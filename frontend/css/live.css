@@ -564,3 +564,56 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 /* The presets, below the soils. */
 .material-library { margin-top: 10px; }
 .material-library h3 { margin: 0 0 4px; }
+
+/* ── Feedback (js/feedback-dialog.js) ──────────────────────────────────────
+   The window: a line of text, the kind as four choices, the message, the name, two
+   switches and what else goes in the report. `.dlg-body` is a flex row. */
+.feedback-body { flex-direction: column; gap: 10px; padding: 14px 18px; overflow: auto; }
+.feedback-text, .feedback-also { margin: 0; color: var(--c-ink-soft); line-height: 1.45; }
+.feedback-also { font-size: var(--fs-sm); }
+.feedback-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.feedback-kind, .feedback-options label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.feedback-options { display: flex; gap: 18px; }
+.feedback-message { height: auto; min-height: 110px; resize: vertical; line-height: 1.4; }
+.feedback-error { padding: 6px 8px; border-left: 3px solid #c0392b; background: #fbeeee; }
+.feedback-error-detail { margin-top: 2px; color: var(--c-ink-soft); font-family: var(--font-mono);
+                         font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.feedback-message-line { max-width: none; min-height: 1.3em; }
+/* The writer's own files: how to add them, and each one added, a picture as a small copy. */
+.feedback-files { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px;
+                  border: 1px dashed var(--c-border); border-radius: var(--radius);
+                  color: var(--c-ink-soft); font-size: var(--fs-sm); line-height: 1.45; }
+.feedback-files.drop-here { border-color: var(--brand-green); background: var(--c-hover); }
+.feedback-files.has-files { border-style: solid; color: var(--c-ink); }
+.feedback-files-text .btn { margin-left: 4px; }
+.feedback-file { display: flex; align-items: center; gap: 10px; }
+.feedback-file-thumb { width: 72px; height: 40px; object-fit: contain; border: 1px solid var(--c-border);
+                       background: #fff; }
+.feedback-file-icon { width: 72px; height: 40px; display: grid; place-items: center;
+                      border: 1px solid var(--c-border); background: var(--c-hover);
+                      font-weight: 600; text-transform: uppercase; color: var(--c-ink-soft); }
+.feedback-file-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                      white-space: nowrap; }
+.feedback-file-size { color: var(--c-ink-soft); white-space: nowrap; }
+/* The speech bubble in every window's title bar, before the close cross. */
+.dlg-feedback { width: 28px; height: 100%; border: 0; background: none; color: #fff;
+                cursor: pointer; display: grid; place-items: center; opacity: .8; }
+.dlg-feedback:hover { opacity: 1; background: rgba(255, 255, 255, .16); }
+.dlg-feedback svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6;
+                    stroke-linecap: round; stroke-linejoin: round; }
+/* The note after an error or a save: bottom right, above the status bar. Over the
+   windows too (#modal-layer is 600), so "Save a report" can be pressed while one is open. */
+.feedback-note { position: fixed; right: 16px; bottom: 34px; z-index: 900; width: 360px;
+                 max-width: calc(100vw - 32px); padding: 10px 30px 10px 12px;
+                 background: #fff; border: 1px solid var(--c-border); border-left-width: 4px;
+                 border-radius: var(--radius); box-shadow: var(--shadow-menu);
+                 font-size: var(--fs-md); color: var(--c-ink); }
+.feedback-note-error { border-left-color: #c0392b; }
+.feedback-note-ok { border-left-color: var(--brand-green); }
+.feedback-note-text { font-weight: 600; line-height: 1.35; }
+.feedback-note-detail { margin-top: 4px; color: var(--c-ink-soft); line-height: 1.35;
+                        overflow-wrap: anywhere; }
+.feedback-note-buttons { display: flex; gap: 8px; margin-top: 8px; }
+.feedback-note-x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+                   border: 0; background: none; color: var(--c-ink-soft); cursor: pointer; }
+.feedback-note-x:hover { color: var(--c-ink); background: var(--c-hover); }

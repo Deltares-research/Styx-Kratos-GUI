@@ -28,7 +28,9 @@ from fastapi.testclient import TestClient
 
 from core.kratos import external_deck
 from backend.main import app
+from backend.routes import feedback as feedback_routes
 from backend.routes import files as files_routes
+from core import feedback
 from tests.api.served import api_routes
 from core.model.templates import seed_project
 from tests import results_run
@@ -297,6 +299,13 @@ CONTRACTS = [
              bad=lambda c: c.delete("/api/files/folder/chosen"), bad_status=403),
     Contract("GET", "/api/files/picture-job/{token}", lambda c: c.get("/api/files/picture-job/x"),
              {"ok"}),
+    Contract("POST", "/api/feedback",
+             lambda c: c.post("/api/feedback", json={"kind": "bug", "message": "m"}),
+             {"path", "folder", "name", "files"},
+             bad=lambda c: c.post("/api/feedback", json={"kind": "praise", "message": "m"}),
+             bad_status=422),
+    Contract("POST", "/api/feedback/folder", lambda c: c.post("/api/feedback/folder"),
+             {"opened", "folder"}),
     Contract("GET", "/", lambda c: c.get("/"), set(), content_type="text/html"),
 ]
 
@@ -320,6 +329,9 @@ def client(monkeypatch, tmp_path):
     chosen.mkdir()
     monkeypatch.setitem(files_routes._folders, "chosen",
                         files_routes.Folder(chosen, time.monotonic()))
+    # A report lands in this test's folder, and no file browser opens.
+    monkeypatch.setenv(feedback.FOLDER_ENV, str(tmp_path / "feedback"))
+    monkeypatch.setattr(feedback_routes, "open_in_file_browser", lambda _folder: None)
     with TestClient(app) as c:
         c.post("/api/project/reset")
         yield c

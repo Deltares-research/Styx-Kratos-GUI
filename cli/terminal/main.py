@@ -14,11 +14,12 @@ import sys
 
 from cli.terminal import output, style
 from core import session
-from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
-                          meshing, picture, stages, project, results, structures, volumes)
+from cli.commands import (analysis, conditions, edit, feedback, ground, inspection,
+                          interactive, meshing, picture, stages, project, results, structures,
+                          volumes)
 
 GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stages, inspection,
-          analysis, results, picture, interactive)
+          analysis, results, picture, interactive, feedback)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 REMOVED = {
@@ -98,10 +99,27 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as failure:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
+        fault(args)
         raise
     answer.warnings = [*lost, *answer.warnings]
     answer.notes = [*answer.notes, *getattr(args, "edit_notes", [])]
     return output.answered(answer, args.json, getattr(args, "csv", None))
+
+
+FAULT = ("This is a fault in Styx, not in the model. Save a report for the Styx team with:\n"
+         '  kratos-cli feedback "what you did" --project {project}\n'
+         "and paste the error below into the message.")
+
+
+def fault(args: argparse.Namespace) -> None:
+    """Before the traceback of an error no command expected: how to report it, as the GUI
+    offers "Save a report" after one."""
+    if args.command == "feedback":
+        return
+    project = getattr(args, "project", None)
+    on = style.enabled(sys.stderr)
+    said = FAULT.format(project=project if project else "PROJECT")
+    sys.stderr.write(style.paint(said, "bold red", on) + "\n")
 
 
 def version() -> output.Answer:

@@ -1,17 +1,20 @@
 """The HTTP middleware: what every request goes through before any route runs.
 
-`only_this_browser_tab` is the security boundary (`tests/api/test_security.py`), and
-`do_not_cache_sources` keeps a browser from mixing old and new frontend files.
+`only_this_browser_tab` is the security boundary (`tests/api/test_security.py`),
+`do_not_cache_sources` keeps a browser from mixing old and new frontend files, and
+`keep_api_requests` keeps a line for each API request, for a feedback report.
 `backend/main.py` registers both, and the order it registers them in is the order they run.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from urllib.parse import urlsplit
 
 from fastapi.responses import JSONResponse
 
+from backend import server_log
 from backend.launcher import ALLOWED_HOSTS_ENV
 
 # Sources the app is built from, as opposed to assets that never change.
@@ -50,6 +53,30 @@ def host_name(netloc: str) -> str:
     if netloc.startswith("["):
         return netloc[1:netloc.find("]")] if "]" in netloc else netloc
     return netloc.rsplit(":", 1)[0] if netloc.count(":") == 1 else netloc
+
+
+def on_this_computer(request) -> bool:
+    """Whether `request` came from a browser on the server's own computer, by its address
+    and by the name it used: what may open a window of the system (`routes/files.py`,
+    `routes/feedback.py`)."""
+    return (request.client is not None and request.client.host in LOOPBACK_HOSTS
+            and host_name(request.headers.get("host", "")) in LOOPBACK_HOSTS)
+
+
+async def keep_api_requests(request, call_next):
+    """Keep one line for each API request, for a feedback report (`backend/server_log.py`):
+    what the GUI asked for just before a problem is most of what it takes to see it again."""
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    started = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        server_log.request(request.method, request.url.path, 500, time.monotonic() - started)
+        raise
+    server_log.request(request.method, request.url.path, response.status_code,
+                       time.monotonic() - started)
+    return response
 
 
 async def only_this_browser_tab(request, call_next):

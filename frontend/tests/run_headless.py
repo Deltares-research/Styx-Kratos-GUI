@@ -109,6 +109,11 @@ SUITES = {
     ),
     # The rulers' arithmetic: steps, ticks, labels, the ranges a view shows. Painting
     # the canvases and the toolbar wiring are test-ruler-dom.js, in the browser.
+    # What a feedback report says and the errors it keeps; the window is test-feedback-dom.js.
+    "feedback": (
+        [JS / "feedback.js"],
+        TESTS / "test-feedback.js",
+    ),
     "ruler": (
         [JS / "ruler.js"],
         TESTS / "test-ruler.js",

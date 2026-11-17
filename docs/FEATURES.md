@@ -169,6 +169,7 @@ and adds only the values that are missing
 | Checks | The server checks the full project at each edit | Tested |
 | Display | WebGL, with a CPU renderer when no GPU is available | Tested |
 | Pictures | The view as PNG, PDF or SVG at 300 dpi, in a width that you select, from the camera button, the File menu or a right click. Copy to the clipboard. Every stage and every result field into one folder, with the field values as CSV. `kratos-cli picture` makes the same pictures with Chrome or Edge. SVG and PDF are vector, except contour colours and 3D faces, which are an image at 300 dpi. | Tested. Opening in Word, Adobe Reader and Inkscape is checked by hand. |
+| Feedback | The **Feedback** button, **Help** → **Send feedback…**, a button in the title bar of each window, and `feedback [text]` add a report to the writer's ZIP file of the day in `~/KratosGUI/feedback`, one folder per report: the message, where in the app it was written, a picture of the view, the files the user adds (a pasted screenshot, a document, any file), the model, the logs of the GUI and the server, and the log of the open run. After a server error, a stopped calculation or a script error, a note offers to save a report about it. `kratos-cli feedback` saves the same report. | Tested |
 | 2D and 3D | Change between a 2D plane-strain section (at a z offset that you select) and the 3D model. Loads and walls are converted. | Tested |
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
@@ -247,6 +248,7 @@ and adds only the values that are missing
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
 | `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
+| `feedback [text]` | Opens the **Send feedback** window, with the text in it |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
@@ -260,6 +262,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 | Shell | `kratos-cli shell` reads commands one after the other, with undo and redo, from a terminal, a file or a pipe | Tested |
 | Model scripts | `script` writes the model as Python; `build` writes a project from a script. Each command that reads a model accepts a script. | Tested |
 | Results | `results` gives numbers and CSV files. `picture` saves pictures with Chrome or Edge. | Tested |
+| Feedback | `feedback "MESSAGE"` adds the report of the GUI's Feedback window to the same ZIP file of the day, with the project file, the run and the files of `--attach`. After an error that no command expected, `kratos-cli` says how to report it. | Tested |
 | Parity with the GUI | A test checks that each command of the GUI command box has a terminal command in the reference | Tested |
 
 ### B9. Tests and benchmarks

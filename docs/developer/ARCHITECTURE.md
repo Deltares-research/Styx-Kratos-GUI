@@ -82,7 +82,7 @@ is one step of the pipeline:
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
 | `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
-| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) is outside the packages too. |
+| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) and `feedback.py` (a feedback report, added as a folder to its writer's ZIP file of the day, which the GUI and `kratos-cli feedback` both write) are outside the packages too. |
 
 ### Import rule
 
@@ -102,7 +102,8 @@ with `-m` in a Python that has no pydantic and no Gmsh.
 | Module | What |
 |---|---|
 | `main.py` | Makes the FastAPI app and mounts the browser files |
-| `middleware.py` | Checks the Host and Origin headers, and switches off the browser cache for the app files |
+| `middleware.py` | Checks the Host and Origin headers, switches off the browser cache for the app files, and keeps a line for each API request |
+| `server_log.py` | The last lines of the server's log and the last API requests, in memory, for a feedback report. `main.py` also logs here each error that no route answers, with its traceback, and answers it with one readable sentence. |
 | `routes/` | One module for each group of the HTTP API (see below). `routes/common.py` has what they share: the upload limit (256 MB), the answer to a refused edit, the answer to a stored edit (the project, and in `edit_notes` the mesh sizes the edit removed), and the mesh jobs. |
 | `store.py` | The one open project |
 | `launcher.py` | Makes the virtual environment and starts the server (`run.bat`, `run.sh`) |
@@ -122,6 +123,7 @@ the HTTP parts.
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
 | Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`; `DELETE /api/files/folder/{folder}` hands the folder back when the save ends. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. A folder id lasts for one save, and at most 15 minutes without use. One folder window is open at a time, and it closes after 10 minutes. `GET /api/files/picture-job/{token}` says whether the page may run the picture job in its address: only on a server `kratos-cli picture` started with that token. |
+| Feedback | `routes/feedback.py` | `POST /api/feedback` adds a report to its writer's ZIP file of the day in `~/KratosGUI/feedback` (or `KRATOS_GUI_FEEDBACK`): what the page sends, the files the user added included, with the project, the server's log and the open run's log and parameter files. `POST /api/feedback/folder` opens that folder in the system's file browser, only for a browser on the same computer. |
 | Health | `main.py` | `GET /api/health` (also the version of Styx) |
 
 ## Command-line modules (`cli/`)
@@ -142,6 +144,7 @@ the HTTP parts.
 | `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
 | `cli/commands/picture.py`, `cli/terminal/pictures.py` | `picture`: starts the server and a headless browser as separate processes, gives the page a job in its address, and takes the files on a one-time receiver |
 | `cli/commands/interactive.py` | `shell` |
+| `cli/commands/feedback.py` | `feedback`: the report of the GUI's Feedback window. After an error that no command expected, `cli/terminal/main.py` says how to send one. |
 | `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
 
 ## Browser modules (`frontend/`)
@@ -162,6 +165,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
+| Feedback | `feedback.js` (what a report says, the errors kept for it; no DOM), `feedback-dialog.js` (the **Send feedback** window with the files the user adds, the speech bubble in each window's title bar, the `feedback` command, and the note that offers a report after a server error, a stopped calculation or a script error) |
 | Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
 
 ## Results mode

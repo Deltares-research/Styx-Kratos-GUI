@@ -15,7 +15,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Part | Where | What it does |
 |---|---|---|
 | Menu bar | Top | All commands, in menus |
-| Toolbar | Below the menu bar | New, open, save, **Save picture** (the camera), the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate** |
+| Toolbar | Below the menu bar | New, open, save, **Save picture** (the camera), the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate**, **Feedback** |
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
@@ -807,6 +807,64 @@ picture save --format pdf --stage all --one-pdf
 `picture save pdf` is short for `picture save --format pdf`. `kratos-cli picture` takes the
 same words and makes the same pictures in a terminal: see [CLI.md](CLI.md#pictures).
 
+## Send feedback
+
+Tell the Styx team what went wrong, what was hard to understand, or what you need. Styx saves
+your report in a ZIP file on your computer. It sends nothing over the internet: you send the
+file to the team yourself, or put it in the shared folder of your workshop.
+
+All your reports of one day go in the same ZIP file, so at the end of the day you send one
+file. The name of the file has the date and your name, for example
+`styx-feedback-2026-11-17-ben.zip`. In the file, each report has its own folder, named by the
+time and the kind of feedback, for example `14-05-12-bug`. The file `reports.txt` at the top
+lists the reports.
+
+To open the **Send feedback** window, do one of these:
+
+- Click **Feedback** at the right end of the toolbar.
+- Select **Help** → **Send feedback…**.
+- Click the speech bubble in the title bar of a window. The report then says which window it
+  is about.
+- Type `feedback` in the command box. Text after the word goes into the message, for example
+  `feedback the anchor tool is hard to find`.
+
+In the window:
+
+1. Select what kind of feedback it is: **Something is wrong**, **Something is confusing**,
+   **Something is missing** or **Something works well**.
+2. Write what you did, what you expected and what happened. A few sentences are enough.
+3. Optional: type your name, so that the team can ask you about the report. Styx keeps the name
+   in this browser for your next report.
+4. Optional: add a screenshot or other files. For a screenshot, press
+   <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, select the part of the screen to show, then
+   press <kbd>Ctrl</kbd>+<kbd>V</kbd> in the window. To add a file of any kind, such as a
+   document or a model, drop it on the window or click **Choose files…**. A report holds up
+   to 10 files of at most 15 MB each. Click **Remove** to take a file out again.
+5. Click **Save report**. A note at the bottom right shows the name of the file and how many
+   reports it holds. Click **Show folder** to see the file.
+
+Styx adds these to the report:
+
+- where you were in the app: the mode, the open windows and the selected object
+- a picture of the model view (clear **Add a picture of the view** to leave it out)
+- the model (clear **Add the model** to leave it out)
+- the **Session** log and the **Model history**
+- the errors that Styx saw before the report, and the log of the server
+- the version of Styx, and the Kratos log of the open calculation
+
+The reports go in the folder `~/KratosGUI/feedback`. To use another folder,
+set the environment variable `KRATOS_GUI_FEEDBACK` before you start Styx.
+
+### After an error
+
+When something goes wrong, a note comes up at the bottom right: *Something went wrong*, with
+the reason. This happens when the server stops on an error, when Kratos stops a calculation,
+or when the page has a script error. Click **Save a report** to open the **Send feedback**
+window with the error in it. You can save the report without a message: the error says what
+happened. The same error does not show the note again within a minute.
+
+`kratos-cli feedback` saves the same report in a terminal: see [CLI.md](CLI.md#feedback).
+
 ## The command box
 
 Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
@@ -832,6 +890,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `gotosoil`, `gotostructures`, `gotomesh`, `gotoflow`, `gotostaged` | Opens a mode |
 | `view iso`, `view top`, `view front`, `view side`, `zoomfit` | Changes the view |
 | `clear` | Clears the log |
+| `feedback [text]` | Opens the **Send feedback** window, with the text in it |
 | `results …` | Works with results. Type `results` alone to see all its forms. |
 
 **Help** → **Command reference** shows the same list in a window.
