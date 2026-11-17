@@ -518,7 +518,7 @@
         "surcharge"
       ],
       "deactivate": [],
-      "reset_displacements": false,
+      "reset_displacements": true,
       "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,

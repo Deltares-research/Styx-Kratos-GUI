@@ -5,6 +5,9 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 [INSTALLATION.md](INSTALLATION.md). To calculate, you also need Kratos: see
 [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
+To learn the GUI by building one model step by step, start with the
+[GUI tutorials](gui_tutorials/index.md).
+
 > [!WARNING]
 > The Styx server keeps the open project in its memory. It does not save the project to a
 > file itself. If you stop the server before you save, you lose your changes. Save often

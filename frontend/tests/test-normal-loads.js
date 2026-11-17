@@ -426,7 +426,7 @@
       App.NormalLoads.start();
       var body = document.createElement('div');
       spec.build(body);
-      var pressure = body.querySelectorAll('input[type="number"]')[4];
+      var pressure = body.querySelectorAll('input[data-number]')[4];
       T.eq(pressure.value, '', 'nothing pre-filled to accept by accident');
 
       var save = spec.buttons.filter(function (b) { return b.label === 'Save'; })[0];
@@ -458,7 +458,7 @@
     App.NormalLoads.start();
     var body = document.createElement('div');
     spec.build(body);
-    var numbers = body.querySelectorAll('input[type="number"]');
+    var numbers = body.querySelectorAll('input[data-number]');
     // x1, y1, x2, y2, then the pressure.
     [4, -1, 4, -9].forEach(function (value, i) { numbers[i].value = String(value); });
     body.querySelector('select.mesh-setting-control').value = 'Uniform';

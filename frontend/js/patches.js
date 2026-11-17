@@ -2625,7 +2625,9 @@ App.LivePatches = (function () {
             node.style.paddingLeft = (8 + row.depth * 4) + 'px';
             node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.label }));
+            var name = el('span.phase-name', { text: row.heading + ' ' });
+            name.appendChild(el('span.phase-id', { text: '[' + row.id + ']' }));
+            node.appendChild(name);
             node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;
@@ -2652,10 +2654,15 @@ App.LivePatches = (function () {
              right-click the part in the viewport, or tick it in the Model explorer. */
           var on = stage.activate || [], off = stage.deactivate || [];
           var active = App.Stages.activeParts(App.PROJECT, stage.id) || [];
+          var named = function (keys) {
+            return keys.map(function (key) {
+              return App.Stages.partLabel(App.PROJECT, key);
+            }).join(', ');
+          };
           var changes = el('div.pgrid');
           changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
-          [['Activated here', on.length ? on.join(', ') : '—'],
-           ['Deactivated here', off.length ? off.join(', ') : '—'],
+          [['Activated here', on.length ? named(on) : '—'],
+           ['Deactivated here', off.length ? named(off) : '—'],
            ['Active in this stage', active.length + ' of ' +
             App.Stages.stageableKeys(App.PROJECT).length + ' parts']
           ].forEach(function (row) {
@@ -2676,7 +2683,7 @@ App.LivePatches = (function () {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
             hidden.forEach(function (key) {
-              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var label = App.Stages.partLabel(App.PROJECT, key);
               var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
               button.addEventListener('click', function () {
                 saveStages(App.Stages.toggled(App.PROJECT, stage.id, key),

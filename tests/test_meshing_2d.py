@@ -58,6 +58,14 @@ def test_stats_are_internally_consistent(quadratic):
     assert stats.quality_histogram["<0.0"] == 0, "inverted triangles are not a usable mesh"
 
 
+def test_the_average_element_size_is_near_the_size_asked_for(quadratic):
+    """The Selection explorer of the mesh shows it: the mean edge length of the
+    elements, which gmsh aims at the element size (2 m here) where nothing refines."""
+    stats = quadratic[1].stats
+    assert 0.5 < stats.average_size < 2.5
+    assert stats.to_dict()["average_size"] == stats.average_size
+
+
 def test_every_node_lies_on_the_section_plane(quadratic):
     """Which is z = 0: the cut is taken at `section_offset` and moved onto the x-y
     plane, so the mesh has no third coordinate to speak of."""

@@ -46,7 +46,8 @@
           { "context": "eslint", "integration_id": 15368 },
           { "context": "actionlint", "integration_id": 15368 },
           { "context": "pip-audit", "integration_id": 15368 },
-          { "context": "gitleaks", "integration_id": 15368 }
+          { "context": "gitleaks", "integration_id": 15368 },
+          { "context": "docs site", "integration_id": 15368 }
         ]
       }
     }

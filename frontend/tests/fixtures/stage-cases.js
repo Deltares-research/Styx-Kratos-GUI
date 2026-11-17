@@ -184,7 +184,7 @@ window.STAGE_FIXTURE =
           }
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Stage 8",
           "parent": "settle",
           "calculation": "mechanical",
@@ -282,7 +282,7 @@ window.STAGE_FIXTURE =
           "solver_settings": {}
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "New stage",
           "parent": "build_wall",
           "calculation": "mechanical",
@@ -304,7 +304,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "mechanical",
           "stress_initialisation": "none",
           "time_integration": "static",
@@ -976,7 +976,7 @@ window.STAGE_FIXTURE =
           "solver_settings": {}
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Wall installation (copy)",
           "parent": "build_wall",
           "calculation": "mechanical",
@@ -998,7 +998,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "mechanical",
           "stress_initialisation": "none",
           "time_integration": "static",
@@ -1266,7 +1266,7 @@ window.STAGE_FIXTURE =
           }
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Consolidate (copy)",
           "parent": "settle",
           "calculation": "mechanical",

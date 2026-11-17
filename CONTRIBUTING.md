@@ -55,8 +55,9 @@ app. Then add the test tools to that venv:
 | Workflows | [actionlint](https://github.com/rhysd/actionlint), if you changed `.github/workflows/` | [lint](.github/workflows/lint.yml), `actionlint` job |
 | Types | `python -m mypy` | [lint](.github/workflows/lint.yml), `mypy` job. A new finding fails it. |
 | Launcher | `run.bat --check` or `./run.sh --check` | [launcher](.github/workflows/launcher.yml): Windows, Linux and macOS, on Python 3.10 and 3.15 |
-| Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
+| Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt -r requirements-docs.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
 | Secrets in the history | [gitleaks](https://github.com/gitleaks/gitleaks): `gitleaks git .` | [security](.github/workflows/security.yml), `gitleaks` job |
+| GUI tutorials site | `python tools/gui_tutorial.py`, if you changed the GUI or `docs/gui_tutorials/`. See [The GUI tutorials](docs/developer/TESTING.md#the-gui-tutorials). | [docs site](.github/workflows/docs-site.yml): screenshots and site on every pull request, published from `main` |
 | Documentation links | [lychee](https://github.com/lycheeverse/lychee): `lychee --config .github/lychee.toml './**/*.md'` | [docs](.github/workflows/docs.yml), also weekly |
 | Code scanning | Not run locally | [codeql](.github/workflows/codeql.yml) and [dependency review](.github/workflows/dependency-review.yml), where GitHub offers them |
 

@@ -3,7 +3,7 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    directory: /                # requirements.txt and requirements-dev.txt
+    directory: /                # requirements.txt, requirements-dev.txt, requirements-docs.txt
     schedule:
       interval: weekly
     groups:
