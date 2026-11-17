@@ -482,19 +482,22 @@ App.FeedbackDialog = (function () {
     return true;
   }
 
+  /* A script error or a promise nobody caught, in the page. */
+  function heard(event) { App.Feedback.uncaught(event); }
+
   function install() {
     if (installed || typeof document === 'undefined') return;
     installed = true;
     App.Feedback.onNotice(offer);
-    window.addEventListener('error', function (event) { App.Feedback.uncaught(event); });
-    window.addEventListener('unhandledrejection', function (event) { App.Feedback.uncaught(event); });
+    window.addEventListener('error', heard);
+    window.addEventListener('unhandledrejection', heard);
     watchWindows();
   }
 
   return {
     TITLE: TITLE, open: open, command: command, offer: offer, saved: saved, showFolder: showFolder,
     hideNote: hideNote, snapshot: snapshot, screenshot: screenshot,
-    addWindowButton: addWindowButton, install: install,
+    addWindowButton: addWindowButton, watchWindows: watchWindows, install: install,
     isOpen: function () { return !!openShell; }
   };
 })();

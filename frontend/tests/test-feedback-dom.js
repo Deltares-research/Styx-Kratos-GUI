@@ -183,6 +183,115 @@
     }).then(ctx.restore, function (error) { ctx.restore(); throw error; });
   });
 
+  test('feedback dom: the picture of the view is the Save picture drawing, and none when that fails', function () {
+    var ctx = rig({});
+    var picture = App.Picture;
+    App.Viewport = { pictureView: function () {} };
+    App.Picture = {
+      commonFrame: function (asked) { T.eq(asked, { screenZoom: true }); return { width: 1 }; },
+      compose: function (asked, frame) { return { frame: frame }; },
+      encode: function (drawn, format) { T.eq(format, 'png'); return Promise.resolve(new Uint8Array([1, 2, 3])); }
+    };
+    function restore() { App.Picture = picture; ctx.restore(); }
+    return D.screenshot().then(function (png) {
+      T.eq(png, 'AQID', 'base64 of the bytes');
+      App.Picture.commonFrame = function () { throw new Error('no view'); };
+      return D.screenshot();
+    }).then(function (none) {
+      T.eq(none, null);
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('feedback dom: the report has the logs and the stage, and the kind sets the hint', function () {
+    var ctx = rig({ path: 'C:/fb/f.zip', folder: 'C:/fb', name: 'f.zip', report: 'r', reports: 1 });
+    var kept = { state: App.state, project: App.PROJECT };
+    var log = document.createElement('div');
+    log.id = 'cmd-log';
+    log.innerHTML = '<div class="cmd-line">&gt; mesh</div><div class="cmd-line">Mesh failed</div>';
+    document.body.appendChild(log);
+    App.state = Object.assign({}, kept.state, { mode: 'staged', phase: 'p2', selection: null });
+    App.PROJECT = Object.assign({}, kept.project, { stages: [{ id: 'p2', name: 'Excavation' }] });
+    function restore() {
+      log.remove();
+      App.state = kept.state; App.PROJECT = kept.project;
+      ctx.restore();
+    }
+    D.open({ message: 'Stage 2' });
+    var win = feedbackWindow();
+    var missing = win.querySelector('input[name="feedback-kind"][value="missing"]');
+    missing.checked = true;
+    missing.dispatchEvent(new Event('change'));
+    T.eq(win.querySelector('textarea').placeholder, App.Feedback.kind('missing').hint);
+    press('Save report');
+    return settle().then(settle).then(function () {
+      var sent = ctx.posts[0].body;
+      T.eq(sent.kind, 'missing');
+      T.eq(sent.session_log, '> mesh\nMesh failed');
+      T.eq(sent.context.stage, 'Excavation');
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('feedback dom: Choose files opens the file picker, and a drag over the window shows where to drop', function () {
+    var ctx = rig({});
+    try {
+      D.open({ message: 'x' });
+      var win = feedbackWindow();
+      var chooser = win.querySelector('input[name="feedback-files"]');
+      var opened = 0;
+      chooser.click = function () { opened += 1; };
+      win.querySelector('.feedback-files-choose').click();
+      T.eq(opened, 1);
+      chooser.dispatchEvent(new Event('change'));
+      T.eq(win.querySelectorAll('.feedback-file').length, 0, 'nothing chosen, nothing added');
+
+      var box = win.querySelector('.feedback-files');
+      var text = new Event('dragover', { bubbles: true, cancelable: true });
+      text.dataTransfer = { types: ['text/plain'] };
+      win.dispatchEvent(text);
+      T.ok(!text.defaultPrevented, 'a drag of text is not a drop of files');
+      var files = new Event('dragover', { bubbles: true, cancelable: true });
+      files.dataTransfer = { types: ['Files'] };
+      win.dispatchEvent(files);
+      T.ok(files.defaultPrevented);
+      T.ok(box.classList.contains('drop-here'));
+      win.dispatchEvent(new Event('dragleave', { bubbles: true }));
+      T.ok(!box.classList.contains('drop-here'));
+    } finally { ctx.restore(); }
+  });
+
+  test('feedback dom: Show folder asks the server, and says where the reports are when it cannot open them', function () {
+    var ctx = rig({ opened: false, folder: 'C:/fb', reason: 'The browser is on another computer than the server.' });
+    D.saved({ name: 'f.zip', folder: 'C:/fb', reports: 1 });
+    var show = Array.prototype.filter.call(document.querySelectorAll('#feedback-note button'),
+                                           function (b) { return b.textContent === 'Show folder'; })[0];
+    show.click();
+    return settle().then(function () {
+      T.eq(ctx.posts[0].path, '/api/feedback/folder');
+      T.ok(ctx.lines.indexOf('note:The feedback reports are in C:/fb (The browser is on another '
+                             + 'computer than the server.).') >= 0);
+      T.ok(!document.getElementById('feedback-note'), 'the note goes');
+      ctx.restore();
+      var failing = rig(new Error('no answer'));
+      return D.showFolder().then(function () {
+        T.ok(failing.lines.indexOf('err:The feedback folder could not be opened: no answer') >= 0);
+      }).then(failing.restore, function (error) { failing.restore(); throw error; });
+    }, function (error) { ctx.restore(); throw error; });
+  });
+
+  test('feedback dom: a window opened later gets the bubble by itself, and pressing it does not drag the window', function () {
+    var ctx = rig({});
+    D.watchWindows();
+    var shell = App.Dialogs.open({ title: 'Soil materials', buttons: [] });
+    return settle().then(function () {
+      var bubble = shell.dialog.querySelector('.dlg-head .dlg-feedback');
+      T.ok(bubble, 'added when the window opened');
+      var reached = false;
+      shell.dialog.querySelector('.dlg-head').addEventListener('mousedown', function () { reached = true; });
+      bubble.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      T.ok(!reached);
+    }).then(ctx.restore, function (error) { ctx.restore(); throw error; });
+  });
+
   test('feedback dom: a save the server refuses stays open and says why', function () {
     var ctx = rig(new Error('The folder could not be made.'));
     D.open({ message: 'x' });
