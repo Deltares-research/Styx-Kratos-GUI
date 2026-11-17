@@ -260,11 +260,17 @@ def rail(tour: Tour, key: str, flyout: str | None = None) -> None:
     item.last.click()
 
 
-def tree_row(page, label: str):
-    """A row of the Model explorer, by its label (`Soil_Top · Part 1` for a soil body)."""
+def tree_rows(page, label: str):
+    """Every row of the Model explorer with this label (`Soil_Top · Part 1` for a soil
+    body): two parts of two layers may have one name."""
     pattern = "^" + re.escape(label).replace(r"\ ·\ ", r"\s+·\s+") + r"(\s|$)"
     return page.locator("#tree-model .tree-row").filter(
-        has=page.locator(".tree-label", has_text=re.compile(pattern))).first
+        has=page.locator(".tree-label", has_text=re.compile(pattern)))
+
+
+def tree_row(page, label: str):
+    """The first row of the Model explorer with this label."""
+    return tree_rows(page, label).first
 
 
 def select_in_tree(tour: Tour, label: str) -> None:

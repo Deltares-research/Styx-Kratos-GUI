@@ -15,7 +15,7 @@ from __future__ import annotations
 from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
                                          field, fill, mode, project, rail, rail_tool,
                                          rename, select_in_tree, selection_row,
-                                         set_in_selection, tool, tree_row, type_command,
+                                         set_in_selection, tool, tree_row, tree_rows, type_command,
                                          window, window_fits)
 from tests.models import crow
 
@@ -248,8 +248,9 @@ def name_the_bodies(tour: Tour) -> None:
     tour.picture("before", mark=[tree_row(page, label) for label, _ in BODY_NAMES])
     for index, (label, name) in enumerate(BODY_NAMES):
         rename(tour, label, name, picture="rename" if index == 0 else "")
-    tour.picture("after", mark=[tree_row(page, f"{label.split(' · ')[0]} · {name}")
-                                for label, name in BODY_NAMES])
+    # A renamed part is shown by its name alone; both parts called `retained` are marked.
+    tour.picture("after", mark=[tree_rows(page, name)
+                                for name in dict.fromkeys(name for _, name in BODY_NAMES)])
 
 
 def bodies_named(tour: Tour) -> None:
