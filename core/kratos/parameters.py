@@ -319,6 +319,10 @@ class Stage:
     time_step: float = TIME_STEP
 
 
+PhreaticLine = tuple[tuple[float, float], tuple[float, float]]
+"""Two (x, y) points of a straight phreatic line, at different x (`_normal_load`)."""
+
+
 @dataclass(frozen=True)
 class WaterPressure:
     """One `WaterPressureCondition` (core/model/schemas.py) on one deck part, resolved.
@@ -357,7 +361,8 @@ def project_parameters(
     constraints: Sequence[tuple[str, list[bool]] | tuple[str, list[bool], str]],
     loads: list[tuple[str, str, list[bool], list[float]]],
     stages: list[Stage],
-    normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
+    normal_loads: Sequence[tuple[str, str, float, float, float]
+                           | tuple[str, str, float, float, float, PhreaticLine]] = (),
     *,
     water_pressures: Sequence[WaterPressure] = (),
     deck_name: str = "model",
@@ -375,7 +380,10 @@ def project_parameters(
     for where they come from. There is always at least one.
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
-    for the mode `fluid_pressure_type` names (see `_normal_load`).
+    for the mode `fluid_pressure_type` names (see `_normal_load`). A `"Phreatic_Line"`
+    entry carries its line's two points as a sixth item: the water on the ground that
+    the writer adds itself (`core.kratos.writer._water_surface_loads`). Written in the
+    order given, which matters there: a later process on a node sets its value again.
     `water_pressures` is the user's water pressure conditions, in the order they are
     written: start values first, so that where a fixed value acts on the same node it is
     the one that stays (see `_water_pressure`). Nothing else fixes a water pressure.
@@ -401,8 +409,9 @@ def project_parameters(
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
         loads_processes += [
-            _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight)
-            for name, fluid_pressure_type, pressure, water_y, specific_weight
+            _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight,
+                         line[0] if line else None)
+            for name, fluid_pressure_type, pressure, water_y, specific_weight, *line
             in normal_loads if keep(name)
         ]
         loads_processes += [_seepage(name) for name in stage.seepage]
@@ -968,7 +977,8 @@ def _master_slave_constraint(master_part_name: str, slave_part_name: str) -> dic
 
 
 def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
-                 water_y: float, specific_weight: float) -> dict:
+                 water_y: float, specific_weight: float,
+                 line: PhreaticLine | None = None) -> dict:
     """Apply a pressure normal to a `NormalLoad`'s line (core/model/schemas.py).
 
     `"Hydrostatic"` is copied field for field from a real working example (see the
@@ -980,6 +990,13 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
     component left off (`active` has one entry per component, and only the first is
     set): unlike the hydrostatic case there is no reference deck for this branch to
     match field for field, so check it against the first real run.
+
+    `"Phreatic_Line"` is hydrostatic below the straight line through `line`'s two
+    points, and level with each end beyond it. The keys are the ones the process copies
+    for that branch (`apply_normal_load_table_process.cpp`), read by
+    `ApplyConstantBoundaryPhreaticLinePressureProcess`, which needs the two points at
+    different x. Kratos has no multi-line normal load, so the water the writer puts on
+    the ground under a phreatic multi-line is one of these per stretch of the line.
     """
     parameters: dict[str, Any] = {
         "model_part_name": f"PorousDomain.{part_name}",
@@ -999,6 +1016,18 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         parameters.update({
             "gravity_direction": 1,
             "reference_coordinate": water_y,
+            "specific_weight": specific_weight,
+        })
+    elif fluid_pressure_type == "Phreatic_Line":
+        if line is None:
+            raise ValueError(f"the Phreatic_Line normal load on {part_name!r} needs its "
+                             "line's two points")
+        (x1, y1), (x2, y2) = line
+        parameters.update({
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+            "first_reference_coordinate": [x1, y1, 0.0],
+            "second_reference_coordinate": [x2, y2, 0.0],
             "specific_weight": specific_weight,
         })
     return {

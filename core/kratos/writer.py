@@ -322,6 +322,12 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     if dim == 2:
         warnings.extend(_pulling_normal_loads(project, conditions, drawn_loads,
                                               soil_blocks, coordinates))
+    # Last of the conditions, and not aligned: each row is already the edge of the element
+    # it presses on, in that element's order, or a wall's own (`_water_surface_loads`).
+    surface_water = (_SurfaceWater([], [], [], {}, []) if flow else
+                     _water_surface_loads(project, soil_blocks, beam_blocks,
+                                          interface_blocks, conditions, coordinates, names))
+    conditions.extend(surface_water.conditions)
 
     used = sorted({tag for _, _, rows in blocks for row in rows for tag in row}
                   | {tag for _, _, rows in conditions for row in rows for tag in row})
@@ -363,6 +369,8 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     parts.extend(condition_parts)
     water_pressures = _water_pressures(project, resolved, warnings)
     parts.extend(load_parts)
+    parts.extend((name, sorted(node_id[tag] for tag in tags), [], [])
+                 for name, tags in surface_water.node_parts)
     supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
     parts.extend(supports)
@@ -387,7 +395,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
          else project.water.y if project.water is not None else project.domain.y_bottom,
          project.water_specific_weight)
         for load in project.active_normal_loads if load.id in condition_keys
-    ]
+    ] + surface_water.processes
     warnings.extend(condition_checks.warnings(project))
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
@@ -409,7 +417,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         for key, _, _ in interface_blocks]
     # What the export worked out for the user rather than warns them about: the numbers
     # an interface took from its soil.
-    notes: list[str] = []
+    notes: list[str] = list(surface_water.notes)
     try:
         material_file, material_warnings = (
             material_parameters(project, part_materials, dim, beam_properties,
@@ -503,6 +511,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
         prestressed=tuple(name for name, section, prestress, _ in anchor_properties
                           if materials.anchor_prestress(section, prestress)),
+        scheduled=tuple(surface_water.scheduled.items()),
     )
     kratos_stages = _stages(project, deck, wall_parts, staged_ties)
     if dim == 3:
@@ -635,6 +644,11 @@ class _Deck:
     """The anchors written with a prestress (`materials.anchor_prestress`). A stage that
     carries one's stress also runs the temporary prestress workaround for it
     (`parameters.Stage.prestressed`)."""
+    scheduled: tuple[tuple[str, frozenset[int]], ...] = ()
+    """Parts alive in the stages listed, by index in execution order, and in no other,
+    whatever `owners` says: the water on the ground (`_water_surface_loads`), whose
+    stretch of exposed surface is worked out stage by stage rather than owned by one
+    model key."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -705,10 +719,12 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     # The boundary conditions a stage switches -- water pressures and supports -- as it
     # does a load.
     switched = {c.id for c in project.boundary_conditions if c.kind in STAGED_CONDITIONS}
+    scheduled = dict(deck.scheduled)
     for index, (stage, switched_on, switched_off) in enumerate(steps):
         was = live
         keys = (set(keys) - switched_off) | switched_on
-        live = _deck_active(deck, keys)
+        live = frozenset(name for name in _deck_active(deck, keys)
+                         if index in scheduled.get(name, (index,)))
 
         # The operations name element-carrying parts only, which is what Activate and
         # Deactivate act on; a node group vanishes from the process lists instead, by
@@ -1794,6 +1810,303 @@ def _rotated(face: tuple[int, ...], row: list[int]) -> bool:
         if turned == row:
             return True
     return False
+
+
+# ── Water on the ground ─────────────────────────────────────────────────────
+
+SURFACE_WATER_TYPES = ("Hydrostatic", "Phreatic_Multi_Line")
+"""The water pressure conditions that have a water level, and so can stand above the
+ground (`_water_surface_loads`)."""
+
+SURFACE_WATER_KEY = "surface_water:"
+"""The stem of the condition keys `_water_surface_loads` adds. No model key has a colon
+in it (`schemas.Ident`), so these cannot collide with one."""
+
+_BEYOND = "<beyond the model>"
+"""What `_water_surface_loads` finds past the domain's cut faces: not open water."""
+
+
+@dataclass(frozen=True)
+class _SurfaceWater:
+    """The water on the ground, as `_water_surface_loads` adds it to the deck.
+
+    `conditions` is one normal-load condition block per part, in gmsh tags like every
+    other condition. `node_parts` is (part name, gmsh tags): node groups whose pressure
+    is set again after their part's own, written as parts of their own. `processes` is
+    `parameters.project_parameters`' normal-load entries, in the order they must run.
+    `scheduled` is the stages, by index, each part is alive in; empty for a deck with no
+    stages, whose every stage has every part."""
+    conditions: list[tuple[str, str, list[list[int]]]]
+    node_parts: list[tuple[str, list[int]]]
+    processes: list[tuple]
+    scheduled: dict[str, frozenset[int]]
+    notes: list[str]
+
+
+def _water_level(condition: WaterPressureCondition, x: float) -> float:
+    """The height of `condition`'s water at `x`: its level, or its phreatic line, held
+    level past either end -- as Kratos' phreatic line holds it."""
+    if condition.fluid_pressure_type == "Hydrostatic":
+        return float(condition.reference_coordinate or 0.0)
+    xs, ys = condition.x_coordinates or [], condition.y_coordinates or []
+    if x <= xs[0]:
+        return ys[0]
+    for (x1, y1), (x2, y2) in zip(zip(xs, ys), zip(xs[1:], ys[1:])):
+        if x <= x2:
+            return y1 + (y2 - y1) * (x - x1) / (x2 - x1)
+    return ys[-1]
+
+
+def _place(row: Sequence[int], xy: dict[int, tuple[float, float]]) -> frozenset:
+    """Where a mesh edge is, whatever its node ids: its two ends. An interface gives the
+    soil copies of the nodes a structure keeps, so one place can have several ids."""
+    return frozenset((round(xy[tag][0], 9), round(xy[tag][1], 9)) for tag in row[:2])
+
+
+def _water_surface_loads(project: Project,
+                         soil_blocks: list[tuple[str, str, list[list[int]]]],
+                         beam_blocks: list[tuple[str, str, list[list[int]]]],
+                         interface_blocks: list[tuple[str, str, list[list[int]]]],
+                         conditions: list[tuple[str, str, list[list[int]]]],
+                         coordinates: dict[int, tuple[float, float, float]],
+                         names: dict[str, str]) -> _SurfaceWater:
+    """The water standing on the ground, pressing on it: one normal load per water
+    pressure condition whose level is above the soil somewhere, in every stage.
+
+    A water pressure condition sets the pore pressure, but water above the ground also
+    weighs on it -- on the ground surface, the floor of a pit, the faces dug into the
+    soil and the face of a wall the water stands against. Without that load the ground
+    under open water heaves. So for every Hydrostatic or Phreatic_Multi_Line condition
+    on the whole soil, on a part, or on the top face, this finds, stage by stage, the
+    exposed boundary of the soil in that stage below the water, and writes the water's
+    weight on it as Kratos' `ApplyNormalLoadTableProcess` does a `NormalLoad`'s.
+
+    **Exposed** is the edge of an element in the stage that no other element in it
+    shares, except on the domain's own sides and bottom, where the ground goes on, and
+    except where an interface holds it, which is against a structure. A wall is exposed
+    on a side with no soil on it; one with water on both sides, or none, carries none.
+
+    **It always presses.** Kratos presses a line condition to the left of its node
+    order, and matches each condition to an element edge with the same order, never a
+    reversed one. A soil edge is written in the order of the element it bounds, the one
+    that is there in the stage, so it presses into that element. A wall can only be
+    written in its own order, which is the way it was drawn; where that has the water
+    on its left, the pressure is written negative node by node, so it still pushes away
+    from the water.
+
+    **One water per stretch.** Where two conditions reach the same edge, the one whose
+    pore pressure the deck writes last there has its water on it (`_water_pressures`'
+    order). Where the user drew a `NormalLoad` along an edge, theirs is the load there.
+
+    A part is alive in the stages whose exposed surface it is: one per condition and
+    surface, so a pit dug lift by lift has one per lift (`_Deck.scheduled`). Kratos has
+    no multi-line normal load, so a phreatic multi-line writes the part with the line's
+    first stretch, and the nodes under each later stretch as a node part of their own
+    with that stretch -- each node gets the pressure of its own stretch, as the pore
+    pressure does. Plane strain only, like a `NormalLoad`.
+    """
+    none = _SurfaceWater([], [], [], {}, [])
+    waters = [condition for condition in project.boundary_conditions
+              if isinstance(condition, WaterPressureCondition)
+              and condition_checks.written(project, condition)
+              and condition.fluid_pressure_type in SURFACE_WATER_TYPES
+              and (condition.on in ("domain", "part")
+                   or (condition.on == "face" and condition.face == "top"))]
+    if project.dimension != 2 or not waters or not soil_blocks:
+        return none
+    # Stable, as `_water_pressures` sorts: the last that reaches an edge is the one whose
+    # pore pressure the deck keeps under it.
+    waters.sort(key=lambda condition: (condition.is_fixed, TARGET_ORDER.index(condition.on)))
+    bodies_of = {condition.id: set(project.expand_body_keys([condition.part or ""]))
+                 for condition in waters if condition.on == "part"}
+    specific_weight = project.water_specific_weight
+
+    stageable = set(project.stageable_keys())
+    try:
+        order = stages.linearise(project)
+    except stages.StageError:
+        order = []
+    # Unstaged, one surface for every stage the deck has, which needs no schedule.
+    states: list[tuple[int | None, set[str]]] = (
+        [(index, stages.active_parts(project, stage)) for index, stage in enumerate(order)]
+        if order else [(None, stageable)])
+
+    xy = {tag: (point[0], point[1]) for tag, point in coordinates.items()}
+    soil_tags = {tag for _, _, rows in soil_blocks for row in rows for tag in row}
+    x_min = min(xy[tag][0] for tag in soil_tags)
+    x_max = max(xy[tag][0] for tag in soil_tags)
+    y_min = min(xy[tag][1] for tag in soil_tags)
+    y_max = max(xy[tag][1] for tag in soil_tags)
+    held = {tag for _, _, rows in interface_blocks for row in rows for tag in row}
+
+    def on(value: float, line: float) -> bool:
+        return abs(value - line) <= TOLERANCE
+
+    def cut(edge: Sequence[int]) -> bool:
+        """On a side or the bottom of the domain, where the soil goes on."""
+        ends = [xy[tag] for tag in edge[:2]]
+        return any(all(on(point[axis], line) for point in ends)
+                   for axis, line in ((0, x_min), (0, x_max), (1, y_min)))
+
+    elements = [(key, row) for key, _, rows in soil_blocks for row in rows]
+    edges = [(key, tuple(row[i] for i in order_))
+             for key, row in elements for order_ in EDGES.get(len(row), ())]
+    triangles = []
+    for key, row in elements:
+        corners = [xy[tag] for tag in row[:3]]
+        xs_, ys_ = [c[0] for c in corners], [c[1] for c in corners]
+        triangles.append((key, corners, (min(xs_), max(xs_), min(ys_), max(ys_))))
+    normal_ids = {load.id for load in project.normal_loads}
+    drawn = {key: {_place(row, xy) for row in rows}
+             for key, _, rows in conditions if key in normal_ids}
+
+    def inside(point, corners) -> bool:
+        (ax, ay), (bx, by), (cx, cy) = corners
+        px, py = point
+        d1 = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+        d2 = (cx - bx) * (py - by) - (cy - by) * (px - bx)
+        d3 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx)
+        return (d1 >= 0 and d2 >= 0 and d3 >= 0) or (d1 <= 0 and d2 <= 0 and d3 <= 0)
+
+    def submerged(water: WaterPressureCondition, row: Sequence[int]) -> bool:
+        return any(_water_level(water, xy[tag][0]) - xy[tag][1] > TOLERANCE for tag in row)
+
+    found: dict[tuple[str, frozenset, frozenset], list[int | None]] = {}
+    for index, keys in states:
+        def alive(key: str) -> bool:
+            return key not in stageable or key in keys
+
+        def soil_at(point) -> str | None:
+            px, py = point
+            if not (x_min - TOLERANCE < px < x_max + TOLERANCE) or py < y_min - TOLERANCE:
+                return _BEYOND
+            return next((key for key, corners, (x0, x1, y0, y1) in triangles
+                         if alive(key) and x0 <= px <= x1 and y0 <= py <= y1
+                         and inside(point, corners)), None)
+
+        def water_on(body: str, row: Sequence[int]) -> WaterPressureCondition | None:
+            winner = None
+            for water in waters:
+                if not alive(water.id):
+                    continue
+                if water.on == "part" and body not in bodies_of[water.id]:
+                    continue
+                if water.on == "face" and not all(on(xy[tag][1], y_max) for tag in row[:2]):
+                    continue
+                winner = water
+            return winner if winner is not None and submerged(winner, row) else None
+
+        covered = set().union(*(places for key, places in drawn.items() if alive(key)))
+        live_edges = [(key, edge) for key, edge in edges if alive(key)]
+        counts: dict[frozenset[int], int] = {}
+        for _, edge in live_edges:
+            counts[frozenset(edge)] = counts.get(frozenset(edge), 0) + 1
+        pressing: dict[str, set[tuple[int, ...]]] = {}
+        reversed_: dict[str, set[tuple[int, ...]]] = {}
+        exposed: set[frozenset[int]] = set()
+        for key, edge in live_edges:
+            if counts[frozenset(edge)] != 1 or cut(edge) or set(edge) <= held:
+                continue
+            exposed.add(frozenset(edge))
+            if _place(edge, xy) in covered:
+                continue
+            water = water_on(key, edge)
+            if water is not None:
+                pressing.setdefault(water.id, set()).add(edge)
+        for key, _, rows in beam_blocks:
+            if not alive(key):
+                continue
+            for row in rows:
+                (ax, ay), (bx, by) = xy[row[0]], xy[row[1]]
+                length = math.hypot(bx - ax, by - ay)
+                if not length or frozenset(row) in exposed or _place(row, xy) in covered:
+                    continue
+                reach = 1e-3 * length
+                middle = ((ax + bx) / 2, (ay + by) / 2)
+                normal = (-(by - ay) / length * reach, (bx - ax) / length * reach)
+                left = soil_at((middle[0] + normal[0], middle[1] + normal[1]))
+                right = soil_at((middle[0] - normal[0], middle[1] - normal[1]))
+                if (left is None) == (right is None):
+                    continue
+                water = water_on(left or right or _BEYOND, row)
+                if water is None:
+                    continue
+                # Water on the right: the wall's own order presses it to the left, away
+                # from the water. On the left, the same order needs the pressure negative.
+                into = pressing if right is None else reversed_
+                into.setdefault(water.id, set()).add(tuple(row))
+        for water in waters:
+            if water.id in pressing or water.id in reversed_:
+                surface = (water.id, frozenset(pressing.get(water.id, ())),
+                           frozenset(reversed_.get(water.id, ())))
+                found.setdefault(surface, []).append(index)
+
+    if not found:
+        return none
+    by_id = {water.id: water for water in waters}
+    used = set(names.values()) | RESERVED
+    out = _SurfaceWater([], [], [], {}, [])
+    places_per_water: dict[str, set[frozenset]] = {}
+    stages_per_water: dict[str, set[int]] = {}
+    turned: set[str] = set()
+    for number, ((water_id, forward, backward), indices) in enumerate(found.items()):
+        water = by_id[water_id]
+        rows = [list(row) for row in sorted(forward) + sorted(backward)]
+        name = NORMAL_LOAD_CONDITIONS.get((2, len(rows[0])))
+        if name is None:
+            continue
+        key = f"{SURFACE_WATER_KEY}{number}"
+        part = _unique(f"{_sanitise(water.name) or water.id}_on_surface", used)
+        names[key] = part
+        out.conditions.append((key, name, rows))
+        written = [part]
+        if water.fluid_pressure_type == "Hydrostatic":
+            out.processes.append((part, "Hydrostatic", 0.0,
+                                  float(water.reference_coordinate or 0.0), specific_weight))
+        else:
+            points = list(zip(water.x_coordinates or [], water.y_coordinates or []))
+            stretches = list(zip(points, points[1:]))
+            out.processes.append((part, "Phreatic_Line", 0.0, 0.0, specific_weight,
+                                  stretches[0]))
+            tags = sorted({tag for row in rows for tag in row})
+            for at, stretch in enumerate(stretches[1:], start=1):
+                last = at == len(stretches) - 1
+                under = [tag for tag in tags if xy[tag][0] > stretch[0][0]
+                         and (last or xy[tag][0] <= stretch[1][0])]
+                if under:
+                    group = _unique(f"{part}_stretch_{at + 1}", used)
+                    out.node_parts.append((group, under))
+                    out.processes.append((group, "Phreatic_Line", 0.0, 0.0,
+                                          specific_weight, stretch))
+                    written.append(group)
+        for tag in sorted({tag for row in backward for tag in row}):
+            depth = _water_level(water, xy[tag][0]) - xy[tag][1]
+            if depth <= 0:
+                continue
+            group = _unique(f"{part}_node_{len(written)}", used)
+            out.node_parts.append((group, [tag]))
+            out.processes.append((group, "Uniform", -specific_weight * depth, 0.0,
+                                  specific_weight))
+            written.append(group)
+            turned.add(water_id)
+        if indices != [None]:
+            out.scheduled.update({each: frozenset(i for i in indices if i is not None)
+                                  for each in written})
+            stages_per_water.setdefault(water_id, set()).update(
+                i for i in indices if i is not None)
+        places_per_water.setdefault(water_id, set()).update(_place(row, xy) for row in rows)
+    for water_id, places in places_per_water.items():
+        water = by_id[water_id]
+        during = (f", in {len(stages_per_water[water_id])} of the {len(order)} stages"
+                  if water_id in stages_per_water else "")
+        note = (f"water pressure condition {water.name!r} stands above the ground, so the "
+                f"deck adds its water as a normal load pressing on the exposed surface "
+                f"below it ({len(places)} mesh edges{during}).")
+        if water_id in turned:
+            note += (" A wall with the water on its left as drawn takes the pressure "
+                     "node by node, negative, so it still pushes away from the water.")
+        out.notes.append(note)
+    return out
 
 
 # ── Naming and numbering ────────────────────────────────────────────────────
