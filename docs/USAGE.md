@@ -835,7 +835,8 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `clear` | Clears the log |
 | `results …` | Works with results. Type `results` alone to see all its forms. |
 
-**Help** → **Command reference** shows the same list in a window.
+**Help** → **Command reference** shows the same list in a window. **Help** → **Kratos
+documentation** opens the Kratos GeoMechanics user documentation in a new browser tab.
 
 [CLI.md](CLI.md#the-guis-command-box-in-the-terminal) gives the `kratos-cli` command that does
 the same as each command of the command box.

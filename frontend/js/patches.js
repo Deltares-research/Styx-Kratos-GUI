@@ -1091,6 +1091,10 @@ App.LivePatches = (function () {
        drawCylinder,      no way to give it one: the deck gets a body that no material
        importModel        is assigned to. Soil comes from Soil > Create soil surface…,
                           which asks for the material. */
+  /* Help > Kratos documentation opens this. */
+  var KRATOS_DOCS_URL =
+    'https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/user_documentation/';
+
   var NOT_YET = ['importSoilLayers', 'drawPoint', 'drawPolygon', 'drawBox', 'drawCylinder',
                  'importModel'];
 
@@ -2981,6 +2985,11 @@ App.LivePatches = (function () {
         return;
       }
 
+      // A page on the web, in a tab of its own so the model stays open here.
+      if (item && item.action === 'kratosDocs') {
+        window.open(KRATOS_DOCS_URL, '_blank', 'noopener');
+        return;
+      }
 
       /* Every Results menu entry. One action carrying the command it stands for,
          rather than one action name per entry: the menu is then a list of the same
@@ -3206,6 +3215,14 @@ App.LivePatches = (function () {
       })[0];
       meshMenu.items.splice(meshMenu.items.indexOf(generateItem) + 1, 0,
         { label: 'Clear mesh', icon: 'delete', action: 'clearMesh' });
+    }
+    // The Kratos GeoMechanics user documentation, under Command reference: what the
+    // solver does with the model Styx writes.
+    var helpMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Help'; })[0];
+    if (helpMenu && !helpMenu.items.some(function (i) { return i && i.action === 'kratosDocs'; })) {
+      var reference = helpMenu.items.filter(function (i) { return i && i.action === 'cmdref'; })[0];
+      helpMenu.items.splice(reference ? helpMenu.items.indexOf(reference) + 1 : 0, 0,
+        { label: 'Kratos documentation', icon: 'help', action: 'kratosDocs' });
     }
     (App.MENUS || []).forEach(function (menu) {
       var wanted = MENU_ACTIONS[menu.label];

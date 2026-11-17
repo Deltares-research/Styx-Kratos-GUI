@@ -74,6 +74,24 @@
     T.eq(row('Structures', /^Create surface$/), [], 'no Create surface row');
   });
 
+  test('Help > Kratos documentation opens the Kratos user documentation in a new tab',
+       function () {
+    var opened = [];
+    var savedOpen = window.open;
+    window.open = function (url, target) { opened.push([url, target]); return null; };
+    try {
+      withInstall(function () {
+        var docs = row('Help', /^Kratos documentation$/);
+        T.eq(docs.length, 1, 'one row');
+        var items = menu('Help').items;
+        var at = items.indexOf(docs[0]);
+        T.eq(items[at - 1] && items[at - 1].action, 'cmdref', 'under Command reference');
+        App.runAction(docs[0]);
+      });
+    } finally { window.open = savedOpen; }
+    T.eq(opened, [['https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/'
+                   + 'user_documentation/', '_blank']]);
+  });
 
   test('no menu row that does nothing is left, submenus included', function () {
     withInstall(function () {});
