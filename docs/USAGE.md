@@ -343,7 +343,9 @@ a soil, not water that stands on the ground, so it adds no load. This is so what
 phreatic line is on; a phreatic line on a soil part puts its water on that part only. This
 is done for each stage, with the soil that the stage has, and the water always pushes on the
 soil or the wall. You do not draw this load. Where you drew a normal load yourself, your load is used
-there instead. The export notes say where the water was added.
+there instead. The export notes say where the water was added. In **Staged construction**,
+small pale blue arrows show where this water presses in the selected stage; the other tabs
+do not show it.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in

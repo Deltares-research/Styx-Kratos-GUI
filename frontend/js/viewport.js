@@ -1319,10 +1319,62 @@ App.Viewport = (function () {
     });
   }
 
+  /* ── The water on the ground, in Staged construction ─────────────────────
+     The normal load the export adds where the phreatic line stands above the soil
+     (core/kratos/writer.py `_water_surface_loads`), for the stage on screen: found by
+     `App.SurfaceWater` on the build's sections, drawn as small pale arrows into the
+     soil. Not a part, so not in `groups`: no eye, no pick, no ghost -- it is rebuilt
+     from the stage on every mode pass (`setMode`), and drawn in that tab only. */
+  var builtSections = null;
+  var surfaceWaterGroup = null;
+  var SURFACE_WATER_COLOR = 0x2f8fd8;
+
+  function syncSurfaceWater(mode) {
+    if (surfaceWaterGroup) { disposeGroup(surfaceWaterGroup); surfaceWaterGroup = null; }
+    var project = App.PROJECT;
+    if (mode !== 'staged' || !scene || !App.SurfaceWater || !builtSections || !project
+        || project.dimension !== 2 || project.deck) return;
+    var pieces = App.SurfaceWater.pieces(project, builtSections, stageHidden());
+    if (!pieces.length) return;
+    var span = modelSpan(project, frame && frame.size);
+    var length = span > 0 ? span * 0.035 : 0.5;
+    var spec = App.SurfaceWater.glyph(pieces, length, length * 1.4);
+    var z = sectionOffset(project);
+    var group = surfaceWaterGroup = new THREE.Group();
+    group.name = 'surface-water';
+
+    spec.arrows.forEach(function (entry) {
+      var direction = new THREE.Vector3(entry.direction[0], entry.direction[1], 0);
+      var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], z);
+      var head = Math.min(length * 0.22, entry.length * 0.6);
+      group.add(new THREE.ArrowHelper(direction,
+                                      tip.clone().addScaledVector(direction, -entry.length),
+                                      entry.length, SURFACE_WATER_COLOR, head, head * 0.6));
+    });
+    spec.tails.forEach(function (points) {
+      group.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points.map(function (p) {
+          return new THREE.Vector3(p[0], p[1], z);
+        })),
+        new THREE.LineBasicMaterial({ color: SURFACE_WATER_COLOR })));
+    });
+    group.traverse(function (child) {
+      child.userData.noPick = true;
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.transparent = true;
+        child.material.opacity = 0.55;
+      }
+      child.renderOrder = 16;
+    });
+    scene.add(group);
+  }
+
   function buildGroups(payload) {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
     glyphs = [];
+    builtSections = payload.sections;
 
     var cut = lineSeams(payload.sections, App.PROJECT);
     var lineDepth = {};
@@ -2538,6 +2590,7 @@ App.Viewport = (function () {
     syncPartColors();
     applySoilWaterColors(mode);
     applyImportedVisibility(mode);
+    syncSurfaceWater(mode);
     needsRender = true;
   }
 
