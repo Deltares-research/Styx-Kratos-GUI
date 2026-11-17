@@ -36,7 +36,8 @@ FIXTURE = ROOT / "frontend" / "tests" / "fixtures" / "convergence-cases.js"
 MARKER = calculation.STAGE_MARKER
 
 HEADER = '''/* Generated fixture -- the convergence data of real and made-up Kratos logs, as the
-   route sends it, and the CSV `kratos-cli results convergence --csv` writes for each.
+   route sends it, and the CSV `kratos-cli results convergence --csv` writes for each,
+   whole and of its last stage alone (`--stage`).
    `App.ConvergencePlot.csv` must write the same text, and the figure's tests draw
    these cases. See `tests/test_convergence_parity.py`, which regenerates and
    compares it.
@@ -75,7 +76,9 @@ def build() -> dict:
         cases[path.stem] = convergence.read_log(path)
     for name, text in MADE_UP.items():
         cases[name] = convergence.parse(text)
-    return {name: {"data": data, "csv": tables.convergence_csv(data)}
+    return {name: {"data": data, "csv": tables.convergence_csv(data),
+                   "csv_last_stage": tables.convergence_csv(
+                       data, stage=data["stages"][-1]["index"]) if data["stages"] else None}
             for name, data in cases.items()}
 
 
@@ -100,8 +103,8 @@ def test_the_fixture_on_disk_is_what_the_server_and_the_cli_compute():
 
 def test_the_fixture_has_the_cases_worth_having():
     document = stored()
-    assert {"staged_cut_lines", "iteration_limit", "seepage", "nan_and_zero",
-            "empty"} <= set(document)
+    assert {"staged_cut_lines", "iteration_limit", "seepage", "mixed_criteria",
+            "nan_and_zero", "empty"} <= set(document)
     made_up = document["nan_and_zero"]["data"]["iterations"]
     assert [i["relative"] for i in made_up] == [0.0, "nan", "inf"]
     assert document["nan_and_zero"]["data"]["fractions"] == [{"at": 1, "value": 0.5}]

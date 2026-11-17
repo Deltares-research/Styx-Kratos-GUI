@@ -16,19 +16,32 @@
    reached the iteration limit or was cut back, and a tooltip on every dot. A dot is
    drawn for every iteration, because many stages have only one.
 
+   A stage chooses its own convergence criterion, and Kratos prints which one it checks:
+   the residual, the displacement change or the water pressure change. Each has its own
+   colour and legend entry, and the axes name it when the whole run has one. The
+   iteration axis counts over the whole run, as the original's does, and says so.
+
+   The figure shows every stage, or one stage alone (the window's slider): with many
+   stages, the early ones are too narrow to read. Its numbers stay those of the run.
+
    ── The command line is the feature ──────────────────────────────────────
 
        results convergence                    in the Convergence window: the run Kratos
                                               is working on, else the open run, else
                                               the newest run
+       results convergence stage N | WORDS | all
+                                              the same, showing one stage alone (its
+                                              number or words of its name), or all
        results convergence csv | svg | png | pdf
                                               the numbers, or the figure, as a file: of
                                               the run in the Convergence window while
                                               it is open (its Save button runs these),
-                                              else of the run chosen as above
+                                              else of the run chosen as above; of the
+                                              stage shown alone, if one is
 
-   `kratos-cli results convergence RUN` prints the same data as a table, and its
-   `--csv` writes the same file as `csv` here (`tests/test_convergence_parity.py`).
+   `kratos-cli results convergence RUN` prints the same data as a table, its `--stage`
+   is `stage` here, and its `--csv` writes the same file as `csv` here
+   (`tests/test_convergence_parity.py`).
 
    ── Why there is no DOM in here ──────────────────────────────────────────
 
@@ -44,10 +57,18 @@ App.ConvergencePlot = (function () {
 
   /* The figure, in SVG units: two panels of the same height, one above the other.
      `right` is the margin on the right; `fraction` is that margin when the second axis,
-     the fraction of unbalance, needs room for its numbers and its name. */
-  var FIG = { width: 560, left: 64, right: 18, fraction: 44, top: 30, panel: 150, gap: 14,
+     the fraction of unbalance, needs room for its numbers and its name. `panel` is the
+     height of a panel in a saved figure, and the least one the window draws. */
+  var FIG = { width: 560, left: 64, right: 18, fraction: 44, top: 30, panel: 170, gap: 14,
               bottom: 38, legend: 18 };
   var LINE = '#1f77b4';      // matplotlib's first colour, the original's residual line
+  /* What each criterion measures, in words, and the colour of its line: matplotlib's
+     first colours, the residual's the original's. */
+  var CRITERIA = {
+    residual: { words: 'residual', colour: LINE },
+    displacement: { words: 'displacement change', colour: '#ff7f0e' },
+    water_pressure: { words: 'water pressure change', colour: '#17becf' }
+  };
   var TARGET = '#222';
   var MET = '#2ca02c';
   var EVENT = '#d62728';
@@ -58,7 +79,7 @@ App.ConvergencePlot = (function () {
   var INK = '#222';
   var CHAR = 5.6;            // the width of one character of the 10-unit font, roughly
 
-  var view = { run: null, data: null };
+  var view = { run: null, data: null, stage: null };
   var listeners = [];
 
   function log(kind, line) {
@@ -72,10 +93,24 @@ App.ConvergencePlot = (function () {
 
   /* ── State ────────────────────────────────────────────────────────────── */
 
-  function state() { return { run: view.run, data: view.data }; }
+  /* `stage` is the index of the stage shown alone, or null for all of them. */
+  function state() { return { run: view.run, data: view.data, stage: view.stage }; }
 
   function forget() {
-    view = { run: null, data: null };
+    view = { run: null, data: null, stage: null };
+    changed({});
+  }
+
+  /* The stage shown alone stays while the same run is shown and still has it. */
+  function keep(run, data) {
+    var stage = run === view.run && stageNamed(data, view.stage) ? view.stage : null;
+    view = { run: run, data: data, stage: stage };
+  }
+
+  /* Show stage `index` alone, or every stage with null. */
+  function setStage(index) {
+    view.stage = index !== null && index !== undefined && stageNamed(view.data, index)
+      ? index : null;
     changed({});
   }
 
@@ -134,8 +169,37 @@ App.ConvergencePlot = (function () {
   }
 
   function stageNamed(data, index) {
-    return (data.stages || []).filter(function (stage) { return stage.index === index; })[0]
-           || null;
+    if (index === null || index === undefined) return null;
+    return ((data && data.stages) || []).filter(function (stage) {
+      return stage.index === index;
+    })[0] || null;
+  }
+
+  /* The criterion of an iteration, as `CRITERIA` has it. An iteration whose line did
+     not name one is the residual's, as the original took every line to be. */
+  function criterionKey(it) {
+    return (it && it.criterion) || 'residual';
+  }
+
+  function criterion(key) {
+    return CRITERIA[key] || { words: String(key).replace(/_/g, ' ').toLowerCase() + ' change',
+                              colour: '#7f7f7f' };
+  }
+
+  /* The criteria these iterations were checked on, in the order they came. */
+  function criteriaIn(iterations) {
+    var seen = [];
+    (iterations || []).forEach(function (it) {
+      var key = criterionKey(it);
+      if (seen.indexOf(key) === -1) seen.push(key);
+    });
+    return seen;
+  }
+
+  /* What the axes measure: the criterion's words when the run has one, else "value". */
+  function measured(data) {
+    var keys = criteriaIn(data && data.iterations);
+    return keys.length > 1 ? 'value' : criterion(keys[0] || 'residual').words;
   }
 
   /* "stage 3 of 7, SheetPileWall installation": the stage Kratos is in, or was last in. */
@@ -150,20 +214,26 @@ App.ConvergencePlot = (function () {
            + (stage.name ? ', ' + tidy(stage.name) : '');
   }
 
-  /* The last iteration in words and numbers, so the plot is not the only way to read it:
-     "Step 2, iteration 5. Relative 3.20e-3 (target 1.00e-4). Absolute ...". */
+  /* The last iteration in words and numbers, so the plot is not the only way to read it.
+     Its number is the run's, as on the iteration axis; its place in the step follows:
+     "Iteration 57 (stage 3, step 2, iteration 5 of the step). Relative residual 3.20e-3
+     (target 1.00e-4). Absolute residual ...". */
   function lastText(data) {
     var iterations = (data && data.iterations) || [];
     if (!iterations.length) return '';
     var last = iterations[iterations.length - 1];
-    var inStage = iterations.filter(function (it) {
+    var inStep = iterations.filter(function (it) {
       return it.stage === last.stage && it.step === last.step;
     }).length;
-    return (last.step ? 'Step ' + last.step + ', iteration ' + inStage + '. '
-                      : 'Iteration ' + iterations.length + '. ')
-           + 'Relative ' + format(last.relative) + ' (target ' + format(last.relative_target)
-           + '). Absolute ' + format(last.absolute) + ' (target '
-           + format(last.absolute_target) + ').' + (last.met ? ' Criterion met.' : '');
+    var place = [];
+    if (last.stage !== null && last.stage !== undefined) place.push('stage ' + last.stage);
+    if (last.step) place.push('step ' + last.step + ', iteration ' + inStep + ' of the step');
+    var words = criterion(criterionKey(last)).words;
+    return 'Iteration ' + iterations.length + (place.length ? ' (' + place.join(', ') + ')' : '')
+           + '. Relative ' + words + ' ' + format(last.relative) + ' (target '
+           + format(last.relative_target) + '). Absolute ' + words + ' '
+           + format(last.absolute) + ' (target ' + format(last.absolute_target) + ').'
+           + (last.met ? ' Criterion met.' : '');
   }
 
   var NO_RESIDUALS = 'Kratos printed no residuals. Is the solver\'s echo_level 0 in this deck?';
@@ -190,17 +260,20 @@ App.ConvergencePlot = (function () {
     return '1e' + power;
   }
 
-  /* Whole iterations, about `target` of them, on round numbers. */
-  function iterationTicks(count, target) {
-    if (count <= 1) return [1];
+  /* Whole iterations, about `target` of them, on round numbers, from iteration `first`
+     (1 when left out) to `first + count - 1`. `first` gets a tick too, unless a round
+     one is so close the numbers would touch. */
+  function iterationTicks(count, target, first) {
+    first = first || 1;
+    if (count <= 1) return [first];
     var raw = count / (target || 8);
     var magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
     var step = [1, 2, 5, 10].map(function (n) { return n * magnitude; })
       .filter(function (s) { return s >= raw; })[0] || 10 * magnitude;
     step = Math.max(1, Math.round(step));
     var out = [];
-    for (var k = step; k <= count; k += step) out.push(k);
-    if (out[0] !== 1) out.unshift(1);
+    for (var k = Math.ceil(first / step) * step; k < first + count; k += step) out.push(k);
+    if (!out.length || (out[0] !== first && out[0] - first >= step / 2)) out.unshift(first);
     return out;
   }
 
@@ -216,17 +289,42 @@ App.ConvergencePlot = (function () {
     return FIG.width - (fractionsOf(data).length ? FIG.fraction : FIG.right);
   }
 
-  /* A second legend row holds the fraction of unbalance, when there is one. */
-  function height(data) {
-    return FIG.top + 2 * FIG.panel + FIG.gap + FIG.bottom
-           + FIG.legend * (fractionsOf(data).length ? 2 : 1);
-  }
-
   /* An X, the original's 'x' marker, centred on (x, y), `half` wide either way. */
   function cross(x, y, half) {
     return 'M' + fixed(x - half) + ',' + fixed(y - half) + 'l' + fixed(2 * half) + ','
            + fixed(2 * half) + 'm0,' + fixed(-2 * half) + 'l' + fixed(-2 * half) + ','
            + fixed(2 * half);
+  }
+
+  /* The part of `data` that is stage `index`, with every `at` counted from the stage's
+     first iteration, and `offset`, the number of iterations before it: what the figure
+     draws when it shows that stage alone. All of `data` when there is no such stage.
+     The same split as `stage_rows` in `core/results/convergence.py`: a step at the next
+     stage's start is that stage's, and an event belongs to the iteration before it. */
+  function windowed(data, index) {
+    var stages = data.stages || [];
+    var order = -1;
+    stages.forEach(function (stage, i) { if (order < 0 && stage.index === index) order = i; });
+    if (index === null || index === undefined || order < 0) return { data: data, offset: 0 };
+    var iterations = data.iterations || [];
+    var from = stages[order].at;
+    var last = order + 1 === stages.length;
+    var to = last ? iterations.length : stages[order + 1].at;
+    function moved(list, keep) {
+      return (list || []).filter(keep).map(function (item) {
+        return Object.assign({}, item, { at: item.at - from });
+      });
+    }
+    function after(item) { return item.at > from && item.at <= to; }
+    return { offset: from, data: Object.assign({}, data, {
+      iterations: iterations.slice(from, to),
+      stages: [Object.assign({}, stages[order], { at: 0 })],
+      steps: moved(data.steps, function (step) {
+        return step.at >= from && (step.at < to || last);
+      }),
+      events: moved(data.events, after),
+      fractions: moved(data.fractions, after)
+    }) };
   }
 
   /* Where each stage's band runs, in iterations: from just before its first iteration
@@ -235,19 +333,23 @@ App.ConvergencePlot = (function () {
     var stages = data.stages || [];
     return stages.map(function (stage, i) {
       var end = i + 1 < stages.length ? stages[i + 1].at : count;
-      return { stage: stage, from: stage.at + 0.5, to: end + 0.5 };
+      return { stage: stage, from: stage.at + 0.5, to: end + 0.5,
+               iterations: (data.iterations || []).slice(stage.at, end) };
     });
   }
 
   function tooltip(data, it, n) {
     var stage = it.stage !== null && it.stage !== undefined ? stageNamed(data, it.stage) : null;
+    var words = criterion(criterionKey(it)).words;
     var place = 'Iteration ' + n
               + (stage ? ' — stage ' + stage.index + (stage.name ? ' ' + tidy(stage.name) : '')
                  : '')
               + (it.step ? ', step ' + it.step : '');
     var lines = [place,
-                 'Relative ' + format(it.relative) + ' (target ' + format(it.relative_target) + ')',
-                 'Absolute ' + format(it.absolute) + ' (target ' + format(it.absolute_target) + ')'];
+                 'Relative ' + words + ' ' + format(it.relative) + ' (target '
+                 + format(it.relative_target) + ')',
+                 'Absolute ' + words + ' ' + format(it.absolute) + ' (target '
+                 + format(it.absolute_target) + ')'];
     if (it.met) lines.push('Criterion met');
     (data.events || []).forEach(function (event) {
       if (event.at === n) lines.push(eventText(event));
@@ -255,9 +357,11 @@ App.ConvergencePlot = (function () {
     return lines.join('\n');
   }
 
-  /* One panel: `key` is 'relative' or 'absolute'. */
-  function panel(data, key, top, sx, count, lastPanel) {
-    var left = FIG.left, right = rightEdge(data), bottom = top + FIG.panel;
+  /* One panel: `key` is 'relative' or 'absolute'. `fig` is the figure's layout (`svg`):
+     the data it draws, `sx`, `count`, `offset`, the panel height and the right edge. */
+  function panel(fig, key, top, lastPanel) {
+    var data = fig.data, sx = fig.sx, count = fig.count, offset = fig.offset;
+    var left = FIG.left, right = fig.right, height = fig.panel, bottom = top + height;
     var iterations = data.iterations || [];
     var out = ['<g class="cp-panel cp-' + key + '">'];
     var range = decades(iterations.map(function (it) { return it[key]; })
@@ -274,8 +378,8 @@ App.ConvergencePlot = (function () {
       var x0 = Math.max(left, sx(band.from)), x1 = Math.min(right, sx(band.to));
       if (x1 > x0) {
         out.push('<rect class="cp-band" x="' + fixed(x0) + '" y="' + top + '" width="'
-                 + fixed(x1 - x0) + '" height="' + FIG.panel + '" fill="'
-                 + BANDS[i % BANDS.length] + '"/>');
+                 + fixed(x1 - x0) + '" height="' + height + '" fill="'
+                 + BANDS[((band.stage.index || i + 1) - 1) % BANDS.length] + '"/>');
       }
     });
     var starts = {};
@@ -309,7 +413,7 @@ App.ConvergencePlot = (function () {
     }
     out.push('<text class="cp-ylabel" transform="translate(14,' + fixed((top + bottom) / 2)
              + ') rotate(-90)" text-anchor="middle">'
-             + (key === 'relative' ? 'Relative residual' : 'Absolute residual') + '</text>');
+             + (key === 'relative' ? 'Relative ' : 'Absolute ') + measured(data) + '</text>');
 
     // The target, a dashed step line: each iteration's own target across its width.
     if (iterations.length) {
@@ -327,19 +431,24 @@ App.ConvergencePlot = (function () {
     }
 
     // The residuals: one line through the whole run, across steps and stages, as the
-    // FEA-Tools plotter draws it. It breaks only at a value that is not finite.
-    var segment = [], lines = [];
+    // FEA-Tools plotter draws it. It breaks at a value that is not finite, and where the
+    // criterion changes: a residual and a displacement change are not one quantity.
+    var segment = [], lines = [], was = null;
+    function flush() {
+      if (segment.length > 1) lines.push({ points: segment, key: was });
+      segment = [];
+    }
     iterations.forEach(function (it, i) {
-      if (!finite(it[key])) {
-        if (segment.length > 1) lines.push(segment);
-        segment = [];
-      }
+      var now = criterionKey(it);
+      if (!finite(it[key]) || now !== was) flush();
+      was = now;
       if (finite(it[key])) segment.push(fixed(sx(i + 1)) + ',' + fixed(sy(it[key])));
     });
-    if (segment.length > 1) lines.push(segment);
-    lines.forEach(function (points) {
-      out.push('<polyline class="cp-line" points="' + points.join(' ') + '" fill="none"'
-               + ' stroke="' + LINE + '" stroke-width="1.3" stroke-linejoin="round"/>');
+    flush();
+    lines.forEach(function (line) {
+      out.push('<polyline class="cp-line" points="' + line.points.join(' ') + '" fill="none"'
+               + ' stroke="' + criterion(line.key).colour + '" stroke-width="1.3"'
+               + ' stroke-linejoin="round"/>');
     });
 
     // A dot for every iteration, with its tooltip; a green X over it where the criterion
@@ -347,7 +456,7 @@ App.ConvergencePlot = (function () {
     var r = iterations.length > 400 ? 1.4 : iterations.length > 100 ? 2 : 2.6;
     iterations.forEach(function (it, i) {
       var x = fixed(sx(i + 1)), cy = fixed(sy(it[key]));
-      var tip = '<title>' + esc(tooltip(data, it, i + 1)) + '</title>';
+      var tip = '<title>' + esc(tooltip(data, it, i + 1 + offset)) + '</title>';
       if (!finite(it[key])) {
         out.push('<path class="cp-nan" d="M' + fixed(sx(i + 1) - 3) + ',' + fixed(top + 1)
                  + 'l6,6m0,-6l-6,6" stroke="' + EVENT + '" stroke-width="1.6" fill="none">'
@@ -355,7 +464,7 @@ App.ConvergencePlot = (function () {
         return;
       }
       out.push('<circle class="cp-dot" cx="' + x + '" cy="' + cy + '" r="' + r + '" fill="'
-               + LINE + '">' + tip + '</circle>');
+               + criterion(criterionKey(it)).colour + '">' + tip + '</circle>');
       if (it.met) {
         // Over the dot, so it shows; the dot under it keeps the tooltip.
         out.push('<path class="cp-met" d="' + cross(sx(i + 1), sy(it[key]), r + 1.8)
@@ -373,7 +482,7 @@ App.ConvergencePlot = (function () {
     Object.keys(marked).forEach(function (n) {
       var x = sx(Number(n));
       out.push('<path class="cp-event" d="M' + fixed(x - 4) + ',' + top + 'h8l-4,7z" fill="'
-               + EVENT + '"><title>' + esc('After iteration ' + n + ': '
+               + EVENT + '"><title>' + esc('After iteration ' + (Number(n) + offset) + ': '
                + marked[n].join('; ')) + '</title></path>');
     });
 
@@ -395,7 +504,7 @@ App.ConvergencePlot = (function () {
         out.push('<path class="cp-fraction-mark" d="' + cross(sx(at(f)), fy(f.value), half)
                  + '" stroke="' + EVENT + '" stroke-width="1.2" fill="none"><title>'
                  + esc('Fraction of unbalance ' + format(f.value) + ', after iteration '
-                       + at(f)) + '</title></path>');
+                       + (at(f) + offset)) + '</title></path>');
       });
       [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(function (v) {
         var ty = fixed(fy(v));
@@ -411,15 +520,16 @@ App.ConvergencePlot = (function () {
     }
 
     out.push('<rect x="' + left + '" y="' + top + '" width="' + (right - left) + '" height="'
-             + FIG.panel + '" fill="none" stroke="' + FRAME + '"/>');
+             + height + '" fill="none" stroke="' + FRAME + '"/>');
     if (fractions.length) {
       out.push('<line class="cp-fraction-spine" x1="' + right + '" y1="' + top + '" x2="'
                + right + '" y2="' + bottom + '" stroke="' + EVENT + '"/>');
     }
 
-    // The iteration axis: tick marks on both panels, numbers under the lower one.
-    iterationTicks(count, 8).forEach(function (n) {
-      var x = fixed(sx(n));
+    // The iteration axis: tick marks on both panels, numbers under the lower one. The
+    // numbers are the run's, also when one stage is shown alone.
+    iterationTicks(count, 8, offset + 1).forEach(function (n) {
+      var x = fixed(sx(n - offset));
       out.push('<line x1="' + x + '" y1="' + bottom + '" x2="' + x + '" y2="' + (bottom + 3)
                + '" stroke="' + FRAME + '"/>');
       if (lastPanel) {
@@ -432,84 +542,142 @@ App.ConvergencePlot = (function () {
   }
 
   /* The stage labels above the upper panel: "3 SheetPileWall installation" where it
-     fits in its band, "3" where only that fits, nothing where not even that does. */
-  function stageLabels(data, sx, count) {
+     fits in its band, "3" where only that fits, nothing where not even that does. The
+     tooltip also names the stage's criterion. */
+  function stageLabels(fig) {
     var out = [];
-    bands(data, count).forEach(function (band) {
-      var x0 = Math.max(FIG.left, sx(band.from)), x1 = Math.min(rightEdge(data), sx(band.to));
+    bands(fig.data, fig.count).forEach(function (band) {
+      var x0 = Math.max(FIG.left, fig.sx(band.from)), x1 = Math.min(fig.right, fig.sx(band.to));
       var room = x1 - x0 - 4;
       var stage = band.stage;
       var number = stage.index === null || stage.index === undefined ? '' : String(stage.index);
       var full = (number + ' ' + tidy(stage.name)).trim();
       var text = full.length * CHAR <= room ? full : number.length * CHAR <= room ? number : '';
       if (!text) return;
+      var keys = criteriaIn(band.iterations);
+      var tip = full + (keys.length ? ' — ' + keys.map(function (key) {
+        return criterion(key).words;
+      }).join(' and ') + ' criterion' : '');
       out.push('<text class="cp-stage" x="' + fixed((x0 + x1) / 2) + '" y="' + (FIG.top - 6)
-               + '" text-anchor="middle"><title>' + esc(full) + '</title>' + esc(text)
+               + '" text-anchor="middle"><title>' + esc(tip) + '</title>' + esc(text)
                + '</text>');
     });
     return out.join('');
   }
 
-  function legend(data, y) {
-    var x = FIG.left;
-    var out = ['<g class="cp-legend" transform="translate(' + x + ',' + y + ')">'];
-    out.push('<line x1="0" y1="0" x2="16" y2="0" stroke="' + LINE + '" stroke-width="1.3"/>'
-             + '<circle cx="8" cy="0" r="2.4" fill="' + LINE + '"/>'
-             + '<text x="20" y="0" dy="0.35em">residual</text>');
-    out.push('<line x1="78" y1="0" x2="96" y2="0" stroke="' + TARGET
-             + '" stroke-dasharray="5,3"/><text x="100" y="0" dy="0.35em">target</text>');
-    out.push('<circle cx="146" cy="0" r="2.4" fill="' + LINE + '"/><path d="'
-             + cross(146, 0, 4.2) + '" stroke="' + MET + '" stroke-width="1.6" fill="none"/>'
-             + '<text x="155" y="0" dy="0.35em">criterion met</text>');
-    out.push('<path d="M232,-4h8l-4,7z" fill="' + EVENT + '"/>'
-             + '<text x="245" y="0" dy="0.35em">iteration limit or cut-back</text>');
-    out.push('<rect x="380" y="-5" width="14" height="10" fill="' + BANDS[1] + '"/>'
-             + '<text x="398" y="0" dy="0.35em">stage</text>');
-    if (fractionsOf(data).length) {
-      out.push('<g class="cp-legend-fraction" transform="translate(0,' + FIG.legend + ')">'
-               + '<line x1="0" y1="0" x2="16" y2="0" stroke="' + EVENT + '" stroke-width="1.1"/>'
-               + '<path d="' + cross(8, 0, 2.6) + '" stroke="' + EVENT + '" stroke-width="1.2"'
-               + ' fill="none"/><text x="20" y="0" dy="0.35em" fill="' + EVENT + '">'
-               + 'fraction of unbalance (right axis)</text></g>');
+  /* The legend's entries, each `width` wide with its `draw(x)`: a line per criterion the
+     figure shows, then the target, the met criterion, the events, the stages and, when
+     Kratos printed it, the fraction of unbalance. */
+  function legendItems(data) {
+    function entry(text, icon, colour) {
+      return { width: 20 + text.length * CHAR + 12, draw: function (x) {
+        return icon(x) + '<text x="' + fixed(x + 20) + '" y="0" dy="0.35em"'
+               + (colour ? ' fill="' + colour + '"' : '') + '>' + esc(text) + '</text>';
+      } };
     }
+    var keys = criteriaIn(data.iterations);
+    var items = (keys.length ? keys : ['residual']).map(function (key) {
+      var colour = criterion(key).colour;
+      return entry(criterion(key).words, function (x) {
+        return '<line x1="' + fixed(x) + '" y1="0" x2="' + fixed(x + 16) + '" y2="0" stroke="'
+               + colour + '" stroke-width="1.3"/><circle cx="' + fixed(x + 8)
+               + '" cy="0" r="2.4" fill="' + colour + '"/>';
+      });
+    });
+    items.push(entry('target', function (x) {
+      return '<line x1="' + fixed(x) + '" y1="0" x2="' + fixed(x + 16) + '" y2="0" stroke="'
+             + TARGET + '" stroke-dasharray="5,3"/>';
+    }));
+    items.push(entry('criterion met', function (x) {
+      return '<circle cx="' + fixed(x + 8) + '" cy="0" r="2.4" fill="' + LINE + '"/><path d="'
+             + cross(x + 8, 0, 4.2) + '" stroke="' + MET + '" stroke-width="1.6" fill="none"/>';
+    }));
+    items.push(entry('iteration limit or cut-back', function (x) {
+      return '<path d="M' + fixed(x + 4) + ',-4h8l-4,7z" fill="' + EVENT + '"/>';
+    }));
+    items.push(entry('stage', function (x) {
+      return '<rect x="' + fixed(x + 1) + '" y="-5" width="14" height="10" fill="' + BANDS[1]
+             + '"/>';
+    }));
+    if (fractionsOf(data).length) {
+      items.push(entry('fraction of unbalance (right axis)', function (x) {
+        return '<line x1="' + fixed(x) + '" y1="0" x2="' + fixed(x + 16) + '" y2="0" stroke="'
+               + EVENT + '" stroke-width="1.1"/><path d="' + cross(x + 8, 0, 2.6)
+               + '" stroke="' + EVENT + '" stroke-width="1.2" fill="none"/>';
+      }, EVENT));
+    }
+    return items;
+  }
+
+  /* The legend's entries in rows that fit the figure's width, each entry with its `x`. */
+  function legendRows(data) {
+    var room = FIG.width - FIG.left - 8, rows = [[]], x = 0;
+    legendItems(data).forEach(function (item) {
+      if (x > 0 && x + item.width - 12 > room) { rows.push([]); x = 0; }
+      rows[rows.length - 1].push({ item: item, x: x });
+      x += item.width;
+    });
+    return rows;
+  }
+
+  function legend(rows, y) {
+    var out = ['<g class="cp-legend" transform="translate(' + FIG.left + ',' + y + ')">'];
+    rows.forEach(function (row, i) {
+      out.push('<g class="cp-legend-row" transform="translate(0,' + i * FIG.legend + ')">');
+      row.forEach(function (placed) { out.push(placed.item.draw(placed.x)); });
+      out.push('</g>');
+    });
     out.push('</g>');
     return out.join('');
   }
 
-  /* The whole figure, as a string: shown by the window, saved as a file. */
-  function svg(data) {
+  /* The whole figure, as a string: shown by the window, saved as a file. `options`:
+     `stage`, the index of the stage to show alone (all when left out); `height`, the
+     height to fill, in the figure's units (the window's shape: 560 wide), which makes
+     the panels taller, never shorter than a saved figure's. */
+  function svg(data, options) {
     data = data || {};
-    var iterations = data.iterations || [];
+    options = options || {};
+    var part = windowed(data, options.stage);
+    var shown = part.data;
+    var iterations = shown.iterations || [];
     var count = Math.max(1, iterations.length);
-    var left = FIG.left, right = rightEdge(data);
+    var left = FIG.left, right = rightEdge(shown);
     function sx(n) { return left + (n - 0.5) / count * (right - left); }
-    var h = height(data);
+    var rows = legendRows(shown);
+    var fixedPart = FIG.top + FIG.gap + FIG.bottom + FIG.legend * rows.length;
+    var panelHeight = options.height
+      ? Math.max(FIG.panel, Math.floor((options.height - fixedPart) / 2)) : FIG.panel;
+    var h = fixedPart + 2 * panelHeight;
+    var fig = { data: shown, sx: sx, count: count, offset: part.offset, panel: panelHeight,
+                right: right };
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" class="cp-figure" viewBox="0 0 '
                + FIG.width + ' ' + h + '" width="' + FIG.width + '" height="' + h
                + '" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="' + INK
                + '">'];
     out.push('<rect width="' + FIG.width + '" height="' + h + '" fill="#fff"/>');
-    var upper = FIG.top, lower = FIG.top + FIG.panel + FIG.gap;
-    out.push(stageLabels(data, sx, count));
-    out.push(panel(data, 'relative', upper, sx, count, false));
-    out.push(panel(data, 'absolute', lower, sx, count, true));
+    var upper = FIG.top, lower = FIG.top + panelHeight + FIG.gap;
+    out.push(stageLabels(fig));
+    out.push(panel(fig, 'relative', upper, false));
+    out.push(panel(fig, 'absolute', lower, true));
     out.push('<text class="cp-xlabel" x="' + fixed((left + right) / 2) + '" y="'
-             + (lower + FIG.panel + 28) + '" text-anchor="middle">Iteration</text>');
+             + (lower + panelHeight + 28) + '" text-anchor="middle">'
+             + 'Iteration, counted over all stages</text>');
     if (!iterations.length) {
       out.push('<text class="cp-empty" x="' + fixed((left + right) / 2) + '" y="'
-               + fixed(upper + FIG.panel / 2) + '" text-anchor="middle" fill="#888">'
+               + fixed(upper + panelHeight / 2) + '" text-anchor="middle" fill="#888">'
                + 'no iterations yet</text>');
     }
-    var rows = fractionsOf(data).length ? 2 : 1;
-    out.push(legend(data, h - FIG.legend * (rows - 0.5) - 2));
+    out.push(legend(rows, h - FIG.legend * (rows.length - 0.5) - 2));
     out.push('</svg>');
     return out.join('');
   }
 
   /* ── The file ─────────────────────────────────────────────────────────── */
 
-  var COLUMNS = ['iteration', 'stage', 'stage_name', 'step', 'time', 'cycle', 'relative',
-                 'relative_target', 'absolute', 'absolute_target', 'met', 'events'];
+  var COLUMNS = ['iteration', 'stage', 'stage_name', 'step', 'time', 'cycle', 'criterion',
+                 'relative', 'relative_target', 'absolute', 'absolute_target', 'met',
+                 'events'];
 
   function cell(text) {
     var value = String(text === undefined || text === null ? '' : text);
@@ -520,20 +688,23 @@ App.ConvergencePlot = (function () {
     return v === null || v === undefined ? '' : String(v);
   }
 
-  /* A row per iteration: `cli.terminal.tables.convergence_csv`, byte for byte. */
-  function csv(data) {
+  /* A row per iteration: `cli.terminal.tables.convergence_csv`, byte for byte. With
+     `stage`, the rows of that stage only, as `--stage` gives them. */
+  function csv(data, stage) {
     var names = {};
-    (data.stages || []).forEach(function (stage) { names[stage.index] = stage.name; });
+    (data.stages || []).forEach(function (entry) { names[entry.index] = entry.name; });
     var lines = [COLUMNS.join(',')];
     (data.iterations || []).forEach(function (it, i) {
       var n = i + 1;
+      if (stage !== null && stage !== undefined && it.stage !== stage) return;
       var events = (data.events || []).filter(function (event) { return event.at === n; })
         .map(function (event) {
           return event.kind + ' ' + value(event.factor !== undefined ? event.factor
                                                                      : event.limit);
         }).join('; ');
       lines.push([n, value(it.stage), cell(names[it.stage]), value(it.step), value(it.time),
-                  value(it.cycle), value(it.relative), value(it.relative_target),
+                  value(it.cycle), value(it.criterion), value(it.relative),
+                  value(it.relative_target),
                   value(it.absolute), value(it.absolute_target), it.met ? 'yes' : 'no',
                   cell(events)].join(','));
     });
@@ -548,14 +719,14 @@ App.ConvergencePlot = (function () {
   function load(run, quiet) {
     return App.Api.get(ROOT + '/' + encodeURIComponent(run) + '/convergence')
       .then(function (data) {
-        view = { run: run, data: data };
+        keep(run, data);
         return data;
       }, function (error) { return quiet ? null : fail(error); });
   }
 
   /* Put `data` on screen as the run's, without asking: the window has it already. */
   function show(run, data, event) {
-    view = { run: run, data: data };
+    keep(run, data);
     changed(event || {});
   }
 
@@ -589,7 +760,21 @@ App.ConvergencePlot = (function () {
                  : data.failed_at ? '; stopped in stage ' + data.failed_at.index + ' of '
                                     + data.failed_at.of : '') + '.');
     log('note', '`results convergence csv` saves the numbers, `results convergence svg`, '
-                + '`png` or `pdf` the figure.');
+                + '`png` or `pdf` the figure; `results convergence stage N` shows one stage.');
+  }
+
+  /* The stage `wanted` names in `data`: its number, or words of its name, as
+     `kratos-cli results convergence --stage` matches it. */
+  function stageMatching(data, wanted) {
+    var stages = (data && data.stages) || [];
+    if (/^\d+$/.test(wanted)) return stageNamed(data, Number(wanted));
+    var plain = function (text) {
+      return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    };
+    var words = plain(wanted);
+    return stages.filter(function (stage) {
+      return stage.name && plain(stage.name).indexOf(words) !== -1;
+    })[0] || null;
   }
 
   /* ── Saving ───────────────────────────────────────────────────────────── */
@@ -599,11 +784,14 @@ App.ConvergencePlot = (function () {
     return !!(W && W.state && W.state().open);
   }
 
+  /* What is shown is what is saved: the stage shown alone, when there is one. */
   function save(kind) {
-    var data = view.data;
-    var name = view.run + '_convergence.' + kind;
-    if (kind === 'png' || kind === 'pdf') return App.Picture.saveFigure(svg(data), name, kind);
-    var text = kind === 'csv' ? csv(data) : svg(data);
+    var data = view.data, stage = view.stage;
+    var name = view.run + '_convergence' + (stage === null ? '' : '_stage_' + stage) + '.'
+               + kind;
+    var figure = svg(data, { stage: stage });
+    if (kind === 'png' || kind === 'pdf') return App.Picture.saveFigure(figure, name, kind);
+    var text = kind === 'csv' ? csv(data, stage) : figure;
     var mime = kind === 'csv' ? 'text/csv' : 'image/svg+xml';
     return App.Download.pickFile(name, mime).then(function (target) {
       if (target === App.Download.CANCELLED) {
@@ -621,9 +809,11 @@ App.ConvergencePlot = (function () {
   /* `results convergence ...`, routed here by results.js. Always a promise. */
   function command(rest) {
     var verb = String(rest || '').trim().toLowerCase();
+    if (/^stage(\s|$)/.test(verb)) return chooseStage(verb.slice(5).trim());
     if (verb && verb !== 'csv' && verb !== 'svg' && verb !== 'png' && verb !== 'pdf') {
       log('err', 'No such convergence command: "' + verb + '". `results convergence` '
-                 + 'shows it; `csv`, `svg`, `png` or `pdf` after it saves it.');
+                 + 'shows it; `stage N` or `stage all` after it picks the stages shown; '
+                 + '`csv`, `svg`, `png` or `pdf` after it saves it.');
       return Promise.resolve();
     }
     // With the Convergence window open, a file is of what it shows: its Save button and
@@ -651,9 +841,41 @@ App.ConvergencePlot = (function () {
     }).catch(fail);
   }
 
+  /* `results convergence stage N | WORDS | all`: of the run the window shows, else of
+     the run `results convergence` takes, which it then shows. */
+  function chooseStage(wanted) {
+    var ready = windowOpen() && view.data ? Promise.resolve(view.data)
+      : whichRun().then(function (run) {
+        if (run) return load(run);
+        log('err', 'No runs yet — press Calculate (F9) and one will appear.');
+        return null;
+      });
+    return ready.then(function (data) {
+      if (!data) return null;
+      var found = null;
+      if (wanted && wanted !== 'all') {
+        found = stageMatching(data, wanted);
+        if (!found) {
+          log('err', 'In ' + view.run + ', no stage with iterations matches "' + wanted
+                     + '". Its stages: ' + ((data.stages || []).map(function (stage) {
+                       return (stage.index + ' ' + tidy(stage.name)).trim();
+                     }).join(', ') || 'none') + '.');
+          return null;
+        }
+      }
+      view.stage = found ? found.index : null;
+      log('ok', found ? 'Showing stage ' + found.index
+                        + (found.name ? ', ' + tidy(found.name) : '') + ', alone.'
+                      : 'Showing every stage.');
+      changed(windowOpen() ? {} : { open: true });
+      return data;
+    }).catch(fail);
+  }
+
   return {
     command: command, state: state, forget: forget, onChange: onChange, load: load,
-    show: show, svg: svg, csv: csv, stageText: stageText, lastText: lastText,
+    show: show, setStage: setStage, svg: svg, csv: csv, stageText: stageText,
+    lastText: lastText, criterion: criterion,
     eventText: eventText, decades: decades, iterationTicks: iterationTicks,
     tidy: tidy, NO_RESIDUALS: NO_RESIDUALS, FIG: FIG
   };

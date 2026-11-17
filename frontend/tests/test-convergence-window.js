@@ -272,6 +272,54 @@
       }));
   });
 
+  function dotsShown(ctx) {
+    return windowOf(ctx).querySelectorAll('.cv-host .cp-relative .cp-dot').length;
+  }
+
+  test('convergence window: the slider shows one stage alone, or all of them', function () {
+    var ctx = rig();
+    return done(ctx, P.command('').then(function () {
+      var win = windowOf(ctx);
+      var row = win.querySelector('.cv-stages');
+      var slider = win.querySelector('.cv-stage-slider');
+      T.ok(!row.hidden, 'two stages: the slider shows');
+      T.eq(slider.max, '2');
+      T.eq(slider.value, '0');
+      T.eq(win.querySelector('.cv-stage-name').textContent, 'All stages');
+      T.eq(dotsShown(ctx), 51);
+      slider.value = '2';
+      slider.dispatchEvent(new Event('input'));
+      T.eq(P.state().stage, 2);
+      T.eq(win.querySelector('.cv-stage-name').textContent, 'Stage 2 of 2, Push');
+      T.eq(dotsShown(ctx), 50);
+      T.ok(win.querySelector('.cv-stage-slider') === slider, 'not rebuilt under the pointer');
+      return P.command('stage all');
+    }).then(function () {
+      T.eq(windowOf(ctx).querySelector('.cv-stage-slider').value, '0',
+           'the command moves the slider');
+      T.eq(dotsShown(ctx), 51);
+      var one = Object.assign({ run: RUN }, JSON.parse(JSON.stringify(CASES.seepage.data)));
+      P.show(RUN, one);
+      T.ok(windowOf(ctx).querySelector('.cv-stages').hidden, 'one stage: no slider');
+    }));
+  });
+
+  test('convergence window: the figure fills the window, and a taller one gets taller panels',
+       function () {
+    var ctx = rig();
+    return done(ctx, P.command('').then(function () {
+      var win = windowOf(ctx);
+      var host = win.querySelector('.cv-host');
+      var svg = host.querySelector('svg');
+      T.ok(svg.getBoundingClientRect().height <= host.clientHeight + 1, 'it fits, no scrolling');
+      var before = Number(svg.getAttribute('height'));
+      win.style.height = (win.offsetHeight + 400) + 'px';
+      W.render();
+      var after = Number(host.querySelector('svg').getAttribute('height'));
+      T.ok(after > before + 200, 'taller: ' + before + ' to ' + after);
+    }));
+  });
+
   test('convergence window: closing it closes its Save menu', function () {
     var ctx = rig();
     return done(ctx, P.command('').then(function () {

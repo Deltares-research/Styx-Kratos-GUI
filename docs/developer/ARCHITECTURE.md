@@ -197,7 +197,9 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
   staged-excavation validation figure and its sign convention. The window can save PNG,
   PDF, SVG or CSV.
 - **Convergence:** the relative and the absolute residual of each iteration, in two panels
-  on a log scale, with the targets, the stages and the steps. The Results menu, the
+  on a log scale, with the targets, the stages and the steps. Each iteration carries the
+  criterion that printed it, since each stage chooses its own; the plot gives each its
+  colour, and can show one stage alone. The Results menu, the
   Results rail and `results convergence` show it for any run. The CSV is written twice,
   in `convergence-plot.js` and in `cli/terminal/tables.py`, and
   `tests/test_convergence_parity.py` holds the two to the same text.

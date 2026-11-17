@@ -413,7 +413,8 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .rp-host svg { display: block; width: 100%; height: auto; }
 
 /* The Convergence window (frontend/js/convergence-window.js): two status lines in words
-   and numbers, then the figure of frontend/js/convergence-plot.js, scaled to the width. */
+   and numbers, the stage slider, then the figure of frontend/js/convergence-plot.js,
+   which fills the rest and grows with the window. */
 .dlg-convergence .dlg-body { overflow: hidden; padding: 0; }
 .cv-window { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .cv-status {
@@ -422,8 +423,19 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 }
 .cv-line1 { font-weight: 600; color: var(--c-ink); }
 .cv-line2 { color: var(--c-ink-soft); min-height: 1.45em; }
-.cv-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
-.cv-host svg { display: block; width: 100%; height: auto; }
+.cv-stages {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+  font-size: 12px; border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-stages[hidden] { display: none; }
+.cv-stages-label { color: var(--c-ink-soft); }
+.cv-stage-slider { flex: 1 1 auto; min-width: 80px; margin: 0; }
+.cv-stage-name {
+  flex: 0 1 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink);
+}
+.cv-host { flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
+.cv-host svg { display: block; width: 100%; height: 100%; }
 
 /* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
    own colour -- outlined while off, filled while on, half filled for a group that is

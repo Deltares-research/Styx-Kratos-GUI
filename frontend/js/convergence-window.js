@@ -22,6 +22,11 @@
    Closing the window does not stop the run; it only stops the asking. Modeless, like
    the plot window: it is read beside the model.
 
+   The figure fills the window, and grows with it when the window is made bigger by its
+   corner. With two stages or more, a slider under the status line shows one stage
+   alone, or all of them (`results convergence stage N | all` does the same): with many
+   stages, the early ones are too narrow to read.
+
    The figure and the words are `App.ConvergencePlot`'s, tested headless. This file is
    the DOM around them, tested in the browser (`frontend/tests/test-convergence-window.js`
    and `tests/e2e/test_convergence.py`).
@@ -35,7 +40,7 @@ var App = window.App || {};
 App.ConvergenceWindow = (function () {
 
   var POLL_MS = 1000;
-  var SIZE = { width: 560, height: 480 };
+  var SIZE = { width: 640, height: 660 };
   var STATUS = '/api/calculate/status';
 
   var win = null;           // the dialog handle while the window is open
@@ -46,12 +51,7 @@ App.ConvergenceWindow = (function () {
   var generation = 0;       // bumped to stop a loop that is waiting for an answer
   var timer = null;
   var installed = false;
-
-  function esc(text) {
-    return String(text === undefined || text === null ? '' : text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
+  var watcher = null;       // the ResizeObserver that redraws the figure to its size
 
   /* ── The window ───────────────────────────────────────────────────────── */
 
@@ -70,7 +70,13 @@ App.ConvergenceWindow = (function () {
         { label: 'Save ▾', keepOpen: true, onClick: function () { saveMenu.toggle(); } },
         { label: 'Close', primary: true }
       ],
-      onClose: function () { if (saveMenu) saveMenu.close(); win = null; stop(); }
+      onClose: function () {
+        if (saveMenu) saveMenu.close();
+        if (watcher) watcher.disconnect();
+        watcher = null;
+        win = null;
+        stop();
+      }
     });
     handle.dialog.classList.add('dlg-convergence');
     // The same Save button as the plot window: a pick runs `results convergence png`
@@ -149,16 +155,85 @@ App.ConvergenceWindow = (function () {
                                 : ' — finished'), none || last];
   }
 
-  function render() {
-    if (!win || !App.ConvergencePlot) return;
-    var lines = words();
-    var data = App.ConvergencePlot.state().data;
+  /* The window's parts, made once: a render while a run is followed (once a second)
+     changes their contents, so the slider is not rebuilt under the pointer. */
+  function build() {
     win.body.innerHTML = '<div class="cv-window">'
       + '<div class="cv-status" role="status" aria-live="polite">'
-      + '<div class="cv-line1">' + esc(lines[0]) + '</div>'
-      + '<div class="cv-line2">' + esc(lines[1]) + '</div></div>'
-      + '<div class="cv-host">' + (data || phase === 'running' || phase === 'meshing'
-        ? App.ConvergencePlot.svg(data || {}) : '') + '</div></div>';
+      + '<div class="cv-line1"></div><div class="cv-line2"></div></div>'
+      + '<label class="cv-stages" hidden><span class="cv-stages-label">Show</span>'
+      + '<input type="range" class="cv-stage-slider" min="0" max="1" step="1" value="0">'
+      + '<span class="cv-stage-name"></span></label>'
+      + '<div class="cv-host"></div></div>';
+    var slider = win.body.querySelector('.cv-stage-slider');
+    slider.addEventListener('input', function () {
+      var stages = stagesOf(App.ConvergencePlot.state().data);
+      var at = Number(slider.value);
+      App.ConvergencePlot.setStage(at > 0 && stages[at - 1] ? stages[at - 1].index : null);
+    });
+    var host = win.body.querySelector('.cv-host');
+    if (window.ResizeObserver) {
+      var size = '';
+      watcher = new ResizeObserver(function () {
+        var now = host.clientWidth + 'x' + host.clientHeight;
+        if (now !== size) { size = now; figure(); }
+      });
+      watcher.observe(host);
+    }
+  }
+
+  /* The stages the slider steps through: those with a number. */
+  function stagesOf(data) {
+    return ((data && data.stages) || []).filter(function (stage) {
+      return stage.index !== null && stage.index !== undefined;
+    });
+  }
+
+  function part(selector) { return win.body.querySelector(selector); }
+
+  /* The slider: 0 is every stage, 1 the first stage alone, and so on. */
+  function slider(data, shown) {
+    var stages = stagesOf(data);
+    var at = 0;
+    stages.forEach(function (stage, i) { if (stage.index === shown) at = i + 1; });
+    part('.cv-stages').hidden = stages.length < 2;
+    var input = part('.cv-stage-slider');
+    input.max = String(Math.max(1, stages.length));
+    if (Number(input.value) !== at) input.value = String(at);
+    var stage = at ? stages[at - 1] : null;
+    var name = stage ? 'Stage ' + stage.index + (stage.of ? ' of ' + stage.of : '')
+                       + (stage.name ? ', ' + App.ConvergencePlot.tidy(stage.name) : '')
+                     : 'All stages';
+    part('.cv-stage-name').textContent = name;
+    input.setAttribute('aria-valuetext', name);
+    input.setAttribute('aria-label', 'Stages shown');
+  }
+
+  /* The figure, as tall as the window leaves room for. */
+  function figure() {
+    if (!win || !App.ConvergencePlot) return;
+    var host = part('.cv-host');
+    if (!host) return;
+    var view = App.ConvergencePlot.state();
+    if (!view.data && phase !== 'running' && phase !== 'meshing') {
+      host.innerHTML = '';
+      return;
+    }
+    var w = host.clientWidth, h = host.clientHeight;
+    var height = w > 0 && h > 0 ? App.ConvergencePlot.FIG.width * h / w : undefined;
+    host.innerHTML = App.ConvergencePlot.svg(view.data || {},
+                                             { stage: view.stage, height: height });
+  }
+
+  function render() {
+    if (!win || !App.ConvergencePlot) return;
+    if (!part('.cv-window')) build();
+    var lines = words();
+    part('.cv-line1').textContent = lines[0];
+    part('.cv-line2').textContent = lines[1];
+    var view = App.ConvergencePlot.state();
+    slider(view.data, view.stage);
+    figure();
   }
 
   /* ── Following a run ──────────────────────────────────────────────────── */

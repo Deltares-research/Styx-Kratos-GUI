@@ -664,10 +664,13 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
-- **`convergence`** reads the residuals Kratos printed for each iteration from the run's
-  `kratos.log`: the relative and the absolute residual and their targets, whether the
+- **`convergence`** reads the values Kratos printed for each iteration from the run's
+  `kratos.log`: the criterion that printed them (`residual`, `displacement` or
+  `water pressure`), the relative and the absolute value and their targets, whether the
   convergence criterion was met, and the steps that were cut back or reached the
-  iteration limit. It works on a run that stopped, and on a run that is still running.
+  iteration limit. Each stage can have its own criterion, so the table gives it per stage,
+  and the CSV per iteration (`criterion`). It works on a run that stopped, and on a run
+  that is still running.
   A deck with two convergence criteria prints two lines per iteration, and both are
   counted as iterations.
 - **Which interface members a run has.** Each face of the wall has its own member:
@@ -728,7 +731,8 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
 | `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
 | `results convergence` | `kratos-cli results convergence RUN` |
-| `results convergence csv` | `kratos-cli results convergence RUN --csv FILE` |
+| `results convergence stage S` | `kratos-cli results convergence RUN --stage S` |
+| `results convergence csv` | `kratos-cli results convergence RUN --csv FILE` (with `--stage S` when the window shows one stage alone) |
 | `results convergence svg`, `results convergence png`, `results convergence pdf` | — the viewport's: a picture of the convergence plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |

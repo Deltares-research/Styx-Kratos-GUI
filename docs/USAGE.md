@@ -635,28 +635,49 @@ Styx never overwrites or deletes a run folder. See
 
 When you click **Calculate**, the **Convergence** window opens at the bottom right. It shows
 how the solver converges while Kratos runs, so you can see early if a stage has problems.
-You can move and resize the window. If you close it, the run continues.
+You can move the window, and make it bigger with its bottom-right corner: the plot grows
+with it. If you close the window, the run continues.
 
-After each iteration, Kratos compares two residuals with their targets: the relative
-residual and the absolute residual. A residual is the force that is still out of balance.
-The criterion is met when one of the two residuals is below its target.
+After each iteration, Kratos compares two values with their targets: a relative value and
+an absolute value. The criterion is met when one of the two is below its target. What the
+values measure depends on the stage's convergence criterion:
 
-The top of the window gives the stage that runs and the last residuals in words, for
-example *Step 2, iteration 5. Relative 3.2e-03 (target 1.0e-04).* Below it, the plot has two
-panels with the iteration number on the horizontal axis:
+| Criterion | What Kratos compares |
+|---|---|
+| Residual | The force that is still out of balance |
+| Displacement | The change of the displacements in the iteration |
+| Water pressure | The change of the water pressures in the iteration |
+
+Each stage has its own criterion, so one run can use more than one. The plot draws each
+criterion in its own colour, and the legend names them. When all stages use the same
+criterion, the axes name it too, for example *Relative residual*.
+
+The top of the window gives the stage that runs and the last values in words, for example
+*Iteration 57 (stage 3, step 2, iteration 5 of the step). Relative residual 3.2e-03 (target
+1.0e-04).* The first number counts the iterations of the whole run, as the horizontal axis
+of the plot does. Below it, the plot has two panels:
 
 | Item | What it shows |
 |---|---|
-| Upper panel | The relative residual of each iteration, on a log scale |
-| Lower panel | The absolute residual of each iteration, on a log scale |
-| Dashed line | The target of the residual |
+| Upper panel | The relative value of each iteration, on a log scale |
+| Lower panel | The absolute value of each iteration, on a log scale |
+| Horizontal axis | The iteration number, counted over all stages |
+| Dashed line | The target |
 | Green X | An iteration where the criterion was met |
 | Red mark after an iteration | A step that reached the maximum number of iterations, or that Kratos cut back to a smaller step |
 | Red dot on the top edge | A residual that is not a number (`nan`) or infinite: the solution diverged |
 | Grey bands | The stages, with the stage name where it fits |
 | Red line and right axis | The fraction of unbalance, from 0 to 1. Kratos prints it only when the stage uses load stepping, so most runs do not show it. |
 
-Point at a dot to see its stage, step, iteration and residuals.
+Point at a dot to see its stage, step, iteration and values. Point at a stage name to see
+its criterion.
+
+With many stages, the early stages are narrow. If the run has two stages or more, use the
+**Show** slider under the status line to show one stage alone: move it to the right to go
+through the stages one by one, and back to the left end for all stages. The iteration
+numbers stay those of the whole run. You can also type `results convergence stage 3`, or
+words of the stage name such as `results convergence stage first excavation`, and
+`results convergence stage all`.
 
 When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
 the run stopped. Styx opens Results mode, but it does not open the **Choose results**
@@ -676,8 +697,10 @@ To see the plot of a run later, also of a run that failed, do one of these:
 Styx shows the run that Kratos works on, else the open run, else the newest run.
 
 To save the plot, click **Save ▾** in the window and choose a format. **PNG**, **PDF** or
-**SVG** saves the figure, and **CSV** saves one row for each iteration. The file is of the
-run that the window shows.
+**SVG** saves the figure, and **CSV** saves one row for each iteration, with the criterion
+of that iteration in the `criterion` column. The file is of the run and the stages that the
+window shows. When one stage is shown alone, its number is in the file name, for example
+`Pit_A_2026-10-12_09-14_convergence_stage_3.csv`.
 
 ## Export and import Kratos files
 

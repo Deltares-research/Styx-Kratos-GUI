@@ -396,12 +396,14 @@ def test_convergence_has_a_row_per_stage(cli, run):
     assert f"{run}: 21 iterations in 7 stages" in out
     assert "Third excavation" in out
     assert out.count(" met") == 7
+    assert out.count("residual") == 7, "the criterion of each stage"
 
 
 def test_convergence_of_one_stage_has_a_row_per_iteration(cli, run):
     out = cli("results", "convergence", run, "--stage", "first excavation").out
 
-    assert out.splitlines()[0] == "Stage 4 (First excavation): 3 iteration(s)"
+    assert out.splitlines()[0] == ("Stage 4 (First excavation): 3 iteration(s), "
+                                   "residual criterion")
     assert len(out.splitlines()) == 2 + 3
 
 

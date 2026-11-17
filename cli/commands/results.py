@@ -356,12 +356,13 @@ def show_convergence(args: argparse.Namespace) -> Answer:
              if data["failed_at"] else "")
     lines = [f"{name}: {count} iteration{'s' if count != 1 else ''} in {len(rows)} "
              f"stage{'s' if len(rows) != 1 else ''}{state}",
-             f"  {'stage':<34}{'iter.':>6}{'steps':>6}  {'relative (target)':<22}"
-             f"{'absolute (target)':<22}"]
+             f"  {'stage':<34}{'criterion':<16}{'iter.':>6}{'steps':>6}  "
+             f"{'relative (target)':<22}{'absolute (target)':<22}"]
     for row in rows:
         label = (f"{row['index']:>3}  {_tidy(row['name'])}" if row["index"] is not None
                  else "  -  (no stage line)")
-        lines.append(f"  {label[:33]:<34}{row['iterations']:>6}{row['steps']:>6}  "
+        lines.append(f"  {label[:33]:<34}{_criterion(row['criterion']):<16}"
+                     f"{row['iterations']:>6}{row['steps']:>6}  "
                      f"{_pair(row['relative'], row['relative_target']):<22}"
                      f"{_pair(row['absolute'], row['absolute_target']):<22}"
                      + ("met" if row["met"] else "not met"))
@@ -397,8 +398,10 @@ def _iteration_lines(data: dict, stage: dict) -> list[str]:
     stages = data["stages"]
     order = stages.index(stage)
     end = stages[order + 1]["at"] if order + 1 < len(stages) else len(data["iterations"])
+    criterion = convergence.criterion_of(data["iterations"][stage["at"]:end])
     lines = [f"Stage {stage['index']} ({_tidy(stage['name'] or '')}): "
-             f"{end - stage['at']} iteration(s)",
+             f"{end - stage['at']} iteration(s)"
+             + (f", {_criterion(criterion)} criterion" if criterion else ""),
              f"  {'iter.':>6}{'step':>6}  {'relative (target)':<22}{'absolute (target)':<22}"]
     for at in range(stage["at"], end):
         iteration = data["iterations"][at]
@@ -410,6 +413,11 @@ def _iteration_lines(data: dict, stage: dict) -> list[str]:
             if event["at"] == at + 1:
                 lines.append(f"{'':16}" + convergence.event_text(event))
     return lines
+
+
+def _criterion(name: str | None) -> str:
+    """`displacement`, `water pressure`, `residual + displacement`; `-` for none."""
+    return name.replace("_", " ").replace("+", " + ") if name else "-"
 
 
 def _pair(value, target) -> str:

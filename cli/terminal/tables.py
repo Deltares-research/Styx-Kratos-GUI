@@ -102,14 +102,16 @@ def profile_csv(plot: dict) -> str:
 
 
 CONVERGENCE_COLUMNS = ("iteration", "stage", "stage_name", "step", "time", "cycle",
-                       "relative", "relative_target", "absolute", "absolute_target", "met",
-                       "events")
+                       "criterion", "relative", "relative_target", "absolute",
+                       "absolute_target", "met", "events")
 
 
 def convergence_csv(data: dict, stage: int | None = None) -> str:
     """The convergence of a run (`core.results.convergence`), a row per iteration.
 
-    `iteration` counts from 1 over the whole run, `step` from 1 in its stage. `met` is
+    `iteration` counts from 1 over the whole run, `step` from 1 in its stage.
+    `criterion` is the one that printed the row: `residual`, `displacement` or
+    `water_pressure`, so a run whose stages use different ones is read right. `met` is
     `yes` where Kratos said the criterion was met. `events` is what happened after that
     iteration -- `max_iterations 50`, `cut_back 0.5` -- separated by `; `. A value Kratos
     printed as nan or inf is written as such. With `stage`, the rows of that stage only.
@@ -124,7 +126,7 @@ def convergence_csv(data: dict, stage: int | None = None) -> str:
         lines.append(",".join([
             str(number), _value(iteration["stage"]), cell(names.get(iteration["stage"])),
             _value(iteration["step"]), _value(iteration["time"]), _value(iteration["cycle"]),
-            _value(iteration["relative"]), _value(iteration["relative_target"]),
+            _value(iteration["criterion"]), _value(iteration["relative"]), _value(iteration["relative_target"]),
             _value(iteration["absolute"]), _value(iteration["absolute_target"]),
             "yes" if iteration["met"] else "no", cell(events)]))
     return "\n".join(lines) + "\n"

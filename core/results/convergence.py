@@ -11,7 +11,7 @@ it), so the plot can follow a run live.
 
 The patterns are ported from the ConvergencePlotter in Deltares' FEA-Tools repository
 (`MiscellaneousTools/ConvergencePlotter/kratos_log_parser.py`), with its test samples.
-This port differs in five ways:
+This port differs in six ways:
 
 *   A stage marker of `core.analysis.kratos_main` that landed inside another line is
     taken out, and the two halves of the cut line are joined again. Logs written before
@@ -26,6 +26,9 @@ This port differs in five ways:
 *   It also reads the step cut-backs (`Down-scaling with factor`) and the steps that hit
     the iteration limit (`ATTENTION: max iterations`), which are what a user most wants
     to see.
+*   Each iteration says which criterion printed it: `residual`, `displacement` or
+    `water_pressure`. A stage chooses its own criterion, so one run can have several,
+    and the plot must not call a displacement update a residual.
 
 One known limit, kept from the original: a deck with two convergence criteria prints two
 lines per iteration, and both are counted as iterations. Decks written by this program
@@ -46,12 +49,13 @@ from core.analysis.kratos_main import STAGE_MARKER
 _NUMBER = r"([-+]?(?:nan(?:\([a-z]*\))?|inf(?:inity)?|\d+\.?\d*(?:e[-+]?\d+)?|\.\d+(?:e[-+]?\d+)?))"
 
 _ITERATION = (
-    # GeoMechanics' residual criterion.
-    re.compile(r"Obtained ratio = " + _NUMBER + r".*?Expected ratio = " + _NUMBER
-               + r".*?Absolute norm = " + _NUMBER + r".*?Expected norm =\s*" + _NUMBER,
-               re.IGNORECASE),
-    # Kratos' displacement and water-pressure criteria.
-    re.compile(r" ratio = " + _NUMBER + r".*?exp\.ratio = " + _NUMBER
+    # Kratos' residual and displacement criteria: `RESIDUAL CRITERION:  :: [ Obtained
+    # ratio = ...` and `DISPLACEMENT CRITERION:  :: [ Obtained ratio = ...`.
+    re.compile(r"(?:(\w+) CRITERION\b.*?)?Obtained ratio = " + _NUMBER
+               + r".*?Expected ratio = " + _NUMBER + r".*?Absolute norm = " + _NUMBER
+               + r".*?Expected norm =\s*" + _NUMBER, re.IGNORECASE),
+    # Kratos' generic criterion, one line per variable: ` WATER_PRESSURE : ratio = ...`.
+    re.compile(r"(?:(\w+)\s*:)? ratio = " + _NUMBER + r".*?exp\.ratio = " + _NUMBER
                + r".*?abs = " + _NUMBER + r".*?exp\.abs =\s*" + _NUMBER, re.IGNORECASE),
 )
 _TIME = re.compile(r"\bTIME\s*:\s*" + _NUMBER, re.IGNORECASE)
@@ -139,11 +143,13 @@ def parse(text: str, growing: bool = False) -> dict:
         for pattern in _ITERATION:
             found = pattern.search(line)
             if found:
+                name, *values = found.groups()
                 relative, relative_target, absolute, absolute_target = (
-                    number(value) for value in found.groups())
+                    number(value) for value in values)
                 iterations.append({"relative": relative, "relative_target": relative_target,
                                    "absolute": absolute, "absolute_target": absolute_target,
-                                   "met": False})
+                                   "met": False,
+                                   "criterion": name.lower() if name else None})
                 break
         else:
             if "convergence is achieved" in line.lower():
@@ -260,8 +266,8 @@ def _stage_of(data: dict, iteration: int) -> dict | None:
 
 
 def stage_rows(data: dict) -> list[dict]:
-    """One row per stage: how many iterations and steps, the last residuals, and how
-    many cut-backs and steps that hit the iteration limit."""
+    """One row per stage: its criterion, how many iterations and steps, the last
+    residuals, and how many cut-backs and steps that hit the iteration limit."""
     rows = []
     total = len(data["iterations"])
     # A log with iterations and no `Analysis -START-` (a deck from elsewhere, say) is
@@ -283,6 +289,7 @@ def stage_rows(data: dict) -> list[dict]:
         last = mine[-1] if mine else None
         rows.append({
             "index": stage["index"], "of": stage["of"], "name": stage["name"],
+            "criterion": criterion_of(mine),
             "iterations": len(mine), "steps": len(in_stage),
             "relative": last["relative"] if last else None,
             "relative_target": last["relative_target"] if last else None,
@@ -294,6 +301,13 @@ def stage_rows(data: dict) -> list[dict]:
                                   if event["kind"] == "max_iterations"),
         })
     return rows
+
+
+def criterion_of(iterations: list[dict]) -> str | None:
+    """The criterion of these iterations: the one they share, joined with `+` when they
+    have more (a deck from elsewhere), None when no line said."""
+    names = list(dict.fromkeys(it["criterion"] for it in iterations if it["criterion"]))
+    return "+".join(names) or None
 
 
 def event_text(event: dict) -> str:

@@ -10,7 +10,9 @@ the lines the parser reads:
 *   `staged_cut_lines.log`: seven stages of an excavation, one iteration each, with the stage
     markers inside other lines and before the iterations of their own stage;
 *   `iteration_limit.log`: a step that hit the limit of 50 iterations, was cut back,
-    and ended in a traceback.
+    and ended in a traceback;
+*   `mixed_criteria.log`: the same seven stages, the first on the residual criterion
+    and the others on the displacement criterion.
 """
 
 from __future__ import annotations
@@ -181,6 +183,35 @@ def test_a_step_at_the_iteration_limit_and_its_cut_back_are_events():
 
 # ── What the port adds ──────────────────────────────────────────────────────
 
+def test_each_iteration_says_which_criterion_printed_it():
+    log = "\n".join([
+        "GeoMechanics Analysis: Analysis -START-",
+        residual("0.5", "1"),
+        "DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; "
+        "Absolute norm = 0.01; Expected norm =  1e-09]",
+        "CONVERGENCE CHECK:",
+        " WATER_PRESSURE : ratio = 0.05; exp.ratio = 0.0001 abs = 0.07 exp.abs = 1e-08",
+        " ratio = 0.05; exp.ratio = 0.0001 abs = 0.07 exp.abs = 1e-08",
+    ])
+
+    data = convergence.parse(log)
+
+    assert [i["criterion"] for i in data["iterations"]] == [
+        "residual", "displacement", "water_pressure", None]
+
+
+def test_a_run_whose_stages_use_different_criteria_says_so_per_stage():
+    data = convergence.read_log(FIXTURES / "mixed_criteria.log")
+
+    assert len(data["iterations"]) == 12
+    rows = convergence.stage_rows(data)
+    assert [row["criterion"] for row in rows] == ["residual"] + ["displacement"] * 6
+    assert convergence.criterion_of([{"criterion": "residual"}, {"criterion": None},
+                                     {"criterion": "displacement"}]) == (
+        "residual+displacement")
+    assert convergence.criterion_of([{"criterion": None}]) is None
+
+
 def test_nan_inf_and_zero_are_kept():
     log = "\n".join([
         "GeoMechanics Analysis: Analysis -START-",
@@ -314,7 +345,8 @@ def test_the_csv_has_one_row_per_iteration_with_its_stage_step_and_events():
     assert len(rows) == 51
     assert rows[0] | {} == {
         "iteration": "1", "stage": "1", "stage_name": "1_Initial", "step": "1",
-        "time": "0", "cycle": "1", "relative": "1.4968e-13", "relative_target": "0.0001",
+        "time": "0", "cycle": "1", "criterion": "residual", "relative": "1.4968e-13",
+        "relative_target": "0.0001",
         "absolute": "4.03844e-11", "absolute_target": "1e-9", "met": "yes", "events": ""}
     assert rows[-1]["stage_name"] == "2_Push" and rows[-1]["met"] == "no"
     assert rows[-1]["events"] == "max_iterations 50; cut_back 0.5"
@@ -325,7 +357,7 @@ def test_the_csv_writes_nan_as_nan():
     from cli.terminal import tables
 
     text = tables.convergence_csv(convergence.parse(residual("nan", "inf")))
-    assert text.splitlines()[1].split(",")[6:10] == ["nan", "0.0001", "inf", "1e-9"]
+    assert text.splitlines()[1].split(",")[7:11] == ["nan", "0.0001", "inf", "1e-9"]
 
 
 # ── One run ─────────────────────────────────────────────────────────────────
