@@ -350,11 +350,13 @@
     });
   });
 
-  test('a contact with no Rinter of its own says it takes each soil’s', function () {
+  test('a contact with no Rinter of its own says it takes each soil’s, and can be given one', function () {
     var p = coulombProject();
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
-      T.eq(contactRow('R_inter').slice(0, 4), ['R_inter', 'each soil’s own', '', true]);
+      T.eq(contactRow('R_inter').slice(0, 4), ['R_inter', 'each soil’s own', '', false]);
+      T.eq(contactRow('R_inter')[4].set(0.6), null);
+      T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.6);
     });
   });
 
@@ -1097,15 +1099,15 @@
     p.custom_parts = [PART];
     withProject(p, function () {
       T.eq(topLabels(App.TREES.soil),
-           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors', 'Model conditions']);
+           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors']);
     });
   });
 
   /* A group the model has nothing in has no row: an empty "Sheet piles [0]" row reads
-     as if the model had sheet piles. Model conditions stays, for gravity. */
-  test('a model with nothing but soil lists only Soil and Model conditions', function () {
+     as if the model had sheet piles. So is an empty "Model conditions". */
+  test('a model with nothing but soil lists only Soil', function () {
     withProject(project(TWO, [], true), function () {
-      T.eq(topLabels(App.TREES.soil), ['Soil', 'Model conditions']);
+      T.eq(topLabels(App.TREES.soil), ['Soil']);
       T.ok(!nodeLabelled(App.TREES.soil, 'Boundary conditions'),
            'no "Boundary conditions [0]" row for a model without any');
     });
@@ -1157,7 +1159,8 @@
     withProject(project(TWO), function () {
       App.Model.setMeshStats({
         nodes: 146321, elements: 82809, seconds: 5.125,
-        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {}
+        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {},
+        average_size: 1.23456
       });
 
       var rows = App.OBJECT_PROPS.mesh.groups.Statistics;
@@ -1165,6 +1168,7 @@
       T.eq(value('Elements'), '82 809');
       T.eq(value('Nodes'), '146 321');
       T.eq(value('Element type'), 'Tetrahedron 10');
+      T.eq(value('Average element size'), '1.235', 'the size the server measured');
 
       var labels = [];
       (function walk(nodes) {

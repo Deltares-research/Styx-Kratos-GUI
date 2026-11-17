@@ -16,6 +16,10 @@ runs against (G / t and 10 G / t, t = 1 m), and, for a Coulomb contact, its stre
 that soil's by the soil's own Rinter, tan(delta) / tan(phi). The K0 stage is elastic in
 both, as the reference's `initial_materials.json` is.
 
+The Mohr-Coulomb case is also the model of the `kratos-cli` tutorial
+(`docs/cli_tutorials/CROW_case.md`) and of the ready-made model it starts from: change one,
+and change the other with it.
+
     run tests/models/crow.py      in the GUI's command box: open it there
 """
 
@@ -23,13 +27,13 @@ from __future__ import annotations
 
 import math
 
-from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, BoxRefinement,
+from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection,
                                 DisplacementCondition, Domain, Interface,
                                 InterfaceSection, Line, LineLoad, Material, MeshSettings,
                                 NormalLoad, Project, SoilBody, SoilLayer, Stage,
                                 WaterPressureCondition)
 
-NAME = "CROW excavation"
+NAME = "CROW excavation wall"
 
 WALL_X = 5.0
 WALL_TOE_Y = -13.0
@@ -48,9 +52,13 @@ LAWS = {
     MOHR_COULOMB: ("GeoMohrCoulombLawPlaneStrain", "GeoInterfaceCoulombLawPlaneStrain"),
 }
 
-RETENTION = {"BIOT_COEFFICIENT": 1.0, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
-             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10,
-             "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4}
+# Saturated below the phreatic level. With the water pressure fixed (CONSTANT_PW_FIELD)
+# Kratos reads no relative permeability, and it derives the Biot coefficient, 1 - K / K_s,
+# from the solid's bulk modulus the export gives (1e10 Pa): 0.9994 for the sand, 0.99995
+# for the clay. The reference writes 1.0; the Soil materials window offers neither for a
+# drained soil, so the GUI builds the same soil as this one.
+RETENTION = {"RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10}
 
 
 def r_inter(delta: float, phi: float) -> float:
@@ -72,7 +80,6 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": density,
                         "POROSITY": 0.0,
-                        "BULK_MODULUS_SOLID": 1.0e10,
                         **strength,
                         "K0_NC": k0,
                         **RETENTION,
@@ -90,19 +97,18 @@ def project(model: str = MOHR_COULOMB) -> Project:
         "CROSS_AREA": 0.4924, "I33": 0.4924 ** 3 / 12, "AREA_EFFECTIVE_Y": 1.0e4})
     strut = AnchorSection(id="strut", name="Strut", spacing=1.0, variables={
         "YOUNG_MODULUS": 2.1e11, "CROSS_AREA": 4.7619e-5, "DENSITY": 0.0})
-    # No material and no Rinter: each stretch of contact takes the soil it runs against.
+    # No material, no Rinter and no variables: each stretch of contact takes the soil it
+    # runs against, its retention and (Coulomb) its tension cut-off included.
     contact = InterfaceSection(
         id="contact", name="Wall contact", constitutive_law=LAWS[model][1],
-        virtual_thickness=1.0,
-        variables=RETENTION if model == LINEAR_ELASTIC
-        else {"GEO_ENABLE_TENSION_CUT_OFF": False, **RETENTION})
+        virtual_thickness=1.0)
     water_loads = [NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
                               fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
                               points=[(0.0, level), (WALL_X, level), (WALL_X, WATER_Y)])
                    for index, level in enumerate(LIFTS, start=1)]
     solved = {"max_iterations": 150, "tolerated_error": 1e-3}
     return Project(
-        name=f"{NAME}, {model}",
+        name=NAME if model == MOHR_COULOMB else f"{NAME}, {model.lower()}",
         dimension=2,
         section_offset=5.0,
         domain=Domain(x0=0.0, x1=80.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-60.0),
@@ -150,19 +156,22 @@ def project(model: str = MOHR_COULOMB) -> Project:
                         components=(0.0, -20_000.0))],
         normal_loads=water_loads,
         # The reference's mesh: 0.5 m quadratic elements along the wall, 0.25 m between
-        # its nodes, and a refined box around the pit.
+        # its nodes, growing to 5 m over 30 m from the wall. The Mohr-Coulomb strut stage
+        # is sensitive to the mesh: over 45 m or 55 m it does not converge in its 500
+        # iterations, over 30 m it takes about 270.
         mesh=MeshSettings(element_size=5.0, order=2, body_sizes={"sheetpile": 0.5},
-                          refinements=[BoxRefinement(kind="box", size=0.75, thickness=45.0,
-                                                     x_min=-1.0, x_max=8.0, y_min=-16.0,
-                                                     y_max=1.0, z_min=-1.0, z_max=11.0)]),
+                          size_bands={"sheetpile": 30.0}),
         stages=[
-            Stage(id="initial", name="Initial stage", calculation="K0 procedure",
+            Stage(id="initial", name="Initial stage", stress_initialisation="K0",
                   deactivate=["sheetpile", "strut", "wall_contact", "surcharge",
                               *(load.id for load in water_loads)]),
-            Stage(id="null_step", name="Null step", parent="initial",
-                  calculation="Null step", max_iterations=150),
+            Stage(id="null_step", name="Null step", parent="initial", max_iterations=150),
+            # As the reference does: the displacements start from zero when the wall goes
+            # in, so they show what the construction did, without the settlement of the
+            # K0 stage under the soil's own weight.
             Stage(id="install_wall", name="Wall installation", parent="null_step",
-                  activate=["sheetpile", "wall_contact", "surcharge"], **solved),
+                  activate=["sheetpile", "wall_contact", "surcharge"],
+                  reset_displacements=True, **solved),
             Stage(id="dig_1", name="First excavation", parent="install_wall",
                   activate=["water_1"], deactivate=["soil_L_top__lift1"],
                   max_iterations=500, tolerated_error=1e-3),

@@ -84,9 +84,13 @@
       err:  function (line) { log.push(['err', line]); },
       write: function (kind, line) { log.push([kind, line]); }
     };
-    App.Download = { anchor: function (name, text, mime) {
-      saved.push({ name: name, text: text, mime: mime });
-    } };
+    // No save window here: a test must not depend on what the browser makes of its click.
+    App.Download = Object.assign({}, App.Download, {
+      pickFile: function () { return Promise.resolve(null); },
+      anchor: function (name, text, mime) {
+        saved.push({ name: name, text: text, mime: mime });
+      }
+    });
 
     var answers = overrides || {};
     App.Api = {
@@ -148,6 +152,14 @@
 
   test('a displacement axis in metres is ticked in round millimetres', function () {
     T.eq(P.ticks(-0.0234, -0.0036, 5), [-0.02, -0.015, -0.01, -0.005]);
+  });
+
+  test('the value axis has as many ticks as its labels have room for', function () {
+    // 162 px of axis: seven labels of five digits ran into each other.
+    var large = P.fittingTicks(-2770, 58178, 5, 162);
+    T.ok(large.length >= 2 && large.length <= 4, 'room for ' + large.join(', '));
+    T.eq(P.ticks(-2770, 58178, 5).length > large.length, true);
+    T.eq(P.fittingTicks(-2.7, 56.6, 5, 162), [0, 10, 20, 30, 40, 50], 'short labels all fit');
   });
 
   test('tick labels carry the decimals of the step and no more', function () {

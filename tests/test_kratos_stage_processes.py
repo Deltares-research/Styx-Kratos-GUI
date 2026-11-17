@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from core.kratos import writer, materials
-from core.model import stages
+from core.kratos import deck_files, writer, materials
+from core.model.schemas import Stage
 from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest, Project
@@ -162,8 +162,9 @@ def test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(doc):
 
 
 def test_a_part_installed_this_stage_has_no_previous_stress_to_carry(doc):
-    """The reference leaves the anchor out of stage 5, where it arrives, and puts it
-    back in stage 6. Nothing else distinguishes those two stages."""
+    """The reference leaves the anchor out of stage 5, where it arrives. From stage 6 it
+    is carried. Kratos' own `building_pit` deck leaves it out there too, and a run shows
+    that this loses the strut's force at the start of each stage."""
     module = "apply_final_stresses_of_previous_stage_to_initial_state"
     assert "Strut" not in carrying(doc, "5_Strut_installation",
                                    "auxiliary_process_list", module)
@@ -176,6 +177,77 @@ def test_a_dug_out_lifts_interface_stops_carrying_stress(doc):
     fourth = carrying(doc, "4_First_excavation", "auxiliary_process_list", module)
     assert not [name for name in fourth if name.endswith("lift_1")]
     assert [name for name in fourth if name.endswith("lift_2")]
+
+
+# -- The temporary prestress workaround ----------------------------------------
+#
+# Kratos carries a truss's stress into the next stage *with* its prestress, and the truss
+# adds the prestress again. A prestressed anchor therefore gets a process of the deck's
+# own directly before the carry-over, until Kratos is fixed
+# (core/kratos/prestress_workaround.py).
+
+WORKAROUND = deck_files.PRESTRESS_WORKAROUND_MODULE
+CARRY = "apply_final_stresses_of_previous_stage_to_initial_state"
+
+
+@pytest.fixture(scope="module")
+def prestressed() -> dict:
+    data = excavation.excavation_project(staged=True).model_dump()
+    data["anchors"][0]["prestress"] = 5.0e7          # Pa
+    project = Project.model_validate(data)
+    with session():
+        return writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+
+
+@pytest.fixture(scope="module")
+def prestressed_doc(prestressed) -> dict:
+    return json.loads(prestressed["project_parameters"])
+
+
+def test_a_prestressed_anchor_is_carried_through_the_workaround(prestressed_doc):
+    for stage in STAGES[5:]:
+        listed = modules(prestressed_doc, stage, "auxiliary_process_list")
+        assert listed.index(WORKAROUND) == listed.index(CARRY) - 1, \
+            f"{stage}: the workaround has to come directly before the carry-over"
+        assert carrying(prestressed_doc, stage, "auxiliary_process_list",
+                        WORKAROUND) == ["Strut"]
+        assert "Strut" in carrying(prestressed_doc, stage, "auxiliary_process_list", CARRY)
+
+
+def test_the_workaround_waits_until_the_anchor_has_a_stress_to_carry(prestressed_doc):
+    """In stage 5 the strut arrives: nothing of it is carried, so nothing is hidden."""
+    assert stages_with(prestressed_doc, "auxiliary_process_list", WORKAROUND) == STAGES[5:]
+
+
+def test_the_workaround_is_a_process_of_the_deck_s_own(prestressed, prestressed_doc):
+    """No `kratos_module`: Kratos imports it from the directory the deck runs in, so
+    the deck ships the file, copied unchanged from the one in this repository."""
+    process = next(p for p in processes(prestressed_doc, STAGES[5], "auxiliary_process_list")
+                   if p["python_module"] == WORKAROUND)
+    assert "kratos_module" not in process
+    assert prestressed["process_files"] == {
+        deck_files.PRESTRESS_WORKAROUND_NAME:
+            deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
+
+
+def test_the_workaround_file_says_it_is_temporary():
+    source = deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")
+    assert source.startswith('"""TEMPORARY WORKAROUND')
+    assert "test_kratos_still_counts_the_prestress_twice" in source
+
+
+def test_an_anchor_without_prestress_needs_no_workaround(result, doc):
+    assert result["process_files"] == {}
+    assert not stages_with(doc, "auxiliary_process_list", WORKAROUND)
+
+
+def test_an_anchor_s_prestress_is_its_own_or_else_its_tendon_s():
+    from core.model.schemas import AnchorSection
+    tendon = AnchorSection(id="t", name="t", variables={"TRUSS_PRESTRESS_PK2": 3.0e6})
+    bare = AnchorSection(id="b", name="b", variables={})
+    assert materials.anchor_prestress(tendon, 5.0e7) == 5.0e7
+    assert materials.anchor_prestress(tendon, 0.0) == 3.0e6
+    assert not materials.anchor_prestress(bare, 0.0)
 
 
 # -- C3: extrapolation and JSON output ---------------------------------------
@@ -390,15 +462,16 @@ def test_material_parameters_writes_the_k0_variables_on_request():
 
 # -- What is built from the start ----------------------------------------------
 #
-# "Create default stages" switches nothing off (`stages.default_stages`), so a wall and
-# its interfaces drawn before that are in the model from the first stage. There is no
-# stage before the first for them to carry a stress from, and the first stage is where
-# they arrive.
+# A first stage that switches nothing off has a wall and its interfaces in the model
+# from the start. There is no stage before the first for them to carry a stress from,
+# and the first stage is where they arrive.
 
 @pytest.fixture(scope="module")
 def from_the_start() -> dict:
     project = excavation.excavation_project(staged=False)
-    project = project.model_copy(update={"stages": stages.default_stages(project)})
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
+        Stage(id="null_step", name="Null step", parent="initial", max_iterations=150)]})
     with session():
         exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
     return json.loads(exported["project_parameters"])
@@ -417,3 +490,88 @@ def test_interfaces_built_from_the_start_find_their_neighbours_in_the_first_stag
     assert len(carrying(from_the_start, "1_Initial_stage", "auxiliary_process_list",
                         module)) == 7
     assert module not in modules(from_the_start, "2_Null_step", "auxiliary_process_list")
+
+
+# -- Stress initialisation and time integration ----------------------------------
+#
+# Gravity loading is an ordinary solve under the self weight: no K0 process, the
+# materials file every other stage reads. A dynamic stage is Kratos' `Dynamic` solution
+# type.
+
+@pytest.fixture(scope="module")
+def gravity_then_dynamic() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="gravity"),
+        Stage(id="null_step", name="Null step", parent="initial"),
+        Stage(id="shake", name="Shake", parent="null_step", time_integration="dynamic",
+              deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def _solver(doc: dict, stage: str) -> dict:
+    return doc["stages"][stage]["stage_settings"]["solver_settings"]
+
+
+def test_gravity_loading_runs_no_k0_procedure(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert "apply_k0_procedure_process" not in modules(
+            gravity_then_dynamic, stage, "auxiliary_process_list")
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "material_import_settings"]["materials_filename"] == deck_files.MATERIALS_NAME
+
+
+def test_gravity_loading_starts_the_clock_at_zero(gravity_then_dynamic):
+    starts = [gravity_then_dynamic["stages"][name]["stage_settings"]["problem_data"]
+              ["start_time"] for name in ("1_Initial_stage", "2_Null_step", "3_Shake")]
+    assert starts == [0.0, 1.0, 2.0]
+
+
+def test_a_static_stage_is_static_and_a_dynamic_one_dynamic(gravity_then_dynamic):
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")["solution_type"] == "static"
+    assert _solver(gravity_then_dynamic, "2_Null_step")["solution_type"] == "static"
+    # With the capital: Kratos adds the velocity and acceleration degrees of freedom only
+    # for exactly "Dynamic" (geomechanics_U_Pw_solver.py).
+    assert _solver(gravity_then_dynamic, "3_Shake")["solution_type"] == "Dynamic"
+
+
+# -- Gravity follows the initial stage's stress initialisation -----------------------
+#
+# Gravity loading (and the K0 procedure) puts the self weight on every body in every
+# stage -- the structures too, which are in the computational model part the process
+# names -- and an initial stage that initialises no stresses leaves it out altogether.
+
+GRAVITY = "apply_vector_constraint_table_process"
+
+
+def _gravity_in(doc: dict, stage: str) -> bool:
+    return any(p["python_module"] == GRAVITY
+               and p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION"
+               for p in processes(doc, stage, "loads_process_list"))
+
+
+def test_gravity_loading_weighs_every_body_in_every_stage(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert _gravity_in(gravity_then_dynamic, stage), stage
+    bodies = _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "problem_domain_sub_model_part_list"]
+    assert "SheetPileWall" in bodies, "the wall is not in the computational model part"
+
+
+@pytest.fixture(scope="module")
+def no_stresses() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="none"),
+        Stage(id="load", name="Load", parent="initial", deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def test_no_stress_initialisation_means_no_gravity_in_any_stage(no_stresses):
+    for stage in no_stresses["stages"]:
+        assert not _gravity_in(no_stresses, stage), stage
+

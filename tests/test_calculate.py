@@ -73,6 +73,17 @@ def test_the_three_input_files_are_written_under_the_deck_name(tmp_path):
     assert json.loads((tmp_path / "ProjectParameters.json").read_text(encoding="utf-8"))
 
 
+def test_a_process_file_of_the_deck_is_written_beside_it(tmp_path):
+    """The temporary prestress workaround is a Python process that Kratos imports from
+    the directory the deck runs in."""
+    deck = dict(DECK, process_files={"kratos_gui_prestress_workaround.py": "x = 1\n"})
+    written = calculation.write_deck(deck, tmp_path)
+
+    assert written[-1] == "kratos_gui_prestress_workaround.py"
+    assert (tmp_path / "kratos_gui_prestress_workaround.py").read_text(
+        encoding="utf-8") == "x = 1\n"
+
+
 def test_the_mdpa_is_named_exactly_what_the_parameters_ask_kratos_for(tmp_path):
     """`model_import_settings.input_filename` plus `.mdpa` is how Kratos finds the
     mesh; a file named anything else is a run that stops on its first line."""
@@ -272,7 +283,7 @@ def test_a_missing_kratos_is_explained_rather_than_left_as_a_traceback(
         runs, monkeypatch):
     """The one failure that is configuration rather than modelling, and the one a
     traceback about an import is least likely to tell someone how to fix."""
-    stand_in(monkeypatch, "import KratosMultiphysics")
+    stand_in(monkeypatch, "raise ModuleNotFoundError(\"No module named 'KratosMultiphysics'\")")
 
     result = calculation.run(DECK)
 

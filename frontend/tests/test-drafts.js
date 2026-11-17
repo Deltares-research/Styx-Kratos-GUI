@@ -71,8 +71,10 @@
 
   T.test('the project\'s water is written as on the command line', function () {
     M.water.forEach(function (c) {
-      var water = App.SoilModels.water(c.system, c.specific_weight, c.bulk_modulus, c.viscosity);
-      var what = JSON.stringify([c.system, c.specific_weight, c.bulk_modulus, c.viscosity]);
+      var water = App.SoilModels.water(c.system, c.specific_weight, c.bulk_modulus, c.viscosity,
+                                       c.gravity);
+      var what = JSON.stringify([c.system, c.specific_weight, c.bulk_modulus, c.viscosity,
+                                 c.gravity]);
       T.eq(Object.keys(water), Object.keys(c.water), what + ', the same variables');
       Object.keys(c.water).forEach(function (name) { close(water[name], c.water[name], what + ' ' + name); });
     });
@@ -80,8 +82,10 @@
 
   M.derived.forEach(function (c) {
     T.test('a soil derives and computes as on the command line: ' + c.title, function () {
-      var water = App.SoilModels.water(c.system, c.water.DENSITY_WATER * App.Units.gravity(c.system),
-                                       c.water.BULK_MODULUS_FLUID, c.water.DYNAMIC_VISCOSITY);
+      var water = App.SoilModels.water(c.system,
+                                       c.water.DENSITY_WATER * App.Units.gravity(c.system, c.gravity),
+                                       c.water.BULK_MODULUS_FLUID, c.water.DYNAMIC_VISCOSITY,
+                                       c.gravity);
       close(water.DENSITY_WATER, c.water.DENSITY_WATER, 'the water');
       var derived = App.SoilModels.derived(c.law, c.variables, c.water, c.system, c.flow);
       T.eq(Object.keys(derived), Object.keys(c.derived), 'derived, in the same order');
@@ -89,7 +93,8 @@
         if (typeof c.derived[name] === 'number') close(derived[name], c.derived[name], name);
         else T.eq(derived[name], c.derived[name], name);
       });
-      var computed = App.SoilModels.computed(c.law, c.variables, c.water, c.system, c.flow);
+      var computed = App.SoilModels.computed(c.law, c.variables, c.water, c.system, c.flow,
+                                             c.gravity);
       T.eq(Object.keys(computed), Object.keys(c.computed), 'computed, in the same order');
       Object.keys(c.computed).forEach(function (name) {
         close(computed[name], c.computed[name], name);

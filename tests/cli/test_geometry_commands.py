@@ -119,6 +119,19 @@ def test_material_set_and_unset_variables(cli, site):
     assert "GEO_COHESION" not in m1.variables
 
 
+def test_material_add_and_set_take_the_soil_s_r_inter(cli, site):
+    """The material window's R_inter field, on the command line too."""
+    assert cli("material", site, "add", "clay", "--r-inter", "0.48").code == 0
+    assert session.load(site).materials[-1].r_inter == 0.48
+
+    assert cli("material", site, "set", "clay", "--r-inter", "0.5").code == 0
+    assert session.load(site).materials[-1].r_inter == 0.5
+
+    ran = cli("material", site, "set", "clay", "--r-inter", "1.5")
+    assert ran.code == 1
+    assert session.load(site).materials[-1].r_inter == 0.5
+
+
 def test_a_variable_that_is_not_name_equals_value_is_refused(cli, site):
     ran = cli("material", site, "set", "m1", "YOUNG_MODULUS")
 
@@ -296,8 +309,8 @@ def test_a_size_for_a_body_the_model_lacks_is_refused_with_how_to_take_it_away(
     refused = cli(refuser, path)
 
     assert refused.code == 1
-    assert "the mesh settings name bodies this model does not have: gone, lost." in refused.err
-    assert "kratos-cli remove FILE mesh.body_sizes.gone" in refused.err
+    assert "the mesh settings name objects this model does not have: gone, lost." in refused.err
+    assert "kratos-cli mesh FILE --body-size gone none" in refused.err
     assert cli("remove", path, "mesh.body_sizes.gone").code == 0
     assert cli("remove", path, "mesh.body_sizes.lost").code == 0
     ran = cli("check", path)

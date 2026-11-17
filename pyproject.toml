@@ -1,5 +1,44 @@
-# Settings for the Python tools: pytest, coverage, mypy and ruff. The app itself is not
-# installed from here: the launcher installs requirements.txt (backend/launcher.py).
+# Build system and project metadata
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deltaresstyx"
+# One version number, VERSION in core/version.py, for the wheel and for what Styx shows.
+dynamic = ["version"]
+description = "A GUI for the Kratos structural analysis framework"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.162.5",
+    "uvicorn[standard]==0.34.0",
+    "pydantic==2.14.3",
+    "gmsh==4.13.1",
+    "numpy==2.2.6; python_version < '3.11'",
+    "numpy==2.3.5; python_version >= '3.11' and python_version < '3.15'",
+    "numpy==2.5.4; python_version >= '3.15'",
+    "python-multipart==0.0.32; python_version < '3.11'",
+    "python-multipart==0.0.33; python_version >= '3.11'",
+]
+
+[project.scripts]
+deltaresstyx = "backend.launcher:main"
+kratos-cli = "cli.__main__:run"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "core.version.VERSION"}
+
+[tool.setuptools.packages.find]
+include = ["backend*", "core*", "cli*"]
+
+[tool.setuptools.package-data]
+backend = ["../frontend/**/*"]
+
+# Settings for the Python tools: pytest, coverage, mypy and ruff.
 
 # ── pytest ──────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
@@ -26,6 +65,10 @@ filterwarnings = [
     # fastapi.testclient imports starlette's TestClient, which now asks for httpx2. The
     # tests keep the pinned httpx (requirements.txt) until fastapi moves over.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+    # pytest-playwright 0.10.0 defines its fallback base_url fixture (used when
+    # pytest-base-url is not installed) as an instance method, which pytest 9.2
+    # deprecates. Only the browser and e2e tiers request it.
+    "ignore:Session-scoped fixtures defined as instance methods are deprecated:pytest.PytestRemovedIn10Warning",
 ]
 
 # ── coverage, for `pytest --cov` (plan/alpha-test-plan.md Task 0.5) ─────────

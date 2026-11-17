@@ -499,3 +499,50 @@ def test_the_note_is_absent_in_plane_strain(session):
                                    MeshRequest(element_size=6.0, order=1))
 
     assert not any("not staged" in w for w in export["warnings"]), export["warnings"]
+
+
+# ── Structures whose stress Kratos cannot carry into the next stage ─────────
+#
+# Kratos resets the displacements at the start of every stage, so a structure keeps its
+# stress only through ApplyFinalStressesOfPreviousStageToInitialState. Kratos 10.4.4
+# gives that process no stress for a shell or a 3-node 3D beam, and a plane one for a
+# 2-node 3D beam. The export says so wherever such a structure is in two stages running.
+
+KEPT = "stay in the model from one stage to the next"
+
+
+def kept_warnings(export: dict, what: str) -> list[str]:
+    return [w for w in export["warnings"] if KEPT in w and w.startswith(what)]
+
+
+def test_a_panel_in_two_stages_says_its_forces_start_each_stage_at_zero(session):
+    export = writer.export_project(_staged(structured([PANEL]), []),
+                                   MeshRequest(element_size=6.0, order=1))
+    [warning] = kept_warnings(export, "wall panel")
+    assert "Wall_1" in warning and "zero" in warning
+
+
+def test_a_panel_in_one_stage_only_has_nothing_to_carry(session):
+    export = writer.export_project(_staged(structured([PANEL]), ["panel_1"]),
+                                   MeshRequest(element_size=6.0, order=1))
+    assert not kept_warnings(export, "wall panel"), export["warnings"]
+
+
+def test_a_single_stage_has_nothing_to_carry(session):
+    export = writer.export_project(structured([PANEL, MEMBER]),
+                                   MeshRequest(element_size=6.0, order=1))
+    assert not [w for w in export["warnings"] if KEPT in w], export["warnings"]
+
+
+def test_a_linear_member_in_two_stages_is_carried_as_a_plane_stress(session):
+    export = writer.export_project(_staged(structured([MEMBER]), []),
+                                   MeshRequest(element_size=6.0, order=1))
+    [warning] = kept_warnings(export, "member")
+    assert "King_post_1" in warning and "LinearTimoshenkoBeamElement3D2N" in warning
+
+
+def test_a_quadratic_member_in_two_stages_says_the_run_will_stop(session):
+    export = writer.export_project(_staged(structured([MEMBER]), []),
+                                   MeshRequest(element_size=6.0, order=2))
+    [warning] = kept_warnings(export, "member")
+    assert "LinearTimoshenkoCurvedBeamElement3D3N" in warning and "stops" in warning

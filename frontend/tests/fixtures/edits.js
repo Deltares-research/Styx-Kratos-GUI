@@ -476,7 +476,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
-      "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -495,6 +495,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -554,8 +555,14 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
-      ]
+      ],
+      "model_strategies": {}
     },
     "pit with a drawn box": {
       "name": "Staged excavation",
@@ -1027,7 +1034,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
-      "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1047,6 +1054,7 @@ window.EDITS_FIXTURE =
           "soil_L_top__lift3": 1.0,
           "drawn_0": 0.5
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -1138,8 +1146,14 @@ window.EDITS_FIXTURE =
         "water_3",
         "drawn_0",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
-      ]
+      ],
+      "model_strategies": {}
     },
     "pit with a spare material": {
       "name": "Staged excavation",
@@ -1634,7 +1648,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
-      "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1653,6 +1667,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -1712,8 +1727,14 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
-      ]
+      ],
+      "model_strategies": {}
     },
     "pit without strut or contact": {
       "name": "Staged excavation",
@@ -2156,7 +2177,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
-      "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2173,6 +2194,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -2230,8 +2252,14 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
-      ]
+      ],
+      "model_strategies": {}
     },
     "staged pit": {
       "name": "Staged excavation",
@@ -2703,7 +2731,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
-      "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2722,6 +2750,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -2742,7 +2771,9 @@ window.EDITS_FIXTURE =
           "id": "initial",
           "name": "Initial stage",
           "parent": null,
-          "calculation": "K0 procedure",
+          "calculation": "mechanical",
+          "stress_initialisation": "K0",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
@@ -2755,28 +2786,42 @@ window.EDITS_FIXTURE =
             "water_3"
           ],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "null_step",
           "name": "Null step",
           "parent": "initial",
-          "calculation": "Null step",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.0001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "install_sheetpile",
           "name": "SheetPileWall installation",
           "parent": "null_step",
-          "calculation": "Plastic",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
             "sheetpile",
@@ -2785,15 +2830,22 @@ window.EDITS_FIXTURE =
           ],
           "deactivate": [],
           "reset_displacements": true,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "dig_1",
           "name": "First excavation",
           "parent": "install_sheetpile",
-          "calculation": "Plastic",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
             "water_1"
@@ -2802,30 +2854,44 @@ window.EDITS_FIXTURE =
             "soil_L_top__lift1"
           ],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "install_strut",
           "name": "Strut installation",
           "parent": "dig_1",
-          "calculation": "Plastic",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
             "strut"
           ],
           "deactivate": [],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "dig_2",
           "name": "Second excavation",
           "parent": "install_strut",
-          "calculation": "Plastic",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
             "water_2"
@@ -2835,15 +2901,22 @@ window.EDITS_FIXTURE =
             "water_1"
           ],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         },
         {
           "id": "dig_3",
           "name": "Third excavation",
           "parent": "dig_2",
-          "calculation": "Plastic",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
             "water_3"
@@ -2853,9 +2926,14 @@ window.EDITS_FIXTURE =
             "water_2"
           ],
           "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
           "tolerated_error": 0.001,
-          "time_interval": 0.0
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
         }
       ],
       "deck": null,
@@ -2901,8 +2979,14 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
-      ]
+      ],
+      "model_strategies": {}
     }
   },
   "cases": [
@@ -3370,7 +3454,9 @@ window.EDITS_FIXTURE =
             "id": "initial",
             "name": "Initial stage",
             "parent": null,
-            "calculation": "K0 procedure",
+            "calculation": "mechanical",
+            "stress_initialisation": "K0",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [],
             "deactivate": [
@@ -3383,28 +3469,42 @@ window.EDITS_FIXTURE =
               "water_3"
             ],
             "reset_displacements": false,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 15,
             "tolerated_error": 0.0001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           },
           {
             "id": "null_step",
             "name": "Null step",
             "parent": "initial",
-            "calculation": "Null step",
+            "calculation": "mechanical",
+            "stress_initialisation": "none",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [],
             "deactivate": [],
             "reset_displacements": false,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
             "tolerated_error": 0.0001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           },
           {
             "id": "install_sheetpile",
             "name": "SheetPileWall installation",
             "parent": "null_step",
-            "calculation": "Plastic",
+            "calculation": "mechanical",
+            "stress_initialisation": "none",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [
               "sheetpile",
@@ -3413,15 +3513,22 @@ window.EDITS_FIXTURE =
             ],
             "deactivate": [],
             "reset_displacements": true,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
             "tolerated_error": 0.001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           },
           {
             "id": "dig_1",
             "name": "First excavation",
             "parent": "install_sheetpile",
-            "calculation": "Plastic",
+            "calculation": "mechanical",
+            "stress_initialisation": "none",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [
               "water_1"
@@ -3430,30 +3537,44 @@ window.EDITS_FIXTURE =
               "soil_L_top__lift1"
             ],
             "reset_displacements": false,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
             "tolerated_error": 0.001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           },
           {
             "id": "install_strut",
             "name": "Strut installation",
             "parent": "dig_1",
-            "calculation": "Plastic",
+            "calculation": "mechanical",
+            "stress_initialisation": "none",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [
               "strut"
             ],
             "deactivate": [],
             "reset_displacements": false,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
             "tolerated_error": 0.001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           },
           {
             "id": "dig_3",
             "name": "Third excavation",
             "parent": "install_strut",
-            "calculation": "Plastic",
+            "calculation": "mechanical",
+            "stress_initialisation": "none",
+            "time_integration": "static",
             "loading": "Staged construction",
             "activate": [
               "water_3"
@@ -3463,9 +3584,14 @@ window.EDITS_FIXTURE =
               "water_2"
             ],
             "reset_displacements": false,
+            "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
             "tolerated_error": 0.001,
-            "time_interval": 0.0
+            "absolute_tolerance": 1e-09,
+            "start_time": 0.0,
+            "duration": 1.0,
+            "time_step": 1.0,
+            "solver_settings": {}
           }
         ]
       }

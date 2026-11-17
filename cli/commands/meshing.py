@@ -26,6 +26,21 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add_project(mesh)
     mesh.add_argument("--size", type=float, help="the element size, in metres")
     mesh.add_argument("--order", type=int, choices=(1, 2), help="linear (1) or quadratic (2)")
+    mesh.add_argument("--body-size", nargs=2, action="append", default=[],
+                      metavar=("KEY", "SIZE"),
+                      help="the element size at one object, by its key: a layer "
+                           "(soil_<layer>) or soil body, a sheet pile, an anchor (at its "
+                           "head), an interface, a normal load, a soil line, a load, a "
+                           "boundary condition, or a face of the model (face_bottom, "
+                           "face_left, face_right, face_top, and face_front, face_back "
+                           "in 3D). A condition on a face takes the size of that face, "
+                           "one on a soil part the size of that part. none takes the "
+                           "size and its band away. Repeat for more")
+    mesh.add_argument("--band", nargs=2, action="append", default=[],
+                      metavar=("KEY", "BAND"),
+                      help="the distance, in metres, over which the size of --body-size "
+                           "grows back to the element size away from its object; none or "
+                           "0 takes the band away. Repeat for more")
     add_writing(mesh)
     mesh.set_defaults(handler=mesh_model)
 
@@ -83,9 +98,11 @@ def mesh_settings(project: Project) -> MeshRequest:
     settings = MeshRequest(**project.mesh.model_dump())
     unknown = session.unknown_mesh_keys(project, settings)
     if unknown:
-        raise CommandError("the mesh settings name bodies this model does not have: "
-                           + ", ".join(unknown) + ". Correct the name, or take the size "
-                           f"away: kratos-cli remove FILE mesh.body_sizes.{unknown[0]}")
+        raise CommandError("the mesh settings name objects this model does not have: "
+                           + ", ".join(unknown) + ". A size can be given to: "
+                           + ", ".join(_offered_keys(project)) + ". Correct the name, "
+                           f"or take the size away: kratos-cli mesh FILE --body-size "
+                           f"{unknown[0]} none")
     return settings
 
 
@@ -118,10 +135,60 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
         project = session.with_value(project, "mesh.element_size", args.size)
     if args.order is not None:
         project = session.with_value(project, "mesh.order", args.order)
+    sizes = dict(project.mesh.body_sizes)
+    bands = dict(project.mesh.size_bands)
+    for key, size in args.body_size:
+        key = _size_key("--body-size", project, key)
+        if size.lower() == "none":
+            sizes.pop(key, None)
+            bands.pop(key, None)
+        else:
+            sizes[key] = _number("--body-size", key, size)
+    for key, band in args.band:
+        key = _size_key("--band", project, key)
+        value = 0.0 if band.lower() == "none" else _number("--band", key, band)
+        if value == 0.0:
+            bands.pop(key, None)
+        elif key not in sizes:
+            raise CommandError(f"--band {key}: give {key} a size first, with "
+                               f"--body-size {key} SIZE")
+        else:
+            bands[key] = value
+    if args.body_size or args.band:
+        project = session.with_value(project, "mesh", {
+            **project.mesh.model_dump(), "body_sizes": sizes, "size_bands": bands})
     return project
+
+
+def _offered_keys(project: Project) -> list[str]:
+    """The keys a new size can name in this dimension, as the GUI's Mesh properties
+    window lists them (`Project.listed_mesh_size_keys`)."""
+    return project.listed_mesh_size_keys()
+
+
+def _size_key(option: str, project: Project, key: str) -> str:
+    """The key the size of the object `key` is kept under (`Project.mesh_size_key_of`),
+    as the Mesh group of the GUI's Selection explorer keeps it: a condition on a face
+    takes the size of the face, one on a soil part the size of the part. One on the
+    whole soil is refused: the whole soil is meshed at the element size."""
+    sized = project.mesh_size_key_of(key)
+    if sized is None:
+        raise CommandError(f"{option} {key}: it acts on the whole soil, which is meshed at "
+                           "the element size; change that with --size")
+    return sized
+
+
+def _number(option: str, key: str, text: str) -> float:
+    try:
+        return float(text)
+    except ValueError:
+        raise CommandError(f"{option} {key}: {text!r} is not a number or none") from None
 
 
 def _stats_line(stats: dict) -> str:
     kinds = ", ".join(f"{count} {kind}" for kind, count in sorted(stats.get("by_type", {}).items()))
+    # The average size is what the GUI shows in the mesh's Selection explorer.
+    size = stats.get("average_size")
     return (f"{stats['nodes']} nodes, {stats['elements']} elements"
-            + (f" ({kinds})" if kinds else ""))
+            + (f" ({kinds})" if kinds else "")
+            + (f", average element size {size:.3f} m" if size else ""))

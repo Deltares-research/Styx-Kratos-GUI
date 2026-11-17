@@ -245,10 +245,12 @@
       }
       function restore() { HTMLInputElement.prototype.click = click; }
       function writes() {
-        return ctx.requests.filter(function (r) { return r.method === 'PUT'; }).length;
+        // Opening is a POST to /api/project/open; anything but a GET writes.
+        return ctx.requests.filter(function (r) { return r.method !== 'GET'; }).length;
       }
       return choose('Opened site.json', JSON.stringify(ctx.server)).then(function () {
-        T.eq(ctx.requests[0].method, 'PUT');
+        T.eq(ctx.requests[0].method, 'POST');
+        T.eq(ctx.requests[0].path, '/api/project/open');
         T.eq(ctx.requests[0].body.name, 'Opened site');
         T.eq(App.PROJECT.name, 'Opened site');
         return choose('Broken.json', 'not json');
@@ -266,6 +268,83 @@
         T.eq(input.isConnected, false);
         T.eq(writes(), 2, 'cancelling does not write');
       }).then(restore, function (error) { restore(); throw error; });
+    });
+  });
+
+  test('the New project window names the project, as kratos-cli new --name does', function () {
+    return withShell(function (ctx, host) {
+      App.runAction({ action: 'newProject' });
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=name]');
+      T.eq(input.value, 'Untitled project');
+      input.value = 'Pit A';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['POST /api/project/new', 'PUT /api/project']);
+        T.eq(ctx.requests[1].body.name, 'Pit A');
+        T.eq(App.PROJECT.name, 'Pit A');
+      });
+    });
+  });
+
+  test('Project properties renames the project; Cancel and the same name write nothing', function () {
+    return withShell(function (ctx) {
+      var file = App.MENUS.filter(function (m) { return m.label === 'File'; })[0];
+      T.ok(file.items.some(function (item) {
+        return item && item.action === 'projectProperties' && item.label === 'Project properties…';
+      }), 'File > Project properties…');
+      var name = App.PROJECT.name;
+      delete App.PROJECT.gravity_acceleration;   // a project from before the field
+      var answers = [null, { name: name, gravity_acceleration: '9.81' },
+                     { name: 'Pit B', gravity_acceleration: '9.81' }];
+      App.NameDialog = { form: function (options) {
+        T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
+             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81]]);
+        return Promise.resolve(answers.shift());
+      } };
+      return App.LivePatches.projectProperties().then(function () {
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests, [], 'cancelled, then unchanged');
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests[0].method + ' ' + ctx.requests[0].path, 'PUT /api/project');
+        T.eq('gravity_acceleration' in ctx.requests[0].body, false,
+             'a rename of a project without g sends no g');
+        T.eq(App.PROJECT.name, 'Pit B');
+        T.ok(ctx.lines.indexOf('ok:Project name: Pit B.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sets g, as kratos-cli gravity P G does, and refuses g <= 0', function () {
+    return withShell(function (ctx, host) {
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=gravity_acceleration]');
+      T.eq(input.value, '9.81');
+      T.ok(dialog.textContent.indexOf('m/s²') >= 0, 'the unit is shown');
+      function ok() {
+        Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+          return button.textContent === 'OK';
+        })[0].click();
+      }
+      input.value = '0';
+      ok();
+      T.ok(host.querySelector('.name-dialog-window'), 'g = 0 keeps the window open');
+      T.ok(dialog.textContent.indexOf('Gravity is a number above 0 m/s².') >= 0);
+      input.value = '9.80665';
+      ok();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PUT /api/project']);
+        T.eq(ctx.requests[0].body.gravity_acceleration, 9.80665);
+        T.eq(App.PROJECT.gravity_acceleration, 9.80665);
+        T.ok(ctx.lines.indexOf('ok:Gravity: g = 9.80665 m/s².') >= 0);
+      });
     });
   });
 
@@ -469,6 +548,7 @@
     return withShell(function (ctx, host) {
       var id = App.PROJECT.stages[1].id;
       App.state.mode = 'staged'; App.state.phase = id;
+      App.PROJECT.stages[1].time_step = 1;
       App.Explorer.mountPhases();
       function control(label) {
         var rows = Array.prototype.slice.call(host.querySelectorAll('#list-phases .pgrid-row'));
@@ -487,7 +567,7 @@
         ['Max iterations', 'abc', 'must be a number'],
         ['Max iterations', '1.5', 'must be a whole number'],
         ['Max iterations', '0', 'must be at least 1'],
-        ['Time interval', '-1', 'must be at least 0'],
+        ['Time step', '-1', 'must be greater than 0'],
         ['Tolerated error', '0', 'must be greater than 0']
       ].forEach(function (entry) {
         var original = control(entry[0]).value;
@@ -499,10 +579,10 @@
       change('Max iterations', '30');
       return settle().then(function () {
         T.eq(App.PROJECT.stages[1].max_iterations, 30);
-        change('Time interval', '0,25');
+        change('Time step', '0,25');
         return settle();
       }).then(function () {
-        T.eq(App.PROJECT.stages[1].time_interval, 0.25);
+        T.eq(App.PROJECT.stages[1].time_step, 0.25);
         var reset = control('Reset displacements to zero');
         var desired = !reset.checked;
         reset.checked = desired; reset.dispatchEvent(new Event('change', { bubbles: true }));
@@ -524,7 +604,7 @@
       var selected = App.PROJECT.stages[1], selectedId = selected.id;
       selected.max_iterations = 37;
       selected.tolerated_error = 0.0007;
-      selected.time_interval = 2.5;
+      selected.time_step = 2.5;
       selected.reset_displacements = true;
       ctx.server = copy(App.PROJECT);
       var original = copy(App.PROJECT.stages);
@@ -544,7 +624,9 @@
             return stage.id === selectedId ? Object.assign({}, stage, { parent: inserted.id }) : stage;
           }), 'insertion preserves every other stage');
         T.eq(ctx.requests[0].body.stages, App.PROJECT.stages);
-        T.eq(App.state.phase, selectedId);
+        T.eq(App.state.phase, inserted.id, 'the inserted stage is selected, to fill in');
+        App.state.phase = selectedId;
+        App.Explorer.mountPhases();
         host.querySelectorAll('.stage-toolbar button')[2].click();
         return settle();
       }).then(function () {
@@ -554,7 +636,7 @@
         T.eq(duplicate.parent, selectedId, 'the copy starts from the selected stage');
         T.ok(!ctx.requests[0].body.stages.some(function (stage) { return stage.id === duplicate.id; }));
         T.eq(duplicate.name, selected.name + ' (copy)');
-        ['calculation', 'reset_displacements', 'max_iterations', 'tolerated_error', 'time_interval'].forEach(function (key) {
+        ['calculation', 'reset_displacements', 'max_iterations', 'tolerated_error', 'time_step'].forEach(function (key) {
           T.eq(duplicate[key], selected[key], 'copied ' + key);
         });
         T.eq(duplicate.activate, []);
@@ -573,22 +655,6 @@
           T.eq(ctx.loaded, 1, 'a refusal reloads the stored sequence');
           T.ok(ctx.lines.indexOf('err:Stage sequence refused') >= 0);
         });
-      });
-    });
-  });
-
-  test('failed default-stage creation is reported without replacing the open project', function () {
-    return withShell(function (ctx, host) {
-      App.PROJECT.stages = []; ctx.server.stages = [];
-      App.Explorer.mountPhases();
-      var button = Array.prototype.filter.call(host.querySelectorAll('#list-phases button'),
-        function (node) { return node.textContent === 'Create default stages'; })[0];
-      ctx.failure = new Error('No stage defaults available');
-      button.click();
-      return settle().then(function () {
-        T.eq(ctx.requests[0].path, '/api/project/stages/defaults');
-        T.eq(App.PROJECT.stages, []);
-        T.ok(ctx.lines.indexOf('err:No stage defaults available') >= 0);
       });
     });
   });

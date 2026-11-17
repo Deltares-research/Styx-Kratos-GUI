@@ -29,6 +29,20 @@ UNITS_NAME = "kratos_gui_units.json"
 """Beside the deck: the unit system its numbers are in, so its results are labelled in it
 (`core.results.catalog.run_unit_system`). Kratos never reads it."""
 
+PRESTRESS_WORKAROUND_NAME = "kratos_gui_prestress_workaround.py"
+"""TEMPORARY. A process of the deck's own, shipped only in a deck that carries a
+prestressed anchor's stress into a later stage. It is a workaround for a Kratos
+limitation, and it goes once Kratos is fixed: see `core/kratos/prestress_workaround.py`,
+which is copied here unchanged. Kratos imports it by its module name
+(`PRESTRESS_WORKAROUND_MODULE`) from the deck's directory, which is the directory the
+deck runs in."""
+
+PRESTRESS_WORKAROUND_MODULE = Path(PRESTRESS_WORKAROUND_NAME).stem
+
+PRESTRESS_WORKAROUND_SOURCE = Path(__file__).with_name("prestress_workaround.py")
+"""The file the deck's copy is made from. It is read as text and never imported: it
+imports Kratos, which the server does not have."""
+
 
 def write_text(path: Path, text: str) -> None:
     r"""Write `text` to `path` exactly as it is.

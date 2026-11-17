@@ -131,37 +131,11 @@ App.Lines = (function () {
     if (!App.Dialogs || !App.Dialogs.open) return;
     var record = copy(source);
     var el = App.UI.el;
-    var shell, message, name, table;
-
-    function pointsNow() {
-      return Array.prototype.map.call(table.querySelectorAll('.line-point'), function (row) {
-        var inputs = row.querySelectorAll('input');
-        return [Number(inputs[0].value), Number(inputs[1].value)];
-      });
-    }
-
-    function drawPoints(points) {
-      App.UI.clear(table);
-      points.forEach(function (point, index) {
-        var x = el('input.mesh-setting-control', {
-          type: 'number', step: '0.1', value: String(point[0]) });
-        var y = el('input.mesh-setting-control', {
-          type: 'number', step: '0.1', value: String(point[1]) });
-        var drop = el('button.btn.btn-sm', { type: 'button', text: 'Remove' });
-        drop.disabled = points.length <= 2;
-        drop.addEventListener('click', function () {
-          var kept = pointsNow();
-          kept.splice(index, 1);
-          drawPoints(kept);
-        });
-        table.appendChild(el('div.line-point', null, [
-          el('span.line-point-number', { text: String(index + 1) }), x, y, drop]));
-      });
-    }
+    var shell, message, name, points;
 
     function submit() {
       record.name = name.value.trim();
-      record.points = pointsNow();
+      record.points = points.read();
       var problem = validate(record);
       if (problem) { message.textContent = problem; return null; }
       return save(record).then(function () { shell.close(); }, function (error) {
@@ -190,19 +164,11 @@ App.Lines = (function () {
         name = el('input.mesh-setting-control', { type: 'text', value: record.name });
         row('Name', name, 'Shown in the Model explorer.');
 
-        table = el('div.line-points');
-        var add = el('button.btn.btn-sm', { type: 'button', text: 'Add point' });
-        add.addEventListener('click', function () {
-          var points = pointsNow();
-          var last = points[points.length - 1];
-          points.push([last[0] + 1, last[1]]);
-          drawPoints(points);
-        });
-        row('Points', el('div', null, [table, add]),
+        points = App.PointList.build(record.points);
+        row('Points', points.element,
             'x and y [m], in order. Where the line crosses a soil layer from one edge to '
             + 'another, the layer becomes separate soil parts. A part of the line that ends '
             + 'inside the soil splits nothing.');
-        drawPoints(record.points);
 
         message = el('div.mesh-settings-message');
         row('', message, '');

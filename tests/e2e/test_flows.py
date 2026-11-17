@@ -7,6 +7,7 @@ then shows, and on what the server then holds. Opt-in: `--run-e2e`.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ MODEL_NAME = "Staged excavation"
 
 def wait_meshed(page):
     page.wait_for_function("App.Viewport.hasMesh && App.Viewport.hasMesh()", timeout=LONG)
+
+
+def stored(page, url: str, check) -> dict:
+    """The project the server holds, read again until `check(project)` is true or LONG
+    has passed. A window can show its change in the page before its request reaches the
+    server, so one read straight after the page changes can still find the old project."""
+    deadline = time.monotonic() + LONG / 1000
+    while True:
+        project = page.request.get(url).json()
+        if check(project) or time.monotonic() > deadline:
+            return project
+        page.wait_for_timeout(100)
 
 
 def run_model(page):
@@ -72,6 +85,9 @@ def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     stage = window.locator('select[data-res="stage"]')
     stage.select_option("1")
     app_page.wait_for_function("App.Results.stage() === 1", timeout=LONG)
+    # With a save window, Download run opens it, and nothing here can press it
+    # (tests/e2e/test_pictures.py answers it). With none, the run comes as a download.
+    app_page.evaluate("window.showSaveFilePicker = undefined")
     with app_page.expect_download() as download:
         window.get_by_role("button", name="Download run").click()
     assert download.value.suggested_filename.endswith(".zip")
@@ -225,9 +241,8 @@ def test_the_units_command_converts_the_project_and_the_status_bar_follows(app_p
 
 
 def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page, live_server):
-    """The standard supports a new project has, the dialog's whole-soil row given a dry
-    pore pressure, and gravity switched off from the command box: each one write the
-    server stores."""
+    """The standard supports a new project has, and the dialog's whole-soil row given a
+    dry pore pressure: each one write the server stores."""
     url = live_server["url"] + "/api/project"
     command(app_page, "boundary list")
     app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
@@ -239,18 +254,17 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
-    app_page.wait_for_function("(App.PROJECT.boundary_conditions || []).some(function (c) {"
-                               " return c.kind === 'water_pressure' && c.on === 'domain'; })",
-                               timeout=LONG)
-    stored = app_page.request.get(url).json()
-    water = [c for c in stored["boundary_conditions"] if c["kind"] == "water_pressure"]
-    assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
-        ("domain", "Uniform", 0.0)]
-    assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
 
-    command(app_page, "gravity off")
-    app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
-    assert app_page.request.get(url).json()["gravity"] is False
+    # The new project already has a hydrostatic pore pressure on the whole soil, so wait
+    # for the server to hold the uniform one.
+    def water(project):
+        return [(c["on"], c["fluid_pressure_type"], c["value"])
+                for c in project["boundary_conditions"] if c["kind"] == "water_pressure"]
+
+    project = stored(app_page, url, lambda p: water(p) == [("domain", "Uniform", 0.0)])
+    assert water(project) == [("domain", "Uniform", 0.0)]
+    assert sum(c["kind"] == "displacement" for c in project["boundary_conditions"]) == 5
+
     assert app_page.errors == []
 
 
@@ -376,9 +390,11 @@ def test_a_soil_layer_is_renamed_from_the_model_explorer_menu(app_page, live_ser
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")
 
+    # The page renames the layer first and then sends the change to the server.
     app_page.wait_for_function("App.LAYERS[0].name === 'Clay top'", timeout=LONG)
-    stored = app_page.request.get(url + "/api/project").json()
-    assert stored["layers"][0]["name"] == "Clay top"
+    project = stored(app_page, url + "/api/project",
+                     lambda p: p["layers"][0]["name"] == "Clay top")
+    assert project["layers"][0]["name"] == "Clay top"
     assert app_page.errors == []
 
 

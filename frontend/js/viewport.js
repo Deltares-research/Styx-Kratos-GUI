@@ -47,6 +47,7 @@ App.Viewport = (function () {
   var hovered = null, selected = null, selectedKeys = [];
   var visible = {};              // key -> bool, driven by the Model explorer
   var modeGroups = {};
+  var fadedKeys = {};            // mode -> keys drawn there for context, faded
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
   /* The section, not the solid model: the server opens on a plane-strain project
@@ -61,6 +62,7 @@ App.Viewport = (function () {
   var frame = null;              // camera framing derived from the server bbox
   var home = null;               // the frame grown to take in loads, piles and the like
   var soilKeys = [];
+  var structureKeys = [];        // sheet piles, anchors and interfaces: faded, not hidden
   var groupKeys = {};            // Model-explorer group row -> the part keys under it
 
   /* A group row stands for a family of parts: hiding it hides all of them, and
@@ -82,9 +84,8 @@ App.Viewport = (function () {
       'group:loads': (loads || []).slice(),
       'group:sheetpiles': (beams || []).slice(),
       'group:anchors': (anchors || []).slice(),
-      // A contact along a pile draws nothing of its own -- it is the pile's line --
-      // so this is empty unless the interface was given a line of its own, which the
-      // build tags under the interface's own key.
+      // Every interface: one on a line of its own comes from the build under its own
+      // key, and one along a pile is drawn beside it under its own key as well.
       'group:interfaces': (contacts || []).slice(),
       // Its own row rather than a share of 'group:loads': the Model explorer lists
       // normal loads separately, and an eye has to toggle what its own row names.
@@ -130,11 +131,41 @@ App.Viewport = (function () {
     });
   }
 
+  /* A structure glyph is coloured by its emissive alone (glyphMaterial), so the
+     usual highlight -- swapping the emissive for a dark blue -- would turn a steel
+     pile and a purple interface the same navy as the selection box. It is tinted
+     toward the selection blue instead, more for a selection than for a hover. */
+  var GLYPH_HIGHLIGHT = new THREE.Color(0x2f7fe0);
+  var GLYPH_TINT = { 0x1f3b70: 0.6, 0x2a3550: 0.35 };
+
+  /* A boundary condition and the water level are lines, lit by nothing, so they have
+     no emissive to swap: their own colour is tinted toward the selection blue, and
+     put back from what it was first. */
+  function lineHighlighted(key) { return key === 'water' || conditionIds.indexOf(key) >= 0; }
+
+  function tintLines(g, amount) {
+    g.traverse(function (o) {
+      if (!(o.isLine || o.isMesh) || !o.material || !o.material.color) return;
+      var data = o.material.userData;
+      if (!data.lineBase) data.lineBase = o.material.color.clone();
+      o.material.color.copy(data.lineBase);
+      if (amount) o.material.color.lerp(GLYPH_HIGHLIGHT, amount);
+    });
+    needsRender = true;
+  }
+
   function setEmissive(key, hex) {
     var g = groups[key];
     if (!g) return;
+    if (lineHighlighted(key)) return tintLines(g, GLYPH_TINT[hex] || 0.5);
     g.traverse(function (o) {
-      if (o.material && o.material.emissive && o.material.userData) o.material.emissive.setHex(hex);
+      if (!(o.material && o.material.emissive && o.material.userData)) return;
+      if (o.material.userData.glyph) {
+        o.material.emissive.copy(o.material.userData.base)
+          .lerp(GLYPH_HIGHLIGHT, GLYPH_TINT[hex] || 0.5);
+      } else {
+        o.material.emissive.setHex(hex);
+      }
     });
     needsRender = true;
   }
@@ -142,6 +173,7 @@ App.Viewport = (function () {
   function restoreEmissive(key) {
     var g = groups[key];
     if (!g) return;
+    if (lineHighlighted(key)) return tintLines(g, 0);
     g.traverse(function (o) {
       if (o.material && o.material.emissive && o.material.userData && o.material.userData.base) {
         o.material.emissive.copy(o.material.userData.base);
@@ -167,6 +199,199 @@ App.Viewport = (function () {
                                        edgeMaterial(section));
     lines.userData.noPick = true;
     return lines;
+  }
+
+  /* ── Sheet piles, anchors and interfaces ──────────────────────────────────
+
+     Drawn as triangles a fixed number of pixels wide (frontend/js/structure-glyphs.js
+     says why and how), so each one is rebuilt whenever the camera moves: `glyphs`
+     lists them for syncGlyphs, which animate() runs before every frame. */
+  var glyphs = [];
+
+  /* Lit by nothing: the colour is the emissive, over a black base, so a band reads
+     the same at any angle -- and the same in the software renderer, which adds the
+     emissive to its own shading. Drawn over the soil and the mesh it lies in. */
+  function glyphMaterial(style) {
+    var m = new THREE.MeshLambertMaterial({
+      color: 0x000000, emissive: new THREE.Color(style.color),
+      side: THREE.DoubleSide, depthTest: false, depthWrite: false
+    });
+    m.userData = { base: m.emissive.clone(), glyph: true };
+    return m;
+  }
+
+  function glyphMesh(key, paths, style) {
+    var mesh = new THREE.Mesh(new THREE.BufferGeometry(), glyphMaterial(style));
+    mesh.userData.key = key;
+    mesh.renderOrder = style.order;
+    var glyph = { mesh: mesh, paths: paths, style: style, signature: null };
+    glyphs.push(glyph);
+    shapeGlyph(glyph, viewForGlyphs());
+    return mesh;
+  }
+
+  /* What the camera shows, in the terms structure-glyphs.js takes. Before the first
+     frame there is no camera to ask; a zero pixel size gives a band of no width
+     along the part's own line, which is still what the home view should measure. */
+  function viewForGlyphs() {
+    if (!cam || !host || !host.clientHeight) {
+      return { toCamera: [0, 0, 1], right: [1, 0, 0], up: [0, 1, 0],
+               camera: null, height: 0 };
+    }
+    cam.updateMatrixWorld();
+    var e = cam.matrixWorld.elements;
+    return {
+      right: [e[0], e[1], e[2]], up: [e[4], e[5], e[6]], toCamera: [e[8], e[9], e[10]],
+      camera: { ortho: !!cam.isOrthographicCamera, top: cam.top, bottom: cam.bottom,
+                zoom: cam.zoom, fov: cam.fov, position: cam.position.toArray() },
+      height: host.clientHeight
+    };
+  }
+
+  function shapeGlyph(glyph, view) {
+    var G = App.StructureGlyphs;
+    var px = view.camera
+      ? G.pixelSize(view.camera, G.centreOf(glyph.paths), view.height) : 0;
+    var signature = [px].concat(view.toCamera, view.up).map(function (v) {
+      return v.toPrecision(6);
+    }).join(',');
+    if (signature === glyph.signature) return;
+    glyph.signature = signature;
+    glyph.px = px;
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(
+      G.triangles(glyph.paths, glyph.style,
+                  { toCamera: view.toCamera, right: view.right, up: view.up, px: px }), 3));
+    // Lit black, but lit all the same: with no normals the shader's lighting term is
+    // NaN, and NaN plus the emissive is drawn black.
+    geometry.computeVertexNormals();
+    glyph.mesh.geometry.dispose();
+    glyph.mesh.geometry = geometry;
+  }
+
+  function syncGlyphs() {
+    if (!glyphs.length) return;
+    var view = viewForGlyphs();
+    glyphs.forEach(function (glyph) { shapeGlyph(glyph, view); });
+  }
+
+  /* Where a section is drawn as a structure glyph rather than as its own buffers: a
+     sheet pile, an anchor or an interface that came as a bare line. A part with
+     triangles -- a 3D wall panel, a 3D interface swept into a surface -- keeps them. */
+  function sectionGlyph(section) {
+    var G = App.StructureGlyphs;
+    if (!G || (section.indices && section.indices.length) || !section.edges.length) return null;
+    var kind = G.kindOf(section.key, App.PROJECT);
+    if (!kind) return null;
+    var paths = G.edgePaths(section.edges);
+    if (kind === 'interface' && dimension === 2 && App.Interfaces) {
+      // From the record rather than the edges, so the dashes run on across its bends.
+      var record = (App.PROJECT.interfaces || []).filter(function (item) {
+        return item.id === section.key;
+      })[0];
+      var own = G.interfacePaths(record, App.Interfaces.pathOf(record, App.PROJECT),
+                                 null, section.edges[2]);
+      if (own.length) paths = own;
+    }
+    return glyphMesh(section.key, paths, G.STYLES[kind]);
+  }
+
+  /* An interface along a sheet pile has no geometry of its own -- it is the pile's
+     line, split after meshing -- so the build sends no section for it. It is drawn
+     here from the record, beside the pile, under its own key: the Model explorer's
+     eye and selection then work on it like on any other part. Plane strain only,
+     which is all an interface along a pile is (frontend/js/interfaces.js).
+
+     `depth` is each drawn pile's z, from its section: the section plane. */
+  function addPileInterfaces(depth) {
+    var G = App.StructureGlyphs;
+    if (!G || !App.Interfaces || dimension !== 2 || !App.PROJECT) return;
+    (App.PROJECT.interfaces || []).forEach(function (record) {
+      if (!record.structure || record.active === false || groups[record.id]) return;
+      // An inactive pile is not built, so there is nothing for it to run along.
+      if (!(record.structure in depth)) return;
+      var path = App.Interfaces.pathOf(record, App.PROJECT);
+      var paths = G.interfacePaths(record, path, App.Interfaces.faces(path),
+                                   depth[record.structure]);
+      if (!paths.length) return;
+      var g = groups[record.id] = new THREE.Group();
+      g.name = record.id;
+      g.add(glyphMesh(record.id, paths, G.STYLES.interface));
+      scene.add(g);
+    });
+  }
+
+  /* A sheet pile, an anchor or an interface whose Active box is off is not built --
+     the server leaves it out of the solid model -- so it has no section either. It is
+     drawn here from its record all the same, faded (`structureOpacity`), so the user
+     can still see where it is and pick it to switch it back on. An interface along a
+     pile that is off goes with the pile: it is not in the model either. Plane strain
+     only: a 2D section lies at z = 0 (core/geometry/solid_model.py). */
+  var inactiveKeys = {};
+
+  function addInactiveStructures() {
+    inactiveKeys = {};
+    var G = App.StructureGlyphs;
+    if (!G || dimension !== 2 || !App.PROJECT) return;
+    function at(p) { return [p[0], p[1], 0]; }
+    function draw(id, paths, style) {
+      if (groups[id] || !paths.length) return;
+      var g = groups[id] = new THREE.Group();
+      g.name = id;
+      g.add(glyphMesh(id, paths, style));
+      scene.add(g);
+      inactiveKeys[id] = true;
+    }
+    var off = {};
+    (App.BEAMS || []).forEach(function (beam) {
+      if (beam.active !== false) return;
+      off[beam.id] = true;
+      if ((beam.points || []).length >= 2) {
+        draw(beam.id, [{ points: beam.points.map(at) }], G.STYLES.pile);
+      }
+    });
+    (App.ANCHORS || []).forEach(function (anchor) {
+      if (anchor.active !== false || !anchor.head || !anchor.tail) return;
+      draw(anchor.id, [{ points: [at(anchor.head), at(anchor.tail)] }], G.STYLES.anchor);
+    });
+    if (!App.Interfaces) return;
+    (App.INTERFACES || []).forEach(function (record) {
+      if (record.active !== false && !(record.structure && off[record.structure])) return;
+      var path = App.Interfaces.pathOf(record, App.PROJECT);
+      var faces = record.structure ? App.Interfaces.faces(path) : null;
+      draw(record.id, G.interfacePaths(record, path, faces, 0), G.STYLES.interface);
+    });
+  }
+
+  /* How opaque a sheet pile, anchor or interface is drawn. Faded to half behind the
+     Soil and Flow conditions tabs, where it is there to be read against rather than
+     worked on; and to half of that again when it is switched off -- its own Active
+     box, or the stage selected in Staged construction. Pure, so it is testable. */
+  var MODE_OPACITY = { soil: 0.5, flow: 0.5 };
+  var INACTIVE_OPACITY = 0.5;
+
+  function structureOpacity(mode, off) {
+    var opacity = MODE_OPACITY[mode] === undefined ? 1 : MODE_OPACITY[mode];
+    return off ? opacity * INACTIVE_OPACITY : opacity;
+  }
+
+  /* Every material in `group` at `opacity` times its own. The first call keeps what
+     each material was made with, so fading back to 1 restores it exactly. */
+  function fadeGroup(group, opacity) {
+    group.traverse(function (o) {
+      var m = o.material;
+      if (!m || Array.isArray(m)) return;
+      var base = m.userData.unfaded;
+      if (!base) {
+        base = m.userData.unfaded = { opacity: m.opacity, transparent: m.transparent,
+                                      depthWrite: m.depthWrite };
+      }
+      var transparent = base.transparent || opacity < 1;
+      if (m.transparent !== transparent) m.needsUpdate = true;
+      m.transparent = transparent;
+      m.opacity = base.opacity * opacity;
+      m.depthWrite = opacity < 1 ? false : base.depthWrite;
+    });
   }
 
   /* The soil's edges that a line puts there, where it splits a layer: each piece draws
@@ -586,6 +811,7 @@ App.Viewport = (function () {
                                       transparent: true,
                                       opacity: spec.active ? 1 : 0.45 }));
       outline.userData.noPick = true;
+      outline.userData.key = load.id;
       outline.userData.loadGlyph = true;
       outline.renderOrder = 18;
       group.add(outline);
@@ -928,8 +1154,8 @@ App.Viewport = (function () {
   }
 
   /* The keys of the conditions, supports and water pressures apart. Both are in every
-     mode but Results, and hidden until the user shows them: by Show in the Model
-     explorer's menu (off in a new view, `shownByDefault`), or by selecting it
+     mode but Results, and drawn until the user hides them by Hide in the Model
+     explorer's menu; one hidden is drawn again while it is selected
      (`revealConditions`). Their check box there is "active", not the eye
      (addConditionChecks in frontend/js/patches.js). */
   function conditionKeysOf(project) {
@@ -994,9 +1220,9 @@ App.Viewport = (function () {
       // level is a reference plane, not a solid: it is meant to be legible through
       // the ground it passes behind.
       new THREE.LineBasicMaterial({ color: 0x2f8fd8, depthTest: false }));
-    // Never a pick target -- it is edited from the Selection explorer's rows, and a
-    // line lying inside the soil would otherwise steal clicks meant for the soil.
-    line.userData.noPick = true;
+    // Picked on screen, a few pixels either side of it (`linesUnderPointer`); a click
+    // farther into the soil still picks the soil.
+    line.userData.key = 'water';
     line.renderOrder = 17;
     group.add(line);
   }
@@ -1041,7 +1267,12 @@ App.Viewport = (function () {
     });
   }
 
+  /* The keys of the groups holding load symbols, which are picked on screen
+     (`screenTargets`). */
+  var loadGlyphIds = [];
+
   function addLoadGlyphs() {
+    loadGlyphIds = [];
     function groupFor(id) {
       var group = groups[id];
       if (!group) {
@@ -1049,6 +1280,7 @@ App.Viewport = (function () {
         group.name = id;
         scene.add(group);
       }
+      if (loadGlyphIds.indexOf(id) < 0) loadGlyphIds.push(id);
       return group;
     }
     ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
@@ -1067,8 +1299,10 @@ App.Viewport = (function () {
   function buildGroups(payload) {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
+    glyphs = [];
 
     var cut = lineSeams(payload.sections, App.PROJECT);
+    var lineDepth = {};
     payload.sections.forEach(function (section) {
       var g = groups[section.key];
       if (!g) {
@@ -1076,11 +1310,19 @@ App.Viewport = (function () {
         g.name = section.key;
         scene.add(g);
       }
+      var glyph = sectionGlyph(section);
+      if (glyph) {
+        g.add(glyph);
+        lineDepth[section.key] = section.edges[2];
+        return;
+      }
       g.add(sectionMesh(section));
       var edges = sectionEdges(section, cut.edges[section.key]);
       if (edges) g.add(edges);
     });
 
+    addPileInterfaces(lineDepth);
+    addInactiveStructures();
     addLoadGlyphs();
     addConditionGlyphs(payload.sections);
     addLineGlyphs();
@@ -1108,6 +1350,20 @@ App.Viewport = (function () {
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                              normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
+    return modeLayout.apply(null, arguments).groups;
+  }
+
+  /* The keys Soil and Flow conditions draw for context rather than as their subject,
+     as `{soil: [...], flow: [...]}`: every part is on screen in those two tabs, and
+     what the tab is not about is faded the way a sheet pile is there
+     (`structureOpacity`). Same arguments as computeModeGroups; pure, so testable. */
+  function computeFadedKeys(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
+                            normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
+    return modeLayout.apply(null, arguments).faded;
+  }
+
+  function modeLayout(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
+                      normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
     // The boundary conditions' symbols: in every mode, each one hidden until it is
     // shown (the explorer's Show) or selected.
@@ -1128,31 +1384,51 @@ App.Viewport = (function () {
     // the loads and the water, so the user sees where the load is and where the water
     // stands. Not the supports: they would hide the edges of the contour.
     var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
+    // Soil and Flow conditions draw every part (not the generated mesh, which is the
+    // Mesh tab's): their own subject solid, the rest faded (`computeFadedKeys`) so the
+    // soil and the water are read against where everything else stands.
+    var soilFaded, flowFaded;
     if (layeredSoil) {
       // The lines go with the soil they split, in every mode that shows it.
       var visibleKeys = soilKeys.concat(customKeys, lineKeys || []);
-      // "water" in the same two modes the full build shows it in -- the level is what
+      soilFaded = loadKeys.concat(memberKeys, contactKeys, ['water']);
+      flowFaded = loadKeys.concat(memberKeys, contactKeys);
+      // "water" in the same modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
-      // out of soil/structures/mesh so those keep reading as they did.
-      return { soil: visibleKeys.concat(conditions),
-               structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
-               mesh: visibleKeys.concat(['mesh'], memberKeys, contactKeys, conditions),
-               flow: visibleKeys.concat(['water'], conditions),
-               // Loads too: Staged construction is where a load is switched on and
-               // off, so it has to be on screen there (`stageHidden` still hides one
-               // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
-               results: results };
+      // out of structures/mesh so those keep reading as they did.
+      return {
+        groups: {
+          soil: visibleKeys.concat(conditions, soilFaded),
+          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+          // The loads solid, not faded: the mesh is read against where it is loaded.
+          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, conditions),
+          flow: visibleKeys.concat(['water'], conditions, flowFaded),
+          // Loads too: Staged construction is where a load is switched on and
+          // off, so it has to be on screen there (`stageHidden` still hides one
+          // the selected stage has switched off).
+          staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
+          results: results
+        },
+        faded: { soil: soilFaded, flow: flowFaded }
+      };
     }
+    soilFaded = ['water', 'wells', 'wall', 'struts', 'anchors', 'piles']
+      .concat(customKeys, loadKeys, memberKeys, contactKeys);
+    flowFaded = ['struts', 'anchors', 'piles'].concat(loadKeys, memberKeys, contactKeys);
     return {
-      soil:       soilKeys.concat(conditions),
-      structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                  loadKeys, memberKeys, contactKeys, customKeys, conditions),
-      mesh:       ['mesh', 'wall'].concat(memberKeys, contactKeys, customKeys, conditions),
-      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
-      staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
-      results:    results
+      groups: {
+        soil:       soilKeys.concat(conditions, soilFaded),
+        structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
+                                    loadKeys, memberKeys, contactKeys, customKeys, conditions),
+        mesh:       ['mesh', 'wall'].concat(loadKeys, memberKeys, contactKeys, customKeys,
+                                            conditions),
+        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions,
+                                    flowFaded),
+        staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
+                      .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
+        results:    results
+      },
+      faded: { soil: soilFaded, flow: flowFaded }
     };
   }
 
@@ -1195,15 +1471,18 @@ App.Viewport = (function () {
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
     waterIds = conditionKeys.water.slice();
-    var contactKeys = (App.INTERFACES || []).filter(function (item) {
-      return !item.structure;
-    }).map(function (item) { return item.id; });
+    // Every interface, the ones along a pile too: those are drawn beside the pile
+    // under their own key (addPileInterfaces).
+    var contactKeys = (App.INTERFACES || []).map(function (item) { return item.id; });
     var lineKeys = ((App.PROJECT && App.PROJECT.lines) || []).map(function (line) {
       return line.id;
     });
-    modeGroups = computeModeGroups(
+    structureKeys = beamKeys.concat(anchorKeys, contactKeys);
+    var layout = modeLayout(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
       beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys, lineKeys);
+    modeGroups = layout.groups;
+    fadedKeys = layout.faded;
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
                                  conditionKeys.supports.concat(conditionKeys.water), lineKeys);
@@ -1213,15 +1492,61 @@ App.Viewport = (function () {
      Grid and bounds, sized to the model rather than to constants
      ══════════════════════════════════════════════════════════════ */
 
-  /* The 3D grid is a plane the model stands on, so it is sized to the model. Its cell
-     is the unit both grids are drawn in: the 2D one coarsens by whole multiples of it
-     so a coarse line is always a line the fine grid also had. */
+  /* The 3D grid is a plane the model stands on, so it is sized to the model, and so is
+     its cell. The 2D grid's cell follows the zoom instead (sectionGridCell). */
   function modelGridSpan(frame) { return Math.max(frame.size[0], frame.size[1]) * 1.6; }
+
+  /* 1, 2 or 5 times a power of ten, as the rulers step (js/ruler.js), so a grid line
+     falls on a ruler tick. Mantissa and exponent apart, so 0.1 * 2 never drifts. */
+  var NICE = [1, 2, 5];
+
+  function niceParts(value) {
+    var exp = Math.floor(Math.log10(value) + 1e-9);
+    return { mantissa: value / Math.pow(10, exp), exp: exp };
+  }
+
+  function niceValue(index, exp) {
+    var e = exp + Math.floor(index / NICE.length);
+    var m = NICE[((index % NICE.length) + NICE.length) % NICE.length];
+    return e < 0 ? m / Math.pow(10, -e) : m * Math.pow(10, e);
+  }
+
+  /* The largest 1-2-5 step that is not more than `value`. */
+  function niceAtMost(value) {
+    var p = niceParts(value);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    return niceValue(i, p.exp);
+  }
+
+  /* The next 1-2-5 step up from `step` that is a whole multiple of `base`. */
+  function coarserNice(step, base) {
+    var p = niceParts(step);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    for (var k = 1; k < 40; k++) {
+      var next = niceValue(i + k, p.exp);
+      var ratio = next / base;
+      if (Math.abs(ratio - Math.round(ratio)) < 1e-6) return next;
+    }
+    return step * 10;
+  }
+
+  /* At least eight cells across the model, and none wider than 2 m on a large one. */
+  var MAX_MODEL_CELL = 2;
 
   function gridCell(frame) {
     var span = modelGridSpan(frame);
-    return span / Math.max(8, Math.round(span / 2.5));
+    if (!(span > 0) || !isFinite(span)) return 1;
+    return niceAtMost(Math.min(span / 8, MAX_MODEL_CELL));
   }
+
+  /* The model-sized grid: whole cells, an even count so the centre is a line, and one
+     cell more than the span so snapping the centre to the lattice leaves no gap. */
+  function modelGridDivisions(frame) {
+    var divisions = Math.ceil(modelGridSpan(frame) / gridCell(frame) - 1e-9) + 1;
+    return divisions % 2 ? divisions + 1 : divisions;
+  }
+
+  function snapToCell(value, cell) { return Math.round(value / cell) * cell; }
 
   /* Beyond this the lines are closer than a pixel and cost more than they show. */
   var MAX_GRID_DIVISIONS = 240;
@@ -1238,7 +1563,7 @@ App.Viewport = (function () {
   function sectionGridSpec(cell, center, halfW, halfH) {
     var c = cell > 0 ? cell : 1;
     var needed = Math.max(halfW, halfH) * GRID_MARGIN * 2;
-    while (needed / c > MAX_GRID_DIVISIONS) c *= 2;
+    while (needed / c > MAX_GRID_DIVISIONS) c = coarserNice(c, cell > 0 ? cell : 1);
     var divisions = Math.ceil(needed / c);
     if (divisions % 2) divisions += 1;      // symmetric about the centre
     return {
@@ -1246,6 +1571,14 @@ App.Viewport = (function () {
       u: Math.round(center[0] / c) * c, v: Math.round(center[1] / c) * c,
       center: [center[0], center[1]], halfW: halfW, halfH: halfH
     };
+  }
+
+  /* The 2D cell follows the zoom: the rulers' labelled step for the same visible width
+     (js/ruler.js), so every grid line is a numbered tick and zooming walks 1, 2, 5, 10.
+     `fallback` is for a view with no size yet. */
+  function sectionGridCell(halfW, widthPx, fallback) {
+    if (!(halfW > 0) || !(widthPx > 0) || !App.Ruler) return fallback > 0 ? fallback : 1;
+    return App.Ruler.niceStep(2 * halfW / widthPx * App.Ruler.MIN_SPACING);
   }
 
   /* Rebuilt only when the view has actually left what is drawn, or needs a different
@@ -1290,7 +1623,8 @@ App.Viewport = (function () {
   function syncSectionGrid() {
     if (dimension !== 2 || !showGrid || !frame || !gridGroup || !cam.isOrthographicCamera) return;
     var view = visibleHalfExtent();
-    var next = sectionGridSpec(gridCell(frame), sectionCenter(), view.halfW, view.halfH);
+    var cell = sectionGridCell(view.halfW, host && host.clientWidth, gridCell(frame));
+    var next = sectionGridSpec(cell, sectionCenter(), view.halfW, view.halfH);
     if (!sectionGridNeedsRebuild(gridSpec, next)) return;
     gridSpec = next;
     makeReferenceGrid(next.span, next.divisions);
@@ -1322,9 +1656,9 @@ App.Viewport = (function () {
   /* Back to the model-sized grid: what 3D wants, and what 2D starts from. */
   function resetReferenceGrid() {
     if (!frame || !gridGroup) return;
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
     gridSpec = null;
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, frameBBox());
   }
 
@@ -1334,11 +1668,11 @@ App.Viewport = (function () {
     disposeGroup(gridGroup);
     disposeGroup(boundsGroup);
 
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
 
     gridGroup = new THREE.Group();
     gridSpec = null;                       // the 2D grid is re-derived from the camera
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, bbox);
 
     boundsGroup = new THREE.Group();
@@ -1414,6 +1748,8 @@ App.Viewport = (function () {
     sp.scale.set(4 * (scale || 1), 1 * (scale || 1), 1);
     sp.position.set(x, y, z);
     sp.userData.noPick = true;
+    sp.userData.pictureText = { text: text, fraction: 40 / 64, color: 0x1d2430, halo: true,
+                                bold: true };
     sp.renderOrder = 10;
     return sp;
   }
@@ -1669,6 +2005,30 @@ App.Viewport = (function () {
     refresh().catch(function () { /* already reported to the command log */ });
   }
 
+  /* What a saved picture needs of the view on screen (picture.js). The camera is brought
+     up to date, as a frame would do: the picture must not lag behind the last orbit. */
+  function pictureView() {
+    if (!scene || !cam || !host) return null;
+    orbit.apply(cam);
+    syncSectionGrid();
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    var section = dimension === 2 && !!cam.isOrthographicCamera && !!frame;
+    var extent = section ? visibleHalfExtent() : null;
+    var shown = triadAxes(dimension);
+    return {
+      scene: scene, camera: cam, width: host.clientWidth, height: host.clientHeight,
+      section: dimension === 2,
+      // Furniture of the moment, not of the model.
+      leaveOut: boxHelper ? [boxHelper] : [],
+      grid: [gridGroup, boundsGroup],
+      gridOn: !!showGrid,
+      rulers: section ? { center: sectionCenter(), halfW: extent.halfW, halfH: extent.halfH } : null,
+      axes: AXES.filter(function (axis) { return shown.indexOf(axis.name) >= 0; })
+    };
+  }
+
   /* ── Axis triad (its own tiny renderer) ─────────────────────── */
 
   /* All three in 3D; in 2D only the two the section is drawn in, which are x and
@@ -1737,7 +2097,98 @@ App.Viewport = (function () {
     pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
     raycaster.setFromCamera(pointer, cam);
     var hits = raycaster.intersectObjects(pickables(), false);
+    var glyph = App.StructureGlyphs && App.StructureGlyphs.nearest(
+      screenTargets({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
+    if (glyph) {
+      return { object: glyph.mesh,
+               point: hits.length ? hits[0].point
+                 : raycaster.ray.intersectPlane(pickPlane(dimension), new THREE.Vector3()) };
+    }
     return hits.length ? hits[0] : null;
+  }
+
+  /* What is picked on screen rather than by the ray, each with its distance in
+     pixels from `click`, for App.StructureGlyphs.nearest to choose from:
+
+     • a sheet pile, anchor or interface: its band is a few pixels wide, and an
+       interface's is dashes with gaps the ray falls through;
+     • a boundary condition and the water level: drawn as one-pixel lines, which the
+       ray (meshes only, `pickables`) does not see at all;
+     • a load: its arrows and the line through their tails, one-pixel lines too, which
+       left only the arrowheads to the ray -- too small to right-click.
+
+     Anything within a few pixels counts. All of them are drawn over the soil, so one
+     in reach beats the soil or mesh under it, as it does on screen; of two in reach,
+     the nearer, then the one drawn on top. */
+  function screenTargets(click) {
+    var G = App.StructureGlyphs;
+    if (!G || !cam) return [];
+    function shown(object) {
+      for (var o = object; o && o !== scene; o = o.parent) if (!o.visible) return false;
+      return !object.userData.noPick;
+    }
+    function toScreen(p) { return projectToScreen(p[0], p[1], p[2]); }
+    var targets = glyphs.filter(function (glyph) {
+      return glyph.mesh.parent && shown(glyph.mesh);
+    }).map(function (glyph) {
+      return { mesh: glyph.mesh, order: glyph.style.order,
+               distance: G.screenDistance(glyph.paths, glyph.style, glyph.px || 0,
+                                          toScreen, click) };
+    });
+    conditionIds.concat(['water']).forEach(function (key) {
+      var group = groups[key];
+      if (!group || !shown(group)) return;
+      group.traverse(function (part) {
+        // Its lines, and the dot a condition at a point is drawn as.
+        if (!(part.isLine || part.isMesh) || !part.userData.key || !shown(part)) return;
+        targets.push({ mesh: part, order: part.renderOrder,
+                       distance: G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0,
+                                                  toScreen, click) });
+      });
+    });
+    // The line through the tails is not picked by the ray (`noPick`), but it is the
+    // longest stretch of a load on screen, so here it counts.
+    loadGlyphIds.forEach(function (key) {
+      var group = groups[key];
+      if (!group || !shown(group)) return;
+      group.traverse(function (part) {
+        if (!(part.isLine || part.isMesh) || !part.userData.loadGlyph
+            || !part.userData.key || !visibleUpTo(part)) return;
+        targets.push({ mesh: part, order: part.renderOrder,
+                       distance: G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0,
+                                                  toScreen, click) });
+      });
+    });
+    return targets;
+  }
+
+  function visibleUpTo(object) {
+    for (var o = object; o && o !== scene; o = o.parent) if (!o.visible) return false;
+    return true;
+  }
+
+  var LINE_PICK_STYLE = { width: 1 };
+
+  /* A THREE.Line's points as structure-glyphs.js paths, in world coordinates: one
+     polyline, or for LineSegments one path per pair. A mesh -- a point condition's
+     dot -- is its centre. */
+  function linePaths3(line) {
+    line.updateMatrixWorld();
+    var v = new THREE.Vector3(), points = [];
+    if (line.isMesh) {
+      v.setFromMatrixPosition(line.matrixWorld);
+      return [{ points: [[v.x, v.y, v.z], [v.x, v.y, v.z]] }];
+    }
+    var position = line.geometry.attributes.position;
+    if (!position) return [];
+    for (var i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i).applyMatrix4(line.matrixWorld);
+      points.push([v.x, v.y, v.z]);
+    }
+    if (!line.isLineSegments) return points.length > 1 ? [{ points: points }] : [];
+    var paths = [];
+    for (var j = 0; j + 1 < points.length; j += 2) paths.push({ points: [points[j], points[j + 1]] });
+    return paths;
   }
 
   var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -1823,19 +2274,35 @@ App.Viewport = (function () {
   var waterIds = [];
   var revealed = [];
 
-  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
-     pressure condition has the stage's checkbox in place of its eye, and the stage is
-     what is read there: the conditions the selected stage has on are drawn, the others
-     not (`stageHidden`). Results reads the stage on screen the same way. */
+  /* Whether the selected stage takes `key` off the screen. A structure or interface
+     the stage has switched off stays, faded (`syncStructureFade`): it is what the
+     user is stepping through the stages to see come and go. Any other part stays as
+     a ghost in Staged construction (`stageGhosts`). */
+  function stageGone(key, hidden, ghosts) {
+    return !!hidden[key] && structureKeys.indexOf(key) < 0 && !(ghosts && ghosts[key]);
+  }
+
+  function syncStructureFade(mode, hidden) {
+    structureKeys.forEach(function (key) {
+      if (groups[key]) fadeGroup(groups[key], structureOpacity(mode, inactiveKeys[key] || hidden[key]));
+    });
+  }
+
+  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a boundary
+     condition -- a support or a water pressure -- has the stage's checkbox in place of
+     its eye, and the stage is what is read there: the conditions the selected stage has
+     on are drawn, the others ghosted (`stageGhosts`). Results reads the stage on screen
+     the same way for the water, the only conditions it draws. */
   function eyeOpen(key, mode) {
-    if ((mode === 'staged' || mode === 'results') && waterIds.indexOf(key) >= 0) return true;
+    if (mode === 'staged' && conditionIds.indexOf(key) >= 0) return true;
+    if (mode === 'results' && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
   }
 
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
     return modeKeys(mode).indexOf(key) >= 0
-           && eyeOpen(key, mode) && !stageHidden()[key];
+           && eyeOpen(key, mode) && !stageGone(key, stageHidden(), stageGhosts());
   }
 
   function hideRevealed() {
@@ -1851,6 +2318,15 @@ App.Viewport = (function () {
       groups[k].visible = true;
       revealed.push(k);
     });
+  }
+
+  function selectedKey() {
+    return selected;
+  }
+
+  /* The tabs that draw the model, each with its own parts. Results draws a result. */
+  function modelTabs() {
+    return Object.keys(modeGroups).filter(function (mode) { return mode !== 'results'; });
   }
 
   function select(key) {
@@ -1896,7 +2372,7 @@ App.Viewport = (function () {
     if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
     var mode = App.state && App.state.mode;
-    var stage = App.state && App.state.phase;
+    var stage = viewedStage(App.state && App.state.phase);
     if (mode === 'results') {
       // The project's stage the result on screen is of, read as Staged construction
       // reads its own; and what the export left out (the check box off) was never in
@@ -1913,6 +2389,64 @@ App.Viewport = (function () {
     App.Stages.hiddenKeys(App.PROJECT, stage, mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
+  }
+
+  /* The stage the stages panel shows as selected: `App.state.phase`, or the first
+     stage when that id is not in the project (stages.js selectedId). */
+  function viewedStage(phase) {
+    return App.Stages && App.Stages.selectedId
+      ? App.Stages.selectedId(App.PROJECT, phase) : phase;
+  }
+
+  /* The parts the selected stage has switched off that are still drawn, as ghosts:
+     in Staged construction only, so that a part taken out of a stage can be
+     right-clicked to put it back (patches.js, the viewport menu's Activate). The
+     boundary conditions too -- a support or a water pressure a stage has switched off
+     is switched back on the same way. Not Results, which draws only what was in the
+     run. */
+  function stageGhosts() {
+    if (!App.state || App.state.mode !== 'staged') return {};
+    var ghosts = {};
+    Object.keys(stageHidden()).forEach(function (key) { ghosts[key] = true; });
+    return ghosts;
+  }
+
+  /* How much of its own opacity a ghost keeps. A condition or a load is drawn in thin
+     lines, which at a soil body's ghost would be gone altogether, so it keeps more. */
+  var GHOST_OPACITY = 0.15;
+  var LINE_GHOST_OPACITY = 0.35;
+
+  function ghostMaterial(material, on, factor) {
+    if (!material) return;
+    var data = material.userData || (material.userData = {});
+    if (on && !data.ghostBase) {
+      data.ghostBase = { transparent: material.transparent, opacity: material.opacity,
+                         depthWrite: material.depthWrite };
+      material.transparent = true;
+      material.opacity = data.ghostBase.opacity * (factor || GHOST_OPACITY);
+      material.depthWrite = false;
+      material.needsUpdate = true;
+    } else if (!on && data.ghostBase) {
+      material.transparent = data.ghostBase.transparent;
+      material.opacity = data.ghostBase.opacity;
+      material.depthWrite = data.ghostBase.depthWrite;
+      delete data.ghostBase;
+      material.needsUpdate = true;
+    }
+  }
+
+  /* A structure is left out: it fades its own way (`syncStructureFade`), and two
+     fades on one material would each restore the other's opacity as its own. */
+  function applyGhosts(ghosts) {
+    Object.keys(groups).forEach(function (key) {
+      if (structureKeys.indexOf(key) >= 0) return;
+      var on = !!ghosts[key];
+      var factor = conditionIds.indexOf(key) >= 0 || loadGlyphIds.indexOf(key) >= 0
+        ? LINE_GHOST_OPACITY : GHOST_OPACITY;
+      groups[key].traverse(function (o) {
+        [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on, factor); });
+      });
+    });
   }
 
   function resultsStage() {
@@ -1938,14 +2472,41 @@ App.Viewport = (function () {
     setMode(App.state && App.state.mode);
   }
 
+  /* The parts Soil and Flow conditions draw for context (`computeFadedKeys`), faded
+     as a structure is there. A structure is left out: `syncStructureFade` has it.
+
+     Run in two halves around `applyGhosts`, because a ghost and this fade would each
+     restore the other's opacity as its own: they never meet on one material at once
+     (a ghost is Staged construction's, this fade Soil and Flow's), so the fade is
+     taken off before a ghost may go on, and put on after the ghosts are off. */
+  var contextFaded = [];
+
+  function clearContextFade() {
+    contextFaded.forEach(function (k) { if (groups[k]) fadeGroup(groups[k], 1); });
+    contextFaded = [];
+  }
+
+  function applyContextFade(mode) {
+    var opacity = structureOpacity(mode, false);
+    contextFaded = (fadedKeys[mode] || []).filter(function (k) {
+      return groups[k] && structureKeys.indexOf(k) < 0;
+    });
+    contextFaded.forEach(function (k) { fadeGroup(groups[k], opacity); });
+  }
+
   function setMode(mode) {
     var wanted = modeKeys(mode);
     var hidden = stageHidden();
+    var ghosts = stageGhosts();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
-                          && !hidden[k];
+                          && !stageGone(k, hidden, ghosts);
     });
+    clearContextFade();
+    applyGhosts(ghosts);
+    applyContextFade(mode);
+    syncStructureFade(mode, hidden);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
@@ -1964,7 +2525,8 @@ App.Viewport = (function () {
     if (!importedMeshGroup) return;
     importedMeshGroup.visible = mode !== 'results';
     var active = App.Deck
-      ? App.Deck.activeForView(App.PROJECT, App.state && App.state.phase, mode) : null;
+      ? App.Deck.activeForView(App.PROJECT, viewedStage(App.state && App.state.phase), mode)
+      : null;
     Object.keys(importedSectionGroups).forEach(function (key) {
       importedSectionGroups[key].visible = App.Deck
         ? App.Deck.sectionShown(importedSectionParts[key], importedEyes[key], active)
@@ -2002,7 +2564,8 @@ App.Viewport = (function () {
     var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
+    groups[key].visible = on && wanted.indexOf(key) >= 0
+                          && !stageGone(key, stageHidden(), stageGhosts());
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -2024,18 +2587,16 @@ App.Viewport = (function () {
     return visible[key] !== false;
   }
 
-  /* Every part is drawn until its eye is turned off, but a boundary condition is not:
-     a model opens on its soil, and the supports and water levels of each face would
-     cover its edges. The user shows them one by one, from the Model explorer's menu. */
-  function shownByDefault(key) {
-    return !(App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key));
-  }
+  /* Every part is drawn until its eye is turned off, the boundary conditions too: the
+     supports and water pressures are what the model is held and loaded by, and are
+     picked in the viewport like any other part. */
+  function shownByDefault() { return true; }
 
   /* When another project is opened. The standard conditions of every project have the
-     same ids, so an eye turned on in the last one would otherwise show the new one's. */
+     same ids, so an eye turned off in the last one would otherwise hide the new one's. */
   function forgetConditionEyes() {
     Object.keys(visible).forEach(function (key) {
-      if (conditionIds.indexOf(key) >= 0 || !shownByDefault(key)) delete visible[key];
+      if (conditionIds.indexOf(key) >= 0) delete visible[key];
     });
     revealed = [];
   }
@@ -2188,18 +2749,12 @@ App.Viewport = (function () {
      mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
      taken from different settings than the mesh on screen would be numbers for a mesh
      nobody is looking at. */
-  /* The refinements a mesh is built with: the ones set from the toolbar this session
-     if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
-     model can carry a graded mesh -- a model script can refine its excavation and
-     grade out to the far field -- and it has to mesh that way from the Generate-mesh
-     button and from Export alike, not only from a script.
-
-     Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,
-     and an empty array is truthy. Reset means "back to what the model asks for", not
-     "no refinement at all". */
+  /* The refinement boxes a mesh is built with: the model's own
+     (`MeshSettings.refinements`). A model script or `kratos-cli add` can give a model a
+     box, and it has to mesh that way from the Generate-mesh button and from Export
+     alike, not only from a script. Refine mesh and its twins change local sizes
+     (`body_sizes`), never a box. */
   function meshRefinements() {
-    var local = App.MESH_REFINEMENTS;
-    if (local && local.length) return local.slice();
     var mesh = App.PROJECT && App.PROJECT.mesh;
     return (mesh && mesh.refinements) ? mesh.refinements.slice() : [];
   }
@@ -2210,9 +2765,8 @@ App.Viewport = (function () {
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
     }, {
-      refinements: meshRefinements(),
-      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
-        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      // No `volume_keys`: the whole model is meshed, whatever is selected or hidden.
+      refinements: meshRefinements()
     });
   }
 
@@ -2278,6 +2832,31 @@ App.Viewport = (function () {
   }
 
   function hasMesh() { return meshBuilt; }
+
+  /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
+     a mesh is made. Everything that belongs to that mesh goes with it: the coloured
+     parts, the node and element numbers, and the node -> parts index. The settings and
+     the local sizes stay in the project, so Generate mesh makes the same mesh again.
+     False when there was no mesh to clear. */
+  function clearMesh() {
+    if (!meshBuilt) return false;
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    scene.add(groups.mesh);
+    meshBuilt = false;
+    meshPartKeys = [];
+    meshPartGroups = {};
+    generatedLabels = null;
+    forgetNodeParts();
+    refreshLabels();
+    App.MESH_STATS = null;
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are drawn only for parts with mesh elements.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+    return true;
+  }
 
   /* ── Which SubModelParts a node is in ──────────────────────────────────
      The node -> parts index of the deck this project exports (`/api/mesh/node-parts`,
@@ -2455,6 +3034,8 @@ App.Viewport = (function () {
     sprite.scale.set(0.035, 0.035, 1);
     sprite.renderOrder = 12;
     sprite.userData.noPick = true;
+    sprite.userData.pictureText = { text: letter, fraction: 34 / 64, color: colour, ring: colour,
+                                    bold: true, fixed: true };
     return sprite;
   }
 
@@ -2925,6 +3506,11 @@ App.Viewport = (function () {
     var c = center || (ref.plane === 'xz' ? [frame.center[0], frame.center[2]]
                      : ref.plane === 'xy' ? [frame.center[0], frame.center[1]]
                                           : [frame.center[1], frame.center[2]]);
+    if (!center) {
+      // On the lattice the 2D grid and the rulers use, not wherever the model's middle is.
+      var cell = gridCell(frame);
+      c = [snapToCell(c[0], cell), snapToCell(c[1], cell)];
+    }
     referenceGrid.rotation.set(0, 0, 0);
     if (ref.plane === 'xz') {
       referenceGrid.position.set(c[0], ref.offset, c[1]);
@@ -2962,6 +3548,11 @@ App.Viewport = (function () {
   }
 
   function dolly(dir) { if (orbit) orbit.dolly(dir); }
+
+  /* Whether the camera is still easing to a view: a picture taken now shows it on the way. */
+  function cameraMoving() {
+    return !!orbit && orbit.tick();
+  }
 
   /* ── Navigation mode: the toolbar's pan / rotate pair ───────────────────────
 
@@ -3064,6 +3655,7 @@ App.Viewport = (function () {
     needsRender = false;
 
     orbit.apply(cam);
+    syncGlyphs();                          // pixel-sized, so sized for this camera
     syncSectionGrid();                     // needs the camera the frame is drawn with
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
@@ -3082,7 +3674,8 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
-    select: select, setView: setView, zoomFit: zoomFit, dolly: dolly,
+    select: select, selectedKey: selectedKey, modelTabs: modelTabs,
+    setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
     setNavMode: setNavMode, getNavMode: getNavMode,
@@ -3090,6 +3683,7 @@ App.Viewport = (function () {
     orthoHalfHeight: orthoHalfHeight, ORTHO_BASE: ORTHO_BASE,
     radiusLimits: radiusLimits, pickPlane: pickPlane, modelSpan: modelSpan,
     sectionGridSpec: sectionGridSpec, sectionGridNeedsRebuild: sectionGridNeedsRebuild,
+    gridCell: gridCell, sectionGridCell: sectionGridCell,
     MAX_GRID_DIVISIONS: MAX_GRID_DIVISIONS,
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
@@ -3104,6 +3698,7 @@ App.Viewport = (function () {
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
+    clearMesh: clearMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
     boundsOf: boundsOf, growBBox: growBBox,
     nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
@@ -3121,6 +3716,8 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    computeFadedKeys: computeFadedKeys,
+    structureOpacity: structureOpacity,
     lineSeams: lineSeams,
     soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
@@ -3128,9 +3725,10 @@ App.Viewport = (function () {
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
-    applyStageVisibility: applyStageVisibility,
+    applyStageVisibility: applyStageVisibility, stageGhosts: stageGhosts,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
+    pictureView: pictureView,
     getCamera: function() { return cam; },
     getCanvas: function() { return canvas; },
     // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to

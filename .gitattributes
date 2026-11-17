@@ -11,7 +11,17 @@ eslint.config.mjs   export-ignore
 .graphifyignore     export-ignore
 pyproject.toml      export-ignore
 requirements-dev.txt export-ignore
+requirements-docs.txt export-ignore
+mkdocs.yml          export-ignore
+
+# Writes the commit and the tag into a download, which has no .git to ask
+# (core/version.py).
+core/version.py     export-subst
 
 # Shell scripts keep LF on every checkout, Windows' too: bash reads a CR as part of
 # the command it ends.
 *.sh                text eol=lf
+
+# A recorded Kratos run of a GUI tutorial (tests/fakes/replay_kratos.py): kept byte for
+# byte as Kratos wrote it, on every checkout.
+tests/fixtures/tutorial_runs/** -text

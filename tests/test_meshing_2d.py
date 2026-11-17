@@ -58,6 +58,14 @@ def test_stats_are_internally_consistent(quadratic):
     assert stats.quality_histogram["<0.0"] == 0, "inverted triangles are not a usable mesh"
 
 
+def test_the_average_element_size_is_near_the_size_asked_for(quadratic):
+    """The Selection explorer of the mesh shows it: the mean edge length of the
+    elements, which gmsh aims at the element size (2 m here) where nothing refines."""
+    stats = quadratic[1].stats
+    assert 0.5 < stats.average_size < 2.5
+    assert stats.to_dict()["average_size"] == stats.average_size
+
+
 def test_every_node_lies_on_the_section_plane(quadratic):
     """Which is z = 0: the cut is taken at `section_offset` and moved onto the x-y
     plane, so the mesh has no third coordinate to speak of."""
@@ -281,6 +289,22 @@ def test_a_size_asked_for_a_structure_reaches_the_mesh():
     assert fine > coarse * 2, (coarse, fine)
 
 
+def test_a_structure_s_size_holds_when_the_layers_to_mesh_are_named():
+    """A request may name the layers it meshes (`volume_keys`). The wall is in none of
+    them, and its size was once dropped with it: the sheet-pile size did nothing when
+    the layers were named, though a request that named none honoured it."""
+    project = excavation_like()
+    layers = [f"soil_{layer.id}" for layer in project.layers]
+
+    def elements(sizes):
+        with solid_model.session():
+            mesh = meshing.mesh_project(project, element_size=8.0, order=1,
+                                        volume_keys=layers, body_sizes=sizes)
+        return mesh.stats.elements
+
+    assert elements({"sheetpile": 0.5}) > elements({})
+
+
 def test_the_contact_follows_the_wall_it_holds():
     """The interface is split off the same curve, so refining the wall refines it too --
     one element a side, which is what keeps the two conformal."""
@@ -377,6 +401,128 @@ def test_the_test_model_carries_its_own_graded_mesh():
     assert sizes[0] < 0.25 * coarse, "fine at the excavation"
     assert sizes[-1] > 0.7 * coarse, "back to the model's own size at the far boundary"
     assert sizes[-1] > 4 * sizes[0], "and genuinely graded between them"
+
+
+# ── A local mesh size: any object, with a band ──────────────────────────────
+# The size at an object, and the band over which it grows back to the element size.
+
+
+def elements_of(project, body_sizes=None, **kw):
+    """The element count, with `body_sizes` added to the project's own sizes."""
+    sizes = {**project.mesh.body_sizes, **(body_sizes or {})}
+    with solid_model.session():
+        return meshing.mesh_project(project, order=1, refinements=[], body_sizes=sizes,
+                                    **kw).stats.elements
+
+
+def test_a_band_on_the_wall_grades_the_mesh_out_from_it():
+    """The wall at x = 6: fine beside it, the element size far away, and no jump."""
+    bands = edge_lengths_by_band(excavation_like(), element_size=8.0, refinements=[],
+                                 body_sizes={"sheetpile": 0.75},
+                                 size_bands={"sheetpile": 45.0})
+    sizes = [bands[b] for b in sorted(bands)]
+    assert sizes[0] < 1.5 and sizes[-1] > 6.0
+    assert all(b > 0.9 * a for a, b in zip(sizes, sizes[1:])), sizes
+    assert all(b < 2.5 * a for a, b in zip(sizes, sizes[1:])), sizes
+
+
+def test_without_a_band_a_size_meshes_as_it_always_did():
+    project = excavation_like()
+    sizes = {"sheetpile": 0.5, "soil_L_top": 3.0}
+    plain = elements_of(project, element_size=8.0, body_sizes=sizes)
+    assert elements_of(project, element_size=8.0, body_sizes=sizes,
+                       size_bands={"sheetpile": 0.0, "soil_L_top": 0.0}) == plain
+
+
+def test_a_band_on_a_layer_grows_its_size_out_into_the_next_one():
+    project = excavation_like()
+    sizes = {"soil_L_top": 1.0}
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_top": 10.0})
+            > elements_of(project, element_size=8.0, body_sizes=sizes))
+
+
+def test_a_band_on_a_size_coarser_than_the_mesh_does_nothing():
+    project = excavation_like()
+    sizes = {"soil_L_bot": 12.0}
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_bot": 20.0})
+            == elements_of(project, element_size=8.0, body_sizes=sizes))
+
+
+def test_a_soil_line_takes_a_size():
+    """A soil line has no curves of its own: they are the edges between the bodies it
+    split, found on its polyline."""
+    project = excavation_like()
+    plain = elements_of(project, element_size=8.0)
+    sized = elements_of(project, element_size=8.0, body_sizes={"floor_2": 0.5})
+    graded = elements_of(project, element_size=8.0, body_sizes={"floor_2": 0.5},
+                         size_bands={"floor_2": 10.0})
+    assert plain < sized < graded
+
+
+def test_an_interface_on_a_pile_sizes_the_pile_it_runs_along():
+    project = excavation_like()
+    assert (elements_of(project, element_size=8.0, body_sizes={"wall_contact": 0.5})
+            == elements_of(project, element_size=8.0, body_sizes={"sheetpile": 0.5}))
+
+
+def test_a_point_load_and_a_point_condition_take_a_size():
+    from core.model.schemas import DisplacementCondition, PointLoad
+    project = excavation_like()
+    payload = project.model_dump()
+    payload["loads"] = [PointLoad(id="push", name="Push", x=30.0, y=0.0,
+                                  components=(0.0, -1.0)).model_dump()]
+    payload["boundary_conditions"] = payload["boundary_conditions"] + [
+        DisplacementCondition(id="pin", name="Pin", on="point", points=[(40.0, -30.0)],
+                              fixed=(True, True, True)).model_dump()]
+    project = Project.model_validate(payload)
+    plain = elements_of(project, element_size=8.0)
+    for key in ("push", "pin"):
+        sized = elements_of(project, element_size=8.0, body_sizes={key: 0.5})
+        graded = elements_of(project, element_size=8.0, body_sizes={key: 0.5},
+                             size_bands={key: 10.0})
+        assert plain < sized < graded, key
+
+
+def test_a_line_load_an_anchor_and_every_face_take_a_size():
+    """Every node part the deck writes can be sized: the edges under a line load, the
+    soil round an anchor's head, and the soil's edges on each face of the section."""
+    project = excavation_like()
+    plain = elements_of(project, element_size=8.0)
+    for key in ("surcharge", "strut", "face_bottom", "face_left", "face_right", "face_top"):
+        sized = elements_of(project, element_size=8.0, body_sizes={key: 0.5})
+        graded = elements_of(project, element_size=8.0, body_sizes={key: 0.5},
+                             size_bands={key: 10.0})
+        assert plain < sized < graded, key
+
+
+def test_a_line_load_and_a_face_size_the_edges_the_deck_puts_them_on():
+    """The edges under the surcharge, and the soil's edges on the left of the section:
+    on the line of the load or the face, and nowhere else."""
+    import gmsh
+    project = excavation_like()
+    load = next(load for load in project.loads if load.id == "surcharge")
+    sizes = {"surcharge": 0.5, "face_left": 0.5}
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+        soil = meshing._finite_element_volumes(project, built, project.part_keys())
+        curves = meshing._curves_of(project, built, sizes, 2, soil)
+        under = [gmsh.model.getBoundingBox(1, tag) for tag in curves["surcharge"]]
+        left = [gmsh.model.getBoundingBox(1, tag) for tag in curves["face_left"]]
+    assert under and left
+    assert all(abs(box[1] - load.y) < 1e-6 and abs(box[4] - load.y) < 1e-6
+               and box[0] >= load.x0 - 1e-6 and box[3] <= load.x1 + 1e-6 for box in under)
+    assert sum(box[3] - box[0] for box in under) == pytest.approx(load.x1 - load.x0)
+    x0 = project.domain.x0
+    assert all(abs(box[0] - x0) < 1e-6 and abs(box[3] - x0) < 1e-6 for box in left)
+    assert sum(box[4] - box[1] for box in left) == pytest.approx(
+        project.domain.y_top - project.domain.y_bottom)
+
+
+def test_a_size_names_an_object_the_model_has():
+    with pytest.raises(ValueError, match="unknown mesh body size key"):
+        elements_of(excavation_like(), element_size=8.0, body_sizes={"nowhere": 1.0})
 
 
 def test_load_footprint_containment_distinguishes_line_and_surface_loads():

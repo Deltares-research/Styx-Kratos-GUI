@@ -1,7 +1,8 @@
 # CROW excavation wall, from the command line
 
 A 2D excavation pit behind a sheet pile wall with one strut, dug in three lifts, as
-`kratos-cli` builds and runs it. The same model is here twice:
+`kratos-cli` builds and runs it. It is the Mohr-Coulomb case of the CROW model that Kratos
+validates itself with. The same model is here twice:
 
 | File | What it is |
 |---|---|
@@ -13,15 +14,18 @@ from anywhere else, give the paths to `kratos-cli` and the files.
 
 ## The model
 
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](crow_model.svg)
+
 - **Site**: 80 m wide, 60 m deep, groundwater at -1.5 m.
-- **Soil**: `Soil_Top` (0 to -8 m) and `Soil_Middle` (-8 to -12 m) of *Upper ground*, and
-  `Soil_Bottom` (-12 to -60 m) of *Deep sand*, both linear elastic.
+- **Soil**: `Soil_Top` (0 to -8 m) and `Soil_Middle` (-8 to -12 m) of *Clay*, and
+  `Soil_Bottom` (-12 to -60 m) of *Sand*, both Mohr-Coulomb. The wall interface is a
+  Coulomb interface that takes each soil's own strength reduction.
 - **Structures**: a sheet pile wall at x = 5 m down to -13 m, with a wall interface, and a
   strut at -1.5 m.
 - **Loads**: a 20 kN/m surcharge behind the wall, and the water in the pit at each lift.
-- **Lines**: the wall and two lines cut the upper ground into three lifts, to -2, -5 and
+- **Lines**: the wall and two lines cut the clay into three lifts, to -2, -5 and
   -8 m. Each lift is a soil body that a stage switches off.
-- **Stages**: initial stage (K0 procedure), null step, wall installation, first
+- **Stages**: initial stage (K0 stress initialisation), null step, wall installation, first
   excavation, strut installation, second and third excavation.
 
 ## The project file
@@ -64,5 +68,28 @@ kratos-cli.bat script crow.json --out crow.py --force
 
 That writes the checkout's own path into `ROOT`; put back
 `ROOT = Path(__file__).resolve().parents[2]` before committing it.
+
+## A faster run: the quasi-Newton strategy
+
+Every stage uses Kratos' Newton-Raphson strategy. The quasi-Newton strategy gives the same
+bending moment and wall displacement for this model, and Kratos runs about ten times
+faster (about 7 s against 70 s). Set it on each of the seven stages, on a copy of the
+example:
+
+```bash
+kratos-cli.bat stages crow.json set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs
+```
+
+and the same for `null_step`, `install_wall`, `dig_1`, `install_strut`, `dig_2` and
+`dig_3`. In `crow.py`, give each `Stage` the same setting:
+
+```python
+solver_settings={"strategy_type": "quasi_newton", "quasi_newton_type": "lbfgs"},
+```
+
+In the GUI, the setting is in the Stages window of each stage, under **Expert settings**:
+set **Strategy** to **Quasi-Newton** and keep **Update** at **L-BFGS**. The
+[CLI tutorial](../../docs/cli_tutorials/CROW_case.md) says more about the strategy and when
+to check it against Newton-Raphson.
 
 The commands are all in [docs/CLI.md](../../docs/CLI.md).

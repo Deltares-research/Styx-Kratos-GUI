@@ -63,7 +63,7 @@ App.NormalLoads = (function () {
 
   /* A free line down the middle of the section, the same default a free
      interface gets when there is no pile to follow -- the user then edits
-     each point's x/y in the explorer. `options.hydrostatic` makes it hydrostatic,
+     the points in the window, or picks them on the model. `options.hydrostatic` makes it hydrostatic,
      with the project's water level copied in as its own (`drafts.normal_load`). */
   function draft(project, options) {
     options = options || {};
@@ -168,15 +168,14 @@ App.NormalLoads = (function () {
     });
   }
 
-  /* Two clicks in the section, the same way a line load is picked. A polyline of
-     more than two points is edited point by point in the explorer afterwards --
-     there is no multi-point sketch tool here, and a free interface has none either. */
-  function pick() {
+  /* Click the points, then right-click or Enter, as a line is drawn; "x y" in the
+     command box places one too (App.DrawInput). The window opens on what was drawn,
+     and `source`, when given, keeps its name and its pressure. */
+  function pick(source) {
     if (!App.DrawInput || !App.DrawInput.start) return;
-    App.DrawInput.start('load', {
-      count: 2,
+    App.DrawInput.start('line', {
       onComplete: function (points) {
-        var record = draft(App.PROJECT);
+        var record = source ? copy(source) : draft(App.PROJECT);
         record.points = points.map(function (point) { return [point[0], point[1]]; });
         open(record);
       }
@@ -190,14 +189,12 @@ App.NormalLoads = (function () {
   function open(source) {
     if (!App.Dialogs || !App.Dialogs.open) return;
     var record = copy(source);
-    var el = App.UI.el, controls = { xs: [], ys: [] };
+    var el = App.UI.el, controls = {};
     var shell, message;
 
     function submit() {
       record.name = controls.name.value.trim();
-      record.points = controls.xs.map(function (control, index) {
-        return [Number(control.value), Number(controls.ys[index].value)];
-      });
+      record.points = controls.points.read();
       record.fluid_pressure_type = controls.type.value;
       var level = controls.level.value.trim();
       if (record.fluid_pressure_type === 'Hydrostatic') {
@@ -214,15 +211,20 @@ App.NormalLoads = (function () {
           return null;
         }
       }
-      // Asked for every time, in either mode: a load whose magnitude was never given
-      // is one nobody has finished describing, and Number('') would quietly read a
-      // blank box as a load of zero.
+      // A uniform load is asked for its pressure every time: a load whose magnitude was
+      // never given is one nobody has finished describing, and Number('') would quietly
+      // read a blank box as a load of zero. A hydrostatic one does not read it.
       var pressure = controls.pressure.value.trim();
-      if (pressure === '') {
-        message.textContent = 'Give the load a pressure in ' + App.Units.label('stress') + '.';
-        return null;
+      if (record.fluid_pressure_type === 'Uniform') {
+        if (pressure === '') {
+          message.textContent = 'Give the load a pressure in ' + App.Units.label('stress')
+            + '.';
+          return null;
+        }
+        record.pressure = Number(pressure);
+      } else if (!Number.isFinite(record.pressure)) {
+        record.pressure = 0;
       }
-      record.pressure = Number(pressure);
       record.active = controls.active.checked;
       var problem = validate(record);
       if (problem) { message.textContent = problem; return null; }
@@ -236,9 +238,9 @@ App.NormalLoads = (function () {
     var known = collection().some(function (item) { return item.id === source.id; });
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' normal load',
-      width: 590, height: 470,
+      width: 590, height: 580,
       buttons: [
-        { label: 'Pick on model…', onClick: function () { pick(); } },
+        { label: 'Pick on model…', onClick: function () { pick(record); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
         { label: 'Cancel' }
       ],
@@ -255,17 +257,10 @@ App.NormalLoads = (function () {
         controls.name = el('input.mesh-setting-control', { type: 'text', value: record.name });
         row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
 
-        (record.points || []).forEach(function (point, index) {
-          var n = index + 1;
-          var x = input(point[0]), y = input(point[1]);
-          controls.xs.push(x);
-          controls.ys.push(y);
-          row('x' + n, x, n === 1
-            ? 'Start of the loaded line [m]. The load presses on the soil on the right '
-              + 'of the line as drawn, where its arrows point.'
-            : 'Point ' + n + ' of the loaded line [m].');
-          row('y' + n, y, 'Elevation of point ' + n + ' [m].');
-        });
+        controls.points = App.PointList.build(record.points || []);
+        row('Points', controls.points.element,
+            'x and y [m], in order. The load presses on the soil on the right of the '
+            + 'line as drawn, where its arrows point.');
 
         controls.type = el('select.mesh-setting-control');
         [['Uniform', 'Uniform pressure'],
@@ -282,7 +277,7 @@ App.NormalLoads = (function () {
         // something the user states rather than something they can walk past.
         controls.pressure = input(known ? record.pressure : (record.pressure || ''));
         row('Pressure', controls.pressure,
-            'Required. Magnitude [' + App.Units.label('stress')
+            'Uniform: required. Magnitude [' + App.Units.label('stress')
             + '], normal to the line, compression positive.');
 
         var water = App.PROJECT && App.PROJECT.water;
@@ -292,6 +287,16 @@ App.NormalLoads = (function () {
         row('Reference level', controls.level,
             'Hydrostatic: the level where the pressure is zero [m]. Empty takes the '
             + 'water level, which the load then keeps as its own.');
+
+        // Hydrostatic reads the level, not the pressure: off, so nobody types a number
+        // that does nothing.
+        function typeChanged() {
+          var hydrostatic = controls.type.value === 'Hydrostatic';
+          controls.pressure.disabled = hydrostatic;
+          controls.level.disabled = !hydrostatic;
+        }
+        controls.type.addEventListener('change', typeChanged);
+        typeChanged();
 
         controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
         controls.active.checked = record.active !== false;

@@ -28,7 +28,7 @@ All three models have:
   pressure condition). The top and the bottom have no condition, so no water flows
   through them.
 - **Supports**: none. A groundwater flow calculation solves the water pressure only.
-- **Stages**: one stage, of the type **Groundwater flow**.
+- **Stages**: one stage, of the calculation type **Flow**.
 
 | | Case A, saturated | Case B, Van Genuchten | Case C, seepage face |
 |---|---|---|---|

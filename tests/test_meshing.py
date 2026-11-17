@@ -247,3 +247,19 @@ def test_refinement_fields_are_restricted_to_requested_entity_dimensions():
             if len(fields.getNumbers(int(tag), option))
         }
         assert restricted_dimensions == {(31.0,), (42.0,)}
+
+
+def test_a_surface_load_and_the_faces_of_a_solid_model_take_a_size():
+    """In a solid model a surface load is sized on the soil's faces under it, and a
+    face of the model on the soil's faces on that side -- the front and back too."""
+    project = seed_project()
+    load = project.loads[0].id
+
+    def elements(sizes):
+        with solid_model.session():
+            return meshing.mesh_project(project, element_size=8.0, order=1,
+                                        body_sizes=sizes).stats.elements
+
+    plain = elements({})
+    for key in (load, "face_bottom", "face_front", "face_back", "face_top"):
+        assert elements({key: 2.0}) > plain, key

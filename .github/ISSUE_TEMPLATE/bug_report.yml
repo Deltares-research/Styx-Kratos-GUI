@@ -39,7 +39,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: The release, or the commit (`git rev-parse --short HEAD`).
+      description: In the GUI, Help > About. In a terminal, `kratos-cli --version`.
+      placeholder: "0.1.0+12.g2408259"
     validations:
       required: true
 

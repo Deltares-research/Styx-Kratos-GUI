@@ -4,7 +4,7 @@ seepage face above the tail water.
 The STEM Muskat geometry (Deltares' FEA-Tools `GeometryGenerator`), built as a Styx
 model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of 3.0 m
 on the left face, the tail water at 0.48 m on the right face, and above it a seepage
-face where the water leaves the soil. One "Groundwater flow" stage.
+face where the water leaves the soil. One flow stage.
 muskat_seepage.json beside it is the same model, as the GUI saves it.
 
     python muskat_seepage.py               write the deck into this folder
@@ -74,8 +74,10 @@ ELEMENT_ORDER = 1
 RIGHT_FACE_SIZE = 0.04
 
 # The seepage strategy opens or closes one node of the face per iteration. The face has
-# 89 nodes at this size, of which about 35 open, in as many iterations. The tolerance is
-# that of Kratos' seepage tests.
+# 89 nodes at this size, of which about 35 open, in as many iterations. The criterion and
+# the tolerance are those of Kratos' seepage tests: the residual, rather than the water
+# pressure a flow stage converges on unless it says otherwise.
+CONVERGENCE_CRITERION = "residual_criterion"
 MAX_ITERATIONS = 100
 TOLERANCE = 1e-4
 
@@ -146,7 +148,8 @@ def project() -> Project:
                           x_min=WIDTH - 0.12, x_max=WIDTH, y_min=0.0, y_max=HEIGHT,
                           z_min=0.0, z_max=1.0)]),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=CONVERGENCE_CRITERION,
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
     )
 

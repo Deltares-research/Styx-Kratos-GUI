@@ -2,7 +2,6 @@
 
 function withExportStubs(body) {
   var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT,
-                REFINEMENTS: App.MESH_REFINEMENTS, LEFT_OUT: App.MESH_BODIES_LEFT_OUT,
                 save: App.Export.save, pickFile: App.Download.pickFile };
   var written = [], logged = [];
   App.Command = {
@@ -15,12 +14,8 @@ function withExportStubs(body) {
   App.Download.pickFile = function () { return Promise.resolve(null); };
   App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid', layers: [{ id: 'L1' }, { id: 'L2' }],
                   mesh: { element_size: 2.5, order: 2 } };
-  App.MESH_REFINEMENTS = [];
-  App.MESH_BODIES_LEFT_OUT = null;
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
-    App.MESH_REFINEMENTS = saved.REFINEMENTS;
-    App.MESH_BODIES_LEFT_OUT = saved.LEFT_OUT;
     App.Export.save = saved.save;
     App.Download.pickFile = saved.pickFile;
   }
@@ -41,20 +36,11 @@ function withExportStubs(body) {
   return outcome;
 }
 
-test('the export meshes every body unless bodies were explicitly chosen', function () {
+test('the export meshes every body', function () {
   withExportStubs(function () {
     T.eq(App.Export.meshRequest().volume_keys, undefined,
          'hiding a layer must not drop it from the analysis');
-    App.MESH_BODIES_LEFT_OUT = ['soil_L2'];
-    T.eq(App.Export.meshRequest().volume_keys, ['soil_L1'],
-         'an explicit choice in the mesh dialog is still honoured');
     T.eq(App.Export.meshRequest().element_size, 2.5, "the project's own mesh settings");
-    App.PROJECT.layers = [{ id: 'L1' }, { id: 'L3' }];
-    T.eq(App.Export.meshRequest().volume_keys, ['soil_L1', 'soil_L3'],
-         'a body deleted after the choice is not asked for, and one added later is');
-    App.MESH_BODIES_LEFT_OUT = ['soil_L1', 'soil_L3'];
-    T.eq(App.Export.meshRequest().volume_keys, undefined,
-         'with nothing left of the choice, every body is meshed');
   });
 });
 
@@ -97,6 +83,19 @@ test('the archive holds the deck, its materials and its process file', function 
   T.eq(App.Export.files(result, 'model.mdpa').map(function (f) { return f.name; }),
        ['model.mdpa', 'MaterialParameters.json', 'ProjectParameters.json']);
   T.eq(App.Export.files(result, 'model.mdpa')[0].text, 'Begin Properties 0\r\n');
+});
+
+test('a process file the deck runs goes into the archive beside it', function () {
+  // The temporary prestress workaround: Kratos imports it from the deck's directory,
+  // so an archive without it is a deck that stops at the stage that needs it.
+  var result = { mdpa: 'Begin Properties 0\r\n', materials: '{"properties": []}',
+                 project_parameters: '{"stages": {}}',
+                 process_files: { 'kratos_gui_prestress_workaround.py': 'import x\n' } };
+  var files = App.Export.files(result, 'model.mdpa');
+  T.eq(files.map(function (f) { return f.name; }),
+       ['model.mdpa', 'MaterialParameters.json', 'ProjectParameters.json',
+        'kratos_gui_prestress_workaround.py']);
+  T.eq(files[3].text, 'import x\n');
 });
 
 test('the real export save writes its archive to the picked file', function () {

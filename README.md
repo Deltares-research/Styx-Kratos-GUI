@@ -66,7 +66,7 @@ See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each fe
 
 | Part | Technology |
 |---|---|
-| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://uvicorn.dev/), [Pydantic](https://docs.pydantic.dev/) |
+| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://uvicorn.dev/), [Pydantic](https://pydantic.dev/docs/) |
 | Geometry and mesh | [Gmsh](https://gmsh.info/) 4.13 (OpenCASCADE kernel), [NumPy](https://numpy.org/) |
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
@@ -97,6 +97,7 @@ Do these steps in this order. Each step has its own guide.
 |---|---|
 | [INSTALLATION.md](docs/INSTALLATION.md) | What to install on each platform, and how to start Styx with `run.bat` or `run.sh` |
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
+| [GUI tutorials](docs/gui_tutorials/index.md) | Build a model in the GUI step by step, with a screenshot of each step: the CROW excavation wall, from an empty project to the bending moment in the wall. The site with the screenshots is published from `main` on GitHub Pages; CI also attaches it to each run as `gui-tutorials-site`. |
 | [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
 | [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
 | [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
@@ -157,6 +158,6 @@ To cite Styx, use [CITATION.cff](CITATION.cff), or **Cite this repository** on t
 - [Deltares](https://www.deltares.nl/)
 - [Gmsh](https://gmsh.info/), for geometry and meshing
 - [three.js](https://threejs.org/), for the 3D viewport
-- [FastAPI](https://fastapi.tiangolo.com/) and [Pydantic](https://docs.pydantic.dev/)
+- [FastAPI](https://fastapi.tiangolo.com/) and [Pydantic](https://pydantic.dev/docs/)
 - [Best-README-Template](https://github.com/othneildrew/Best-README-Template), the structure
   of this README
