@@ -183,6 +183,21 @@ def test_a_roller_bottom_and_a_support_on_top(gmsh_session):
                                 ("Top_Surface", [True, False, False])]
 
 
+def test_a_support_a_stage_switches_off_is_written_only_in_the_stages_that_have_it(
+        gmsh_session):
+    project = section([held("bottom", face="bottom"),
+                       held("top", face="top", fixed=(True, False, False))], stages=[
+        {"id": "s1", "name": "Held", "deactivate": []},
+        {"id": "s2", "name": "Released", "parent": "s1", "deactivate": ["top"]},
+        {"id": "s3", "name": "Held again", "parent": "s2", "activate": ["top"]}])
+    assert "top" in project.stageable_keys() and "bottom" in project.stageable_keys()
+    export = writer.export_project(project, MESH)
+    names = [[name for name, _ in supports(export, stage)]
+             for stage in ("1_Held", "2_Released", "3_Held_again")]
+    assert names == [["Bottom_Fixed", "Top_Surface"], ["Bottom_Fixed"],
+                     ["Bottom_Fixed", "Top_Surface"]]
+
+
 def test_no_support_is_written_without_a_condition_and_the_export_says_so(gmsh_session):
     export = writer.export_project(section([]), MESH)
     assert supports(export) == []

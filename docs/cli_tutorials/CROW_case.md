@@ -186,13 +186,19 @@ added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostati
   conditions: the bottom fixed, and the left and right sides on rollers.
 
 **Check your progress.** `parts` lists the part keys a stage can switch on and off: the
-soil parts, and the pore pressure condition:
+soil parts, the supports and the pore pressure condition (the front and back rollers are
+for a 3D model; a section leaves them out of its deck):
 
 ```text
 crow.json> parts
 soil_L_top  Soil_Top
 soil_L_mid  Soil_Middle
 soil_L_bot  Soil_Bottom
+fixed_bottom  Fixed bottom
+roller_left  Roller left
+roller_right  Roller right
+roller_front  Roller front
+roller_back  Roller back
 pore_pressure  Pore pressure
 ```
 
@@ -375,8 +381,10 @@ converge in its 500 iterations.
 #### Step 12. The construction stages
 
 A new project starts with its initial stage, which chooses the stress initialisation of the
-whole sequence: K0 here. Each `stages add` adds one stage after the last, and names what it
-switches on and off:
+whole sequence: K0 here. `stages deactivate` switches parts out of one stage only -- the
+stages already after it keep what they had -- so the parts that are not built yet are taken
+out of both. Each `stages add` adds one stage after the last, starting with what the stage
+before it has, and names what it switches on and off:
 
 ```text
 crow.json> stages set initial --stress-initialisation k0
@@ -384,7 +392,9 @@ changed stage initial; wrote ...\crow.json
 crow.json> stages add null_step --name "Null step" --max-iterations 150
 added stage (id null_step, name Null step) after initial; wrote ...\crow.json
 crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
-sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model from stage initial on; wrote ...\crow.json
+sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
+crow.json> stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
+sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json
 crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
 added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json
 crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
@@ -427,7 +437,7 @@ To look at a stage, or change one:
 ```text
 crow.json> stages show dig_2                             what is in the model during that stage
 crow.json> stages set dig_1 --max-iterations 600         more iterations for the first dig
-crow.json> stages deactivate dig_3 strut                 take the strut out from dig_3 on
+crow.json> stages deactivate dig_3 strut                 take the strut out of dig_3 alone
 crow.json> undo                                          ...and put it back
 crow.json> undo                                          ...and the first dig back to 500
 ```

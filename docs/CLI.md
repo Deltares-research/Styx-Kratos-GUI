@@ -86,7 +86,7 @@ Genuchten soil.
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [G]` | Show whether the self weight acts, or set g in m/s² (9.81 in a new project). The initial stage's stress initialisation decides whether the self weight acts |
-| `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
+| `parts P` | Every part by its key, and every support, water pressure condition and seepage face: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2] [--body-size KEY S] [--band KEY B]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them. `--body-size` is the element size at one object, by its key: a layer (`soil_<layer>`) or soil body, a sheet pile, an anchor (at its head), an interface, a normal load, a soil line, a load, a boundary condition, or a face of the model (`face_bottom`, `face_left`, `face_right`, `face_top`, and in 3D `face_front`, `face_back`). A condition on a face keeps its size as the size of that face, and a condition on a soil part as the size of that part; a condition on the whole soil is refused. `none` takes the size and its band away. `--band` is the distance over which that size grows back to the element size; `none` takes it away |
 | `stages P [list\|show\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
@@ -393,16 +393,18 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   those values. A `Uniform` condition frees its nodes when its stage ends, so in a soil
   that couples the water pressure to the deformation the pressure is then free, and the
   export warns about it. A condition a stage names cannot be removed; take it out of
-  those stages first. The supports are on in every stage.
+  those stages first. A support is switched per stage the same way, and is on in every
+  stage until one switches it off.
 - **Seepage face.** `--seepage` makes a seepage face, where water may leave the soil in a
   groundwater flow calculation: on `--face F`, or on `--line X Y X Y ...` along the soil's
   outer boundary. It takes no other option. Kratos' seepage strategy decides, node by node
   while it iterates, where the face is open: there the water pressure is zero and the water
   flows out; elsewhere the face is closed, as a boundary with no condition is. It opens or
   closes one node per iteration, so the export warns when a stage allows fewer iterations
-  than its seepage faces have nodes. A seepage line through the soil is refused, and a
-  deformation calculation leaves a seepage face out, with a warning. It is on in every
-  stage.
+  than the seepage faces it has on have nodes. A seepage line through the soil is refused,
+  and a deformation calculation leaves a seepage face out, with a warning. It is on in
+  every stage until a stage switches it off (`stages P deactivate STAGE ID`), as a water
+  pressure condition is.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -421,8 +423,9 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
 
 ## The stages, command by command
 
-A stage says what it changes about the model it starts from: the parts and the water
-pressure conditions it switches on and off, and how it is solved. `kratos-cli parts P`
+A stage says what it changes about the model it starts from: the parts, the supports, the
+water pressure conditions and the seepage faces it switches on and off, and how it is
+solved. `kratos-cli parts P`
 lists the keys a stage can switch.
 
 Stages were called *phases* before Styx took Kratos' word for them. The old name still
@@ -457,10 +460,12 @@ kratos-cli stages pit.json list
   and the stages after it then start from the copy; a copy has no stress
   initialisation. **`remove`** heals the chain: the removed stage's children start from
   its parent.
-- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model from that
-  stage on, as the Model explorer's checkbox does, with the smallest instruction that
-  does it: switching a part back to what the stage inherits drops the instruction.
-  `add` and `copy` take `--activate` and `--deactivate` the same way.
+- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model in that
+  stage alone, as the Model explorer's checkbox does: the other stages keep what they
+  had. It is done with the smallest instruction that does it: switching a part back to
+  what the stage inherits drops the instruction. A stage added later starts with the
+  parts of the stage before it. `add` and `copy` take `--activate` and `--deactivate`
+  the same way.
 - **`set STAGE`** changes `--name`, `--calculation mechanical|flow`,
   `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
   `--reset-displacements` / `--keep-displacements`, `--convergence-criterion`,
@@ -507,8 +512,8 @@ kratos-cli stages pit.json list
   solves it in, both in the project's unit of time (seconds in every unit system). The
   stage runs from where the stage before it ended, in `duration / time-step` steps; a
   step longer than the duration is refused.
-- **A seepage face** (`boundary add --seepage`, above) makes every flow stage use
-  Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
+- **A seepage face** (`boundary add --seepage`, above) makes every flow stage that has
+  it on use Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
   is written in a 2D groundwater flow calculation only; a mechanical deck leaves it out.
 - **`--solver KEY=VALUE ...`** sets a stage's expert solver settings, the ones the
   Stages window shows under **Expert settings**: the strategy, the linear solver, the

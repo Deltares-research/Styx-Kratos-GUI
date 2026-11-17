@@ -666,43 +666,63 @@ App.Stages = (function () {
     return setActive(project, id, [key], !current);
   }
 
-  /* Make each of `keys` be `wanted` (in the model, or not) in stage `id` -- what the
-     Model explorer's checkbox does in Staged construction mode, for one part or for a
-     group row's every part.
+  /* Make each of `keys` be `wanted` (in the model, or not) in stage `id` -- and in
+     stage `id` only. What the Model explorer's checkbox and the viewport's
+     Activate / Deactivate do in Staged construction mode, for one part or for a group
+     row's every part.
 
-     Only stage `id` is edited, so no stage before it changes; the ones after it inherit
-     the new state until one of them says otherwise, which is how Kratos runs its
-     stages -- one model, carried from stage to stage. Each key ends up with the
-     smallest instruction that gives the wanted state: none at all when the parent
-     already gives it (which is also how switching back drops an instruction rather
-     than stacking a second one), and never both lists for one part, which the server
-     refuses (`Stage._one_instruction_per_part`). */
+     Per stage: no other stage's state changes. The stages before it are not edited at
+     all; the stages that start from it are given whatever instruction keeps them as
+     they were -- so switching the bottom lift off in stage 1 does not also take it out
+     of stage 2, which the user had left on. (Stored as a diff, a child that merely
+     inherited would otherwise follow its parent.) Grandchildren need nothing: their
+     parent's state is unchanged.
+
+     Each key ends up with the smallest instruction that gives the wanted state: none
+     at all when the parent already gives it (which is also how switching back drops an
+     instruction rather than stacking a second one), and never both lists for one part,
+     which the server refuses (`Stage._one_instruction_per_part`).
+
+     A stage made afterwards (Add, Insert, Copy) says nothing of its own, so it starts
+     with the state of the stage it starts from. */
   function setActive(project, id, keys, wanted) {
     var byId = index(project);
     if (!byId[id]) return copy(stagesOf(project));
 
-    var before = chainTo(project, id).slice(0, -1);
-    function inheritedActive(key) {
+    // Whether `key` is in the model at the end of `chain`, before the edit.
+    function activeAlong(chain, key) {
       var active = true;      // everything starts in the model
-      before.forEach(function (stage) {
+      chain.forEach(function (stage) {
         if (listOf(stage, 'deactivate').indexOf(key) >= 0) active = false;
         if (listOf(stage, 'activate').indexOf(key) >= 0) active = true;
       });
       return active;
     }
+    var before = chainTo(project, id).slice(0, -1);
+    // The stages that start from this one, and the chain each had before the edit:
+    // their state then is the state they keep.
+    var children = {};
+    stagesOf(project).forEach(function (stage) {
+      if (stage.parent === id && stage.id !== id) children[stage.id] = chainTo(project, stage.id);
+    });
+
+    function restate(stage, key, want, given) {
+      stage.activate = listOf(stage, 'activate').filter(function (k) { return k !== key; });
+      stage.deactivate = listOf(stage, 'deactivate').filter(function (k) { return k !== key; });
+      // Only state an instruction the parent does not already give.
+      if (want !== given) (want ? stage.activate : stage.deactivate).push(key);
+    }
 
     return copy(stagesOf(project)).map(function (stage) {
-      if (stage.id !== id) return stage;
-      var activate = listOf(stage, 'activate').slice();
-      var deactivate = listOf(stage, 'deactivate').slice();
-      keys.forEach(function (key) {
-        activate = activate.filter(function (k) { return k !== key; });
-        deactivate = deactivate.filter(function (k) { return k !== key; });
-        // Only state an instruction the parent does not already give.
-        if (wanted !== inheritedActive(key)) (wanted ? activate : deactivate).push(key);
-      });
-      stage.activate = activate;
-      stage.deactivate = deactivate;
+      if (stage.id === id) {
+        keys.forEach(function (key) {
+          restate(stage, key, wanted, activeAlong(before, key));
+        });
+      } else if (children[stage.id]) {
+        keys.forEach(function (key) {
+          restate(stage, key, activeAlong(children[stage.id], key), wanted);
+        });
+      }
       return stage;
     });
   }
@@ -726,6 +746,18 @@ App.Stages = (function () {
      it, exported exactly as it always was. Empty too when no stage is selected or the
      selected one has gone -- "hide nothing" is the safe answer to "I do not know",
      because the opposite hides the whole model. */
+  /* The stage on screen: `wanted` when the project has it, else the first stage, else
+     null. The stages panel highlights the first stage when the remembered one is not in
+     the project (a fresh boot, a project just opened), so the viewport has to read the
+     selection the same way -- or the panel shows the initial stage while the viewport
+     ghosts nothing until the user clicks away and back. */
+  function selectedId(project, wanted) {
+    var list = stagesOf(project);
+    if (!list.length) return null;
+    var found = list.filter(function (stage) { return stage.id === wanted; })[0];
+    return (found || list[0]).id;
+  }
+
   function hiddenKeys(project, stageId, mode) {
     if (mode !== 'staged') return [];
     var active = activeParts(project, stageId);
@@ -762,7 +794,7 @@ App.Stages = (function () {
     groundwaterFlow: groundwaterFlow, kindOf: kindOf, edited: edited,
     initialOf: initialOf, isInitial: isInitial,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
-    hiddenKeys: hiddenKeys, partLabel: partLabel,
+    hiddenKeys: hiddenKeys, partLabel: partLabel, selectedId: selectedId,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,

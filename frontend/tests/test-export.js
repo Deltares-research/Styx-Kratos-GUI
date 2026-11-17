@@ -85,6 +85,19 @@ test('the archive holds the deck, its materials and its process file', function 
   T.eq(App.Export.files(result, 'model.mdpa')[0].text, 'Begin Properties 0\r\n');
 });
 
+test('a process file the deck runs goes into the archive beside it', function () {
+  // The temporary prestress workaround: Kratos imports it from the deck's directory,
+  // so an archive without it is a deck that stops at the stage that needs it.
+  var result = { mdpa: 'Begin Properties 0\r\n', materials: '{"properties": []}',
+                 project_parameters: '{"stages": {}}',
+                 process_files: { 'kratos_gui_prestress_workaround.py': 'import x\n' } };
+  var files = App.Export.files(result, 'model.mdpa');
+  T.eq(files.map(function (f) { return f.name; }),
+       ['model.mdpa', 'MaterialParameters.json', 'ProjectParameters.json',
+        'kratos_gui_prestress_workaround.py']);
+  T.eq(files[3].text, 'import x\n');
+});
+
 test('the real export save writes its archive to the picked file', function () {
   var save = App.Export.save;
   return withExportStubs(function () {
