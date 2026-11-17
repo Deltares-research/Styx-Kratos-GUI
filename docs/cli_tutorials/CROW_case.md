@@ -15,23 +15,7 @@ benchmark BM-CROW-MC holds to Kratos' own results.
 
 A 2D plane-strain section, 80 m wide and 60 m deep, in SI units (m, N, Pa, kg/m³):
 
-```text
-             x = 0       x = 5                                         x = 80
-                           ↓ ↓ ↓ ↓ ↓ ↓  surcharge 20 kN/m  ↓ ↓ ↓ ↓ ↓ ↓
-  y = 0        +-----------+--------------------------------------------+
-               |  lift 1  =|  strut at -1.5      water table at -1.5    |
-  y = -2       | - - - - - |                                            |
-               |  lift 2   |                                            |
-  y = -5       | - - - - - |  Clay                                      |
-               |  lift 3   |                                            |
-  y = -8       +-----------+--------------------------------------------+
-               |           |  Clay                                      |
-  y = -12      +-----------+--------------------------------------------+
-               |           '  wall toe at -13                           |
-               |              Sand                                      |
-  y = -60      +--------------------------------------------------------+
-         symmetry plane
-```
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](../../examples/CROW_case/crow_model.svg)
 
 - A 13 m sheet pile at x = 5, with a strut at −1.5 m.
 - The pit, between the wall and the symmetry plane, is dug in three lifts: to −2, −5 and −8 m.
@@ -520,6 +504,43 @@ was, and every run is kept.
   set to your working folder. Without it, the runs root is `~/KratosGUI/runs`.
   `--runs-dir DIR` puts one run somewhere else.
 - `calculate` does steps 13 and 15 in one go, without a `deck\` folder of your own.
+
+#### A faster run: the quasi-Newton strategy (optional)
+
+The stages above use Kratos' Newton-Raphson strategy, which builds and factorises the
+stiffness matrix again in every iteration. The quasi-Newton strategy factorises it once
+and then updates its inverse from the residuals, so each iteration costs much less. For
+this model the bending moment and the wall displacement stay the same, and Kratos took
+about 7 s against about 70 s with Newton-Raphson (measured on 2026-11-16).
+
+The strategy is a solver setting of each stage, so set it on all seven stages, then export
+and run again:
+
+```text
+crow.json> stages set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs         stage 1
+crow.json> stages set null_step --solver strategy_type=quasi_newton quasi_newton_type=lbfgs       stage 2
+crow.json> stages set install_wall --solver strategy_type=quasi_newton quasi_newton_type=lbfgs    stage 3
+crow.json> stages set dig_1 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 4
+crow.json> stages set install_strut --solver strategy_type=quasi_newton quasi_newton_type=lbfgs   stage 5
+crow.json> stages set dig_2 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 6
+crow.json> stages set dig_3 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 7
+crow.json> stages show dig_2                             lists strategy_type = Quasi-Newton *
+crow.json> export --out deck                             the deck again, with the new strategy
+crow.json> run deck                                      a new run
+```
+
+L-BFGS is the default update of the quasi-Newton strategy, so `quasi_newton_type=lbfgs`
+only makes the choice visible. In `crow.json` and in the model script, the same setting is
+on each stage:
+
+```python
+solver_settings={"strategy_type": "quasi_newton", "quasi_newton_type": "lbfgs"},
+```
+
+The quasi-Newton strategy always uses the Sparse LU linear solver, without scaling. On a
+fully coupled soil with a very low permeability it can settle a few percent too little, so
+on a new model compare one run with a Newton-Raphson run. To go back to Newton-Raphson:
+`stages set STAGE --solver-default strategy_type quasi_newton_type`.
 
 ### Part 5: the results
 
