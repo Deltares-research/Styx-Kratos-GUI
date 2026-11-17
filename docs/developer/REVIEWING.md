@@ -142,8 +142,9 @@ for example 3D piping analyses. A change made for 2D must not make that work har
 Ask these questions about each change:
 
 - **Does it work in both dimensions?** If it does not, does it refuse clearly in the
-  dimension that it does not support? In the GUI the tool is greyed (`TWO_D_ONLY`,
-  `THREE_D_ONLY`); `kratos-cli` refuses with the same message; the export gives a
+  dimension that it does not support? In the GUI the tool is left off the tool rail
+  and greyed in the menus (`TWO_D_ONLY`, `THREE_D_ONLY`); `kratos-cli` refuses with the
+  same message; the export gives a
   warning. A silent 2D-only assumption is a blocker.
 - **Is the data shape good for 3D?** Look for a field that only makes sense in a section:
   an `(x, y)` point where 3D needs `(x, y, z)`, a value "per metre run", a line where 3D

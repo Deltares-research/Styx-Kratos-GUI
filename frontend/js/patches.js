@@ -1361,11 +1361,35 @@ App.LivePatches = (function () {
       else button.removeAttribute('data-action');
       button.setAttribute('data-tool', tool.action || tool.icon);
       if (tool.tip) button.setAttribute('aria-label', tool.tip);
-      var off = !availableNow(tool.action) || calculateOff(tool);
+      // A tool of the other dimension is left off the rail, not drawn greyed: in
+      // 2D there is no box or member to make, and in 3D no line or interface. It
+      // comes back when the model switches. Calculate still greys while it runs.
+      var wrongDimension = !availableNow(tool.action);
+      var off = wrongDimension || calculateOff(tool);
       if (tool.action === 'calculate') paintCalculating(button);
+      button.hidden = wrongDimension;
       button.classList.toggle('disabled', off);
       button.disabled = off;
     });
+    hideStraySeparators(rail);
+  }
+
+  /* A separator with nothing shown between it and the one before it (or the top of
+     the rail), or nothing after it, would draw two lines in a row or a line at the
+     end: hidden with the tools around it. */
+  function hideStraySeparators(rail) {
+    var last = null;
+    var seen = false;
+    Array.prototype.forEach.call(rail.children, function (child) {
+      if (child.classList.contains('rail-sep')) {
+        child.hidden = !seen;
+        if (seen) last = child;
+        seen = false;
+      } else if (!child.hidden) {
+        seen = true;
+      }
+    });
+    if (!seen && last) last.hidden = true;
   }
 
   /* One place decides what is available, so the toolbar, the menus, the rail and the

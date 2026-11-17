@@ -177,6 +177,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .btn:disabled { opacity: .5; pointer-events: none; }
 .rail-btn:disabled { color: var(--c-disabled); pointer-events: none; }
 
+/* A tool of the other dimension (2D or 3D) is left off the rail, with any divider
+   it leaves behind. `.rail-btn` sets `display: grid`, which beats the browser's
+   own `[hidden]` rule. */
+.rail-btn[hidden], .rail-sep[hidden] { display: none; }
+
 /* ── 2D rulers ──────────────────────────────────────────────────────
    One canvas per viewport edge, painted by frontend/js/ruler.js from the same
    visible rectangle the camera is drawn with. They sit *over* the scene rather

@@ -206,6 +206,44 @@
     }
   });
 
+  test('the rail leaves out the tools of the other dimension, not greyed', function () {
+    var savedState = App.state;
+    App.state = { mode: 'structures', modelMode: '2d' };
+    function button(tool) {
+      return document.querySelector('#toolrail .rail-btn[data-tool="' + tool + '"]');
+    }
+    function shownSeparators() {
+      var children = Array.prototype.filter.call(
+        document.getElementById('toolrail').children, function (c) { return !c.hidden; });
+      return children.map(function (c) { return c.classList.contains('rail-sep'); });
+    }
+    try {
+      withInstall(function () {
+        App.Toolbars.mountRail('structures');
+        T.eq(button('drawBox').hidden, true, 'no box in a 2D section');
+        T.eq(button('createMember').hidden, true, 'no member in a 2D section');
+        T.eq(button('drawLine').hidden, false);
+        T.eq(button('interface').hidden, false);
+
+        App.state.modelMode = '3d';
+        App.Toolbars.mountRail('structures');
+        T.eq(button('drawBox').hidden, false, 'the box comes back in 3D');
+        T.eq(button('createMember').hidden, false);
+        T.eq(button('drawLine').hidden, true, 'no line tool in 3D');
+        T.eq(button('interface').hidden, true);
+
+        var seps = shownSeparators();
+        T.eq(seps[0], false, 'no divider at the top');
+        T.eq(seps[seps.length - 1], false, 'no divider at the bottom');
+        T.ok(seps.every(function (sep, i) { return !(sep && seps[i + 1]); }),
+             'no two dividers in a row');
+      });
+    } finally {
+      App.state = savedState;
+      App.UI.clear(document.getElementById('toolrail'));
+    }
+  });
+
   /* ── Refusal ───────────────────────────────────────────────────────── */
 
   test('a NOT_YET action that still arrives is refused, not run', function () {
