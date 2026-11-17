@@ -184,7 +184,7 @@ window.STAGE_FIXTURE =
           }
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Stage 8",
           "parent": "settle",
           "calculation": "mechanical",
@@ -282,7 +282,7 @@ window.STAGE_FIXTURE =
           "solver_settings": {}
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "New stage",
           "parent": "build_wall",
           "calculation": "mechanical",
@@ -304,7 +304,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "mechanical",
           "stress_initialisation": "none",
           "time_integration": "static",
@@ -976,7 +976,7 @@ window.STAGE_FIXTURE =
           "solver_settings": {}
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Wall installation (copy)",
           "parent": "build_wall",
           "calculation": "mechanical",
@@ -998,7 +998,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "mechanical",
           "stress_initialisation": "none",
           "time_integration": "static",
@@ -1266,7 +1266,7 @@ window.STAGE_FIXTURE =
           }
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Consolidate (copy)",
           "parent": "settle",
           "calculation": "mechanical",
@@ -1404,7 +1404,8 @@ window.STAGE_FIXTURE =
           "time_integration": "static",
           "loading": "Staged construction",
           "activate": [
-            "tie"
+            "tie",
+            "wall"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -1609,7 +1610,9 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1__outside"
+            "soil_L1__outside",
+            "soil_L1",
+            "anchors"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1901,6 +1904,367 @@ window.STAGE_FIXTURE =
           "deactivate": [
             "wall"
           ],
+          "reset_displacements": true,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "dig_1",
+          "name": "Dig to -2.0 m",
+          "parent": "build_wall",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1",
+            "wall"
+          ],
+          "deactivate": [
+            "soil_L1__outside"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "prop",
+          "name": "Strut installation",
+          "parent": "dig_1",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "tie"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "dig_2",
+          "name": "Dig to -5.0 m",
+          "parent": "prop",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift2",
+            "soil_L1__outside"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "settle",
+          "name": "Consolidate",
+          "parent": "dig_2",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "displacement_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-06,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {
+            "strategy_type": "newton_raphson",
+            "linear_solver_type": "amgcl"
+          }
+        }
+      ]
+    },
+    {
+      "call": "setActive",
+      "args": [
+        "null_step",
+        [
+          "soil_L1__lift1"
+        ],
+        true
+      ],
+      "result": [
+        {
+          "id": "initial",
+          "name": "Initial stage",
+          "parent": null,
+          "calculation": "mechanical",
+          "stress_initialisation": "K0",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "pile",
+            "tie",
+            "load",
+            "soil_L1__lift1",
+            "soil_L1__lift2",
+            "soil_L1__lift3"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "null_step",
+          "name": "Null step",
+          "parent": "initial",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "build_wall",
+          "name": "Wall installation",
+          "parent": "null_step",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "pile",
+            "load"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": true,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "dig_1",
+          "name": "Dig to -2.0 m",
+          "parent": "build_wall",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1"
+          ],
+          "deactivate": [
+            "soil_L1__outside"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "prop",
+          "name": "Strut installation",
+          "parent": "dig_1",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "tie"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "dig_2",
+          "name": "Dig to -5.0 m",
+          "parent": "prop",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift2",
+            "soil_L1__outside"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "settle",
+          "name": "Consolidate",
+          "parent": "dig_2",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "displacement_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-06,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {
+            "strategy_type": "newton_raphson",
+            "linear_solver_type": "amgcl"
+          }
+        }
+      ]
+    },
+    {
+      "call": "setActive",
+      "args": [
+        "prop",
+        [
+          "soil_L1"
+        ],
+        true
+      ],
+      "result": [
+        {
+          "id": "initial",
+          "name": "Initial stage",
+          "parent": null,
+          "calculation": "mechanical",
+          "stress_initialisation": "K0",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "pile",
+            "tie",
+            "load",
+            "soil_L1__lift1",
+            "soil_L1__lift2",
+            "soil_L1__lift3"
+          ],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "null_step",
+          "name": "Null step",
+          "parent": "initial",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [],
+          "reset_displacements": false,
+          "convergence_criterion": "residual_criterion",
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "absolute_tolerance": 1e-09,
+          "start_time": 0.0,
+          "duration": 1.0,
+          "time_step": 1.0,
+          "solver_settings": {}
+        },
+        {
+          "id": "build_wall",
+          "name": "Wall installation",
+          "parent": "null_step",
+          "calculation": "mechanical",
+          "stress_initialisation": "none",
+          "time_integration": "static",
+          "loading": "Staged construction",
+          "activate": [
+            "pile",
+            "load"
+          ],
+          "deactivate": [],
           "reset_displacements": true,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
@@ -4675,6 +5039,11 @@ window.STAGE_FIXTURE =
       "pile",
       "tie",
       "load",
+      "fixed_bottom",
+      "roller_left",
+      "roller_right",
+      "roller_front",
+      "roller_back",
       "pore_pressure"
     ],
     "model_strategies": {}
@@ -4691,11 +5060,21 @@ window.STAGE_FIXTURE =
     "pile",
     "tie",
     "load",
+    "fixed_bottom",
+    "roller_left",
+    "roller_right",
+    "roller_front",
+    "roller_back",
     "pore_pressure"
   ],
   "active_parts": {
     "initial": [
+      "fixed_bottom",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -4703,7 +5082,12 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "null_step": [
+      "fixed_bottom",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -4711,9 +5095,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "build_wall": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -4721,9 +5110,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "dig_1": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift1",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -4731,9 +5125,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "prop": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift1",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -4742,9 +5141,14 @@ window.STAGE_FIXTURE =
       "tie"
     ],
     "dig_2": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift2",
       "soil_L1__outside",
       "soil_L2__outside",
@@ -4754,9 +5158,14 @@ window.STAGE_FIXTURE =
       "tie"
     ],
     "settle": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift2",
       "soil_L1__outside",
       "soil_L2__outside",

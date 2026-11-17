@@ -238,7 +238,7 @@ App.NormalLoads = (function () {
     var known = collection().some(function (item) { return item.id === source.id; });
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' normal load',
-      width: 590, height: 470,
+      width: 590, height: 580,
       buttons: [
         { label: 'Pick on model…', onClick: function () { pick(record); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },

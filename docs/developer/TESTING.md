@@ -139,6 +139,96 @@ python tests/test_solver_parity.py --write
 The rewritten files are part of the change. Read their diff, and check that each changed
 line is wanted.
 
+## The GUI tutorials
+
+The pages in `docs/gui_tutorials/` are written by hand. Their screenshots are made by a
+script that plays each step in the real GUI, so they always show the GUI as it is. The
+same script is a test:
+
+| Part | Where |
+|---|---|
+| The steps of a tutorial, and the model it builds | `tests/e2e/tutorials/<name>.py` (`STEPS`, `MODEL`, `PAGE`) |
+| Clicks, windows, screenshots and the orange outline | `tests/e2e/tutorials/harness.py` |
+| The test: play the steps, hold the deck to `MODEL`, hold the page to the screenshots | `tests/e2e/test_gui_tutorials.py` (`e2e` tier) |
+| The page names only screenshots of its steps, and is on the site | `tests/test_gui_tutorial_pages.py` (`quick` tier) |
+| A recorded Kratos run, and its replay | `tests/fixtures/tutorial_runs/<name>/`, `tests/fakes/replay_kratos.py` |
+| The site settings | `mkdocs.yml`, built with Zensical (`requirements-docs.txt`) |
+
+Make the screenshots and the site on your computer, for a preview:
+
+```bash
+pip install -r requirements-docs.txt         # once, in the server's venv
+python tools/gui_tutorial.py                 # every tutorial, then the site
+python tools/gui_tutorial.py NAME --headed   # one tutorial; watch the browser play the steps
+```
+
+The screenshots go in `docs/gui_tutorials/images/<name>/` and the site in
+`build/gui_tutorials/site/`. Neither is committed. CI makes both for every pull request
+(the artifact `gui-tutorials-site` of the [docs site](../../.github/workflows/docs-site.yml)
+run) and publishes the site from `main`. To look at the site of a pull request, download
+the artifact from the **Artifacts** list at the bottom of the run's summary page, unzip
+it, and open `index.html`. It needs no web server; only the search box does not work.
+
+### How CI makes the site
+
+The [docs site](../../.github/workflows/docs-site.yml) workflow makes the screenshots and
+the site. These events start it:
+
+| Event | Result |
+|---|---|
+| A pull request is opened or gets new commits | The site as the artifact `gui-tutorials-site`, kept for 14 days |
+| A push to `main`, for example a merge | The same artifact, and the job `publish` puts the site on GitHub Pages |
+| **Run workflow** on the workflow's page in the **Actions** tab | The site as the artifact |
+
+The workflow runs on Windows, because the recorded runs were made on Windows. The deck
+compare then meets the same Gmsh build, and the screenshots get the fonts of a local
+preview on Windows. The job does these steps:
+
+1. It installs Python 3.11, the packages of `requirements.txt`, `requirements-dev.txt` and
+   `requirements-docs.txt`, and the Chromium browser of Playwright.
+2. It runs `python tools/gui_tutorial.py`. On a push to `main`, it adds `--strict-deck`.
+3. The script runs `tests/e2e/test_gui_tutorials.py` with
+   `--doc-screenshots docs/gui_tutorials/images`. The test starts the server on a free
+   port and opens the GUI in Chromium.
+4. The test plays the steps of each tutorial. At each `tour.picture(...)` in a step, it
+   saves a PNG, with an orange outline on the control to use.
+5. Calculate replays the recorded run, so the Results screenshots show real Kratos
+   results. If the deck differs from the recorded deck, a pull request gets a warning and
+   a push to `main` fails.
+6. The script checks that each screenshot that a page names exists. Then it runs
+   `zensical build --strict --clean -f mkdocs.yml`, which writes the site to
+   `build/gui_tutorials/site/`.
+7. The workflow uploads that folder as the artifact. On `main`, the job `publish` gives the
+   artifact to GitHub Pages.
+
+> [!NOTE]
+> The job `publish` works only if GitHub Pages is on for the repository, with
+> **Settings > Pages > Source** set to **GitHub Actions**.
+
+The tools that make the site:
+
+| Tool | What it does |
+|---|---|
+| GitHub Actions | Runs the workflow |
+| Playwright and pytest | Play the steps in Chromium, take the screenshots, and fail the run if a step breaks |
+| Zensical (`requirements-docs.txt`) | Makes HTML pages from the Markdown pages and the screenshots. It reads `mkdocs.yml`. |
+| Material theme | The look of the site |
+| GitHub Pages | Holds the published site |
+
+**When you change the GUI.** If a tutorial step breaks, the `e2e` tier fails with the step
+and the reason. Fix the step in `tests/e2e/tutorials/<name>.py`, and the page if the reader
+must do something else. A new or removed screenshot must be added to or removed from
+the page in the same pull request.
+
+**When the deck of a tutorial changes.** The GitHub runners have no Kratos, so Calculate
+replays the recorded run. If the deck differs from the recorded deck, the test warns on a
+pull request, and the site build on `main` fails, so the site never shows results of
+another model. On a computer with Kratos, record the run again and commit it:
+
+```bash
+python tools/gui_tutorial.py NAME --record   # about 5 minutes; writes tests/fixtures/tutorial_runs/NAME/
+```
+
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and
@@ -151,5 +241,9 @@ The `kratos` tier and the benchmarks need Kratos, which the GitHub runners do no
 self-hosted runner with Kratos runs the `kratos` tier every night and the benchmarks every
 Saturday ([.github/workflows/kratos.yml](../../.github/workflows/kratos.yml)). These jobs
 run only when the repository variable `KRATOS_RUNNER` is `true`.
+
+The [docs site](../../.github/workflows/docs-site.yml) workflow plays the GUI tutorials on
+Windows, makes their screenshots and builds the site (see
+[The GUI tutorials](#the-gui-tutorials)).
 
 [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the other checks of CI.

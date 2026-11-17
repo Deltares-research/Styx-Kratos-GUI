@@ -205,6 +205,12 @@ def write_deck(export: dict, directory: Path) -> list[str]:
         written.append(INITIAL_MATERIALS_NAME)
     write_text(directory / PARAMETERS_NAME, export["project_parameters"])
     written.append(PARAMETERS_NAME)
+    # A process of the deck's own, which Kratos imports from the directory the deck runs
+    # in. Today that is only the temporary prestress workaround
+    # (`core.kratos.deck_files.PRESTRESS_WORKAROUND_NAME`).
+    for name, text in (export.get("process_files") or {}).items():
+        write_text(directory / name, text)
+        written.append(name)
     if export.get("unit_system"):
         write_text(directory / UNITS_NAME, json.dumps({"unit_system": export["unit_system"]}))
         written.append(UNITS_NAME)

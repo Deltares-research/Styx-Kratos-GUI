@@ -52,6 +52,7 @@ def check_deck(export: dict) -> list[str]:
     out += _k0(deck, params, files)
     out += _condition_order(deck)
     out += _mesh_read_once(params)
+    out += _own_processes(params, export)
     return out
 
 
@@ -329,4 +330,42 @@ def _mesh_read_once(params) -> list[str]:
         wanted = 1 if index == 0 else 0
         if reads != wanted:
             out.append(f"rule 14: stage {name} reads the mesh {reads} times, not {wanted}")
+    return out
+
+
+# 15. a process that is not Kratos' own ships with the deck, and the temporary prestress
+#     workaround sits directly before the stress carry-over and names only what it carries
+CARRY = "apply_final_stresses_of_previous_stage_to_initial_state"
+
+
+def _own_processes(params, export) -> list[str]:
+    from core.kratos.deck_files import PRESTRESS_WORKAROUND_MODULE
+    shipped = set(export.get("process_files") or {})
+    used: set[str] = set()
+    out = []
+    for name, stage in (params.get("stages") or {}).items():
+        lists = stage["stage_settings"].get("processes") or {}
+        for listing, processes in lists.items():
+            for index, process in enumerate(processes):
+                if "kratos_module" in process:
+                    continue
+                module = f"{process['python_module']}.py"
+                used.add(module)
+                if module not in shipped:
+                    out.append(f"rule 15: stage {name} runs {module}, which the deck does "
+                               "not ship")
+                if process["python_module"] != PRESTRESS_WORKAROUND_MODULE:
+                    continue
+                following = processes[index + 1] if index + 1 < len(processes) else {}
+                if following.get("python_module") != CARRY:
+                    out.append(f"rule 15: in stage {name} ({listing}) the prestress "
+                               f"workaround is not directly before {CARRY}")
+                    continue
+                hidden = set(process["Parameters"]["model_part_name_list"])
+                carried = set(following["Parameters"]["model_part_name_list"])
+                if not hidden <= carried:
+                    out.append(f"rule 15: in stage {name} the prestress workaround names "
+                               f"{sorted(hidden - carried)}, which are not carried")
+    out += [f"rule 15: the deck ships {module}, which no stage runs"
+            for module in sorted(shipped - used)]
     return out

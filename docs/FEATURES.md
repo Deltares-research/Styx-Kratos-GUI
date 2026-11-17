@@ -140,10 +140,10 @@ and adds only the values that are missing
 | Staged excavation | A wall and lines split the soil into lifts, and a stage switches each lift off. `tests/models/excavation.py` and the tutorial model have the 7 stages of the Kratos staged-excavation reference: K0, null step, wall installation, then one stage for each lift with its water load, and the strut after the lift that uncovers it. | Tested |
 | Switch parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | Tested |
 | Settings for each stage | Reset displacements (`reset_totals`), convergence criterion, maximum iterations, relative and absolute tolerance, and the expert solver settings: strategy, linear solver, time step control, time scheme of a dynamic stage, assembly. Only those that apply are shown, each with the default for the stage's calculation type and time integration | Tested |
-| Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` | Tested |
+| Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` for the interfaces, beams and anchors in two stages in a row. This includes the two-stage deck of a project without stages. The soil keeps its own stress. A prestressed anchor also gets a **temporary workaround**: `kratos_gui_prestress_workaround.py`, shipped with the deck. Without it, Kratos adds the prestress again in every stage. The workaround goes once Kratos is fixed. In 3D, Kratos cannot carry the forces of a wall panel or a member, and the export warns when one is in two stages in a row. | Tested, in Kratos too (2D) |
 | Initial stresses | `apply_k0_procedure_process`, with its own `initial_materials.json` | Tested |
 | Soil connected before the wall is built | `AssignMasterSlaveConstraintsToNeighboursUtility` ties the split nodes together until the wall is installed | Tested |
-| Interface neighbour search | `FindNeighboursOfInterfacesProcess` | Tested |
+| Interface neighbour search | `FindNeighboursOfInterfacesProcess`, in the stage an interface arrives in, so it starts from the stress of its soil | Tested |
 | Loading type | Staged construction only | Limited |
 
 ### A8. Output that Styx asks from Kratos
@@ -288,6 +288,10 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
+   Kratos cannot carry the forces of a wall panel or a member from one stage to the
+   next. A panel starts each stage at zero force. A quadratic member stops the run, and
+   a linear one carries a stress of the wrong size. The export warns when one is in two
+   stages in a row.
 5. **Only the solver settings listed.** A stage's expert settings offer the
    strategies and linear solvers above, not all of Kratos': no arc-length or piping
    strategy, and no Pardiso or other linear solver this Kratos build does not have.
