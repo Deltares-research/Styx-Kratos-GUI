@@ -336,9 +336,9 @@ components to hold.
 | Water pressure, Phreatic line | Hydrostatic below a line through points that you type, x increasing |
 
 Water above the ground also presses on it. When the level of a hydrostatic or phreatic line
-condition on the whole soil, a soil part or the top face is above the soil, the calculation
-adds the weight of that water on the ground below it, on the floor and the sides of a pit,
-and on the face of a wall (2D). This is done for each stage, with the soil that the stage
+condition is above the soil, the calculation adds the weight of that water on the ground
+below it, on the floor and the sides of a pit, and on the face of a wall (2D). This is so
+whatever the condition is on; a condition on a soil part puts its water on that part only. This is done for each stage, with the soil that the stage
 has, and the water always pushes on the soil or the wall. You do not draw this load. Where
 you drew a normal load yourself, your load is used there instead. The export notes say
 where the water was added.

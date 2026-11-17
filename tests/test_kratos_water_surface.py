@@ -158,6 +158,42 @@ def test_a_phreatic_multi_line_loads_only_where_it_is_above_the_ground():
     assert all(2.0 < deck.nodes[n][0] <= 6.0 for n in stretch.nodes)
 
 
+def test_a_phreatic_line_drawn_as_a_line_puts_its_water_in_a_pit():
+    """The GUI draws a phreatic line as a condition on a line. Its level is the free
+    water's all the same: in a pit dug to -5 left of x = 4, with the line at -2, the
+    water stands on the pit's floor and on the dug face up to -2, and presses on both."""
+    payload = seed_project().model_dump()
+    payload.update(dimension=2, section_offset=0.0,
+                   domain={"x0": 0, "x1": 20, "z0": -10, "z1": 10,
+                           "y_top": 0, "y_bottom": -10})
+    material = payload["layers"][0]["mat"]
+    payload["layers"] = [{"id": "L1", "name": "Top", "mat": material, "top": 0, "bottom": -5},
+                         {"id": "L2", "name": "Bottom", "mat": material, "top": -5,
+                          "bottom": -10}]
+    payload["lines"] = [{"id": "cut", "name": "Cut", "points": [[4, 0], [4, -5]]}]
+    payload["bodies"] = [{"id": "pit", "name": "Pit", "layer": "L1", "point": [2, -2.5]},
+                         {"id": "rest", "name": "Rest", "layer": "L1", "point": [12, -2.5]}]
+    payload["boundary_conditions"] = [
+        c for c in payload["boundary_conditions"] if c["kind"] == "displacement"
+    ] + [{"id": "phreatic", "name": "Phreatic line", "kind": "water_pressure", "on": "line",
+          "points": [[0, -2], [20, -2]], "fluid_pressure_type": "Phreatic_Multi_Line",
+          "x_coordinates": [0, 20], "y_coordinates": [-2, -2]}]
+    payload["stages"] = [{"id": "initial", "name": "Initial", "deactivate": ["soil_L1__pit"]}]
+    export = writer.export_project(Project.model_validate(payload), MESH)
+    deck = mdpa.parse(export["mdpa"])
+
+    rows = surface_rows(deck, "Phreatic_line_on_surface")
+    floor = [row for row in rows if all(abs(y + 5.0) < 1e-9 for _, y in row)]
+    face = [row for row in rows if all(abs(x - 4.0) < 1e-9 for x, _ in row)]
+    assert floor and face and len(floor) + len(face) == len(rows)
+    assert min(x for row in floor for x, _ in row) == pytest.approx(0.0)
+    assert max(y for row in face for _, y in row) == pytest.approx(-2.0)
+    assert all(left_of(row)[1] < -5.0 for row in floor)
+    assert all(left_of(row)[0] > 4.0 for row in face)
+    (process,) = surface_processes(export)
+    assert process["fluid_pressure_type"] == "Phreatic_Line"
+
+
 # ── Stage by stage ───────────────────────────────────────────────────────────
 
 def dug(flip_wall: bool = False) -> Project:

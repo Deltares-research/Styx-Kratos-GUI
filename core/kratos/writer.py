@@ -1877,9 +1877,11 @@ def _water_surface_loads(project: Project,
     weighs on it -- on the ground surface, the floor of a pit, the faces dug into the
     soil and the face of a wall the water stands against. Without that load the ground
     under open water heaves. So for every Hydrostatic or Phreatic_Multi_Line condition
-    on the whole soil, on a part, or on the top face, this finds, stage by stage, the
-    exposed boundary of the soil in that stage below the water, and writes the water's
-    weight on it as Kratos' `ApplyNormalLoadTableProcess` does a `NormalLoad`'s.
+    this finds, stage by stage, the exposed boundary of the soil in that stage below the
+    water, and writes the water's weight on it as Kratos' `ApplyNormalLoadTableProcess`
+    does a `NormalLoad`'s. Its level is the free water's wherever the condition fixes
+    the pore pressure -- the whole soil, a face, a drawn phreatic line, a point -- so it
+    stands on the whole surface; a condition on a soil part stands on that part's.
 
     **Exposed** is the edge of an element in the stage that no other element in it
     shares, except on the domain's own sides and bottom, where the ground goes on, and
@@ -1909,9 +1911,7 @@ def _water_surface_loads(project: Project,
     waters = [condition for condition in project.boundary_conditions
               if isinstance(condition, WaterPressureCondition)
               and condition_checks.written(project, condition)
-              and condition.fluid_pressure_type in SURFACE_WATER_TYPES
-              and (condition.on in ("domain", "part")
-                   or (condition.on == "face" and condition.face == "top"))]
+              and condition.fluid_pressure_type in SURFACE_WATER_TYPES]
     if project.dimension != 2 or not waters or not soil_blocks:
         return none
     # Stable, as `_water_pressures` sorts: the last that reaches an edge is the one whose
@@ -1936,7 +1936,6 @@ def _water_surface_loads(project: Project,
     x_min = min(xy[tag][0] for tag in soil_tags)
     x_max = max(xy[tag][0] for tag in soil_tags)
     y_min = min(xy[tag][1] for tag in soil_tags)
-    y_max = max(xy[tag][1] for tag in soil_tags)
     held = {tag for _, _, rows in interface_blocks for row in rows for tag in row}
 
     def on(value: float, line: float) -> bool:
@@ -1990,8 +1989,6 @@ def _water_surface_loads(project: Project,
                 if not alive(water.id):
                     continue
                 if water.on == "part" and body not in bodies_of[water.id]:
-                    continue
-                if water.on == "face" and not all(on(xy[tag][1], y_max) for tag in row[:2]):
                     continue
                 winner = water
             return winner if winner is not None and submerged(winner, row) else None
