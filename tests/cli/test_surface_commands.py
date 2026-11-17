@@ -47,7 +47,7 @@ def test_a_line_across_a_surface_cuts_it_into_soil_bodies(cli, empty):
     assert "(cut into drawn_0__part1, drawn_0__part2)" in cli("surface", empty, "list").out
     assert "drawn_0__part1  Soil surface · Part 1  ·" in cli("body", empty, "list").out
     assert cli("body", empty, "set", "drawn_0__part1", "--name", "Core").code == 0
-    assert session.load(empty).soil_body_labels["drawn_0__part1"] == "Soil surface · Core"
+    assert session.load(empty).soil_body_labels["drawn_0__part1"] == "Core"
 
 
 def test_a_new_material_for_a_cut_surface_goes_to_every_body(cli, empty):

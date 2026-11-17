@@ -348,12 +348,14 @@ def test_a_soil_part_is_renamed_in_its_panel(app_page, live_server):
     rename_body(app_page, "Top · Part 1", "Pit")
 
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
-    tree_row(app_page, "Top · Pit").wait_for(state="visible")
-    assert "Top · Pit" in app_page.locator("#grid-selection .pgrid-header").inner_text()
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
+    tree_row(app_page, "Pit").wait_for(state="visible")
+    app_page.wait_for_function(
+        "document.querySelector('#grid-selection .pgrid-header').innerText.trim() === 'Pit'",
+        timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     mdpa = app_page.request.post(url + "/api/export/mdpa", data={}).json()["mdpa"]
     assert "Begin SubModelPart Top_Pit" in mdpa.splitlines()
     assert "Top_Part_1" not in mdpa
@@ -469,7 +471,7 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     rename_body(app_page, "Top · Part 1", "Pit")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
 
     press(app_page, "Control+z")
     app_page.wait_for_function(
@@ -478,10 +480,10 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     press(app_page, "Control+y")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     assert app_page.errors == []
 
 

@@ -232,10 +232,10 @@ def test_a_saved_pit_opens_as_lines_with_the_keys_and_names_it_had():
     # The second level is the boundary between the layers, so it needs no line.
     assert [line.id for line in project.lines] == ["pit_side", "pit_level_1"]
     assert project.soil_body_labels == {
-        "soil_top__lift1": "Top · lift 1", "soil_top__lift2": "Top · lift 2",
-        "soil_top__outside": "Top · outside the pit",
-        "soil_bottom__pit": "Bottom · below the pit",
-        "soil_bottom__outside": "Bottom · outside the pit"}
+        "soil_top__lift1": "lift 1", "soil_top__lift2": "lift 2",
+        "soil_top__outside": "outside the pit",
+        "soil_bottom__pit": "below the pit",
+        "soil_bottom__outside": "outside the pit"}
 
 
 def test_a_saved_pit_keeps_what_its_stages_switch():

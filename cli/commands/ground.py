@@ -9,8 +9,8 @@ the defaults the material window fills in (`core.model.soil_models`).
 
 A line splits the layers and the soil surfaces it crosses from edge to edge, as a sheet
 pile does. Each piece is a soil body with its own key (`soil_<layer>__<id>`, or
-`<surface>__<id>`), which a stage can switch, and `body` names it and can give it a material
-of its own (`Project.split_soil`).
+`<surface>__<id>`), which a stage can switch, and `body` names it, can give it a material
+of its own, or removes it and leaves a void (`Project.split_soil`).
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     existing(remove, "line")
 
     body = noun(commands, common, "body",
-                "list the soil bodies, and name them or give them a material")
+                "list the soil bodies, name them, give them a material or remove one")
     action(body, common, "list", list_bodies, writes=False,
            help="every soil body by its key, the word a stage takes")
     change = action(body, common, "set", update_body,
@@ -114,6 +114,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     change.add_argument("--name", help="what to call it")
     change.add_argument("--material", help="its material, or `layer` for its layer's or soil "
                                            "surface's as it is now")
+    remove = action(body, common, "remove", remove_body,
+                    help="delete one body that a line or a sheet pile cut off: the soil there "
+                         "becomes a void, and the rest of its layer or soil surface stays")
+    remove.add_argument("key", help="the body's key, as `body list` shows it")
 
     parts = commands.add_parser("parts", parents=[common],
                                 help="the parts of the model, and which a stage can switch")
@@ -216,6 +220,11 @@ def update_body(args: argparse.Namespace) -> Answer:
         fields["material"] = None if args.material == "layer" else args.material
     return edited(args, session.update_body(read(args), args.key, **fields),
                   f"changed soil body {args.key}")
+
+
+def remove_body(args: argparse.Namespace) -> Answer:
+    return edited(args, session.remove_body(read(args), args.key),
+                  f"removed soil body {args.key}")
 
 
 def _domain_line(project: Project) -> str:

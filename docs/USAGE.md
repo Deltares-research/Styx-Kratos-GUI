@@ -211,9 +211,15 @@ part starts with its layer's material. Change the layer's material, in the **Soi
 window or in the Selection explorer, and every part of that layer takes the new material,
 also a part you gave a material of its own.
 
-Right-click a part to rename the part, or to rename or delete its whole layer or soil
-surface. The Selection explorer of a part has the same buttons. You cannot delete one part
-alone: delete the line, or switch the part off in a stage.
+A part you rename shows the new name alone, for example *Clay*. A part with the name it
+was given, such as *Part 1*, also shows its layer or soil surface.
+
+Right-click a part to rename it or delete it, or to rename or delete its whole layer or soil
+surface. The Selection explorer of a part has the same buttons. **Delete part** deletes that
+part alone: no soil is left there, and the other parts stay. The last part of a layer or a
+soil surface cannot be deleted alone; delete the whole layer or surface. A deleted part
+comes back when you delete the line that cut it off, or with undo. To take soil away in one
+stage only, switch the part off in that stage instead.
 
 Lines have their own group in the Model explorer. Delete a line there, and the parts join
 again, unless a stage still uses one of them. Then the deletion is refused.
@@ -225,7 +231,7 @@ An excavation is made in this way: a wall and a line at each level make the lift
 stage switches each lift off.
 
 A project saved with an excavation pit opens with lines and soil parts in its place, for
-example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+example *lift 1*, a part of the layer *Soil_Top*. A pit with one level was never dug, so it just goes. A 3D pit
 narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode

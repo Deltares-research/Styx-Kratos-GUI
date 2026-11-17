@@ -73,7 +73,7 @@ Genuchten soil.
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
-| `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
+| `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
 | `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
@@ -188,8 +188,13 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   names each of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
   its material in every stage. `layer set --material` gives every body of that layer the
-  new material, also a body given one of its own. In a model script, `lines=` and
-  `bodies=` say the same. A record
+  new material, also a body given one of its own. `body remove KEY` deletes one body: no
+  soil is left there, the other bodies of the layer stay, and the stages stop naming it.
+  Its record stays with `removed: true`, so it stays deleted when the lines change; it
+  comes back when no line cuts it off any more. The last body of a layer is the whole
+  layer, so `layer remove` deletes it. `body list` labels a body by its own name, or by
+  its layer's name and `Part 1`, ... while it has the name it was given. In a model
+  script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
 

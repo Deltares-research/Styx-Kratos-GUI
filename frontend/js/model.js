@@ -1769,8 +1769,13 @@ App.Model = (function () {
         run: function () { App.SoilVolumeDialog.open(owner.part); }
       }]);
     }
-    // Every part of it goes with it: one part alone stays cut off by its line.
-    general.push(['Delete', '', '', false, {
+    // This part alone, which leaves a void (js/patches.js deleteBodyPart); or the whole
+    // layer or surface, every part of it.
+    general.push(['Delete part', '', '', false, {
+      kind: 'button', text: 'Delete part',
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyPart(key); }
+    }]);
+    general.push(['Delete ' + noun, '', '', false, {
       kind: 'button', text: 'Delete ' + noun,
       run: function () { if (App.LivePatches) App.LivePatches.deleteBodyOwner(key); }
     }]);

@@ -487,8 +487,51 @@ App.LivePatches = (function () {
       });
   }
 
-  /* The whole layer or soil surface goes, every part of it: one part alone cannot go,
-     as the line that cut it off still splits the soil there. */
+  /* The other parts of the layer or soil surface `key` is a part of, still in the model. */
+  function otherParts(key) {
+    var stem = key.split('__')[0];
+    return ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other !== key && other.split('__')[0] === stem;
+    });
+  }
+
+  /* One part alone goes (`session.remove_body`): the soil there becomes a void, and the
+     rest of its layer or soil surface stays. The last part left is the whole of it. */
+  function deleteBodyPart(key) {
+    var owner = bodyOwner(key);
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!owner || !body) return;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete part',
+        'This deletes ' + body.name + ', one part of ' + owner.noun + ' ' + owner.name +
+        '. No soil is left there. The other parts of ' + owner.noun + ' ' + owner.name +
+        ' stay.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) { if (sure) return deleteBody(key); });
+  }
+
+  function deleteBody(key) {
+    var label = ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || key;
+    return deleteRequest('/api/project/bodies/' + encodeURIComponent(key), 'Delete failed')
+      .then(function (reply) {
+        if (reply && reply.project) App.Model.apply(reply.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.state && App.state.selection === key && App.selectObject) {
+          App.selectObject(null, 'tree');
+        }
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        if (App.Command && App.Command.ok) App.Command.ok('Deleted soil part ' + label + '.');
+      })
+      .catch(function (err) {
+        if (App.Command && App.Command.err) {
+          App.Command.err('Could not delete the soil part: ' + err.message);
+        }
+      });
+  }
+
+  /* The whole layer or soil surface goes, every part of it (Delete part takes one). */
   function deleteBodyOwner(key) {
     var owner = bodyOwner(key);
     if (!owner) return;
@@ -1004,11 +1047,14 @@ App.LivePatches = (function () {
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
-    // A soil body is a part of a layer or a soil surface: Rename… names the part, and
-    // the owner's own Rename and Delete stand beside it.
+    // A soil body is a part of a layer or a soil surface: Rename… and Delete part act on
+    // the part, and the owner's own Rename and Delete stand beside them. The last part
+    // left is the whole of it, so it goes with Delete layer or Delete soil surface.
     var owner = kind === 'body' ? bodyOwner(key) : null;
     var edits = owner ? [
       { label: 'Rename part…', action: 'renameObject' },
+      { label: 'Delete part', icon: 'delete', action: 'deletePart',
+        disabled: !otherParts(key).length },
       { label: 'Rename ' + owner.noun + '…', action: 'renameOwner' },
       { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
     ] : [
@@ -1027,6 +1073,7 @@ App.LivePatches = (function () {
       if (it.action === 'renameObject') return renameObject(kind, key);
       if (it.action === 'renameOwner') return renameBodyOwner(key);
       if (it.action === 'deleteOwner') return deleteBodyOwner(key);
+      if (it.action === 'deletePart') return deleteBodyPart(key);
       if (it.action) { App.runAction(it); return; }
       if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
@@ -4450,6 +4497,7 @@ App.LivePatches = (function () {
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
     renameBodyOwner: renameBodyOwner, deleteBodyOwner: deleteBodyOwner,
+    deleteBodyPart: deleteBodyPart, deleteBody: deleteBody,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };

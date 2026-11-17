@@ -168,6 +168,15 @@ async def patch_body(key: str, update: BodyUpdate) -> dict:
     return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
 
 
+@router.delete("/api/project/bodies/{key}")
+async def delete_body(key: str) -> dict:
+    """Delete one soil body a line cut off (`session.remove_body`): the soil there becomes
+    a void, and the rest of its layer or soil surface stays."""
+    with refusals():
+        project = session.remove_body(store.get(), key)
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
 @router.patch("/api/project/structures")
 async def patch_structures(update: StructuresUpdate) -> dict:
     """Replace Structure-mode objects as one validated project transaction

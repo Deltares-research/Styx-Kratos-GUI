@@ -123,7 +123,7 @@ def test_a_renamed_body_keeps_its_name_when_another_line_comes():
     named = [{**b.model_dump(), "name": "Pit" if b.id == "part1" else b.name}
              for b in before.bodies]
     after = edited(before, bodies=named, lines=[PIT_SIDE.model_dump(), FLOOR.model_dump()])
-    assert "Top · Pit" in after.soil_body_labels.values()
+    assert "Pit" in after.soil_body_labels.values()
 
 
 def test_a_save_and_a_load_give_the_same_bodies():
@@ -164,7 +164,7 @@ def test_a_record_can_name_a_body_in_a_script():
     project = model(lines=[PIT_SIDE], bodies=[
         SoilBody(id="pit", name="The pit", layer="top", point=(2.5, -2.0))])
     assert "soil_top__pit" in project.soil_body_keys
-    assert project.soil_body_labels["soil_top__pit"] == "Top · The pit"
+    assert project.soil_body_labels["soil_top__pit"] == "The pit"
     assert len(project.soil_body_keys) == 3
 
 
@@ -374,7 +374,7 @@ def test_a_line_that_splits_nothing_gets_a_note():
 
 def test_a_body_can_be_renamed():
     project = session.update_body(model(lines=[PIT_SIDE]), "soil_top__part1", name="Pit")
-    assert project.soil_body_labels["soil_top__part1"] == "Top · Pit"
+    assert project.soil_body_labels["soil_top__part1"] == "Pit"
 
 
 def test_a_body_that_is_not_there_cannot_be_edited():
@@ -612,7 +612,7 @@ def test_a_stage_that_names_the_surface_names_each_piece_once_a_line_cuts_it():
 def test_a_piece_of_a_surface_can_be_renamed_and_given_its_own_material():
     project = session.update_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part1",
                                   name="Core", material="grout")
-    assert project.soil_body_labels["drawn_0__part1"] == "Surface · Core"
+    assert project.soil_body_labels["drawn_0__part1"] == "Core"
     assert project.soil_body_materials == {"drawn_0__part1": "grout", "drawn_0__part2": "sand"}
     with pytest.raises(session.UnknownPart,
                        match="drawn_0 is a whole soil surface, .*with `surface set`"):
@@ -769,3 +769,69 @@ def test_a_name_typed_with_a_number_of_its_own_gets_no_note():
     project = session.update_layer(before, "low", name="Top_3")
     assert project.layers[1].name == "Top_3"
     assert session.edit_notes(before, project) == []
+
+
+# ── One part deleted on its own ──────────────────────────────────────────────────
+
+
+def test_one_part_of_a_cut_layer_can_be_deleted_and_leaves_a_void():
+    project = session.remove_body(model(lines=[PIT_SIDE]), "soil_top__part1")
+    assert project.soil_body_keys == ["soil_top__part2", "soil_low"]
+    assert "soil_top__part1" not in project.part_keys()
+    assert [(body.id, body.removed) for body in project.bodies] == [
+        ("part1", True), ("part2", False)]
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+    assert sum(built.mass[key] for key in project.soil_body_keys) == pytest.approx(
+        20.0 * 12.0 - 5.0 * 4.0)
+    assert "Top_Part_1" not in deck_of(project)["mdpa"]
+
+
+def test_a_deleted_part_stays_deleted_after_a_save_and_another_line():
+    project = session.remove_body(model(lines=[PIT_SIDE]), "soil_top__part1")
+    again = Project.model_validate(project.model_dump(mode="json"))
+    assert again.soil_body_keys == project.soil_body_keys
+    deeper = Line(id="deep", name="Deep", points=[(12.0, 0.0), (12.0, -4.0)])
+    after = session.add_line(again, deeper)
+    assert "soil_top__part1" not in after.soil_body_keys
+    assert len([key for key in after.soil_body_keys if key.startswith("soil_top__")]) == 2
+
+
+def test_a_file_without_a_deleted_part_does_not_say_removed():
+    assert all("removed" not in body for body in model(lines=[PIT_SIDE]).model_dump()["bodies"])
+
+
+def test_deleting_a_part_takes_it_out_of_the_stages():
+    project = edited(model(stages=[Stage(id="s", name="S", deactivate=["soil_top"])]),
+                     lines=[PIT_SIDE.model_dump()])
+    project = session.remove_body(project, "soil_top__part2")
+    assert project.stages[0].deactivate == ["soil_top__part1"]
+
+
+def test_the_last_part_of_a_layer_cannot_be_deleted_on_its_own():
+    project = session.remove_body(model(lines=[PIT_SIDE]), "soil_top__part1")
+    with pytest.raises(session.EditRefused, match="last part of soil_top"):
+        session.remove_body(project, "soil_top__part2")
+
+
+def test_a_deleted_part_or_a_whole_layer_is_not_a_part_to_delete():
+    project = session.remove_body(model(lines=[PIT_SIDE]), "soil_top__part1")
+    with pytest.raises(session.UnknownPart, match="no soil body"):
+        session.remove_body(project, "soil_top__part1")
+    with pytest.raises(session.UnknownPart, match="whole layer"):
+        session.remove_body(project, "soil_low")
+
+
+def test_one_part_of_a_cut_soil_surface_can_be_deleted():
+    project = session.remove_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part1")
+    assert project.soil_body_keys == ["drawn_0__part2"]
+    assert project.cut_parts() == ["drawn_0"]
+    assert "drawn_0" not in project.part_keys()
+
+
+def test_a_part_with_its_given_name_says_its_layer_and_a_renamed_one_its_name_alone():
+    project = session.update_body(model(lines=[PIT_SIDE]), "soil_top__part1", name="Clay")
+    project = session.update_layer(project, "top", name="Sand")
+    assert project.soil_body_labels == {"soil_top__part1": "Clay",
+                                        "soil_top__part2": "Sand · Part 2",
+                                        "soil_low": "Low"}

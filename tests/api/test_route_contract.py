@@ -141,6 +141,12 @@ CONTRACTS = [
              EDITED,
              bad=lambda c: c.patch("/api/project/bodies/no_such_body", json={"name": "A"}),
              bad_status=404),
+    Contract("DELETE", "/api/project/bodies/{key}",
+             lambda c: (c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -8.0]]}]}),
+                        c.delete(f"/api/project/bodies/{c.get('/api/project').json()['soil_body_keys'][0]}"))[1],
+             EDITED, EVERYTHING,
+             bad=lambda c: c.delete("/api/project/bodies/no_such_body"), bad_status=404),
     Contract("PATCH", "/api/project/conditions",
              lambda c: c.patch("/api/project/conditions", json={
                  "boundary_conditions": _project(c)["boundary_conditions"],

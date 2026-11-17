@@ -39,6 +39,11 @@ def _not_blank(name: str) -> str:
 
 RequiredName = Annotated[str, AfterValidator(_not_blank)]
 
+GIVEN_BODY_NAME = re.compile(r"Part \d+")
+"""The name a new soil body is given, `Part 1`, ... (`Project.split_soil`). A body with it
+says its layer's or soil surface's name before it (`soil_body_labels`); a body the user
+renamed is called by its new name alone."""
+
 ATTACHMENT_TOLERANCE = 1e-6
 """Metres. How close an anchor head must be to a sheet pile to count as on it."""
 
@@ -303,6 +308,11 @@ class SoilBody(Base):
     that cuts a new piece off, takes its layer's or part's then (`Project._split_the_soil`).
     An edit that gives the layer or the part another material gives it to every piece of it
     too (`session._parts_take_their_layers_material`)."""
+    removed: bool = False
+    """Deleted on its own (`session.remove_body`): the soil there is left out of the model,
+    a void, while the rest of its layer or surface stays. The record stays too, so its
+    `point` keeps the piece out when the lines change; a piece with no line left to cut it
+    off comes back with its layer or surface."""
 
     @field_validator("id")
     @classmethod
@@ -321,10 +331,12 @@ class SoilBody(Base):
 
     @model_serializer(mode="wrap")
     def _leave_out_the_other_owner(self, handler: SerializerFunctionWrapHandler) -> dict:
-        """Only the owner it has, so a file written before pieces of parts reads the same."""
+        """Only the owner it has, and `removed` only on a removed piece, so a file written
+        before pieces of parts, or before a piece could be removed, reads the same."""
         data = handler(self)
         return {key: value for key, value in data.items()
-                if value is not None or key not in ("layer", "part")}
+                if (value is not None or key not in ("layer", "part"))
+                and (value or key != "removed")}
 
     @property
     def owner_key(self) -> str:
@@ -2029,7 +2041,7 @@ class Project(Base):
         if self.lines and not self.layered_soil:
             raise ValueError("a project with layered_soil false takes no lines: its soil is "
                              "the seeded demo's")
-        pieces = self.split_soil()
+        pieces = self.split_soil(removed=True)
         # A part keeps the material it was cut off with when its layer's changes: a record
         # that has none takes its layer's now, as a new piece does.
         pieces = [piece if piece.body is None or piece.body.mat is not None
@@ -2037,6 +2049,13 @@ class Project(Base):
                       update={"mat": piece.owner_mat}))
                   for piece in pieces]
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
+        # A removed piece keeps its record, but is in the model no more (`split_soil`).
+        pieces = [piece for piece in pieces if piece.body is None or not piece.body.removed]
+        owners = {piece.owner_key for piece in pieces}
+        emptied = sorted({body.owner_key for body in self.bodies} - owners)
+        if emptied:
+            raise ValueError("every part of " + ", ".join(emptied) + " is removed: delete "
+                             "the whole layer or soil surface instead")
         _reject_same_names(pieces, self.dimension)
         # The viewport keeps a line's drawing under its id, beside the parts', the
         # conditions' and the water level's.
@@ -2653,15 +2672,22 @@ class Project(Base):
     def soil_body_labels(self) -> dict[str, str]:
         """What to call each soil body in front of a user, keyed by part key.
 
-        A body that is the whole of its layer is just the layer's name; one that is a piece
-        of a cut layer says which piece.
+        A body that is the whole of its layer is just the layer's name. A piece of a cut
+        layer or soil surface is called by the name the user gave it, as typed; a piece
+        with the name it was given (`GIVEN_BODY_NAME`) says what it is a piece of, as
+        `Soil_1 · Part 1`.
 
         Published beside `soil_body_keys` rather than derived in the browser, for the same
         reason: the split is this class's to describe.
         """
-        return {piece.key: (f"{piece.owner_name} · {piece.body.name}" if piece.body
-                            else piece.owner_name)
-                for piece in self.split_soil()}
+        def label(piece: SoilPiece) -> str:
+            if piece.body is None:
+                return piece.owner_name
+            if GIVEN_BODY_NAME.fullmatch(piece.body.name):
+                return f"{piece.owner_name} · {piece.body.name}"
+            return piece.body.name
+
+        return {piece.key: label(piece) for piece in self.split_soil()}
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -2699,9 +2725,11 @@ class Project(Base):
                 found.append((part, regions.polygon_pieces(section[0], cutters)))
         return found
 
-    def split_soil(self) -> list[SoilPiece]:
+    def split_soil(self, removed: bool = False) -> list[SoilPiece]:
         """The pieces the layers and the drawn soil surfaces are cut into, each with its key
-        and its record.
+        and its record. A piece removed on its own (`SoilBody.removed`) is not in the model,
+        so it is left out, unless `removed` asks for it too: `_split_the_soil` keeps its
+        record.
 
         A layer in one piece is its own body, with the plain key `soil_<layer>`. A layer in
         several has no plain key any more: each piece is `soil_<layer>__<id>`. A drawn soil
@@ -2745,7 +2773,8 @@ class Project(Base):
                                       layer=layer.id if layer is not None else None,
                                       part=part.key if part is not None else None,
                                       point=piece.point, mat=owner.mat)
-                out.append(SoilPiece(record.key, layer, piece, record, part, z))
+                if removed or not record.removed:
+                    out.append(SoilPiece(record.key, layer, piece, record, part, z))
         return out
 
     def cut_parts(self) -> list[str]:

@@ -265,12 +265,12 @@ changed soil body soil_L_mid__part1; wrote ...\crow.json
 crow.json> body set soil_L_mid__part2 --name retained
 changed soil body soil_L_mid__part2; wrote ...\crow.json
 crow.json> body list
-soil_L_top__part3  Soil_Top · lift 1  ·  Upper ground
-soil_L_top__part2  Soil_Top · retained  ·  Upper ground
-soil_L_top__part1  Soil_Top · lift 2  ·  Upper ground
-soil_L_top__part4  Soil_Top · lift 3  ·  Upper ground
-soil_L_mid__part1  Soil_Middle · below the pit  ·  Upper ground
-soil_L_mid__part2  Soil_Middle · retained  ·  Upper ground
+soil_L_top__part3  lift 1  ·  Upper ground
+soil_L_top__part2  retained  ·  Upper ground
+soil_L_top__part1  lift 2  ·  Upper ground
+soil_L_top__part4  lift 3  ·  Upper ground
+soil_L_mid__part1  below the pit  ·  Upper ground
+soil_L_mid__part2  retained  ·  Upper ground
 soil_L_bot  Soil_Bottom  ·  Deep sand
 ```
 

@@ -358,6 +358,60 @@
     });
   });
 
+  test('the menu of a part deletes the part alone, unless it is the last one left', function () {
+    return withCutSoil(function () {
+      T.ok(menuOf('soil_L1__part1').some(function (l) {
+        return l[0] === 'Delete part' && !l[1]; }));
+      App.PROJECT.soil_body_keys = ['soil_L1__part2', 'drawn_0__part1', 'drawn_0__part2'];
+      T.ok(menuOf('soil_L1__part2').some(function (l) {
+        return l[0] === 'Delete part' && l[1]; }), 'the last part is the whole layer');
+    });
+  });
+
+  /* Delete part with fetch, the model and the explorer stubbed: what it sends. */
+  function deletingAPart(seen, key) {
+    var saved = { fetch: window.fetch, api: App.Api, model: App.Model, explorer: App.Explorer };
+    seen.sent = [];
+    window.fetch = function (url, options) {
+      seen.sent.push(options.method + ' ' + url);
+      return Promise.resolve({ ok: true, json: function () {
+        return Promise.resolve({ project: { name: 'after' } }); } });
+    };
+    App.Api = { base: '', told: function (reply) { return reply; } };
+    App.Model = { apply: function (project) { seen.applied = project.name; } };
+    App.Viewport.refresh = function () { return Promise.resolve(); };
+    App.Explorer = { mountTree: function () {} };
+    function restore() {
+      window.fetch = saved.fetch; App.Api = saved.api; App.Model = saved.model;
+      App.Explorer = saved.explorer;
+    }
+    return Promise.resolve(App.LivePatches.deleteBodyPart(key)).then(restore, function (e) {
+      restore(); throw e; });
+  }
+
+  test('deleting one part asks first, then deletes that part alone', function () {
+    return withCutSoil(function (seen) {
+      return deletingAPart(seen, 'soil_L1__part1').then(function () {
+        T.eq(seen.asked, [['Delete part', 'Delete partThis deletes Part 1, one part of layer ' +
+                           'Sand. No soil is left there. The other parts of layer Sand stay.']]);
+        T.eq(seen.sent, ['DELETE /api/project/bodies/soil_L1__part1']);
+        T.eq(seen.applied, 'after');
+        T.eq(seen.deleted, [], 'not the layer');
+        T.eq(seen.selected, [null]);
+      });
+    });
+  });
+
+  test('a refused Delete part sends nothing', function () {
+    return withCutSoil(function (seen) {
+      seen.answer = false;
+      return deletingAPart(seen, 'drawn_0__part2').then(function () {
+        T.eq(seen.asked.length, 1);
+        T.eq(seen.sent, []);
+      });
+    });
+  });
+
   test('a refused delete leaves the layer', function () {
     return withCutSoil(function (seen) {
       seen.answer = false;

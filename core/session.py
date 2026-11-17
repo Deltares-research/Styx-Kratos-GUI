@@ -1136,7 +1136,7 @@ def update_body(project: Project, key: str, **fields) -> Project:
     is that layer's to change, and a whole soil surface is a custom part."""
     payload = project.model_dump()
     for record, body in zip(project.bodies, payload.get("bodies", [])):
-        if record.key == key:
+        if record.key == key and not record.removed:
             if "name" in fields:
                 body["name"] = fields["name"]
             if "material" in fields:
@@ -1151,6 +1151,37 @@ def update_body(project: Project, key: str, **fields) -> Project:
         raise UnknownPart(f"{key} is a whole {noun}, not a part cut off by a line: change it "
                           f"with `{command}`")
     raise UnknownPart(f"no soil body with key {key!r}")
+
+
+def remove_body(project: Project, key: str) -> Project:
+    """The project without the soil body `key`, one piece a line or a sheet pile cut off:
+    the soil there becomes a void, and the rest of its layer or soil surface stays
+    (`SoilBody.removed`).
+
+    The stages stop naming it, as it is no soil any more: a stage names it because it named
+    its layer before the cut. A boundary condition on it is refused, not dropped, as the
+    condition is the user's own choice. The last piece left is the whole layer or soil
+    surface, which is deleted as that."""
+    payload = project.model_dump()
+    at = next((index for index, record in enumerate(project.bodies)
+               if record.key == key and not record.removed), None)
+    if at is None:
+        return update_body(project, key)     # its refusal: a whole layer, or no such body
+    owner = project.bodies[at].owner_key
+    if [each for each, *_ in project.soil_bodies() if each.partition("__")[0] == owner] \
+            == [key]:
+        raise EditRefused(f"{key} is the last part of {owner}: delete the whole layer or "
+                          "soil surface instead")
+    users = sorted(condition.id for condition in project.boundary_conditions
+                   if condition.on == "part" and condition.part == key)
+    if users:
+        raise EditRefused(f"cannot delete {key}: boundary condition {', '.join(users)} is "
+                          "on it; delete that condition first")
+    payload["bodies"][at]["removed"] = True
+    for stage in payload["stages"]:
+        stage["activate"] = [each for each in stage["activate"] if each != key]
+        stage["deactivate"] = [each for each in stage["deactivate"] if each != key]
+    return _edited(project, payload)
 
 
 def assign_part_material(project: Project, key: str, material: str) -> Project:
