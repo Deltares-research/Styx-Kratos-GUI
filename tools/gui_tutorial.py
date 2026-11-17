@@ -103,9 +103,9 @@ def site(python: pathlib.Path) -> int:
     found = subprocess.run([str(python), "-c", "import zensical"], cwd=ROOT,
                            capture_output=True).returncode == 0
     if not found:
-        print(f"The site was not built: {python} has no zensical. Install it with\n"
-              f"  {python} -m pip install -r requirements-docs.txt\n"
-              "or give --no-site.", file=sys.stderr)
+        print(f"The site was not built, because zensical is not installed in {python}.\n"
+              "To build the site, install zensical with\n"
+              f"  {python} -m pip install -r requirements-docs.txt", file=sys.stderr)
         return 2
     code = subprocess.run([str(python), "-m", "zensical", "build", "--strict", "--clean",
                            "-f", "mkdocs.yml"], cwd=ROOT).returncode
