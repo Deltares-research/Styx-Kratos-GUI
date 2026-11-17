@@ -49,7 +49,7 @@
        no room for. A sheet pile is not among them: that tool makes the wall of
        whichever dimension is open. */
     T.eq(App.LivePatches.THREE_D_ONLY.slice().sort(), [
-      'createMember', 'drawBox', 'drawCylinder', 'navRotate', 'toggleProjection',
+      'createMember', 'navRotate', 'toggleProjection',
       'viewFront', 'viewIso', 'viewSide', 'viewTop'
     ]);
     T.eq(App.LivePatches.availableIn2D('zoomFit'), true);
@@ -419,10 +419,9 @@
     });
     T.eq(keys, [
       'select',
-      '-', 'drawLine', 'drawPolygon', 'drawBox',
+      '-', 'drawLine',
       '-', 'createSheetPile', 'createMember', 'createAnchor', 'interface',
-      '-', 'createLoad', 'createBoundaryCondition',
-      '-', 'importModel'
+      '-', 'createLoad', 'createBoundaryCondition'
     ]);
   });
 

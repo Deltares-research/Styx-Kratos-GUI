@@ -50,8 +50,30 @@
     T.eq(implemented({ label: 'Stage', sub: [] }), true, 'a submenu a caller fills is');
     T.eq(implemented('-'), true, 'a separator is not a control');
     T.eq(implemented({ title: 'Standard views' }), true, 'nor is a caption');
-    T.eq(App.LivePatches.NOT_YET.slice().sort(), ['drawPoint', 'importSoilLayers']);
+    T.eq(App.LivePatches.NOT_YET.slice().sort(),
+         ['drawBox', 'drawCylinder', 'drawPoint', 'drawPolygon', 'importModel',
+          'importSoilLayers']);
   });
+
+  test('the drawn and imported shapes Kratos never gets are gone from rail and menus',
+       function () {
+    withInstall(function () {});
+    var gone = ['drawPolygon', 'drawBox', 'drawCylinder', 'importModel'];
+    var found = [];
+    function walk(items, path) {
+      (items || []).forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        if (gone.indexOf(item.action) >= 0) found.push(path + (item.label || item.tip));
+        if (Array.isArray(item.sub)) walk(item.sub, path);
+        if (Array.isArray(item.flyout)) walk(item.flyout, path);
+      });
+    }
+    App.MENUS.forEach(function (m) { walk(m.items, m.label + ' > '); });
+    Object.keys(App.RAILS).forEach(function (mode) { walk(App.RAILS[mode], mode + ' rail > '); });
+    T.eq(found, []);
+    T.eq(row('Structures', /^Create surface$/), [], 'no Create surface row');
+  });
+
 
   test('no menu row that does nothing is left, submenus included', function () {
     withInstall(function () {});
@@ -220,15 +242,13 @@
     try {
       withInstall(function () {
         App.Toolbars.mountRail('structures');
-        T.eq(button('drawBox').hidden, true, 'no box in a 2D section');
         T.eq(button('createMember').hidden, true, 'no member in a 2D section');
         T.eq(button('drawLine').hidden, false);
         T.eq(button('interface').hidden, false);
 
         App.state.modelMode = '3d';
         App.Toolbars.mountRail('structures');
-        T.eq(button('drawBox').hidden, false, 'the box comes back in 3D');
-        T.eq(button('createMember').hidden, false);
+        T.eq(button('createMember').hidden, false, 'the member comes back in 3D');
         T.eq(button('drawLine').hidden, true, 'no line tool in 3D');
         T.eq(button('interface').hidden, true);
 
@@ -277,7 +297,6 @@
   test('the menu twins of working tools carry the tool’s action', function () {
     withInstall(function () {});
     T.eq(row('Structures', /^Create line$/)[0].action, 'drawLine');
-    T.eq(row('Structures', /^Create surface$/)[0].action, 'drawPolygon');
     T.eq(row('Mesh', /^View mesh$/)[0].action, 'viewMesh');
     T.eq(row('Edit', /^Deselect all$/)[0].action, 'deselectAll');
     var water = row('Flow conditions', /water pressure line/);

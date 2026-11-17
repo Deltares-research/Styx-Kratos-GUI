@@ -1008,18 +1008,12 @@ App.LivePatches = (function () {
      all six a few lines each rather than a feature apiece.
      ══════════════════════════════════════════════════════════════════════════ */
 
-  /* Actions a plane-strain section cannot serve. The four view presets and the
-     isometric view all resolve to the same locked camera; perspective would stop the
-     section being measurable; orbiting is undone by clampAngles as fast as it happens;
-     and a box or a cylinder is a solid, which is not a thing a 2D model contains. */
   /* What a 2D section cannot serve. Mostly the camera -- a locked section view cannot
-     orbit, take a preset angle or go perspective -- and, since the structures arrived,
-     the objects a plane has no room for: a box, a cylinder and a member all exist in
-     the solid model alone. `createSheetPile` is deliberately *not* here: it makes the
-     wall of whichever dimension is open. */
+     orbit, take a preset angle or go perspective -- and a member, which exists in the
+     solid model alone. `createSheetPile` is not here: it makes the wall of whichever
+     dimension is open. */
   var THREE_D_ONLY = ['viewFront', 'viewTop', 'viewSide', 'viewIso',
-                      'toggleProjection', 'navRotate', 'drawBox', 'drawCylinder',
-                      'createMember'];
+                      'toggleProjection', 'navRotate', 'createMember'];
 
   /* And the mirror of it. An interface is a zero-thickness contact along a line in
      the section: every reference deck that has one is plane strain, and the 3D
@@ -1090,8 +1084,15 @@ App.LivePatches = (function () {
 
        importSoilLayers   the mockup's import dialog, which imports nothing.
        drawPoint          draws a point, which the server then refuses: the creation
-                          recipes (core/geometry/primitives.py) have no `point` kind. */
-  var NOT_YET = ['importSoilLayers', 'drawPoint'];
+                          recipes (core/geometry/primitives.py) have no `point` kind.
+       drawPolygon        "Create surface": a flat surface with no material. The mesh
+                          leaves it out, with a note, so Kratos never sees it.
+       drawBox,           a solid with no material, and the Selection explorer offers
+       drawCylinder,      no way to give it one: the deck gets a body that no material
+       importModel        is assigned to. Soil comes from Soil > Create soil surface…,
+                          which asks for the material. */
+  var NOT_YET = ['importSoilLayers', 'drawPoint', 'drawPolygon', 'drawBox', 'drawCylinder',
+                 'importModel'];
 
   /* Separators ('-') and section captions are not controls, so they always pass. */
   function implemented(item) {
@@ -1240,12 +1241,11 @@ App.LivePatches = (function () {
      tools. Groups become the separators the rail draws between them. */
   var STRUCTURES_RAIL_GROUPS = [
     ['select', 'selectmulti'],
-    ['drawPoint', 'drawLine', 'drawPolygon', 'drawBox'],
+    ['drawLine'],
     ['plate', 'beam', 'embedded', 'createSheetPile', 'createMember', 'createAnchor',
      'interface'],
     ['createLoad', 'createBoundaryCondition'],
-    ['tunnel'],
-    ['importModel']
+    ['tunnel']
   ];
 
   /* The frozen node-to-node anchor tool draws nothing -- frontend/js/anchors.js owns
@@ -2824,9 +2824,9 @@ App.LivePatches = (function () {
     plate: 'Structures > Create wall panel… (3D), or `kratos-cli wall add`',
     beam: 'Structures > Create sheet pile…, or `kratos-cli beam add`',
     anchor: 'Structures > Create anchor…, or `kratos-cli anchor add`',
-    surface: 'the Create surface tool of Structures mode',
+    surface: 'Soil > Create soil surface…',
     line: 'the Create line tool of Structures mode',
-    point: 'the Create point tool of Structures mode'
+    point: 'the Create line tool of Structures mode, which is drawn point by point'
   };
 
   /* Every first word js/command.js answers itself: its mode jumps, its `switch`, and
@@ -2980,6 +2980,7 @@ App.LivePatches = (function () {
         openResults();
         return;
       }
+
 
       /* Every Results menu entry. One action carrying the command it stands for,
          rather than one action name per entry: the menu is then a list of the same

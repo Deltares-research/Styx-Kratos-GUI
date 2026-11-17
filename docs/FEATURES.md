@@ -183,8 +183,8 @@ and adds only the values that are missing
 | Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
 | Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer from edge to edge, the layer becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. | Tested |
 | Old saved excavations | A project saved with an excavation pit opens with lines and soil bodies in its place. | Tested |
-| Drawing tools | Point, surface, box and cylinder (box and cylinder in 3D only). These make display geometry. | Tested |
-| CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) | Tested |
+| Drawn solids | Box, cylinder and extruded polygon with `kratos-cli volume add`; with `--material` they are soil. The GUI has no tool for them. | Limited |
+| CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) with `kratos-cli volume import`; with `--material` the solid is soil. Not in the GUI. | Limited |
 | Kratos `.mdpa` import | View only: a preview with a list of parts. You cannot change the mesh. | Tested |
 
 ### B3. Structures, loads and water
