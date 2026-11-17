@@ -322,10 +322,11 @@ def panel_button(page, text: str):
 
 
 def rename_body(page, row: str, name: str) -> None:
-    """Select the body's row and rename it with the button in its panel."""
+    """Select the body's row and rename it with the button in its panel: the first one, as
+    the second renames its layer."""
     tree_row(page, row).click()
     page.once("dialog", lambda dialog: dialog.accept(name))
-    panel_button(page, "Rename…").click()
+    panel_button(page, "Rename…").first.click()
 
 
 def press(page, keys: str) -> None:

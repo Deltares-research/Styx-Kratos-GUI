@@ -415,6 +415,56 @@ App.LivePatches = (function () {
     if (kind === 'condition') return App.BoundaryConditions.remove(key);
   }
 
+  /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
+     part) a line cut. Once a line cuts a layer or a surface, the explorer shows only
+     its parts, so a part's menu and panel are where the whole is renamed or deleted. */
+  function bodyOwner(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return null;
+    if (body.layer) {
+      var layer = App.layerById ? App.layerById(body.layer) : null;
+      return layer ? { kind: 'layer', noun: 'layer', key: 'soil_' + layer.id,
+                       record: layer, name: layer.name } : null;
+    }
+    var part = partByKey(body.part);
+    return part ? { kind: 'part', noun: in3D() ? 'soil volume' : 'soil surface',
+                    key: part.key, record: part, name: part.label } : null;
+  }
+
+  function renameBodyOwner(key) {
+    var owner = bodyOwner(key);
+    if (!owner) return;
+    var name = window.prompt('New name of the ' + owner.noun, owner.name);
+    if (name === null) return;
+    name = name.trim();
+    if (!name) { reportRenameError(new Error('Name cannot be empty.')); return; }
+    if (owner.kind === 'layer') owner.record.name = name;
+    else owner.record.label = name;
+    // Saved under the owner's key: under the part's, commitSelectionEdit saves the
+    // part alone. The part stays selected, as its key does not change.
+    return Promise.resolve(App.commitSelectionEdit(owner.key)).then(function () {
+      if (App.selectObject) App.selectObject(key, 'tree');
+    });
+  }
+
+  /* The whole layer or soil surface goes, every part of it: one part alone cannot go,
+     as the line that cut it off still splits the soil there. */
+  function deleteBodyOwner(key) {
+    var owner = bodyOwner(key);
+    if (!owner) return;
+    var parts = ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other.split('__')[0] === owner.key;
+    }).length;
+    if (!window.confirm('Delete the ' + owner.noun + ' ' + owner.name + ' with all its '
+                        + parts + ' parts?')) return;
+    if (owner.kind === 'part') return deleteCustomPart(owner.key);
+    var error = App.deleteLayerById(owner.record.id);
+    if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
+    if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
+    if (App.selectObject) App.selectObject(null, 'tree');
+    return App.commitSelectionEdit(null);
+  }
+
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
      depth-first order -- there is no other way to recover which key a row is for, since
      rowsByObj lives in explorer.js's closure. */
@@ -909,18 +959,29 @@ App.LivePatches = (function () {
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
+    // A soil body is a part of a layer or a soil surface: Rename… names the part, and
+    // the owner's own Rename and Delete stand beside it.
+    var owner = kind === 'body' ? bodyOwner(key) : null;
+    var edits = owner ? [
+      { label: 'Rename part…', action: 'renameObject' },
+      { label: 'Rename ' + owner.noun + '…', action: 'renameOwner' },
+      { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
+    ] : [
+      { label: 'Rename…', action: 'renameObject' },
+      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' }
+    ];
     App.Menu.openAt([
       { label: 'Zoom to object', icon: 'zoomfit', action: 'zoomFit' },
       { label: App.Viewport.isVisible(key) ? 'Hide' : 'Show', icon: 'eye' },
-      '-',
-      { label: 'Rename…', action: 'renameObject' },
-      // A soil body goes when the line that made it goes.
-      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' },
+      '-'
+    ].concat(edits, [
       '-',
       { label: 'Properties…', icon: 'settings' }
-    ], event.clientX, event.clientY, function (it) {
+    ]), event.clientX, event.clientY, function (it) {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
+      if (it.action === 'renameOwner') return renameBodyOwner(key);
+      if (it.action === 'deleteOwner') return deleteBodyOwner(key);
       if (it.action) { App.runAction(it); return; }
       if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
@@ -4334,6 +4395,7 @@ App.LivePatches = (function () {
     nameSoilBodyActions: nameSoilBodyActions,
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
+    renameBodyOwner: renameBodyOwner, deleteBodyOwner: deleteBodyOwner,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };

@@ -226,6 +226,121 @@
     }).then(restore, function (err) { restore(); throw err; });
   });
 
+  /* ── A part of a cut layer or soil surface (PR #133 review) ──────────────
+
+     Once a line cuts a layer or a soil surface, the explorer shows only its parts. The
+     menu of a part renames the part, and renames or deletes the whole it belongs to. */
+
+  function withCutSoil(run) {
+    var saved = {
+      project: App.PROJECT, layers: App.LAYERS, menu: App.Menu, viewport: App.Viewport,
+      state: App.state, commit: App.commitSelectionEdit, select: App.selectObject,
+      deleteLayer: App.deleteLayerById, command: App.Command, prompt: window.prompt,
+      confirm: window.confirm
+    };
+    var seen = { commits: [], selected: [], deleted: [], lines: [], asked: [] };
+    App.LAYERS = [{ id: 'L1', name: 'Sand', mat: 'm1', top: 0, bottom: -5 }];
+    App.PROJECT = {
+      dimension: 2,
+      custom_parts: [{ key: 'drawn_0', label: 'Embankment', mat: 'm1' }],
+      bodies: [{ id: 'part1', name: 'Part 1', layer: 'L1', point: [1, -1] },
+               { id: 'part2', name: 'Part 2', layer: 'L1', point: [9, -1] },
+               { id: 'part1', name: 'Part 1', part: 'drawn_0', point: [0.5, 1] },
+               { id: 'part2', name: 'Part 2', part: 'drawn_0', point: [2, 1] }],
+      soil_body_keys: ['soil_L1__part1', 'soil_L1__part2', 'drawn_0__part1', 'drawn_0__part2']
+    };
+    App.state = { mode: 'soil', modelMode: '2d', selection: 'soil_L1__part1' };
+    App.Viewport = { isVisible: function () { return true; } };
+    App.commitSelectionEdit = function (key) { seen.commits.push(key); return Promise.resolve(); };
+    App.selectObject = function (key) { seen.selected.push(key); };
+    App.deleteLayerById = function (id) { seen.deleted.push(id); return null; };
+    App.Command = { ok: function (t) { seen.lines.push('ok:' + t); },
+                    err: function (t) { seen.lines.push('err:' + t); },
+                    note: function () {} };
+    window.confirm = function (text) { seen.asked.push(text); return true; };
+    function restore() {
+      App.PROJECT = saved.project; App.LAYERS = saved.layers; App.Menu = saved.menu;
+      App.Viewport = saved.viewport; App.state = saved.state;
+      App.commitSelectionEdit = saved.commit; App.selectObject = saved.select;
+      App.deleteLayerById = saved.deleteLayer; App.Command = saved.command;
+      window.prompt = saved.prompt; window.confirm = saved.confirm;
+    }
+    var result;
+    try { result = run(seen); } catch (error) { restore(); throw error; }
+    return Promise.resolve(result).then(restore, function (error) { restore(); throw error; });
+  }
+
+  function menuOf(key) {
+    var items = null;
+    App.Menu = { openAt: function (opened) { items = opened; } };
+    var row = document.createElement('div');
+    row.className = 'tree-row';
+    row.dataset.obj = key;
+    App.LivePatches.onTreeContextMenu({ target: row, clientX: 0, clientY: 0,
+                                        preventDefault: function () {},
+                                        stopImmediatePropagation: function () {} });
+    return (items || []).filter(function (it) { return it && it.label; })
+      .map(function (it) { return [it.label, !!it.disabled]; });
+  }
+
+  test('the menu of a part of a cut layer renames the part, and renames or deletes the layer',
+       function () {
+         return withCutSoil(function () {
+           var labels = menuOf('soil_L1__part1');
+           T.ok(labels.some(function (l) { return l[0] === 'Rename part…' && !l[1]; }));
+           T.ok(labels.some(function (l) { return l[0] === 'Rename layer…' && !l[1]; }));
+           T.ok(labels.some(function (l) { return l[0] === 'Delete layer' && !l[1]; }),
+                JSON.stringify(labels));
+           var surface = menuOf('drawn_0__part2');
+           T.ok(surface.some(function (l) { return l[0] === 'Rename soil surface…'; }));
+           T.ok(surface.some(function (l) { return l[0] === 'Delete soil surface' && !l[1]; }));
+         });
+       });
+
+  test('renaming the layer of a part saves the layer, and the part stays selected', function () {
+    return withCutSoil(function (seen) {
+      window.prompt = function (message, current) {
+        T.eq(current, 'Sand');
+        return '  Dense sand ';
+      };
+      return App.LivePatches.renameBodyOwner('soil_L1__part2').then(function () {
+        T.eq(App.LAYERS[0].name, 'Dense sand');
+        T.eq(seen.commits, ['soil_L1'], 'saved as the layer, not as the part');
+        T.eq(seen.selected, ['soil_L1__part2']);
+      });
+    });
+  });
+
+  test('renaming the soil surface of a part changes its label', function () {
+    return withCutSoil(function (seen) {
+      window.prompt = function () { return 'Dike'; };
+      return App.LivePatches.renameBodyOwner('drawn_0__part1').then(function () {
+        T.eq(App.PROJECT.custom_parts[0].label, 'Dike');
+        T.eq(seen.commits, ['drawn_0']);
+      });
+    });
+  });
+
+  test('deleting the layer of a part asks first, then removes the whole layer', function () {
+    return withCutSoil(function (seen) {
+      return Promise.resolve(App.LivePatches.deleteBodyOwner('soil_L1__part1')).then(function () {
+        T.eq(seen.asked, ['Delete the layer Sand with all its 2 parts?']);
+        T.eq(seen.deleted, ['L1']);
+        T.eq(seen.commits, [null]);
+        T.eq(seen.selected, [null]);
+      });
+    });
+  });
+
+  test('a refused delete leaves the layer', function () {
+    return withCutSoil(function (seen) {
+      window.confirm = function () { return false; };
+      App.LivePatches.deleteBodyOwner('soil_L1__part1');
+      T.eq(seen.deleted, []);
+      T.eq(seen.commits, []);
+    });
+  });
+
   /* ── Model explorer: Rename/Delete for beams, anchors and loads ──────────
 
      js/explorer.js:89-98 only ever wires up Rename/Delete for a soil layer --

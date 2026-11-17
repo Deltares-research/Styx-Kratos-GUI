@@ -88,6 +88,11 @@ objects, show all, show node or element labels, and visibility settings.
 Right-click an object in the Model explorer to zoom to it, rename it, delete it, or open its
 properties.
 
+Each soil layer and soil surface has a name of its own. If you give one a name that is
+already in use, Styx adds a number: a second *Embankment* becomes *Embankment_2*. The
+Session log says so. The Model explorer, `kratos-cli` and the Kratos input files then use
+the same name.
+
 ## Soil mode
 
 ### Soil layers
@@ -204,6 +209,10 @@ part off in its own stage. Select a part to rename it or to give it another mate
 part starts with its layer's material. Change the layer's material, in the **Soil layers**
 window or in the Selection explorer, and every part of that layer takes the new material,
 also a part you gave a material of its own.
+
+Right-click a part to rename the part, or to rename or delete its whole layer or soil
+surface. The Selection explorer of a part has the same buttons. You cannot delete one part
+alone: delete the line, or switch the part off in a stage.
 
 Lines have their own group in the Model explorer. Delete a line there, and the parts join
 again, unless a stage still uses one of them. Then the deletion is refused.

@@ -1730,9 +1730,10 @@ App.Model = (function () {
      of. Which layer or soil surface (`owner`, partOwner) it came out of is fixed. */
   function bodyProps(owner, body, key) {
     var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
+    var noun = (owner.noun || 'Layer').toLowerCase();
     var general = [
       ['Name', body.name, '', true],
-      ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
+      ['Rename part', '', '', false, { kind: 'button', text: 'Rename…',
         run: function () {
           var name = window.prompt('New name', body.name);
           if (name && name.trim() && App.Lines) {
@@ -1740,6 +1741,12 @@ App.Model = (function () {
           }
         } }],
       [owner.noun || 'Layer', owner.name, '', true],
+      // The explorer shows only the parts of a cut layer or surface, so the whole of
+      // it is renamed here (js/patches.js renameBodyOwner).
+      ['Rename ' + noun, '', '', false, {
+        kind: 'button', text: 'Rename…',
+        run: function () { if (App.LivePatches) App.LivePatches.renameBodyOwner(key); }
+      }],
       // The materials only, the part's chosen: it has one of its own from the moment
       // a line cuts it off, until its layer or surface is given another.
       ['Material', bodyMaterial(owner, key).name, '', false, {
@@ -1759,6 +1766,11 @@ App.Model = (function () {
         run: function () { App.SoilVolumeDialog.open(owner.part); }
       }]);
     }
+    // Every part of it goes with it: one part alone stays cut off by its line.
+    general.push(['Delete', '', '', false, {
+      kind: 'button', text: 'Delete ' + noun,
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyOwner(key); }
+    }]);
     return { title: labels[key] || body.name, icon: 'cube', groups: { 'General': general } };
   }
 
