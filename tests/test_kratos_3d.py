@@ -387,6 +387,43 @@ def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
     assert constraints[0]["Parameters"]["is_fixed"] == [True, True, True]
 
 
+# ── A free tail: a node of the soil mesh, in the solid model too ─────────────
+
+@pytest.mark.parametrize("beams, anchor, order", [
+    ([PANEL, MEMBER], ANCHOR, 2),
+    ([PILE], PLANE_ANCHOR, 1),
+], ids=["space-anchor", "plane-anchor"])
+def test_a_free_anchor_tail_is_a_soil_node_with_no_support(session, beams, anchor, order):
+    project = structured(beams, [dict(anchor, tail_end="free")])
+    deck = deck_of(writer.export_project(project, MeshRequest(element_size=6.0, order=order)))
+    block = truss_of(deck)
+    head, tail = next(iter(block.entries.values()))
+    others = {n for other in deck.elements if other is not block
+              for nodes in other.entries.values() for n in nodes}
+    # A plane anchor lies on the cut it was drawn on.
+    where = (tuple(anchor["tail"]) if len(anchor["tail"]) == 3
+             else (*anchor["tail"], project.cut_at()))
+
+    assert deck.nodes[tail] == pytest.approx(where, abs=1e-6)
+    assert tail in others, "the tie pulls on the soil at its tail"
+    assert not any(name.endswith("_Support") for name in deck.parts)
+
+
+def test_a_space_anchor_needs_no_wall_or_member(session):
+    """With no structure in the model, both ends of a free anchor are soil nodes."""
+    anchor = dict(ANCHOR, head=[10.0, -2.0, 10.0], tail_end="free")
+    deck = deck_of(writer.export_project(structured([], [anchor]),
+                                         MeshRequest(element_size=6.0, order=1)))
+    block = truss_of(deck)
+    head, tail = next(iter(block.entries.values()))
+    others = {n for other in deck.elements if other is not block
+              for nodes in other.entries.values() for n in nodes}
+
+    assert deck.nodes[head] == pytest.approx((10.0, -2.0, 10.0), abs=1e-6)
+    assert deck.nodes[tail] == pytest.approx(tuple(ANCHOR["tail"]), abs=1e-6)
+    assert head in others and tail in others
+
+
 # ── 2D loads that reach a 3D deck ───────────────────────────────────────────
 #
 # A point load and a line load below the ground surface have no surface form (a

@@ -585,14 +585,20 @@ class AnchorSection(KratosPropertySet):
     """Left None for a tendon, which takes no compression at all."""
 
 
-class Anchor(Base):
-    """One anchor: a two-node tie from a sheet pile to a restrained point.
+TailEnd = Literal["free", "fixed"]
+"""What an anchor's tail is joined to: the soil mesh ("free"), or nothing, held in
+place ("fixed")."""
 
-    The formulation is the one Kratos' reference decks write -- a single
-    `LinearTrussElement2D2N` whose head node is shared with the beam and whose tail node
-    belongs to no other element, held by its own node group. The tail is therefore *not*
-    coupled to the soil continuum: the grouted body is idealised as a fixed point, which
-    is the standard plane-strain treatment.
+
+class Anchor(Base):
+    """One anchor: a two-node tie from its head to its tail.
+
+    A single `LinearTrussElement2D2N`. A head on a sheet pile shares the beam's node; a
+    head on no pile is a node of the soil mesh (`Project.anchor_on_structure`). What the
+    tail is joined to is `tail_end`: a free tail is a node of the soil mesh, so the tie
+    pulls on the soil there; a fixed tail belongs to no other element and is held by
+    its own node group, the formulation Kratos' reference decks write, which idealises
+    the grouted body as a fixed point.
 
     Dimension-native `(x, y)` like every other 2D record.
     """
@@ -607,6 +613,12 @@ class Anchor(Base):
     positive in tension (smeared by the tendon's spacing in 2D, like its area). Per
     anchor rather than per section: two anchors of the same tendon are routinely
     stressed differently, and each anchor is its own property set in the deck."""
+    tail_end: TailEnd = "fixed"
+    """"free": the tail is a node of the soil mesh. "fixed": the tail is in no element
+    and held in place. A new anchor is free (`core.model.drafts.anchor`,
+    `App.Anchors.draft`); a record that does not say is fixed, which is what every
+    anchor was before the choice existed, so a project saved then gives the same
+    results."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -982,11 +994,11 @@ class Member(Base):
 
 
 class SpaceAnchor(Base):
-    """One 3D anchor: a two-node tie in space, from a wall or member to a fixed point.
+    """One 3D anchor: a two-node tie in space, from its head to its tail.
 
-    The same formulation as the 2D `Anchor` -- head shared with the structure it hangs
-    from, tail in no element at all and pinned by its own node group -- one dimension
-    up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
+    The same formulation as the 2D `Anchor` -- head shared with the wall or member it is
+    on, or a node of the soil mesh; tail a node of the soil mesh or held by its own node
+    group (`tail_end`) -- one dimension up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
     smear and means nothing here, where every anchor is a discrete member.
     """
     id: Ident
@@ -996,6 +1008,8 @@ class SpaceAnchor(Base):
     head: tuple[float, float, float]
     tail: tuple[float, float, float]
     prestress: float = 0.0
+    tail_end: TailEnd = "fixed"
+    """As `Anchor.tail_end`."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -2277,33 +2291,22 @@ class Project(Base):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at ({x}, {y})"
                     )
-            # The head becomes a node the beam shares, so it has to be on a live pile.
-            # Only checked while the anchor is active: deleting a pile under a disabled
-            # anchor must not make the saved project unopenable.
-            if anchor.active and not any(
-                point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
-                for beam in self.sheet_piles if beam.active
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a sheet pile"
-                )
+            # An end joined to the soil has to be where soil can be: a head that is on no
+            # pile, and a free tail. Only checked while the anchor is active, as a
+            # disabled anchor is not built.
+            if anchor.active:
+                for end, (x, y) in self.anchor_soil_ends(anchor):
+                    if y > extent.y_top:
+                        raise ValueError(
+                            f"anchor {anchor.id!r} {end} at ({x}, {y}) is joined to the "
+                            "soil but lies above it"
+                        )
         for anchor in self.space_anchors:
             for point in (anchor.head, anchor.tail):
                 if not extent.contains(*point):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at {point}"
                     )
-            # The 3D head hangs from whatever structure is there: the swept surface of a
-            # panel, or the polyline of a member. Same rule as 2D, two shapes to test.
-            if anchor.active and not (
-                any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
-                    for panel in self.panels if panel.active)
-                or any(point_on_polyline(anchor.head, member.points, ATTACHMENT_TOLERANCE)
-                       for member in self.members if member.active)
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a wall or member"
-                )
 
         sections = {s.id for s in self.beam_sections}
         for beam in self.sheet_piles:
@@ -2642,6 +2645,30 @@ class Project(Base):
     @property
     def space_anchors(self) -> list[SpaceAnchor]:
         return [a for a in self.anchors if isinstance(a, SpaceAnchor)]
+
+    def anchor_on_structure(self, anchor: Anchor | SpaceAnchor) -> bool:
+        """Whether the head of `anchor` is on a live structure, whose node it then
+        shares: a sheet pile for a 2D anchor, a wall or a member for a 3D one. A head
+        on none is a node of the soil mesh instead -- an anchor needs no structure."""
+        if isinstance(anchor, SpaceAnchor):
+            return (any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
+                        for panel in self.panels if panel.active)
+                    or any(point_on_polyline(anchor.head, member.points,
+                                             ATTACHMENT_TOLERANCE)
+                           for member in self.members if member.active))
+        return any(point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
+                   for beam in self.sheet_piles if beam.active)
+
+    def anchor_soil_ends(self, anchor: Anchor | SpaceAnchor
+                         ) -> list[tuple[str, tuple[float, ...]]]:
+        """The ends of `anchor` that are nodes of the soil mesh, as ("head" | "tail",
+        point): the head when it is on no structure, the tail when it is free."""
+        ends: list[tuple[str, tuple[float, ...]]] = []
+        if not self.anchor_on_structure(anchor):
+            ends.append(("head", anchor.head))
+        if anchor.tail_end == "free":
+            ends.append(("tail", anchor.tail))
+        return ends
 
     def structures_for(self, dimension: int) -> list[Beam | Panel | Member]:
         """The structures this dimension builds, in `beams[]` order.

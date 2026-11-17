@@ -62,8 +62,8 @@ See `ELEMENTS` and `FLOW_ELEMENTS` in [kratos/writer.py](../core/kratos/writer.p
 | `Beam` | Sheet pile | `LinearTimoshenkoCurvedBeamElement2D2N` / `2D3N` | `TimoshenkoBeamElasticConstitutiveLaw` | 2D | Tested: element from the reference deck, law from the Kratos documentation |
 | `Member` | Bored pile, king post, strut | `LinearTimoshenkoBeamElement3D2N` / `3D3N` | same | 3D | Limited |
 | `Panel` | Wall panel (a footprint swept between two levels) | `ShellThinElement3D3N` (a 6-node triangle is written from its corners) | `LinearElasticPlaneStress2DLaw` | 3D | Limited |
-| `Anchor` | Anchor: a 2-node tie, head on a sheet pile, tail fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw`, prestress as `TRUSS_PRESTRESS_PK2` (a stress) | 2D | Tested: element from a Kratos reference deck |
-| `SpaceAnchor` | 3D anchor, head on a panel or a member | `LinearTrussElement3D2N` | same | 3D | Limited |
+| `Anchor` | Anchor: a 2-node tie, head on a sheet pile or in the soil, tail free (a soil node) or fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw`, prestress as `TRUSS_PRESTRESS_PK2` (a stress) | 2D | Tested: element from a Kratos reference deck |
+| `SpaceAnchor` | 3D anchor, head on a panel, a member or in the soil, tail free or fixed | `LinearTrussElement3D2N` | same | 3D | Limited |
 | Anchor tension and compression limits | Fields of the anchor section | Not exported. The export shows a warning. | — | — | Not exported |
 
 A beam section has the Kratos variables `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY`,
@@ -129,7 +129,7 @@ and adds only the values that are missing
 | Water conditions for each stage | A stage switches a water pressure condition on or off, as it does a load. The Kratos stage writes the conditions that its stage has on. | 2D, 3D | Tested |
 | Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every stage; a mechanical deck leaves it out and says so. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
-| Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
+| Anchor tail | **Tail end** free: the tail node is a node of the soil mesh. **Tail end** fixed: the tail node is in no other element and is fixed. A new anchor is free; a project saved without the setting keeps fixed tails. | 2D, 3D | Tested |
 
 ### A7. Construction stages
 

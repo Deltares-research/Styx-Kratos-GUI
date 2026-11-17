@@ -1,20 +1,22 @@
 /* ══════════════════════════════════════════════════════════════════
    anchors.js — Structure-mode anchors.
 
-   An anchor is a two-node tie: a head on a sheet pile and a tail at a point
-   the analysis holds still. That is the formulation Kratos' reference decks
-   use -- the head node is shared with the beam, and the
-   tail belongs to no element at all, restrained by its own node group. The
-   grouted body is idealised as a fixed point rather than bonded to the soil.
+   An anchor is a two-node tie from a head to a tail, and needs no structure.
+   A head within SNAP_DISTANCE of a sheet pile is snapped onto it and shares the
+   beam's node; a head further away is a node of the soil mesh. What the tail is
+   joined to is the anchor's `tail_end`: a free tail (a new anchor's) is a node
+   of the soil mesh, so the tie pulls on the soil there; a fixed tail belongs to
+   no element at all and is restrained by its own node group, the formulation
+   Kratos' reference decks use, which idealises the grouted body as a fixed
+   point.
 
-   So the head is snapped onto a pile here rather than left where it was
-   clicked: an anchor floating beside its wall would export a truss attached to
-   nothing, and the server refuses it anyway.
+   The Create anchor tool and the Edit anchor… button open one window (`open`),
+   as the sheet pile's do.
 
-   In the solid model the same tie hangs from a wall panel or a member instead, in
+   In the solid model the same tie may hang from a wall panel or a member, in
    three dimensions: `kind: "anchor3d"`, head snapped onto the swept surface of a
-   wall or the polyline of a member, tail free. The formulation is identical --
-   only the dimension of the points, and what the head may sit on, differ.
+   wall or the polyline of a member. The formulation is identical -- only the
+   dimension of the points, and what the head may sit on, differ.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -42,7 +44,7 @@ App.Anchors = (function () {
                          App.PropertySets.defaults('anchor'));
   }
 
-  var SNAP_DISTANCE = 1.0;   // metres a picked head may be off the pile
+  var SNAP_DISTANCE = 1.0;   // metres from a pile within which a head is snapped onto it
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -73,10 +75,22 @@ App.Anchors = (function () {
     });
   }
 
-  /* An anchor needs something to hang from, in the dimension it is drawn in. */
+  /* An anchor needs no structure, so any open project may have one. */
   function available(project) {
-    if (!project || livePiles(project).length === 0) return false;
-    return spatial(project) || project.dimension === 2;
+    return !!project;
+  }
+
+  /* Whether the head of `anchor` is on a live structure of its own kind -- a sheet
+     pile for a 2D anchor, a wall or a member for a 3D one -- whose node it then
+     shares (core/model/schemas.py `Project.anchor_on_structure`). */
+  function onStructure(project, anchor) {
+    var wanted = anchor.kind === 'anchor3d' ? ['panel', 'member'] : ['beam'];
+    return ((project && project.beams) || []).some(function (beam) {
+      if (beam.active === false || wanted.indexOf(beam.kind || 'beam') < 0) return false;
+      var found = beam.kind === 'panel' ? nearestOnPanel(beam, anchor.head)
+                                        : nearestOnPolyline(beam.points || [], anchor.head);
+      return !!found && found.distance <= 1e-6;
+    });
   }
 
   /* The closest point on a polyline, in however many dimensions it is given. */
@@ -132,15 +146,8 @@ App.Anchors = (function () {
     return prefix + number;
   }
 
-  function unavailableMessage(project) {
-    if (livePiles(project).length) {
-      return spatial(project)
-        ? 'Anchors are created in the 3D model.'
-        : 'Anchors are created in the 2D x-y section.';
-    }
-    return spatial(project)
-      ? 'An anchor hangs from a wall or a member; create one first.'
-      : 'An anchor hangs from a sheet pile; create one first.';
+  function unavailableMessage() {
+    return 'Open or create a project first.';
   }
 
   /* A picked point in the dimension this project's anchors live in: `(x, z)` in a
@@ -158,8 +165,10 @@ App.Anchors = (function () {
     // stands above `y_top`. Mirrors the server's `Project.extent`. In a section the top
     // is free: a strut from the part of a pile above the ground ends at a fixed point
     // in the air.
+    // By the point's own width: a 2D anchor kept in a 3D project is still checked as
+    // drawn, in its section, as the server does.
     var d = extent(project);
-    if (!spatial(project)) {
+    if (point.length === 2) {
       return point[0] >= d.x0 && point[0] <= d.x1 && point[1] >= d.y_bottom;
     }
     return point[0] >= d.x0 && point[0] <= d.x1
@@ -167,7 +176,9 @@ App.Anchors = (function () {
       && point[2] >= d.z0 && point[2] <= d.z1;
   }
 
-  function draftFromPoints(project, points) {
+  /* `tailEnd` is what the tail is joined to (TAIL_ENDS); left out, the tail is free. */
+  function draftFromPoints(project, points, tailEnd) {
+    var end = tailEnd === undefined ? 'free' : tailEnd;
     if (!available(project)) throw new Error(unavailableMessage(project));
     if (!points || points.length !== 2) {
       throw new Error('An anchor needs a head and a tail.');
@@ -176,20 +187,18 @@ App.Anchors = (function () {
     if (!ends.every(function (p) { return p.every(Number.isFinite); })) {
       throw new Error('Every anchor coordinate must be a number.');
     }
-    var snapped = nearestOnPile(project, ends[0]);
-    if (!snapped || snapped.distance > SNAP_DISTANCE) {
-      throw new Error(spatial(project)
-        ? 'The anchor head must be placed on a wall or a member.'
-        : 'The anchor head must be placed on a sheet pile.');
-    }
+    var head = snapHead(project, ends[0]).map(round);
     var tail = ends[1];
-    if (!insideDomain(project, tail)) {
+    if (!insideDomain(project, head) || !insideDomain(project, tail)) {
       throw new Error('The anchor must stay inside the model domain.');
     }
-    var head = snapped.point.map(round);
+    var problem = headProblem(project, head);
+    if (problem) throw new Error(problem);
     if (head.every(function (value, axis) { return value === tail[axis]; })) {
       throw new Error('An anchor must have a non-zero length.');
     }
+    problem = tailEndProblem(project, end, tail);
+    if (problem) throw new Error(problem);
     var id = nextId(project.anchors || [], 'anchor_');
     var existing = (project.anchor_sections || [])[0];
     return {
@@ -200,6 +209,8 @@ App.Anchors = (function () {
       head: head, tail: tail.map(round),
       // TRUSS_PRESTRESS_PK2, a stress in the project's units: none until it is typed.
       prestress: 0,
+      // A free tail is a node of the soil mesh; a fixed one is held in place.
+      tail_end: end,
       active: true
     };
   }
@@ -209,12 +220,22 @@ App.Anchors = (function () {
   function round(value) { return Math.round(value * 1e6) / 1e6; }
 
   /* The coordinate-first path: raking back and down from the pile at 35 degrees,
-     the usual ground anchor, which the user then edits. */
+     the usual ground anchor, which the user then edits. With no structure the head
+     is 2 m below the top of the soil in the middle of the domain. */
   function draft(project) {
     if (!available(project)) throw new Error(unavailableMessage(project));
     var d = project.domain;
     var length = 10, radians = 35 * Math.PI / 180;
     var pile = livePiles(project)[0];
+    if (!pile) {
+      var middle = [(d.x0 + d.x1) / 2, Math.max(d.y_bottom, d.y_top - 2)];
+      if (spatial(project)) middle.push((d.z0 + d.z1) / 2);
+      var toward = (d.x1 - middle[0]) >= (middle[0] - d.x0) ? 1 : -1;
+      var far = middle.slice();
+      far[0] = Math.max(d.x0, Math.min(d.x1, middle[0] + toward * length * Math.cos(radians)));
+      far[1] = Math.max(d.y_bottom, Math.min(d.y_top, middle[1] - length * Math.sin(radians)));
+      return draftFromPoints(project, [middle, far]);
+    }
     if (!spatial(project)) {
       var top = pile.points[0], toe = pile.points[pile.points.length - 1];
       var head = [top[0], top[1] + (toe[1] - top[1]) * 0.25];
@@ -280,11 +301,48 @@ App.Anchors = (function () {
     }
     if (!Number.isFinite(anchor.prestress)) return 'Prestress must be a number.';
     var target = project || App.PROJECT;
-    var snapped = target ? nearestOnPile(target, anchor.head) : null;
-    if (!snapped || snapped.distance > 1e-6) {
-      return width === 3
-        ? 'The anchor head must sit on a wall or a member.'
-        : 'The anchor head must sit on a sheet pile.';
+    if (!target) return null;
+    if (!insideDomain(target, anchor.head) || !insideDomain(target, anchor.tail)) {
+      return 'The anchor must stay inside the model domain.';
+    }
+    // A head on no structure is a node of the soil mesh (headProblem).
+    if (!onStructure(target, anchor) && anchor.head[1] > extent(target).y_top) {
+      return 'An anchor head on no structure must be in the soil. Move the head '
+        + 'down, or onto a structure.';
+    }
+    return tailEndProblem(target, anchor.tail_end, anchor.tail);
+  }
+
+  /* Why an anchor cannot start at `head`, or null (core/model/drafts.py
+     `head_problem`). A head on no structure is a node of the soil mesh, so it has to
+     be where soil can be, as a free tail does. */
+  function headProblem(project, head) {
+    if (!project) return null;
+    var on = nearestOnPile(project, head);
+    if (on && on.distance <= 1e-6) return null;
+    if (head[1] > extent(project).y_top) {
+      return 'An anchor head on no structure must be in the soil. Move the head '
+        + 'down, or onto a structure.';
+    }
+    return null;
+  }
+
+  /* What an anchor's tail is joined to (core/model/schemas.py `TailEnd`). A new anchor
+     is free; a record that does not say is fixed, as every anchor was before. */
+  var TAIL_ENDS = ['free', 'fixed'];
+  var TAIL_END_LABELS = { free: 'Free (joined to the soil)', fixed: 'Fixed (held in place)' };
+
+  /* Why `tailEnd` cannot be used with this tail, or null (core/model/drafts.py
+     `tail_end_problem`). A free tail is a node of the soil mesh, so it has to be where
+     soil can be; in a section the top is otherwise open, for a fixed strut end in the
+     air. Whether there really is soil there is only known once the model is built, and
+     the export says so if there is not. */
+  function tailEndProblem(project, tailEnd, tail) {
+    if (tailEnd === undefined) return null;
+    if (TAIL_ENDS.indexOf(tailEnd) < 0) return 'The tail end is free or fixed.';
+    if (tailEnd === 'free' && project && tail[1] > extent(project).y_top) {
+      return 'A free anchor tail must be in the soil. Move the tail down, '
+        + 'or make the tail end fixed.';
     }
     return null;
   }
@@ -400,22 +458,150 @@ App.Anchors = (function () {
     return Math.atan2(drop, run) * 180 / Math.PI;
   }
 
+  function input(value) {
+    return App.UI.el('input.mesh-setting-control', {
+      type: 'number', step: '0.1', value: String(value)
+    });
+  }
+
+  /* A text box for a Kratos variable, as in beams.js: it may be a flag, a list or a
+     name as well as a number (App.PropertySets.parse). */
+  function variableInput(value) {
+    return App.UI.el('input.mesh-setting-control', {
+      type: 'text', value: App.PropertySets.format(value)
+    });
+  }
+
+  /* A typed head a little off the structure is moved onto it, as a picked one is
+     (draftFromPoints); further away it is left where it is, for validate to refuse. */
+  function snapHead(project, head) {
+    var snapped = nearestOnPile(project, head);
+    if (!snapped || snapped.distance > SNAP_DISTANCE) return head;
+    return snapped.point.map(round);
+  }
+
+  /* The window the Create anchor tool and the Edit anchor… button open, as the sheet
+     pile's does (beams.js `open`): a name, both ends, what the tail is joined to, the
+     prestress, whether it is active, and the numbers of its tendon. Editing the tendon
+     here edits the shared tendon, as the Selection explorer's own fields do. */
+  function open(source) {
+    if (!App.Dialogs || !App.Dialogs.open) return;
+    var anchor = copy(source);
+    if (TAIL_ENDS.indexOf(anchor.tail_end) < 0) anchor.tail_end = 'fixed';
+    var editing = collection().some(function (item) { return item.id === anchor.id; });
+    var library = sectionsFor(App.PROJECT, anchor);
+    var section = copy(library.filter(function (s) { return s.id === anchor.section; })[0]
+                       || library[0]);
+    var axes = anchor.kind === 'anchor3d' ? ['x', 'y', 'z'] : ['x', 'y'];
+    var el = App.UI.el, controls = {}, ends = { head: [], tail: [] }, sectionControls = {};
+    var shell, message;
+
+    function submit() {
+      anchor.name = controls.name.value.trim();
+      ['head', 'tail'].forEach(function (end) {
+        anchor[end] = ends[end].map(function (control) { return Number(control.value); });
+      });
+      anchor.head = snapHead(App.PROJECT, anchor.head);
+      anchor.tail_end = controls.tail_end.value;
+      anchor.prestress = Number(controls.prestress.value);
+      anchor.active = controls.active.checked;
+      section.variables = section.variables || {};
+      Object.keys(sectionControls).forEach(function (key) {
+        if (key === 'spacing') { section.spacing = Number(sectionControls[key].value); return; }
+        var value = App.PropertySets.parse(sectionControls[key].value);
+        if (value === undefined) delete section.variables[key];
+        else section.variables[key] = value;
+      });
+      var problem = validate(anchor, App.PROJECT) || validateSection(section);
+      if (problem) { message.textContent = problem; return; }
+      var tendons = library.map(function (s) { return s.id === section.id ? section : s; });
+      save(anchor, tendons).then(function () { shell.close(); }, function (error) {
+        message.textContent = error.message;
+      });
+    }
+
+    shell = App.Dialogs.open({
+      title: (editing ? 'Edit ' : 'Create ') + 'anchor',
+      width: 520, height: anchor.kind === 'anchor3d' ? 620 : 580,
+      buttons: [
+        { label: 'Save', primary: true, keepOpen: true, onClick: submit },
+        { label: 'Cancel' }
+      ],
+      build: function (body) {
+        body.classList.add('mesh-settings-body');
+        var form = el('div.mesh-settings-form');
+        body.appendChild(form);
+        function row(label, control, help) {
+          form.appendChild(el('label.mesh-setting-label', { text: label }));
+          form.appendChild(control);
+          form.appendChild(el('div.mesh-setting-help', { text: help || '' }));
+        }
+
+        controls.name = el('input.mesh-setting-control', { type: 'text', value: anchor.name });
+        row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
+
+        // The head is moved onto the nearest structure on Save (snapHead).
+        [['head', 'Head'], ['tail', 'Tail']].forEach(function (end) {
+          anchor[end[0]].forEach(function (value, axis) {
+            var control = input(value);
+            ends[end[0]].push(control);
+            row(end[1] + ' ' + axes[axis], control, 'World ' + axes[axis] + ' [m].');
+          });
+        });
+
+        controls.tail_end = el('select.mesh-setting-control');
+        TAIL_ENDS.forEach(function (value) {
+          controls.tail_end.appendChild(el('option', { value: value,
+                                                       text: TAIL_END_LABELS[value] }));
+        });
+        controls.tail_end.value = anchor.tail_end;
+        row('Tail end', controls.tail_end,
+            'Free: joined to the soil mesh. Fixed: held in place.');
+
+        controls.prestress = input(anchor.prestress);
+        row('TRUSS_PRESTRESS_PK2', controls.prestress,
+            '[' + App.Units.label('stress') + '] Positive in tension.');
+
+        controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
+        controls.active.checked = anchor.active !== false;
+        row('Active', controls.active,
+            'Inactive anchors remain in the project but are not exported.');
+
+        // The tendon's Kratos variables, by Kratos' names and in the project's units.
+        App.PropertySets.names('anchor', section,
+                               App.PROJECT && App.PROJECT.dimension).forEach(function (key) {
+          var control = variableInput((section.variables || {})[key]);
+          sectionControls[key] = control;
+          var unit = App.Units.variableLabel(key);
+          row(key, control, unit ? '[' + unit + ']' : '');
+        });
+        if (anchor.kind !== 'anchor3d') {
+          var spacing = input(section.spacing);
+          sectionControls.spacing = spacing;
+          row('Spacing', spacing,
+              'Out-of-plane centres [m]; a 2D section smears the anchor over them.');
+        }
+
+        message = el('div.mesh-settings-message');
+        row('', message, '');
+      }
+    });
+    return shell;
+  }
+
   function start() {
     if (!App.PROJECT) return;
     if (!available(App.PROJECT)) {
       if (App.Command) App.Command.note(unavailableMessage(App.PROJECT));
       return;
     }
-    var anchor = draft(App.PROJECT);
-    var tendons = sectionsFor(App.PROJECT, anchor);
-    if (App.Dialogs && App.Dialogs.anchor) return App.Dialogs.anchor(anchor, tendons);
-    return save(anchor, tendons);
+    return open(draft(App.PROJECT));
   }
 
   function edit(id) {
     var anchor = collection().filter(function (item) { return item.id === id; })[0];
     if (!anchor) return;
-    return save(copy(anchor), copy(sections()));
+    return open(anchor);
   }
 
   return {
@@ -425,8 +611,8 @@ App.Anchors = (function () {
     unavailableMessage: unavailableMessage,
     sectionsFor: sectionsFor, sectionOf: sectionOf,
     validate: validate, validateSection: validateSection,
-    save: save, remove: remove, start: start, edit: edit,
+    save: save, remove: remove, start: start, edit: edit, open: open,
     isAnchorKey: isAnchorKey, length: length, inclination: inclination,
-    defaultSection: defaultSection
+    defaultSection: defaultSection, TAIL_ENDS: TAIL_ENDS, TAIL_END_LABELS: TAIL_END_LABELS
   };
 })();

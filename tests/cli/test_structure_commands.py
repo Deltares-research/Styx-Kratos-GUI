@@ -203,11 +203,21 @@ def test_an_anchor_with_no_tail_rakes_back(cli, pit):
     assert project.anchors[-1].tail == drafts.anchor(project, head=(6, -2)).tail
 
 
-def test_an_anchor_head_far_from_the_pile_is_refused(cli, pit):
-    ran = cli("anchor", pit, "add", "--head", "10", "-2", "--tail", "20", "-8")
+def test_an_anchor_head_far_from_the_pile_stays_in_the_soil(cli, pit):
+    ran = cli("anchor", pit, "add", "tie", "--head", "10", "-2", "--tail", "20", "-8")
+
+    assert ran.code == 0, ran.err
+    assert session.load(pit).anchors[-1].head == (10, -2)
+
+
+def test_an_anchor_head_in_the_air_is_refused_without_saving(cli, pit):
+    before = pit.read_bytes()
+
+    ran = cli("anchor", pit, "set", "strut", "--head", "10", "3")
 
     assert ran.code == 1
-    assert "on a sheet pile" in ran.err
+    assert "head on no structure must be in the soil" in ran.err
+    assert pit.read_bytes() == before
 
 
 def test_anchor_set_moves_the_head_onto_the_pile_and_list_shows_it(cli, pit):
@@ -413,6 +423,28 @@ def test_anchor_set_updates_tail_and_prestress(cli, pit):
     assert anchor.prestress == 5000
 
 
+def test_a_new_anchor_has_a_free_tail_and_tail_end_makes_it_fixed(cli, pit):
+    assert cli("anchor", pit, "add", "tie", "--head", "6", "-2", "--tail", "20", "-8").code == 0
+    assert session.load(pit).anchors[-1].tail_end == "free"
+    assert "tail free" in cli("anchor", pit, "list").out
+
+    ran = cli("anchor", pit, "set", "tie", "--tail-end", "fixed")
+
+    assert ran.code == 0, ran.err
+    assert session.load(pit).anchors[-1].tail_end == "fixed"
+    assert "tail fixed" in cli("anchor", pit, "list").out
+
+
+def test_a_free_tail_in_the_air_is_refused_without_saving(cli, pit):
+    before = pit.read_bytes()
+
+    ran = cli("anchor", pit, "set", "strut", "--tail", "4", "2", "--tail-end", "free")
+
+    assert ran.code == 1
+    assert "free anchor tail must be in the soil" in ran.err
+    assert pit.read_bytes() == before
+
+
 @pytest.mark.parametrize("option", ["--head", "--tail"])
 def test_anchor_endpoint_options_refuse_more_than_one_point_without_saving(cli, pit, option):
     before = pit.read_bytes()
@@ -545,7 +577,7 @@ def test_the_structures_of_the_test_model_are_built_with_commands_alone(cli, tmp
     run("beam", path, "add", "sheetpile", "--name", "SheetPileWall", "--points",
         "6", "0", "6", "-12")
     run("anchor", path, "add", "strut", "--name", "Strut", "--head", "6", "-1",
-        "--tail", "5", "-1")
+        "--tail", "5", "-1", "--tail-end", "fixed")
     run("interface", path, "add", "wall_contact", "--name", "Interface",
         "--structure", "sheetpile", "--side", "both")
     run("load", path, "add", "line", "surcharge", "--name", "Load", "--x", "6", "60",

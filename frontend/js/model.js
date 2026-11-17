@@ -1240,6 +1240,39 @@ App.Model = (function () {
     return rows;
   }
 
+  /* Tail end: free (a node of the soil mesh) or fixed (held in place), as in the
+     anchor's window. A record that does not say is fixed (core/model/schemas.py). */
+  function anchorTailEndEditor(anchor) {
+    return {
+      kind: 'select',
+      options: function () {
+        var labels = App.Anchors ? App.Anchors.TAIL_END_LABELS : {};
+        return ['free', 'fixed'].map(function (value) {
+          return { value: value, text: labels[value] || value };
+        });
+      },
+      get: function () { return anchor.tail_end || 'fixed'; },
+      set: function (value) {
+        var was = anchor.tail_end;
+        anchor.tail_end = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor.tail_end = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function anchorTailEndRow(anchor) {
+    var value = anchor.tail_end || 'fixed';
+    var labels = App.Anchors ? App.Anchors.TAIL_END_LABELS : {};
+    return ['Tail end', labels[value] || value, '', false, anchorTailEndEditor(anchor)];
+  }
+
+  function anchorEditRow(anchor) {
+    return ['Edit', '', '', false, { kind: 'button', text: 'Edit anchor…',
+      run: function () { if (App.Anchors) App.Anchors.edit(anchor.id); } }];
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1262,10 +1295,12 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorTailEndRow(anchor),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
@@ -1291,10 +1326,12 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorTailEndRow(anchor),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,

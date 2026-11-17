@@ -8,7 +8,8 @@
    "name": "string",
    "prestress": "number",
    "section": "string",
-   "tail": "array"
+   "tail": "array",
+   "tail_end": "string"
   }
  ],
  "beam list": [

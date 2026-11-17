@@ -117,13 +117,14 @@ def _seepage_outside_flow(project: Project) -> list[str]:
 
 
 def _rigid_body(project: Project) -> list[str]:
-    """Nothing holds the model: no displacement condition and no anchor, whose fixed
-    tail is a support of its own. Kratos cannot solve a body that is free to move."""
+    """Nothing holds the model: no displacement condition and no anchor with a fixed
+    tail, which is a support of its own. A free tail is a soil node and holds nothing.
+    Kratos cannot solve a body that is free to move."""
     held = any(isinstance(c, DisplacementCondition) and written(project, c)
                for c in project.boundary_conditions)
     anchors = (project.plane_anchors if project.dimension == 2
                else project.plane_anchors + project.space_anchors)
-    if held or any(anchor.active for anchor in anchors):
+    if held or any(anchor.active and anchor.tail_end == "fixed" for anchor in anchors):
         return []
     return [
         "no displacement condition holds the model, so it can move as a rigid body and "

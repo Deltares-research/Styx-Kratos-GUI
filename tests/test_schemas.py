@@ -863,10 +863,22 @@ def test_project_rejects_an_anchor_pointing_at_an_unknown_section():
         schemas.Project.model_validate(_with_anchors([_anchor(section="bar")]))
 
 
-def test_an_anchor_head_must_sit_on_a_sheet_pile():
-    """The head node is shared with the beam, so it has to be on one to begin with."""
-    with pytest.raises(ValidationError, match="sheet pile"):
-        schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, -2.0])]))
+def test_an_anchor_head_off_the_pile_is_a_soil_node():
+    """An anchor needs no structure: a head on no pile is joined to the soil."""
+    project = schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, -2.0])]))
+
+    assert not project.anchor_on_structure(project.anchors[0])
+    assert [end for end, _ in project.anchor_soil_ends(project.anchors[0])] == ["head"]
+
+
+def test_an_anchor_end_joined_to_the_soil_may_not_be_above_it():
+    with pytest.raises(ValidationError, match="head at .* is joined to the soil"):
+        schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, 3.0])]))
+    with pytest.raises(ValidationError, match="tail at .* is joined to the soil"):
+        schemas.Project.model_validate(
+            _with_anchors([_anchor(tail=[20.0, 3.0], tail_end="free")]))
+    # A fixed tail in the air is a strut's: no soil has to hold it.
+    schemas.Project.model_validate(_with_anchors([_anchor(tail=[20.0, 3.0])]))
 
 
 def test_an_anchor_head_on_a_pile_segment_is_accepted():
@@ -876,10 +888,11 @@ def test_an_anchor_head_on_a_pile_segment_is_accepted():
     assert "anchor_1" in project.part_keys()
 
 
-def test_an_anchor_head_must_sit_on_an_active_pile():
+def test_an_anchor_head_on_an_inactive_pile_is_a_soil_node():
     beams = [_beam(points=[[12.0, 0.0], [12.0, -14.0]], active=False)]
-    with pytest.raises(ValidationError, match="sheet pile"):
-        schemas.Project.model_validate(_with_anchors([_anchor()], beams=beams))
+    project = schemas.Project.model_validate(_with_anchors([_anchor()], beams=beams))
+
+    assert not project.anchor_on_structure(project.anchors[0])
 
 
 def test_an_inactive_anchor_is_not_required_to_be_attached():
@@ -1095,17 +1108,12 @@ def test_a_space_anchor_head_must_be_on_a_panel_or_a_member():
     )
     assert ok.space_anchors[0].head == (20.0, -4.0, 10.0)
 
-    # Beside the wall, in mid-air.
-    with pytest.raises(ValidationError, match="not on a wall or member"):
-        schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[13.0, -2.0, 10.0])])
-        )
-    # On the footprint in plan, but below the toe.
-    with pytest.raises(ValidationError, match="not on a wall or member"):
-        schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[12.0, -20.0, 10.0],
-                                                tail=[18.0, -22.0, 10.0])])
-        )
+    # Beside the wall, or on its footprint below the toe: in the soil instead.
+    for head, tail in (([13.0, -2.0, 10.0], [18.0, -8.0, 10.0]),
+                       ([12.0, -20.0, 10.0], [18.0, -22.0, 10.0])):
+        beside = schemas.Project.model_validate(
+            _with_3d([_panel()], [_space_anchor(head=head, tail=tail)]))
+        assert not beside.anchor_on_structure(beside.space_anchors[0])
 
 
 def test_an_inactive_space_anchor_is_not_required_to_be_attached():

@@ -294,13 +294,14 @@ soil_L_bot  Soil_Bottom  ·  Sand
 
 #### Step 8. The strut
 
-A strut is an anchor whose free end is a pinned support:
+A strut is an anchor whose far end is a pinned support. The tail of a new anchor is a
+node of the soil mesh, so `--tail-end fixed` makes this one a support:
 
 ```text
 crow.json> section add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
 added anchor section (id strut, name Strut); wrote ...\crow.json
 
-crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5
+crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5 --tail-end fixed
 added anchor (id strut, name Strut); wrote ...\crow.json
 ```
 

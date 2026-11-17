@@ -166,7 +166,7 @@ App.LivePatches = (function () {
   }
 
   /* A sheet pile in a section is a wall panel in the solid model -- one tool, two
-     structures -- and an anchor hangs from whichever of them is there. The tool has
+     structures -- and an anchor may hang from whichever of them is there. The tool has
      to say which one it is about to make, for the same reason the soil-body tool
      renames itself below. */
   function nameStructureActions(is2d) {
@@ -946,9 +946,8 @@ App.LivePatches = (function () {
       : kind === 'line' ? App.Lines
       : kind === 'condition' ? App.BoundaryConditions
       : kind === 'beam' ? App.Beams
+      : kind === 'anchor' ? App.Anchors
       : kind === 'interface' ? App.Interfaces : null;
-    // Anchors are not here: their `edit` saves the record rather than opening
-    // anything, so calling it would write, not show.
     if (owner && owner.edit) return owner.edit(key);
     if (App.selectObject) App.selectObject(key, 'tree');
   }

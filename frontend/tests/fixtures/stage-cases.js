@@ -4336,6 +4336,7 @@ window.STAGE_FIXTURE =
           -1.0
         ],
         "prestress": 0.0,
+        "tail_end": "fixed",
         "active": true
       }
     ],

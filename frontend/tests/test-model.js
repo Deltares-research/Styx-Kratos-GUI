@@ -219,17 +219,20 @@
     });
   });
 
-  test('an anchor head cannot be edited off the sheet pile it hangs from', function () {
-    withProject(anchoredProject(), function () {
-      var rows = App.OBJECT_PROPS.anchor_1.groups.Geometry;
-      var headX = rows.filter(function (row) { return row[0] === 'Head x'; })[0];
-      T.ok(headX[4].set(20), 'a head in mid-air is refused');
-      T.eq(App.ANCHORS[0].head[0], 12, 'and the anchor is left where it was');
-      var headZ = rows.filter(function (row) { return row[0] === 'Head y'; })[0];
-      T.eq(headZ[4].set(-5), null, 'sliding along the pile is fine');
-      T.eq(App.ANCHORS[0].head[1], -5);
+  test('an anchor head may be edited off its pile into the soil, not into the air',
+    function () {
+      withProject(anchoredProject(), function () {
+        var rows = App.OBJECT_PROPS.anchor_1.groups.Geometry;
+        var headX = rows.filter(function (row) { return row[0] === 'Head x'; })[0];
+        var headY = rows.filter(function (row) { return row[0] === 'Head y'; })[0];
+        T.eq(headY[4].set(-5), null, 'sliding along the pile is fine');
+        T.eq(App.ANCHORS[0].head[1], -5);
+        T.eq(headX[4].set(20), null, 'off the pile, the head is a node of the soil');
+        T.eq(App.ANCHORS[0].head[0], 20);
+        T.ok(headY[4].set(3), 'off the pile and above the ground is refused');
+        T.eq(App.ANCHORS[0].head[1], -5, 'and the anchor is left where it was');
+      });
     });
-  });
 
   test('the tendon rows edit the shared library and reject a bad value', function () {
     withProject(anchoredProject(), function () {
