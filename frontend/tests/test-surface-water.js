@@ -128,6 +128,48 @@
     pieces.forEach(function (p) { T.ok(p.a[0] >= 12 - 1e-9, 'on the right block'); });
   });
 
+  T.test('where two lines reach a soil, the last in the writer\'s order is its water', function () {
+    /* Start values first, then the least specific target first: listed out of that
+       order on purpose, so the order is the sort's, not the list's. */
+    function topOfRight(conditions) {
+      var pieces = W.pieces(project(conditions), sections(), {});
+      return where(pieces, function (p) { return Math.min(p.a[0], p.b[0]) >= 12 - 1e-9; });
+    }
+    var onPart = phreatic([[0, 2], [20, 2]], { id: 'part', on: 'part', part: 'soil_L__right' });
+    var onDomain = phreatic([[0, 1], [20, 1]], { id: 'domain' });
+
+    var right = topOfRight([onPart, onDomain]);
+    T.ok(right.length > 0, 'the right block is loaded');
+    right.forEach(function (p) {
+      T.eq(p.water, 'part', 'the part\'s line, the more specific');
+      T.near(p.depth[0], 2, 1e-9, 'under its 2 m of water');
+    });
+
+    var start = Object.assign({}, onPart, { is_fixed: false });
+    topOfRight([onDomain, start]).forEach(function (p) {
+      T.eq(p.water, 'domain', 'a start value goes first, so the fixed line is the last');
+      T.near(p.depth[0], 1, 1e-9);
+    });
+  });
+
+  T.test('the soil is the layers\' bodies and the custom parts with a material', function () {
+    /* No soil body keys yet: the layers give them. A custom part counts as soil only
+       with a material; the plate between the blocks has none, so the blocks' inner
+       sides are open to the water, the full 10 m. */
+    var p = project([phreatic([[0, 1], [20, 1]])], {
+      soil_body_keys: [], layers: [{ id: 'L' }],
+      custom_parts: [{ key: 'soil_L__right', mat: 'clay' }, { key: 'plate', mat: null }]
+    });
+    var pieces = W.pieces(p, [rect('soil_L', 0, -10, 8, 0), rect('soil_L__right', 12, -10, 20, 0),
+                              rect('plate', 8, -1, 12, 0)], {});
+    T.near(length(pieces), 8 + 8 + 10 + 10, 1e-9, 'both tops and both inner sides');
+    T.ok(pieces.some(function (q) { return Math.min(q.a[0], q.b[0]) >= 12 - 1e-9; }),
+         'on the custom part too');
+    T.ok(pieces.every(function (q) {
+      return Math.max(q.a[0], q.b[0]) <= 8 + 1e-9 || Math.min(q.a[0], q.b[0]) >= 12 - 1e-9;
+    }), 'nothing on the plate');
+  });
+
   T.test('where the user drew a normal load, theirs is the load', function () {
     var p = project([phreatic([[0, 1], [20, 1]])], {
       normal_loads: [{ id: 'nl', active: true, points: [[8, -3], [12, -3]] }]
