@@ -405,6 +405,10 @@ def test_convergence_of_one_stage_has_a_row_per_iteration(cli, run):
     assert out.splitlines()[0] == ("Stage 4 (First excavation): 3 iteration(s), "
                                    "residual criterion")
     assert len(out.splitlines()) == 2 + 3
+    assert out.splitlines()[1].split()[:3] == ["iter.", "run", "step"]
+    first = out.splitlines()[2].split()
+    assert first[0] == "1", "counted in the stage, as the GUI's axis for one stage"
+    assert int(first[1]) > 1, "and over the run"
 
 
 def test_convergence_refuses_a_stage_it_does_not_have(cli, run):

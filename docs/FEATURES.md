@@ -217,6 +217,7 @@ and adds only the values that are missing
 |---|---|---|
 | Export | **File** → **Export model…** writes the Kratos input files in one ZIP file, and lists each assumption and warning | Tested |
 | Calculate (F9) | Makes the mesh, writes the files, and runs Kratos in a new run folder | Tested |
+| Stop a calculation | While Kratos runs, Calculate is a **Stop** button (also in the Convergence window and the Stages menu, and `calculate stop`). Kratos stops at once; the model does not change, and the run folder keeps the results of the stages that finished. <kbd>Ctrl</kbd>+<kbd>C</kbd> does the same in `kratos-cli`. | Tested |
 | Kratos location | `kratos.local.json` or environment variables: Python of Kratos, build folder, runs folder, time limit (default 3600 s) | Tested |
 | Failed runs | The log names the stage that failed | Tested |
 | Convergence while Kratos runs | The **Convergence** window opens with Calculate and shows the relative and the absolute residual of each iteration, about once a second, until the run ends. `kratos-cli run --follow` and `calculate --follow` print the same iterations. The points arrive one by one only where the Kratos build shares the C runtime of its Python, which is so on the Windows build that the tests use. Linux is not tested. | Limited |

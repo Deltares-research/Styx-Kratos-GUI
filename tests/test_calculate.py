@@ -487,6 +487,128 @@ def test_the_log_holds_each_line_while_the_run_goes_on(runs, monkeypatch):
     assert calculation.running() is False
 
 
+# ── A run the user stops ────────────────────────────────────────────────────
+
+def stoppable() -> str:
+    """A stand-in that finishes its first stage, then works on the second for 30 s."""
+    return ("import time\n"
+            f"print({marker('begin', 1, 2, '1_Initial')!r}, flush=True)\n"
+            f"print({marker('end', 1, 2, '1_Initial')!r}, flush=True)\n"
+            "open('Test_model_1_Initial.post.res', 'w').close()\n"
+            f"print({marker('begin', 2, 2, '2_Dig')!r}, flush=True)\n"
+            "for _ in range(600):\n"
+            "    print('iterating', flush=True)\n"
+            "    time.sleep(0.05)\n")
+
+
+def stop_when_running(action):
+    """Call `action` as soon as the second stage has begun, on a thread of its own."""
+    import threading
+    import time
+
+    def watch() -> None:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            directory = calculation.current_run()
+            log = directory / calculation.LOG_NAME if directory else None
+            if log is not None and log.is_file() and "iterating" in log.read_text(
+                    encoding="utf-8", errors="replace"):
+                action()
+                return
+            time.sleep(0.02)
+
+    thread = threading.Thread(target=watch)
+    thread.start()
+    return thread
+
+
+def test_a_stopped_run_ends_at_once_and_keeps_what_it_wrote(runs, monkeypatch):
+    from core.results import catalog
+
+    stand_in(monkeypatch, stoppable())
+    answers: list[bool] = []
+    watcher = stop_when_running(lambda: answers.append(calculation.stop()))
+
+    result = calculation.run(DECK)
+    watcher.join()
+
+    assert answers == [True]
+    assert result["ok"] is False and result["stopped"] is True
+    assert result["seconds"] < 20
+    assert result["stage"] == {"index": 2, "of": 2, "name": "2_Dig"}
+    assert result["error"].startswith("Stopped by the user after ")
+    assert "in stage 2 of 2 (2_Dig)" in result["error"]
+    assert "Test_model_1_Initial.post.res" in result["outputs"]
+    directory = Path(result["directory"])
+    log = (directory / calculation.LOG_NAME).read_text(encoding="utf-8")
+    assert log.splitlines()[-1].startswith(calculation.STOPPED_NOTE)
+    assert calculation.was_stopped(log)
+
+    described = catalog.describe(directory)
+    assert described["stopped"] is True
+    assert described["failed_at"] == {"index": 2, "of": 2, "name": "2_Dig"}
+
+    assert calculation.running() is False and calculation.current_run() is None
+    stand_in(monkeypatch, "pass")
+    again = calculation.run(DECK)
+    assert again["ok"] is True and again["stopped"] is False, "the button is free again"
+    assert catalog.describe(Path(again["directory"]))["stopped"] is False
+
+
+def test_a_stop_with_nothing_running_does_nothing():
+    assert calculation.stop() is False
+
+
+def test_a_stop_while_the_model_is_meshed_keeps_kratos_from_starting(runs, monkeypatch):
+    stand_in(monkeypatch, "open('started', 'w').close()")
+
+    with calculation.preparing():
+        assert calculation.stop() is True
+        result = calculation.run(DECK)
+
+    directory = Path(result["directory"])
+    assert result["stopped"] is True and result["ok"] is False
+    assert result["returncode"] is None and result["stage"] is None
+    assert not (directory / "started").exists()
+    assert (directory / "Test_model.mdpa").is_file(), "the deck is still written"
+    assert calculation.was_stopped(
+        (directory / calculation.LOG_NAME).read_text(encoding="utf-8"))
+
+
+def test_a_stop_that_came_too_early_does_not_stop_the_next_run(runs, monkeypatch):
+    """A stop during meshing that failed must not reach the next Calculate."""
+    stand_in(monkeypatch, "pass")
+    with calculation.preparing():
+        calculation.stop()
+
+    assert calculation.run(DECK)["ok"] is True
+    with calculation.preparing():
+        assert calculation.run(DECK)["ok"] is True
+
+
+def test_ctrl_c_stops_the_run_as_stop_does(runs, monkeypatch):
+    """`kratos-cli calculate` runs on the main thread, where Ctrl+C lands.
+
+    Python's own Ctrl+C handler is put back for the test: a test before it that started
+    a server may have left one of its own, which does not raise KeyboardInterrupt.
+    """
+    import _thread
+    import signal
+
+    stand_in(monkeypatch, stoppable())
+    before = signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        watcher = stop_when_running(_thread.interrupt_main)
+        result = calculation.run(DECK)
+        watcher.join()
+    finally:
+        signal.signal(signal.SIGINT, before)
+
+    assert result["stopped"] is True and result["seconds"] < 20
+    assert result["stage"] == {"index": 2, "of": 2, "name": "2_Dig"}
+    assert calculation.running() is False
+
+
 def test_no_run_is_in_progress_after_one_that_could_not_start(runs, monkeypatch, tmp_path):
     not_a_program = tmp_path / "python.exe"
     not_a_program.write_text("not a program", encoding="utf-8")

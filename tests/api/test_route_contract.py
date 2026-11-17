@@ -228,6 +228,8 @@ CONTRACTS = [
              bad_status=422),
     Contract("GET", "/api/calculate/status", lambda c: c.get("/api/calculate/status"),
              {"running", "run"}),
+    Contract("POST", "/api/calculate/stop", lambda c: c.post("/api/calculate/stop"),
+             {"stopped"}),
     Contract("GET", "/api/results/runs", lambda c: c.get("/api/results/runs"),
              {"runs", "root"}),
     Contract("GET", "/api/results/runs/{run_id}", lambda c: c.get(f"/api/results/runs/{RUN}"),

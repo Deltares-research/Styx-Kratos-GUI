@@ -128,7 +128,8 @@ def show_run(args: argparse.Namespace) -> Answer:
     lines += _stage_lines(run["stages"])
     if run["failed_at"]:
         failed = run["failed_at"]
-        lines.append(f"  stopped in stage {failed['index']} of {failed['of']} "
+        lines.append(f"  stopped{' by the user' if run.get('stopped') else ''} in stage "
+                     f"{failed['index']} of {failed['of']} "
                      f"({_tidy(failed['name'])}); the stages before it can be read")
     elif not run["complete"]:
         lines.append("  not every stage wrote results, and the log does not say why"
@@ -352,7 +353,8 @@ def show_convergence(args: argparse.Namespace) -> Answer:
     rows = convergence.stage_rows(data)
     count = len(data["iterations"])
     state = (" (still running)" if data["running"] else
-             f"; stopped in stage {data['failed_at']['index']} of {data['failed_at']['of']}"
+             f"; stopped{' by the user' if data.get('stopped') else ''} in stage "
+             f"{data['failed_at']['index']} of {data['failed_at']['of']}"
              if data["failed_at"] else "")
     lines = [f"{name}: {count} iteration{'s' if count != 1 else ''} in {len(rows)} "
              f"stage{'s' if len(rows) != 1 else ''}{state}",
@@ -402,10 +404,13 @@ def _iteration_lines(data: dict, stage: dict) -> list[str]:
     lines = [f"Stage {stage['index']} ({_tidy(stage['name'] or '')}): "
              f"{end - stage['at']} iteration(s)"
              + (f", {_criterion(criterion)} criterion" if criterion else ""),
-             f"  {'iter.':>6}{'step':>6}  {'relative (target)':<22}{'absolute (target)':<22}"]
+             f"  {'iter.':>6}{'run':>6}{'step':>6}  "
+             f"{'relative (target)':<22}{'absolute (target)':<22}"]
+    # `iter.` counts the stage's own iterations, as the GUI's axis does for one stage
+    # alone; `run` is the same iteration counted over all stages.
     for at in range(stage["at"], end):
         iteration = data["iterations"][at]
-        lines.append(f"  {at + 1:>6}{iteration['step'] or '':>6}  "
+        lines.append(f"  {at - stage['at'] + 1:>6}{at + 1:>6}{iteration['step'] or '':>6}  "
                      f"{_pair(iteration['relative'], iteration['relative_target']):<22}"
                      f"{_pair(iteration['absolute'], iteration['absolute_target']):<22}"
                      + ("met" if iteration["met"] else ""))

@@ -216,6 +216,8 @@ def describe(run: Run) -> dict:
                     and all(stage["results"] for stage in stages),
         "unit_system": run_unit_system(run),
         "failed_at": failed,
+        # The user stopped it (`calculation.stop`): `failed_at` is where, not why.
+        "stopped": stopped(directory),
         "log": calculation.LOG_NAME if (directory / calculation.LOG_NAME).is_file() else None,
     }
 
@@ -240,6 +242,23 @@ def failed_at(directory: Path) -> dict | None:
         return None
     index, total, name = stage
     return {"index": index, "of": total, "name": name}
+
+
+def stopped(directory: Path) -> bool:
+    """True when the user stopped this run: its log ends with `calculation.STOPPED_NOTE`.
+
+    Only the end of the log is read; the note is its last line.
+    """
+    log = directory / calculation.LOG_NAME
+    if not log.is_file() or calculation.is_current(directory):
+        return False
+    try:
+        with open(log, "rb") as handle:
+            handle.seek(max(0, log.stat().st_size - 400))
+            tail = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    return calculation.was_stopped(tail)
 
 
 def stage_list(directory: Path) -> list[dict]:

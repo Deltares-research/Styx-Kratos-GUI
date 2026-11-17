@@ -298,6 +298,38 @@ def test_calculate_exports_and_runs_in_one_step(cli, site, stand_in_kratos):
     assert list(run.glob("*.mdpa"))
 
 
+def test_a_stopped_calculation_says_so_and_where_its_files_are(cli, site, stand_in_kratos):
+    """Ctrl+C, or Stop in the GUI, while `calculate` runs (`calculation.stop`)."""
+    import threading
+    import time
+
+    stand_in_kratos("import time\n"
+                    "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"
+                    "for _ in range(600):\n"
+                    "    print('iterating', flush=True)\n"
+                    "    time.sleep(0.05)\n")
+
+    def stop_when_running() -> None:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            directory = calculation.current_run()
+            log = directory / calculation.LOG_NAME if directory else None
+            if log is not None and log.is_file() and "iterating" in log.read_text(
+                    encoding="utf-8", errors="replace"):
+                calculation.stop()
+                return
+            time.sleep(0.02)
+
+    watcher = threading.Thread(target=stop_when_running)
+    watcher.start()
+    ran = cli("calculate", site)
+    watcher.join()
+
+    assert ran.code == 1
+    assert "stopped by the user in stage 1 of 1 (1_Flow)" in ran.out
+    assert "Stopped by the user after" in ran.err
+
+
 SLOW_RESIDUALS = (
     "import time\n"
     "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"

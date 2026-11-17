@@ -98,7 +98,7 @@ Genuchten soil.
 | `results show\|stages\|files RUN` | A run's stages, its files and whether it finished; `RUN` is its id, its number, or a run directory |
 | `results fields\|field\|at RUN ... [--stage S]` | What a stage can show, one field (`--csv` for every value), every field at one node |
 | `results members\|profile RUN ...` | The walls and interfaces the run wrote curves for, and one quantity along one, stage by stage (`--csv`) |
-| `results convergence RUN [--stage S]` | How the solver converged, read off the run's log: a row per stage, or per iteration of one stage (`--csv`) |
+| `results convergence RUN [--stage S]` | How the solver converged, read off the run's log: a row per stage, or per iteration of one stage (`iter.` counts in the stage, `run` over all stages; `--csv`) |
 | `results get\|archive RUN ...` | A copy of one file of a run, or the whole run as a zip |
 | `picture geometry\|mesh P ...` | Save a picture of the model or its mesh, as the GUI's camera button does. See [Pictures](#pictures). |
 | `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
@@ -710,6 +710,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |
 | `materials` | `kratos-cli material P` (the window, as commands) |
 | `calculate` | `kratos-cli calculate P` (the box only says to press Calculate) |
+| `calculate stop` | <kbd>Ctrl</kbd>+<kbd>C</kbd> while `kratos-cli calculate` or `run` runs |
 | `help` | `kratos-cli --help` |
 | `soillayer`, `plate`, `beam`, `anchor` | `kratos-cli layer P add`, `kratos-cli wall P add`, `kratos-cli beam P add`, `kratos-cli anchor P add` (the box answers these with a placeholder and builds nothing) |
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
@@ -809,6 +810,11 @@ into `kratos.log` there line by line while it runs; `kratos-cli results converge
 a second terminal reads it at any time. The run time grows quickly with the mesh: `mesh P`
 reports the number of nodes and elements before a run, and `--timeout` (an hour by default)
 stops a run that takes too long.
+
+<kbd>Ctrl</kbd>+<kbd>C</kbd> stops a run, as the GUI's **Stop** button does: Kratos stops at
+once, the answer says `run RUN stopped by the user in stage 3 of 7 (...)`, and the run
+directory keeps the log and the results of the stages that finished. `results show RUN` says
+later that the run was stopped by the user.
 
 ## Output and exit codes
 

@@ -249,6 +249,7 @@ def of_run(run) -> dict:
     data = read_log(directory / calculation.LOG_NAME, growing=running)
     return {"run": directory.name, "running": running,
             "failed_at": catalog.failed_at(directory),
+            "stopped": catalog.stopped(directory),
             "log": (directory / calculation.LOG_NAME).is_file(), **data}
 
 

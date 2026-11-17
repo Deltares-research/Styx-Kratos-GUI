@@ -118,7 +118,7 @@ the HTTP parts.
 | Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
-| Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder) |
+| Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder); `POST /api/calculate/stop` (stop the run: Kratos is killed, the run answers `stopped`) |
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive`, `/runs/{run}/convergence` (also for the run in progress) |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |

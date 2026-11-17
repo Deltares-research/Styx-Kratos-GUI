@@ -124,7 +124,7 @@ def fake_run(export: dict, seconds_per_iteration: float = 0.0) -> dict:
     outputs = sorted(p.name for p in directory.iterdir()
                      if p.name not in inputs and p.name != calculation.LOG_NAME
                      and not p.name.endswith("aterials.json"))
-    return {"ok": True, "returncode": 0, "stage": None,
+    return {"ok": True, "returncode": 0, "stopped": False, "stage": None,
             "seconds": round(time.monotonic() - started, 1), "directory": str(directory),
             "inputs": inputs, "outputs": outputs, "log": calculation.LOG_NAME, "error": None}
 

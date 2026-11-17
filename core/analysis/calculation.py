@@ -34,6 +34,12 @@ The log grows while Kratos works: each line Kratos prints is written to `kratos.
 once, and `current_run` names the run directory in progress. That is what lets the
 convergence plot (`core.results.convergence`) follow a run live, and what keeps
 `core.results.catalog` from reading a half-written log as a failed run.
+
+A run can be stopped (`stop`): the GUI's Stop button, `calculate stop` in its command
+box, and Ctrl+C in `kratos-cli`. Kratos is killed, and the run ends as a run that did
+not finish: its directory, its log and the results of the stages that finished stay,
+and the log ends with `STOPPED_NOTE`, so the run says later that it was stopped and
+did not fail. The model is not touched: it is not in this process.
 """
 
 from __future__ import annotations
@@ -130,6 +136,21 @@ _current: Path | None = None
 """The run directory Kratos is working in now, or None. Set for exactly as long as the
 Kratos process lives (`in_progress`), so a run directory that is named here has a log
 that is still growing."""
+
+STOPPED_NOTE = "Stopped by the user"
+"""The last line of the log of a run that was stopped, so that a run read back later
+(`core.results.catalog`) says it was stopped, not that it failed."""
+
+_process: subprocess.Popen | None = None
+"""The Kratos process of the run in progress, for `stop`. Set and cleared under
+`_claim`, so a stop cannot fall between the process starting and being named here."""
+
+_preparing = 0
+"""The Calculate requests that mesh the model before they call `run` (`preparing`)."""
+
+_stop = threading.Event()
+"""Set by `stop`: the run in progress is to end, or the one being prepared is not to
+start. Cleared when a new calculation begins and when a run ends."""
 
 
 class CalculationError(RuntimeError):
@@ -302,10 +323,50 @@ def _one_at_a_time():
         if _running:
             raise Busy("A calculation is already running.")
         _running = True
+        # A stop asked while the route meshed is for this run; any other is old.
+        if not _preparing:
+            _stop.clear()
     try:
         yield
     finally:
-        _running = False
+        with _claim:
+            _running = False
+            _stop.clear()
+
+
+@contextmanager
+def preparing():
+    """Hold a Calculate request that meshes the model before it calls `run`.
+
+    Meshing can take a while, and a Stop pressed then must not be lost: `stop` keeps it,
+    and `run` writes the deck but does not start Kratos.
+    """
+    global _preparing
+    with _claim:
+        if not _preparing and not _running:
+            _stop.clear()
+        _preparing += 1
+    try:
+        yield
+    finally:
+        with _claim:
+            _preparing -= 1
+
+
+def stop() -> bool:
+    """Stop the calculation in progress. False when there is none.
+
+    Kratos is killed, and `_follow` then ends the run as stopped. While the model is
+    meshed or the deck written, Kratos is not started at all. What the run wrote stays.
+    """
+    with _claim:
+        process = _process
+        if process is None and not _running and not _preparing:
+            return False
+        _stop.set()
+    if process is not None and process.poll() is None:
+        process.kill()
+    return True
 
 
 def running() -> bool:
@@ -360,17 +421,21 @@ def _execute(python: str, environment: dict[str, str], directory: Path,
     before = _contents(directory)
 
     started = time.monotonic()
-    output, returncode = _follow(python, environment, directory)
+    output, returncode, stopped = _follow(python, environment, directory)
 
     stage = failed_stage(output)
+    seconds = round(time.monotonic() - started, 1)
+    ok = returncode == 0 and not stopped
     return {
-        "ok": returncode == 0,
+        "ok": ok,
         "returncode": returncode,
+        # True when the user stopped the run (`stop`): not finished, and not failed.
+        "stopped": stopped,
         # Which stage the run died in, for the command log to name. Null on a run
         # that finished, and on one that never reached a stage at all.
         "stage": None if stage is None else
                  {"index": stage[0], "of": stage[1], "name": stage[2]},
-        "seconds": round(time.monotonic() - started, 1),
+        "seconds": seconds,
         "directory": str(directory),
         "inputs": inputs,
         # Read by difference rather than by pattern: every writer Kratos can be asked
@@ -378,34 +443,60 @@ def _execute(python: str, environment: dict[str, str], directory: Path,
         # quietly leave out whichever one nobody thought of.
         "outputs": sorted(_contents(directory) - before - {LOG_NAME}),
         "log": LOG_NAME,
-        "error": None if returncode == 0 else _explain(output, stage=stage),
+        "error": None if ok else stopped_text(seconds, stage) if stopped
+                 else _explain(output, stage=stage),
     }
 
 
+def stopped_text(seconds: float, stage: tuple[int, int, str] | None) -> str:
+    """What a stopped run says: when, where, and that what finished is kept."""
+    if stage is None:
+        return f"{STOPPED_NOTE} after {seconds:g} s."
+    index, total, name = stage
+    return (f"{STOPPED_NOTE} after {seconds:g} s, in stage {index} of {total} ({name}). "
+            "The stages before it finished and keep their results.")
+
+
+def was_stopped(log_text: str) -> bool:
+    """True when this log is of a run that was stopped (`STOPPED_NOTE`)."""
+    return STOPPED_NOTE in log_text[-400:]
+
+
 def _follow(python: str, environment: dict[str, str],
-            directory: Path) -> tuple[str, int | None]:
+            directory: Path) -> tuple[str, int | None, bool]:
     """Run Kratos in `directory` and copy its output into the log as it comes.
 
     Each line goes into `kratos.log` at once, so the log can be read during the run.
-    A timer kills the process at `timeout()`. Returns everything Kratos printed and its
-    exit code, or None as the exit code when the timer had to kill it. The log is
-    opened before the process starts, so a run in progress always has one.
+    A timer kills the process at `timeout()`, and `stop` kills it when the user asks.
+    Returns everything Kratos printed, its exit code (None when the timer had to kill
+    it) and whether the user stopped it. The log is opened before the process starts,
+    so a run in progress always has one.
     """
+    global _process
     given_up = threading.Event()
     lines: list[str] = []
+    started = time.monotonic()
     with in_progress(directory), \
             open(directory / LOG_NAME, "w", encoding="utf-8") as log:
-        try:
-            process = subprocess.Popen(
-                [python, *COMMAND], cwd=directory, env=environment,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
-            )
-        except OSError as failure:
-            raise CalculationError(
-                f"The python to run Kratos with, {python}, could not be started: "
-                f"{failure}. It has to be a python interpreter; correct it in "
-                f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
+        with _claim:
+            if _stop.is_set():
+                # Stopped while the model was meshed: the deck is written, Kratos is not
+                # started.
+                note = f"{STOPPED_NOTE} before Kratos started."
+                log.write(note + "\n")
+                return note, None, True
+            try:
+                process = subprocess.Popen(
+                    [python, *COMMAND], cwd=directory, env=environment,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace",
+                )
+            except OSError as failure:
+                raise CalculationError(
+                    f"The python to run Kratos with, {python}, could not be started: "
+                    f"{failure}. It has to be a python interpreter; correct it in "
+                    f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
+            _process = process
 
         def give_up() -> None:
             given_up.set()
@@ -421,6 +512,10 @@ def _follow(python: str, environment: dict[str, str],
                 log.write(line)
                 log.flush()
             process.wait()
+        except KeyboardInterrupt:
+            # Ctrl+C in kratos-cli: the same as Stop in the GUI.
+            _stop.set()
+            process.kill()
         finally:
             timer.cancel()
             if process.poll() is None:
@@ -430,14 +525,24 @@ def _follow(python: str, environment: dict[str, str],
                 process.wait()
             if process.stdout is not None:
                 process.stdout.close()
+            with _claim:
+                _process = None
 
+        # A run that ended by itself just before the stop was asked has finished.
+        if _stop.is_set() and process.returncode != 0:
+            half = bool(lines) and not lines[-1].endswith("\n")
+            note = (("\n" if half else "")
+                    + f"\n{STOPPED_NOTE} after {time.monotonic() - started:.0f} s.\n")
+            lines.append(note)
+            log.write(note)
+            return "".join(lines), process.returncode, True
         if given_up.is_set():
             note = (f"\n\nGiven up on after {timeout():.0f} s. Raise {TIMEOUT_ENV} if "
                     "the model is meant to take this long.")
             lines.append(note)
             log.write(note)
-            return "".join(lines), None
-    return "".join(lines), process.returncode
+            return "".join(lines), None, False
+    return "".join(lines), process.returncode, False
 
 
 def failed_stage(output: str) -> tuple[int, int, str] | None:

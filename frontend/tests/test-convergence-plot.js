@@ -288,7 +288,8 @@
     T.eq(P.decades([]), { lo: -12, hi: 0 });
     T.eq(P.iterationTicks(7), [1, 2, 3, 4, 5, 6, 7]);
     T.eq(P.iterationTicks(51).slice(0, 3), [1, 10, 20]);
-    T.eq(P.iterationTicks(50, 8, 2), [2, 10, 20, 30, 40, 50], 'one stage shown alone');
+    T.eq(P.iterationTicks(50, 8, 2), [2, 10, 20, 30, 40, 50]);
+    T.eq(P.iterationTicks(51, 8, 0), [0, 10, 20, 30, 40, 50], 'one stage shown alone');
     T.eq(P.iterationTicks(5, 8, 58), [58, 59, 60, 61, 62]);
     T.eq(P.iterationTicks(30, 8, 9), [10, 15, 20, 25, 30, 35], 'no 9 against the 10');
   });
@@ -332,15 +333,24 @@
 
   /* ── One stage alone, and the window's size ───────────────────────────── */
 
-  test('one stage alone: its iterations, numbered as in the whole run', function () {
+  test('one stage alone: an axis of its own, from 0', function () {
     var limit = data('iteration_limit');
     var svg = P.svg(limit, { stage: 2 });
     var upper = panels(svg)[0];
     T.eq(dots(upper).length, 50);
     T.eq(count(upper, 'cp-band'), 1);
-    T.ok(svg.indexOf('<title>Iteration 2 — stage 2 Push') !== -1, 'the run\'s numbers');
-    T.ok(svg.indexOf('After iteration 51: step reached the iteration limit') !== -1);
-    T.ok(/text-anchor="middle">2<\/text>/.test(panels(svg)[1]), 'the axis starts at 2');
+    T.ok(svg.indexOf('<title>Iteration 1 of the stage (2 of the run) — stage 2 Push') !== -1,
+         'the stage\'s number, and the run\'s');
+    T.ok(svg.indexOf('After iteration 50 of the stage: step reached the iteration limit') !== -1);
+    var ticks = [], re = /class="cp-tick" x="([\d.]+)"[^>]*text-anchor="middle">(\d+)</g, m;
+    while ((m = re.exec(panels(svg)[1]))) ticks.push([Number(m[2]), Number(m[1])]);
+    T.eq(ticks.map(function (t) { return t[0]; }), [0, 10, 20, 30, 40, 50],
+         'the axis starts at 0');
+    T.eq(ticks[0][1], P.FIG.left, '0 at the left edge');
+    T.ok(svg.indexOf('>Iteration in stage 2</text>') !== -1);
+    T.ok(svg.indexOf('counted over all stages') === -1);
+    T.ok(/text-anchor="middle">1<\/text>/.test(panels(P.svg(limit))[1]),
+         'all stages: the run\'s numbers, from 1');
     T.eq(count(panels(P.svg(limit, { stage: 1 }))[0], 'cp-dot'), 1);
     T.eq(P.svg(limit, { stage: 9 }), P.svg(limit), 'a stage it does not have: all');
   });

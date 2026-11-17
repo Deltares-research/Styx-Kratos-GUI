@@ -272,6 +272,48 @@
       }));
   });
 
+  test('convergence window: Stop is there while the run goes on, and says who stopped it', function () {
+    var ctx = rig();
+    var answer = live(ctx, function () { return { running: true, run: RUN }; });
+    var calculatePost = App.Api.post;
+    var stops = 0;
+    App.Api.post = function (path) {
+      if (path !== '/api/calculate/stop') return calculatePost(path);
+      stops += 1;
+      return Promise.resolve({ stopped: true });
+    };
+    function stopButton() { return windowOf(ctx).querySelector('.cv-stop'); }
+    var calculated = App.Calculate.run();
+    return done(ctx, until(function () { return W.state().phase === 'running'; },
+                           function () { return 'running, but ' + W.state().phase; })
+      .then(function () {
+        T.ok(!stopButton().hidden, 'Stop shows while it runs');
+        T.eq(stopButton().textContent, 'Stop calculation');
+        stopButton().click();
+        var question = ctx.layer.querySelector('.dlg-calc-stop');
+        T.ok(question, 'it asks first');
+        button(question, 'Stop calculation').click();
+        return until(function () { return stops === 1 && statusLine(ctx) === 'Stopping Kratos…'; },
+                     function () { return 'stopping, but ' + statusLine(ctx); });
+      }).then(function () {
+        T.ok(stopButton().disabled);
+        T.eq(stopButton().textContent, 'Stopping…');
+        ctx.running = false;
+        answer.resolve({ ok: false, stopped: true, run: RUN, seconds: 4,
+                         stage: { index: 2, of: 2, name: 'Push' }, outputs: [],
+                         directory: 'runs', stats: { elements: 10, nodes: 20 }, warnings: [] });
+        return calculated;
+      }).then(function () {
+        var said = 'Stopped by the user in stage 2 of 2, Push after 4 s';
+        return until(function () { return statusLine(ctx) === said; },
+                     function () { return said + ', but ' + statusLine(ctx); });
+      }).then(function () {
+        T.ok(stopButton().hidden, 'no Stop once the run is over');
+        T.ok(ctx.lines.some(function (line) { return /^note:Calculation stopped after 4 s/.test(line); }),
+             ctx.lines.join(' | '));
+      }));
+  });
+
   function dotsShown(ctx) {
     return windowOf(ctx).querySelectorAll('.cv-host .cp-relative .cp-dot').length;
   }

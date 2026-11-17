@@ -56,24 +56,28 @@ async def calculate_project(settings: ExportRequest) -> dict:
     computes nothing. The reason is `session.nothing_to_mesh`'s, the one `kratos-cli
     check` and `calculate` give. The GUI greys its Calculate button out on the same
     test, so this is for a stale page or a script.
+
+    Meshing and the run are held as `calculation.preparing`, so a Stop pressed while
+    the model is meshed is kept: the deck is written, and Kratos is not started.
     """
     project = store.get()
     if project.deck is not None:
-        return await _calculate_deck(project.deck)
+        with calculation.preparing():
+            return await _calculate_deck(project.deck)
     empty = session.nothing_to_mesh(project)
     if empty:
         raise HTTPException(status_code=422, detail=empty)
     check_mesh_keys(project, settings)
-    export = await run_mesh_job(gmsh_worker.export_job, project,
-                                settings.model_copy(update={"include_materials": True}),
-                                (GeometryError, MeshingError, ExportError))
-
-    try:
-        result = await asyncio.to_thread(calculation.run, export)
-    except calculation.Busy as busy:
-        raise HTTPException(status_code=409, detail=str(busy)) from busy
-    except calculation.CalculationError as failure:
-        raise HTTPException(status_code=500, detail=str(failure)) from failure
+    with calculation.preparing():
+        export = await run_mesh_job(gmsh_worker.export_job, project,
+                                    settings.model_copy(update={"include_materials": True}),
+                                    (GeometryError, MeshingError, ExportError))
+        try:
+            result = await asyncio.to_thread(calculation.run, export)
+        except calculation.Busy as busy:
+            raise HTTPException(status_code=409, detail=str(busy)) from busy
+        except calculation.CalculationError as failure:
+            raise HTTPException(status_code=500, detail=str(failure)) from failure
 
     # The mesh the run was made from, said in the same breath as the run: the deck was
     # exported here, so this is the only place that can report both. `run` is the
@@ -96,6 +100,18 @@ def calculate_status() -> dict:
     current = calculation.current_run()
     return {"running": calculation.running() or current is not None,
             "run": current.name if current is not None else None}
+
+
+@router.post("/api/calculate/stop")
+def calculate_stop() -> dict:
+    """Stop the calculation in progress: the GUI's Stop button and `calculate stop`.
+
+    Kratos is killed; the Calculate request that started the run then answers with
+    `stopped` true. The run directory, its log and the results of the stages that
+    finished stay, and the model is not touched. `stopped` here is false when nothing
+    was running, which is not an error: the run may have ended a moment before.
+    """
+    return {"stopped": calculation.stop()}
 
 
 async def _calculate_deck(deck: Deck) -> dict:

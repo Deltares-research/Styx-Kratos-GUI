@@ -628,6 +628,23 @@ While Kratos runs, the log shows *Meshing, writing the deck and running Kratosâ€
 fails, the log shows which stage failed and why, and the Stages explorer shows which stages
 finished.
 
+### Stop a calculation
+
+While Kratos runs, the **Calculate** button in the toolbar is a red **Stop** button. Click it
+and then **Stop calculation** to stop Kratos at once. The **Convergence** window has the same
+button, and the **Stages** menu has **Stop calculation**. To stop without the question, type
+`calculate stop` in the command box.
+
+When you stop a calculation:
+
+- your model does not change, and Styx stays in the mode you were in;
+- the run folder keeps the input files, the log and the results of the stages that finished,
+  so you can still open them in Results mode;
+- the log says *Calculation stopped after 41 s, in stage 3 of 7*, and the Stages window marks
+  that stage *Stopped by the user*.
+
+<kbd>F9</kbd> does not stop a calculation, so a key pressed twice cannot end a long run.
+
 Styx never overwrites or deletes a run folder. See
 [What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
 
@@ -636,7 +653,8 @@ Styx never overwrites or deletes a run folder. See
 When you click **Calculate**, the **Convergence** window opens at the bottom right. It shows
 how the solver converges while Kratos runs, so you can see early if a stage has problems.
 You can move the window, and make it bigger with its bottom-right corner: the plot grows
-with it. If you close the window, the run continues.
+with it. If you close the window, the run continues. To stop the run, click
+**Stop calculation** (see [Stop a calculation](#stop-a-calculation)).
 
 After each iteration, Kratos compares two values with their targets: a relative value and
 an absolute value. The criterion is met when one of the two is below its target. What the
@@ -661,7 +679,7 @@ of the plot does. Below it, the plot has two panels:
 |---|---|
 | Upper panel | The relative value of each iteration, on a log scale |
 | Lower panel | The absolute value of each iteration, on a log scale |
-| Horizontal axis | The iteration number, counted over all stages |
+| Horizontal axis | The iteration number, counted over all stages (from 0 in the stage, when one stage is shown alone) |
 | Dashed line | The target |
 | Green X | An iteration where the criterion was met |
 | Red mark after an iteration | A step that reached the maximum number of iterations, or that Kratos cut back to a smaller step |
@@ -674,8 +692,10 @@ its criterion.
 
 With many stages, the early stages are narrow. If the run has two stages or more, use the
 **Show** slider under the status line to show one stage alone: move it to the right to go
-through the stages one by one, and back to the left end for all stages. The iteration
-numbers stay those of the whole run. You can also type `results convergence stage 3`, or
+through the stages one by one, and back to the left end for all stages. A stage shown
+alone has its own horizontal axis: it starts at 0 and counts the iterations of that stage.
+Point at a dot to see its number in the whole run too. You can also type
+`results convergence stage 3`, or
 words of the stage name such as `results convergence stage first excavation`, and
 `results convergence stage all`.
 
@@ -895,6 +915,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `mesh` | Makes the mesh |
 | `clearmesh` | Removes the mesh from the view; its settings stay |
 | `calculate` | Calculates the model, as the **Calculate** button |
+| `calculate stop` | Stops the calculation that runs, without asking first |
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |

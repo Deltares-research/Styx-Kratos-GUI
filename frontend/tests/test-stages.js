@@ -701,4 +701,11 @@
          ['OK', 'OK', 'Failed', 'Not calculated', 'Not calculated']);
     T.eq(rows[2].state, 'failed');
   });
+
+  test('a run the user stopped says so in the stage it stopped in', function () {
+    var rows = App.Stages.overview(dike(), { completed: 3, stopped: true });
+    T.eq(rows.map(function (r) { return r.log; }),
+         ['OK', 'OK', 'OK', 'Stopped by the user', 'Not calculated']);
+    T.eq(rows[3].state, 'stopped');
+  });
 })();

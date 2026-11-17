@@ -19,8 +19,10 @@
    *   A page that loads while a run goes on -- a reload, a second tab -- opens the
        window and follows that run too.
 
-   Closing the window does not stop the run; it only stops the asking. Modeless, like
-   the plot window: it is read beside the model.
+   Closing the window does not stop the run; it only stops the asking. Its Stop button
+   does, after asking (`App.Calculate.askStop`): it is there while a run goes on, also
+   one this page found going on, since this is where a run that goes wrong is seen.
+   Modeless, like the plot window: it is read beside the model.
 
    The figure fills the window, and grows with it when the window is made bigger by its
    corner. With two stages or more, a slider under the status line shows one stage
@@ -47,7 +49,7 @@ App.ConvergenceWindow = (function () {
   var phase = 'idle';       // idle, meshing, running, finished, stopped, failed, shown
   var calculating = false;  // this page's Calculate request is open
   var run = null;           // the run being followed or shown
-  var ending = null;        // { seconds, stage } of the run this page started
+  var ending = null;        // { seconds, stage, stopped } of the run this page started
   var generation = 0;       // bumped to stop a loop that is waiting for an answer
   var timer = null;
   var installed = false;
@@ -68,6 +70,8 @@ App.ConvergenceWindow = (function () {
       width: SIZE.width, height: SIZE.height,
       buttons: [
         { label: 'Save ▾', keepOpen: true, onClick: function () { saveMenu.toggle(); } },
+        { label: 'Stop calculation', keepOpen: true,
+          onClick: function () { if (App.Calculate) App.Calculate.askStop(); } },
         { label: 'Close', primary: true }
       ],
       onClose: function () {
@@ -79,6 +83,9 @@ App.ConvergenceWindow = (function () {
       }
     });
     handle.dialog.classList.add('dlg-convergence');
+    var footButtons = handle.dialog.querySelectorAll('.dlg-foot .btn');
+    footButtons[1].classList.add('cv-stop');
+    footButtons[1].hidden = true;
     // The same Save button as the plot window: a pick runs `results convergence png`
     // and the like, which saves what this window shows (see `App.ConvergencePlot`).
     // Before any run is shown there is nothing to save, and the command says so.
@@ -127,8 +134,11 @@ App.ConvergenceWindow = (function () {
     var iterations = data && data.iterations ? data.iterations.length : 0;
     var last = data ? P.lastText(data) : '';
     var where = data ? P.stageText(data) : '';
-    if (phase === 'meshing') return ['Meshing and writing the deck…', ''];
+    if (phase === 'meshing') {
+      return [stopping() ? 'Stopping…' : 'Meshing and writing the deck…', ''];
+    }
     if (phase === 'running') {
+      if (stopping()) return ['Stopping Kratos…', last];
       if (!data) return ['Starting Kratos…', ''];
       return ['Running' + (where ? ': ' + where : '…'),
               last || 'Waiting for the first iteration…'];
@@ -141,8 +151,11 @@ App.ConvergenceWindow = (function () {
                                   : data.log ? 'Kratos did not start solving.'
                                              : 'The run has no log.');
     var failed = (ending && ending.stage) || data.failed_at;
-    var stopped = failed ? 'Stopped in stage ' + failed.index + ' of ' + failed.of
-                           + (failed.name ? ', ' + P.tidy(failed.name) : '') : '';
+    var byUser = !!((ending && ending.stopped) || data.stopped);
+    var stopped = failed ? (byUser ? 'Stopped by the user in stage ' : 'Stopped in stage ')
+                           + failed.index + ' of ' + failed.of
+                           + (failed.name ? ', ' + P.tidy(failed.name) : '')
+                : byUser ? 'Stopped by the user' : '';
     if (phase === 'finished' || phase === 'stopped') {
       var took = ending && ending.seconds !== undefined ? ' in ' + ending.seconds + ' s' : '';
       return [stopped ? stopped + took.replace(' in ', ' after ') : 'Finished' + took,
@@ -153,6 +166,22 @@ App.ConvergenceWindow = (function () {
                               last || 'Waiting for the first iteration…'];
     return [data.run + (stopped ? ' — ' + stopped.charAt(0).toLowerCase() + stopped.slice(1)
                                 : ' — finished'), none || last];
+  }
+
+  function stopping() {
+    return !!(App.Calculate && App.Calculate.stopping && App.Calculate.stopping());
+  }
+
+  /* The Stop button: there while a run goes on, "Stopping…" once asked. */
+  function stopButton() {
+    var button = win.dialog.querySelector('.cv-stop');
+    if (!button) return;
+    var data = App.ConvergencePlot.state().data;
+    var live = phase === 'meshing' || phase === 'running'
+               || (phase === 'shown' && !!(data && data.running));
+    button.hidden = !live;
+    button.disabled = stopping();
+    button.textContent = stopping() ? 'Stopping…' : 'Stop calculation';
   }
 
   /* The window's parts, made once: a render while a run is followed (once a second)
@@ -233,6 +262,7 @@ App.ConvergenceWindow = (function () {
     part('.cv-line2').textContent = lines[1];
     var view = App.ConvergencePlot.state();
     slider(view.data, view.stage);
+    stopButton();
     figure();
   }
 
@@ -309,7 +339,8 @@ App.ConvergenceWindow = (function () {
       return;
     }
     run = result.run;
-    ending = { seconds: result.seconds, stage: result.stage || null };
+    ending = { seconds: result.seconds, stage: result.stage || null,
+               stopped: !!result.stopped };
     phase = result.ok ? 'finished' : 'stopped';
     if (!win) return;                     // closed during the run: it stays closed
     App.ConvergencePlot.load(run, true).then(function (data) {
@@ -350,6 +381,7 @@ App.ConvergenceWindow = (function () {
     if (installed) return;
     installed = true;
     if (App.Calculate && App.Calculate.onChange) App.Calculate.onChange(onCalculate);
+    if (App.Calculate && App.Calculate.onStop) App.Calculate.onStop(render);
     if (App.ConvergencePlot && App.ConvergencePlot.onChange) {
       App.ConvergencePlot.onChange(onPlot);
     }

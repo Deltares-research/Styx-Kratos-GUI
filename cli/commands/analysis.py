@@ -6,6 +6,9 @@ Results mode sees the run. `calculate` is `export` and `run` in one step, as the
 Calculate button is. Either way it is `core.analysis.calculation` that runs it, with this
 machine's Kratos (`kratos.local.json`, or `KRATOS_GUI_PYTHON` and `KRATOS_GUI_KRATOS`).
 
+Ctrl+C stops the run, as the GUI's Stop button does: Kratos is killed, and the run
+directory keeps what the stages that finished wrote.
+
 `--follow` prints each solver iteration on stderr while Kratos works, read off the
 growing log the way the GUI's convergence window reads it (`core.results.convergence`).
 stdout, and so `--json`, stays the answer alone.
@@ -93,6 +96,11 @@ def _ran(result: dict, warnings: list[str] | None = None,
         return Answer(data=data, lines=lines, warnings=warnings or [], notes=notes or [])
     stage = result.get("stage")
     where = f" in stage {stage['index']} of {stage['of']} ({stage['name']})" if stage else ""
+    if result.get("stopped"):
+        lines = [f"run {run} stopped by the user{where}; what it wrote is in "
+                 f"{result['directory']}"]
+        return Answer(data=data, lines=lines, warnings=warnings or [], notes=notes or [],
+                      error=result.get("error") or calculation.STOPPED_NOTE + ".")
     lines = [f"run {run} stopped{where}; Kratos' own output is in "
              f"{Path(result['directory']) / result['log']}"]
     return Answer(data=data, lines=lines, warnings=warnings or [], notes=notes or [],

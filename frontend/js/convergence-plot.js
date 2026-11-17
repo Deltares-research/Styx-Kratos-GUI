@@ -22,7 +22,9 @@
    iteration axis counts over the whole run, as the original's does, and says so.
 
    The figure shows every stage, or one stage alone (the window's slider): with many
-   stages, the early ones are too narrow to read. Its numbers stay those of the run.
+   stages, the early ones are too narrow to read. A stage alone has an axis of its own:
+   it starts at 0 and counts the stage's iterations; a tooltip gives the run's number
+   too.
 
    ── The command line is the feature ──────────────────────────────────────
 
@@ -264,7 +266,7 @@ App.ConvergencePlot = (function () {
      (1 when left out) to `first + count - 1`. `first` gets a tick too, unless a round
      one is so close the numbers would touch. */
   function iterationTicks(count, target, first) {
-    first = first || 1;
+    first = first === undefined || first === null ? 1 : first;
     if (count <= 1) return [first];
     var raw = count / (target || 8);
     var magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -333,15 +335,17 @@ App.ConvergencePlot = (function () {
     var stages = data.stages || [];
     return stages.map(function (stage, i) {
       var end = i + 1 < stages.length ? stages[i + 1].at : count;
-      return { stage: stage, from: stage.at + 0.5, to: end + 0.5,
+      // The first stage starts at the axis' own start, which is 0 for a stage alone.
+      return { stage: stage, from: stage.at ? stage.at + 0.5 : 0, to: end + 0.5,
                iterations: (data.iterations || []).slice(stage.at, end) };
     });
   }
 
-  function tooltip(data, it, n) {
+  /* `run`, given for a stage shown alone, is the number of the iteration in the run. */
+  function tooltip(data, it, n, run) {
     var stage = it.stage !== null && it.stage !== undefined ? stageNamed(data, it.stage) : null;
     var words = criterion(criterionKey(it)).words;
-    var place = 'Iteration ' + n
+    var place = 'Iteration ' + n + (run ? ' of the stage (' + run + ' of the run)' : '')
               + (stage ? ' — stage ' + stage.index + (stage.name ? ' ' + tidy(stage.name) : '')
                  : '')
               + (it.step ? ', step ' + it.step : '');
@@ -361,6 +365,8 @@ App.ConvergencePlot = (function () {
      the data it draws, `sx`, `count`, `offset`, the panel height and the right edge. */
   function panel(fig, key, top, lastPanel) {
     var data = fig.data, sx = fig.sx, count = fig.count, offset = fig.offset;
+    // An iteration in words: "12", or "12 of the stage" where one stage is shown alone.
+    function named(n) { return fig.alone ? n + ' of the stage' : String(n); }
     var left = FIG.left, right = fig.right, height = fig.panel, bottom = top + height;
     var iterations = data.iterations || [];
     var out = ['<g class="cp-panel cp-' + key + '">'];
@@ -421,7 +427,9 @@ App.ConvergencePlot = (function () {
       iterations.forEach(function (it, i) {
         if (!finite(it[key + '_target'])) return;
         var ty = fixed(sy(it[key + '_target']));
-        target.push(fixed(sx(i + 0.5)) + ',' + ty, fixed(sx(i + 1.5)) + ',' + ty);
+        // The first starts at the left edge: 0 for a stage shown alone.
+        var from = i === 0 && fig.alone ? 0 : i + 0.5;
+        target.push(fixed(sx(from)) + ',' + ty, fixed(sx(i + 1.5)) + ',' + ty);
       });
       if (target.length) {
         out.push('<polyline class="cp-target" points="' + target.join(' ')
@@ -456,7 +464,8 @@ App.ConvergencePlot = (function () {
     var r = iterations.length > 400 ? 1.4 : iterations.length > 100 ? 2 : 2.6;
     iterations.forEach(function (it, i) {
       var x = fixed(sx(i + 1)), cy = fixed(sy(it[key]));
-      var tip = '<title>' + esc(tooltip(data, it, i + 1 + offset)) + '</title>';
+      var tip = '<title>' + esc(tooltip(data, it, i + 1, fig.alone ? i + 1 + offset : null))
+                + '</title>';
       if (!finite(it[key])) {
         out.push('<path class="cp-nan" d="M' + fixed(sx(i + 1) - 3) + ',' + fixed(top + 1)
                  + 'l6,6m0,-6l-6,6" stroke="' + EVENT + '" stroke-width="1.6" fill="none">'
@@ -482,7 +491,7 @@ App.ConvergencePlot = (function () {
     Object.keys(marked).forEach(function (n) {
       var x = sx(Number(n));
       out.push('<path class="cp-event" d="M' + fixed(x - 4) + ',' + top + 'h8l-4,7z" fill="'
-               + EVENT + '"><title>' + esc('After iteration ' + (Number(n) + offset) + ': '
+               + EVENT + '"><title>' + esc('After iteration ' + named(Number(n)) + ': '
                + marked[n].join('; ')) + '</title></path>');
     });
 
@@ -504,7 +513,7 @@ App.ConvergencePlot = (function () {
         out.push('<path class="cp-fraction-mark" d="' + cross(sx(at(f)), fy(f.value), half)
                  + '" stroke="' + EVENT + '" stroke-width="1.2" fill="none"><title>'
                  + esc('Fraction of unbalance ' + format(f.value) + ', after iteration '
-                       + (at(f) + offset)) + '</title></path>');
+                       + named(at(f))) + '</title></path>');
       });
       [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(function (v) {
         var ty = fixed(fy(v));
@@ -526,10 +535,11 @@ App.ConvergencePlot = (function () {
                + right + '" y2="' + bottom + '" stroke="' + EVENT + '"/>');
     }
 
-    // The iteration axis: tick marks on both panels, numbers under the lower one. The
-    // numbers are the run's, also when one stage is shown alone.
-    iterationTicks(count, 8, offset + 1).forEach(function (n) {
-      var x = fixed(sx(n - offset));
+    // The iteration axis: tick marks on both panels, numbers under the lower one. A
+    // stage shown alone counts its own iterations, from 0 at the left edge.
+    (fig.alone ? iterationTicks(count + 1, 8, 0) : iterationTicks(count, 8, 1))
+      .forEach(function (n) {
+      var x = fixed(sx(n));
       out.push('<line x1="' + x + '" y1="' + bottom + '" x2="' + x + '" y2="' + (bottom + 3)
                + '" stroke="' + FRAME + '"/>');
       if (lastPanel) {
@@ -643,14 +653,20 @@ App.ConvergencePlot = (function () {
     var iterations = shown.iterations || [];
     var count = Math.max(1, iterations.length);
     var left = FIG.left, right = rightEdge(shown);
-    function sx(n) { return left + (n - 0.5) / count * (right - left); }
+    // All stages: iteration 1 to `count`, half an iteration of room at either end. One
+    // stage alone: its own axis, from 0 at the left edge.
+    var alone = shown !== data;
+    function sx(n) {
+      return alone ? left + n / (count + 0.5) * (right - left)
+                   : left + (n - 0.5) / count * (right - left);
+    }
     var rows = legendRows(shown);
     var fixedPart = FIG.top + FIG.gap + FIG.bottom + FIG.legend * rows.length;
     var panelHeight = options.height
       ? Math.max(FIG.panel, Math.floor((options.height - fixedPart) / 2)) : FIG.panel;
     var h = fixedPart + 2 * panelHeight;
     var fig = { data: shown, sx: sx, count: count, offset: part.offset, panel: panelHeight,
-                right: right };
+                right: right, alone: alone };
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" class="cp-figure" viewBox="0 0 '
                + FIG.width + ' ' + h + '" width="' + FIG.width + '" height="' + h
                + '" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="' + INK
@@ -662,7 +678,8 @@ App.ConvergencePlot = (function () {
     out.push(panel(fig, 'absolute', lower, true));
     out.push('<text class="cp-xlabel" x="' + fixed((left + right) / 2) + '" y="'
              + (lower + panelHeight + 28) + '" text-anchor="middle">'
-             + 'Iteration, counted over all stages</text>');
+             + (alone ? 'Iteration in stage ' + shown.stages[0].index
+                      : 'Iteration, counted over all stages') + '</text>');
     if (!iterations.length) {
       out.push('<text class="cp-empty" x="' + fixed((left + right) / 2) + '" y="'
                + fixed(upper + panelHeight / 2) + '" text-anchor="middle" fill="#888">'
