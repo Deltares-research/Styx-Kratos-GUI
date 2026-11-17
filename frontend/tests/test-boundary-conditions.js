@@ -434,10 +434,10 @@
     });
   });
 
-  test('a condition is hidden until it is shown', function () {
+  test('a condition is shown until it is hidden', function () {
     App.PROJECT = section(standard().concat([pressure('pore', 'domain')]));
-    T.eq(App.Viewport.isVisible('roller_left'), false);
-    T.eq(App.Viewport.isVisible('pore'), false);
+    T.eq(App.Viewport.isVisible('roller_left'), true);
+    T.eq(App.Viewport.isVisible('pore'), true);
     T.eq(App.Viewport.isVisible('soil_L1'), true, 'a part is shown as before');
   });
 

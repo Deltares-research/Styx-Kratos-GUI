@@ -71,6 +71,13 @@ App.Export = (function () {
     if (result.project_parameters) {
       written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
     }
+    /* Python processes of the deck's own, which Kratos imports from the directory the
+       deck runs in. Today that is only the temporary prestress workaround, for a deck
+       that carries a prestressed anchor into a later stage
+       (core/kratos/prestress_workaround.py). */
+    Object.keys(result.process_files || {}).sort().forEach(function (name) {
+      written.push({ name: name, text: result.process_files[name] });
+    });
     // Which unit system every number above is in. Kratos never reads it; opened again
     // as a deck case, it is what labels the results (core/results/catalog.py).
     if (result.unit_system) {

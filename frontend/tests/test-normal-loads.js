@@ -247,7 +247,9 @@
       ['soil_L1'], [], false, ['load_1'], [], ['normalload_1']);
     T.ok(groups.structures.indexOf('normalload_1') >= 0, 'drawn in Structures');
     T.ok(groups.staged.indexOf('normalload_1') >= 0, 'drawn in Staged construction');
-    T.eq(groups.soil.indexOf('normalload_1'), -1, 'not in Soil, like any other load');
+    T.ok(groups.soil.indexOf('normalload_1') >= 0, 'in Soil too, like any other load');
+    T.ok(App.Viewport.computeFadedKeys(['soil_L1'], [], false, ['load_1'], [], ['normalload_1'])
+           .soil.indexOf('normalload_1') >= 0, 'faded there');
   });
 
   test('a normal load is drawn with arrows along the line it loads', function () {

@@ -223,8 +223,9 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
     for a mechanical stage, which is Newton-Raphson unless it says otherwise, and
     whose deck leaves a seepage face out (`core.kratos.condition_checks`).
 
-    Newton-Raphson with seepage where the project has a seepage face, as that strategy
-    is what opens and closes the face node by node. Newton-Raphson where a soil in the
+    Newton-Raphson with seepage where the stage has a seepage face on, as that strategy
+    is what opens and closes the face node by node. A stage that switches its seepage
+    faces off is solved as if the project had none. Newton-Raphson where a soil in the
     stage has a retention law that makes its permeability depend on the water pressure
     (Kratos' `tests/Muskat/van_genuchten_hydrostatic`). One linear solve otherwise, as a
     saturated soil's flow is linear in it (`saturated_hydrostatic`).
@@ -233,7 +234,9 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
         stage = next(each for each in project.stages if each.id == stage)
     if stage.calculation != FLOW:
         return None
-    if seepage(project):
+    active = active_parts(project, stage)
+    if seepage(project) and any(condition.kind == "seepage" and condition.id in active
+                                for condition in project.boundary_conditions):
         return "newton_raphson_with_seepage"
     # Keyed by body, as `core.kratos.writer._part_materials` is: a lift is still the
     # layer it was dug out of.
@@ -243,7 +246,7 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
                         if key.partition("__")[0] in material_of})
     material_of.update({part.key: part.mat for part in project.custom_parts if part.mat})
     known = {material.id: material for material in project.materials}
-    for key in active_parts(project, stage):
+    for key in active:
         material = known.get(material_of.get(key, ""))
         if material and material.variables.get("RETENTION_LAW", SATURATED) != SATURATED:
             return "newton_raphson"
@@ -459,30 +462,44 @@ def edited_solver(project: Project, id: str, key: str, value: object) -> list[St
 
 
 def set_active(project: Project, id: str, keys: list[str], wanted: bool) -> list[Stage]:
-    """Make each of `keys` in the model (`wanted`) or out of it during stage `id`, with
-    the smallest instruction that does it: none when the stages before already give that
-    state, and never both lists for one part. Only stage `id` changes; the ones after
-    inherit the new state until one of them says otherwise."""
+    """Make each of `keys` in the model (`wanted`) or out of it during stage `id`, and
+    in that stage only, with the smallest instruction that does it: none when the
+    parent already gives that state, and never both lists for one part.
+
+    No other stage's state changes: the stages before are not edited, and each stage
+    that starts from `id` is given whatever instruction keeps it as it was -- stored as
+    a diff, it would otherwise follow its parent. Grandchildren need nothing, since
+    their parent's state is unchanged. A stage made afterwards (`added`, `inserted`,
+    `copied`) says nothing of its own, so it starts with its parent's state."""
     listed = _copies(project)
     if not any(stage.id == id for stage in listed):
         return listed
     before = _chain_to(project, id)[:-1]
+    # The stages that start from this one, and the chain each had before the edit:
+    # their state then is the state they keep.
+    children = {stage.id: _chain_to(project, stage.id)
+                for stage in project.stages if stage.parent == id and stage.id != id}
 
-    def inherited(key: str) -> bool:
+    def active_along(chain: list[Stage], key: str) -> bool:
         active = True       # everything starts in the model
-        for stage in before:
+        for stage in chain:
             if key in stage.deactivate:
                 active = False
             if key in stage.activate:
                 active = True
         return active
 
+    def restate(stage: Stage, key: str, want: bool, given: bool) -> None:
+        stage.activate = [k for k in stage.activate if k != key]
+        stage.deactivate = [k for k in stage.deactivate if k != key]
+        if want != given:       # only an instruction the parent does not already give
+            (stage.activate if want else stage.deactivate).append(key)
+
     for stage in listed:
-        if stage.id != id:
-            continue
-        for key in keys:
-            stage.activate = [k for k in stage.activate if k != key]
-            stage.deactivate = [k for k in stage.deactivate if k != key]
-            if wanted != inherited(key):
-                (stage.activate if wanted else stage.deactivate).append(key)
+        if stage.id == id:
+            for key in keys:
+                restate(stage, key, wanted, active_along(before, key))
+        elif stage.id in children:
+            for key in keys:
+                restate(stage, key, active_along(children[stage.id], key), wanted)
     return listed

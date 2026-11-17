@@ -237,6 +237,14 @@ To change an object, select it in the viewport or in the Model explorer, then ch
 properties in the Selection explorer. An object that is not **Active** stays in the project,
 but Styx does not send it to Kratos.
 
+In the viewport, a sheet pile is a thick dark line, an anchor is a green line with a dot at
+each end, and an interface is a dashed purple line. An interface on a sheet pile is drawn
+next to the pile, on each face that has the interface. These lines keep the same width when
+you zoom, and they are drawn over the soil and the mesh. On the **Soil** and **Flow
+conditions** tabs they are drawn half transparent. A sheet pile, anchor or interface that is
+not **Active**, or that the selected stage deactivates, is drawn half transparent too. On the
+**Soil** and **Flow conditions** tabs it is fainter still.
+
 The sheet pile section starts with values near an AZ 26-700 steel sheet pile. In 2D, the
 values are for each metre of wall, divided by the **Spacing**.
 
@@ -337,6 +345,10 @@ In the Model explorer, the check box of a condition shows if the condition is ac
 it to keep the condition in the project but leave it out of the calculation. The check box
 of **Boundary conditions** switches all of them. In Staged construction mode, the check box
 of a water pressure condition is for the selected stage.
+
+The viewport shows every condition and the water level. Click a condition or the water level
+to select it. A click a few pixels away from the line also selects it. To hide a condition,
+right-click its row in the Model explorer and select **Hide**.
 
 The viewport does not show the conditions when a model opens. To show a condition, select it
 in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
@@ -489,10 +501,14 @@ Use the buttons at the top of the Stages explorer to change the sequence:
 ### Switch parts on and off
 
 1. Select a stage in the Stages explorer.
-2. In the Model explorer, select or clear the check box of a part. You can also click the
-   part in the viewport.
+2. In the Model explorer, select or clear the check box of a part. Or right-click the part
+   in the viewport and click **Activate in** *stage* or **Deactivate in** *stage*.
 
-The stages after the selected stage keep this change until a later stage changes it again.
+A click on a part in the viewport only selects it. A part that is switched off in the
+selected stage is shown faint, so you can right-click it to switch it on again.
+
+The change is made in the selected stage only. The other stages keep what they had. A
+stage that you add later starts with the parts of the stage before it.
 
 ### Switch water conditions on and off
 
@@ -501,10 +517,13 @@ Staged construction mode, each water pressure condition under **Model conditions
 **Boundary conditions** has a check box for the selected stage, as a part has. For
 example, to lower the water from a level at -1 m to a level at -6 m in stage 3:
 
-1. Add a second hydrostatic condition with its **Reference level** at -6 m.
-2. Select the first stage, and clear the check box of the -6 m condition.
-3. Select stage 3. Select the check box of the -6 m condition, and clear the check box of
-   the -1 m condition.
+1. Add a second hydrostatic condition with its **Reference level** at -6 m. It is on in
+   every stage.
+2. Select each stage before stage 3, and clear the check box of the -6 m condition.
+3. Select stage 3 and each stage after it, and clear the check box of the -1 m condition.
+
+As for a part, a check box changes the selected stage only. A stage that you add later
+starts with the check boxes of the stage before it.
 
 The viewport shows the water conditions that the selected stage has on. A stage with no
 water condition on keeps the water pressures that the stage before it ended with, for a

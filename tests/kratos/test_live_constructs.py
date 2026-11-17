@@ -160,6 +160,14 @@ def test_a_first_order_section_with_interfaces_runs():
     run(project, order=1, size=project.mesh.element_size)
 
 
+def test_a_project_without_stages_runs_its_two_stage_deck():
+    """The implicit deck of a sheet pile with no stage list. In wall installation, the
+    pile's interfaces search for their neighbouring soil, and the strut's stress is
+    carried from the initial stage."""
+    project = excavation.excavation_project(staged=False)
+    run(project, size=project.mesh.element_size)
+
+
 # ── 3D ──────────────────────────────────────────────────────────────────────
 
 def solid_excavation() -> Project:
