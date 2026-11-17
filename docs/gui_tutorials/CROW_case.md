@@ -17,23 +17,7 @@ row to use.
 A 2D plane-strain section, 80 m wide and 60 m deep. All values are in SI units: m, N, Pa
 and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 
-```text
-             x = 0       x = 5                                         x = 80
-                           ↓ ↓ ↓ ↓ ↓ ↓  surcharge 20 kN/m  ↓ ↓ ↓ ↓ ↓ ↓
-  y = 0        +-----------+--------------------------------------------+
-               |  lift 1  =|  strut at -1.5      water table at -1.5    |
-  y = -2       | - - - - - |                                            |
-               |  lift 2   |                                            |
-  y = -5       | - - - - - |  Clay                                      |
-               |  lift 3   |                                            |
-  y = -8       +-----------+--------------------------------------------+
-               |           |  Clay                                      |
-  y = -12      +-----------+--------------------------------------------+
-               |           '  wall toe at -13                           |
-               |              Sand                                      |
-  y = -60      +--------------------------------------------------------+
-         symmetry plane
-```
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](crow_model.svg)
 
 - A sheet pile wall at x = 5 m, from the ground surface down to y = −13 m.
 - A strut at y = −1.5 m, which holds the wall from the pit side.
