@@ -127,7 +127,26 @@
       T.eq(anchor.tail, [20, -8]);
     });
 
+  test('a fixed head is held where it was typed, and may be in the air', function () {
+    var near = App.Anchors.draftFromPoints(section(), [[12.4, -3, 20], [20, -8, 20]],
+                                           'free', 'fixed');
+    T.eq(near.head, [12.4, -3], 'a fixed head is not snapped onto the pile');
+    T.eq(near.head_end, 'fixed');
+    var high = App.Anchors.draftFromPoints(section({ beams: [] }), [[25, 2], [30, -8]],
+                                           'free', 'fixed');
+    T.eq(high.head, [25, 2]);
+    T.eq(App.Anchors.validate(high, section({ beams: [] })), null);
+    high.head_end = 'loose';
+    T.ok(/head end is free or fixed/.test(App.Anchors.validate(high, section({ beams: [] }))));
+  });
+
+  test('a drafted tail is on whole metres, 8 m back and 6 m down', function () {
+    var anchor = App.Anchors.draft(section({ beams: [] }));
+    T.eq(anchor.tail, [33, -8]);
+  });
+
   test('a head too far from any pile is left where it was, not dragged', function () {
+
     var anchor = App.Anchors.draftFromPoints(section(), [[30, -3, 20], [40, -8, 20]]);
     T.eq(anchor.head, [30, -3], 'a head metres away from the wall is in the soil');
   });

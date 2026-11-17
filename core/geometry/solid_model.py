@@ -65,9 +65,9 @@ class BuildResult:
     dim: int = 3
     """3 for the solid model, 2 for a plane-strain section."""
 
-    tie_nodes: dict[str, int] = field(default_factory=dict)
-    """Anchor key -> the 0D entity tag at its tail, for an anchor whose tail is fixed
-    (a free tail is a vertex of the soil, `_embed_beams`). `meshing` makes these visible so
+    tie_nodes: dict[str, list[int]] = field(default_factory=dict)
+    """Anchor key -> the 0D entity tags at its fixed ends, for an anchor with a fixed
+    head or tail (a free end is a vertex of the soil or of a structure, `_embed_beams`). `meshing` makes these visible so
     the mesh puts a node exactly there; the exporter then has both ends of the tie."""
 
     curves: dict[str, list[int]] = field(default_factory=dict)
@@ -210,8 +210,7 @@ def build_geometry(project: Project) -> BuildResult:
         _tag_physical_groups(curves, 1, clear=False)
         _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
-        _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
-                             clear=False, suffix="_Support")
+        _tag_physical_groups(tie_nodes, 0, clear=False, suffix="_Support")
         _verify(project, volumes, overlays, {**curves, **ties})
 
         return BuildResult(
@@ -285,9 +284,9 @@ def _build_layered_soil(project: Project) -> BuildResult:
         _tag_physical_groups(curves, 1, clear=False)
         _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
-        _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
-                             clear=False, suffix="_Support")
+        _tag_physical_groups(tie_nodes, 0, clear=False, suffix="_Support")
         tags = [tag for values in volumes.values() for tag in values]
+
         return BuildResult(
             volumes=volumes,
             mass={key: sum(gmsh.model.occ.getMass(dim, tag) for tag in tags)
@@ -1100,19 +1099,19 @@ def _embed_curves_in_volumes(curves: dict[str, list[int]], volumes: list[int],
 
 
 def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
-                    ) -> tuple[dict[str, list[int]], dict[str, int]]:
-    """Draw each anchor and give a fixed tail a node, without touching the model topology.
+                    ) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+    """Draw each anchor and give a fixed end a node, without touching the model topology.
 
     Deliberately *not* fragmented into anything: embedding the tie in the soil would
-    model a fully bonded bar. A fixed tail is a node that belongs to no element at all,
+    model a fully bonded bar. A fixed end is a node that belongs to no element at all,
     held by its own node group: the grouted body is idealised as a fixed point. A free
-    tail, and a head on no structure, need nothing here -- `_embed_beams` has already
-    made them vertices of the soil, which is where their nodes come from. Nor does a
-    head on a structure: `_split_at` has already made it a vertex of the beam, which is
-    where the shared node comes from.
+    tail, and a free head on no structure, need nothing here -- `_embed_beams` has
+    already made them vertices of the soil, which is where their nodes come from. Nor
+    does a free head on a structure: `_split_at` has already made it a vertex of the
+    beam, which is where the shared node comes from.
 
-    Returns the anchor key -> display curve tags, and the anchor key -> fixed tail point
-    tag that `meshing` makes visible so a node lands exactly on it.
+    Returns the anchor key -> display curve tags, and the anchor key -> fixed end point
+    tags (head first) that `meshing` makes visible so a node lands exactly on each.
     """
     # Each dimension draws its own kind and says so about the other's: an anchor drawn
     # in a section has no place in the solid model, and one drawn in space has none in
@@ -1148,13 +1147,15 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
         return {}, {}
 
     curves: dict[str, list[int]] = {}
-    tails: dict[str, int] = {}
+    fixed: dict[str, list[int]] = {}
     for anchor, point in active:
         head, tail = point(*anchor.head), point(*anchor.tail)
         curves[anchor.id] = [gmsh.model.occ.addLine(head, tail)]
-        if anchor.tail_end == "fixed":
-            tails[anchor.id] = tail
-    return curves, tails
+        held = ([head] if anchor.head_end == "fixed" else []) + (
+            [tail] if anchor.tail_end == "fixed" else [])
+        if held:
+            fixed[anchor.id] = held
+    return curves, fixed
 
 
 SOIL_POINT = "\0anchor-soil-point"
@@ -1163,8 +1164,8 @@ can be it."""
 
 
 def soil_points(project: Project, dim: int) -> list[tuple[float, float, float]]:
-    """Where every end of an active anchor that is a node of the soil mesh is -- a head
-    on no structure, a free tail (`Project.anchor_soil_ends`) -- in world coordinates:
+    """Where every end of an active anchor that is a node of the soil mesh is -- a free
+    head on no structure, a free tail (`Project.anchor_soil_ends`) -- in world coordinates:
     a section's own `(x, y)` on z = 0, and in the solid model a plane anchor's on the cut
     it was drawn on, as `_attach_anchors` places them."""
     cut = 0.0 if dim == 2 else project.cut_at()
@@ -1182,7 +1183,8 @@ def soil_points(project: Project, dim: int) -> list[tuple[float, float, float]]:
 
 
 def structure_heads(project: Project, dim: int) -> list[tuple[float, ...]]:
-    """The head of every active anchor that is on a structure, which the structure's
+    """The head of every active anchor that is on a structure -- a free head
+    (`Project.anchor_on_structure`) -- which the structure's
     mesh needs a node at: a section's own `(x, y)`, and in the solid model a plane
     anchor's on the cut it was drawn on."""
     plane = [a for a in project.plane_anchors

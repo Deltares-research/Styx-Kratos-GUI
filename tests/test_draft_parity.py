@@ -158,6 +158,13 @@ def calls(models: dict) -> list[dict]:
     call("an anchor head in the air on no structure is refused", "Anchors.draftFromPoints",
          "section", [[[20, 3], [25, -8]], "fixed"],
          lambda p: drafts.anchor(p, (20, 3), (25, -8), tail_end="fixed"))
+    call("a fixed anchor head is not snapped onto the pile", "Anchors.draftFromPoints",
+         "pile", [[[6.4, -2], [20, -8]], "free", "fixed"],
+         lambda p: drafts.anchor(p, (6.4, -2), (20, -8), head_end="fixed"))
+    call("a fixed anchor head may be in the air", "Anchors.draftFromPoints",
+         "section", [[[20, 3], [25, -8]], "free", "fixed"],
+         lambda p: drafts.anchor(p, (20, 3), (25, -8), head_end="fixed"))
+
     call("an anchor on a wall", "Anchors.draft", "solid_wall", [], drafts.anchor)
     call("an anchor on a member", "Anchors.draft", "solid_member", [], drafts.anchor)
     call("a first anchor in a kN model", "Anchors.draft", "section_pile_kn", [],

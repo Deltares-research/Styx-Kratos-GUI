@@ -438,6 +438,10 @@
       T.eq(ctx.requests, [], 'opening the window must not save the draft');
       T.eq(field(dialog, 'Head x').value, '12');
       T.eq(field(dialog, 'Tail end').value, 'free', 'a new anchor is joined to the soil');
+      T.eq(field(dialog, 'Head end').value, 'free', 'a new head is attached to the mesh');
+      T.eq(field(dialog, 'Tail x').value, '20', 'the drafted tail is on whole metres');
+      T.eq(field(dialog, 'Tail y').value, '-11');
+      T.ok(/attached to the mesh/.test(field(dialog, 'Head end').textContent));
       field(dialog, 'Name').value = 'Ground anchor';
       field(dialog, 'Head x').value = '12.4';      // within a metre: moved onto the pile
       field(dialog, 'Head y').value = '-3';
@@ -455,6 +459,7 @@
         T.eq(saved.head, [12, -3]);
         T.eq(saved.tail, [20, -9]);
         T.eq(saved.tail_end, 'free');
+        T.eq(saved.head_end, 'free');
         T.eq(saved.prestress, 150);
         T.eq(body.anchor_sections[0].variables.YOUNG_MODULUS, 195000000000);
         T.eq(body.anchor_sections[0].spacing, 3);
@@ -482,7 +487,28 @@
     });
   });
 
+  test('the anchor window makes a head fixed, which is not snapped and may be in the air',
+    function () {
+      return withEnvironment(anchoredProject(2), function (ctx) {
+        App.Anchors.start();
+        var dialog = latest(ctx);
+        change(field(dialog, 'Head end'), 'fixed');
+        field(dialog, 'Head x').value = '12.4';    // within a metre, but held in place
+        field(dialog, 'Head y').value = '1';
+        button(dialog, 'Save');
+        return drain().then(function () {
+          T.ok(dialog.closed);
+          var saved = ctx.requests[0].body.anchors[0];
+          T.eq(saved.head_end, 'fixed');
+          T.eq(saved.head, [12.4, 1]);
+          App.Anchors.edit(saved.id);
+          T.eq(field(latest(ctx), 'Head end').value, 'fixed');
+        });
+      });
+    });
+
   test('the anchor window refuses a free tail or a soil head in the air', function () {
+
     return withEnvironment(anchoredProject(2), function (ctx) {
       App.Anchors.start();
       var dialog = latest(ctx);

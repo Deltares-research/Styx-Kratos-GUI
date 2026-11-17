@@ -1151,6 +1151,27 @@ def test_an_anchor_needs_no_sheet_pile(session, tail_end):
     assert ("Anchor_1_Support" in deck.parts) == (tail_end == "fixed")
 
 
+# ── A fixed head: its own pinned node, on the pile or in the air ────────────
+
+@pytest.mark.parametrize("head", [(12.0, -2.0), (16.0, 1.0)])
+def test_a_fixed_anchor_head_is_its_own_pinned_node(session, head):
+    """A fixed head is in no other element, even where it sits on the pile, and its own
+    node group holds it together with a fixed tail."""
+    project = anchored_project(order=1)
+    anchor = project.anchors[0].model_copy(update={"head_end": "fixed", "head": head})
+    deck = deck_of(writer.export_project(project.model_copy(update={"anchors": [anchor]}),
+                                         MeshRequest(element_size=3.0, order=1)))
+    block = truss_of(deck)
+    head_node, tail_node = next(iter(block.entries.values()))
+    others = {n for other in deck.elements if other is not block
+              for nodes in other.entries.values() for n in nodes}
+
+    assert deck.nodes[head_node][:2] == pytest.approx(head, abs=1e-6)
+    assert head_node not in others, "a fixed head shares no node with the pile or soil"
+    assert set(deck.parts["Anchor_1_Support"].nodes) == {head_node, tail_node}
+
+
+
 # -- Gravity -----------------------------------------------------------------
 # `VOLUME_ACCELERATION` on the computational model part, which is what gives the
 # continuum elements their self weight. Every reference deck in the repo carries it in

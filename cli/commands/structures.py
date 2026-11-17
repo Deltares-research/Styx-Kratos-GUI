@@ -284,9 +284,14 @@ def _anchor_fields(parser: argparse.ArgumentParser) -> None:
                         help="x y in 2D, x y z in 3D: on a pile, a wall or a member "
                              "(snapped within 1 m), or in the soil")
     parser.add_argument("--tail", nargs="+", metavar="N", help="the far end")
-    parser.add_argument("--tail-end", choices=drafts.TAIL_ENDS,
-                        help="free: the tail is a node of the soil mesh (a new anchor's); "
-                             "fixed: the tail is held in place and joined to nothing")
+    parser.add_argument("--head-end", choices=drafts.ANCHOR_ENDS,
+                        help="free: the head is attached to the mesh, a node of the "
+                             "structure it is on or of the soil (a new anchor's); fixed: "
+                             "the head is held in place, joined to nothing and not snapped")
+    parser.add_argument("--tail-end", choices=drafts.ANCHOR_ENDS,
+                        help="free: the tail is attached to the mesh, a node of the soil "
+                             "(a new anchor's); fixed: the tail is held in place and "
+                             "joined to nothing")
     parser.add_argument("--prestress", type=float,
                         help="TRUSS_PRESTRESS_PK2, a stress, positive in tension")
 
@@ -499,6 +504,7 @@ def _drafted(project: Project, args: argparse.Namespace):
         return drafts.anchor(project, _point(args.head, width, "--head"),
                              _point(args.tail, width, "--tail"), section=args.section,
                              prestress=args.prestress or 0.0,
+                             head_end=args.head_end or "free",
                              tail_end=args.tail_end or "free", **named)
     if kind == "interface":
         return drafts.interface(project, args.structure, _points(args.points, 2),
@@ -533,12 +539,14 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
                        (("y_top", args.top), ("y_toe", args.toe)) if value is not None})
     if kind in ("anchor", "anchor3d"):
         width = 2 if kind == "anchor" else 3
+        fields.update(given(args, "prestress", "head_end", "tail_end"))
+        head_end = fields.get("head_end", record.head_end)
         if args.head is not None:
-            fields["head"] = drafts.anchor_head(project, _point(args.head, width, "--head"))
+            fields["head"] = drafts.anchor_head(project, _point(args.head, width, "--head"),
+                                                head_end)
         if args.tail is not None:
             fields["tail"] = _point(args.tail, width, "--tail")
-        fields.update(given(args, "prestress", "tail_end"))
-        problem = (drafts.head_problem(project, fields.get("head", record.head))
+        problem = (drafts.head_problem(project, fields.get("head", record.head), head_end)
                    or drafts.tail_end_problem(project,
                                               fields.get("tail_end", record.tail_end),
                                               fields.get("tail", record.tail)))
@@ -635,7 +643,9 @@ def _line(record) -> str:
         where = (" -> ".join(_xy(point) for point in record.footprint)
                  + f", {record.y_top:g} .. {record.y_toe:g}")
     elif kind in ("anchor", "anchor3d"):
-        where = f"{_xy(record.head)} -> {_xy(record.tail)}, tail {record.tail_end}"
+        where = (f"{_xy(record.head)} -> {_xy(record.tail)}, head {record.head_end}, "
+                 f"tail {record.tail_end}")
+
     elif kind == "interface":
         where = f"along {record.structure}"
         if record.stretch is not None:

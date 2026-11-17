@@ -2,13 +2,14 @@
    anchors.js — Structure-mode anchors.
 
    An anchor is a two-node tie from a head to a tail, and needs no structure.
-   A head within SNAP_DISTANCE of a sheet pile is snapped onto it and shares the
-   beam's node; a head further away is a node of the soil mesh. What the tail is
-   joined to is the anchor's `tail_end`: a free tail (a new anchor's) is a node
-   of the soil mesh, so the tie pulls on the soil there; a fixed tail belongs to
-   no element at all and is restrained by its own node group, the formulation
-   Kratos' reference decks use, which idealises the grouted body as a fixed
-   point.
+   What each end is joined to is the anchor's `head_end` and `tail_end`; both
+   are free on a new anchor. A free head within SNAP_DISTANCE of a sheet pile
+   is snapped onto it and shares the beam's node; a free head further away is a
+   node of the soil mesh. A free tail is a node of the soil mesh, so the tie
+   pulls on the soil there. A fixed end belongs to no element at all and is
+   restrained by its own node group, the formulation Kratos' reference decks
+   use for the tail, which idealises the grouted body as a fixed point; a fixed
+   head is never snapped.
 
    The Create anchor tool and the Edit anchor… button open one window (`open`),
    as the sheet pile's do.
@@ -176,9 +177,11 @@ App.Anchors = (function () {
       && point[2] >= d.z0 && point[2] <= d.z1;
   }
 
-  /* `tailEnd` is what the tail is joined to (TAIL_ENDS); left out, the tail is free. */
-  function draftFromPoints(project, points, tailEnd) {
+  /* `tailEnd` and `headEnd` are what the ends are joined to (ANCHOR_ENDS); left out,
+     an end is free. */
+  function draftFromPoints(project, points, tailEnd, headEnd) {
     var end = tailEnd === undefined ? 'free' : tailEnd;
+    var headAt = headEnd === undefined ? 'free' : headEnd;
     if (!available(project)) throw new Error(unavailableMessage(project));
     if (!points || points.length !== 2) {
       throw new Error('An anchor needs a head and a tail.');
@@ -187,12 +190,12 @@ App.Anchors = (function () {
     if (!ends.every(function (p) { return p.every(Number.isFinite); })) {
       throw new Error('Every anchor coordinate must be a number.');
     }
-    var head = snapHead(project, ends[0]).map(round);
+    var head = snapHead(project, ends[0], headAt).map(round);
     var tail = ends[1];
     if (!insideDomain(project, head) || !insideDomain(project, tail)) {
       throw new Error('The anchor must stay inside the model domain.');
     }
-    var problem = headProblem(project, head);
+    var problem = headProblem(project, head, headAt);
     if (problem) throw new Error(problem);
     if (head.every(function (value, axis) { return value === tail[axis]; })) {
       throw new Error('An anchor must have a non-zero length.');
@@ -209,7 +212,8 @@ App.Anchors = (function () {
       head: head, tail: tail.map(round),
       // TRUSS_PRESTRESS_PK2, a stress in the project's units: none until it is typed.
       prestress: 0,
-      // A free tail is a node of the soil mesh; a fixed one is held in place.
+      // A free end is attached to the mesh; a fixed one is held in place.
+      head_end: headAt,
       tail_end: end,
       active: true
     };
@@ -219,48 +223,42 @@ App.Anchors = (function () {
      grid looks like a bug, and the server matches the pile to 1e-6 m. */
   function round(value) { return Math.round(value * 1e6) / 1e6; }
 
-  /* The coordinate-first path: raking back and down from the pile at 35 degrees,
-     the usual ground anchor, which the user then edits. With no structure the head
-     is 2 m below the top of the soil in the middle of the domain. */
+  /* A new anchor: 8 m back and 6 m down from its head, 10 m long at about 37 degrees
+     (core/model/drafts.py `ANCHOR_RUN`, `ANCHOR_DROP`). */
+  var ANCHOR_RUN = 8, ANCHOR_DROP = 6;
+
+  /* The tail of a new anchor from `head` (core/model/drafts.py `_raked`): back and
+     down into the longer side of the domain -- away from the pit, which is the shorter
+     side about a wall -- on whole metres, kept inside it. */
+  function raked(d, head) {
+    var into = (d.x1 - head[0]) >= (head[0] - d.x0) ? 1 : -1;
+    var tail = head.slice();
+    tail[0] = Math.max(d.x0, Math.min(d.x1, Math.round(head[0] + into * ANCHOR_RUN)));
+    tail[1] = Math.max(d.y_bottom, Math.min(d.y_top, Math.round(head[1] - ANCHOR_DROP)));
+    return tail;
+  }
+
+  /* The coordinate-first path: raking back and down from the pile, the usual ground
+     anchor, which the user then edits. With no structure the head is 2 m below the
+     top of the soil in the middle of the domain. */
   function draft(project) {
     if (!available(project)) throw new Error(unavailableMessage(project));
     var d = project.domain;
-    var length = 10, radians = 35 * Math.PI / 180;
     var pile = livePiles(project)[0];
+    var head;
     if (!pile) {
-      var middle = [(d.x0 + d.x1) / 2, Math.max(d.y_bottom, d.y_top - 2)];
-      if (spatial(project)) middle.push((d.z0 + d.z1) / 2);
-      var toward = (d.x1 - middle[0]) >= (middle[0] - d.x0) ? 1 : -1;
-      var far = middle.slice();
-      far[0] = Math.max(d.x0, Math.min(d.x1, middle[0] + toward * length * Math.cos(radians)));
-      far[1] = Math.max(d.y_bottom, Math.min(d.y_top, middle[1] - length * Math.sin(radians)));
-      return draftFromPoints(project, [middle, far]);
-    }
-    if (!spatial(project)) {
+      head = [(d.x0 + d.x1) / 2, Math.max(d.y_bottom, d.y_top - 2)];
+      if (spatial(project)) head.push((d.z0 + d.z1) / 2);
+    } else if (!spatial(project)) {
       var top = pile.points[0], toe = pile.points[pile.points.length - 1];
-      var head = [top[0], top[1] + (toe[1] - top[1]) * 0.25];
-      // Rake into the retained side: away from the pit, which is the shorter side of
-      // the domain about the wall.
-      var into = (d.x1 - head[0]) >= (head[0] - d.x0) ? 1 : -1;
-      var tail = [head[0] + into * length * Math.cos(radians),
-                  head[1] - length * Math.sin(radians)];
-      tail[0] = Math.max(d.x0, Math.min(d.x1, tail[0]));
-      tail[1] = Math.max(d.y_bottom, Math.min(d.y_top, tail[1]));
-      return draftFromPoints(project, [[head[0], head[1]], [tail[0], tail[1]]]);
+      head = [top[0], top[1] + (toe[1] - top[1]) * 0.25];
+    } else {
+      // In space the head sits a quarter of the way down the structure, at the middle
+      // of a wall's run or of a member's length -- the same ground anchor, one
+      // dimension up.
+      head = pile.kind === 'panel' ? midOfPanel(pile) : midOfMember(pile);
     }
-
-    // In space the head sits a quarter of the way down the structure, at the middle
-    // of a wall's run or of a member's length, and the tie rakes back and down from
-    // there -- the same ground anchor, one dimension up.
-    var spot = pile.kind === 'panel'
-      ? midOfPanel(pile)
-      : midOfMember(pile);
-    var away = (d.x1 - spot[0]) >= (spot[0] - d.x0) ? 1 : -1;
-    var end = [spot[0] + away * length * Math.cos(radians),
-               spot[1] - length * Math.sin(radians), spot[2]];
-    end[0] = Math.max(d.x0, Math.min(d.x1, end[0]));
-    end[1] = Math.max(d.y_bottom, Math.min(d.y_top, end[1]));
-    return draftFromPoints(project, [spot, end]);
+    return draftFromPoints(project, [head, raked(d, head)]);
   }
 
   /* A quarter of the way down the wall, halfway along its footprint. */
@@ -305,32 +303,39 @@ App.Anchors = (function () {
     if (!insideDomain(target, anchor.head) || !insideDomain(target, anchor.tail)) {
       return 'The anchor must stay inside the model domain.';
     }
-    // A head on no structure is a node of the soil mesh (headProblem).
-    if (!onStructure(target, anchor) && anchor.head[1] > extent(target).y_top) {
-      return 'An anchor head on no structure must be in the soil. Move the head '
-        + 'down, or onto a structure.';
+    var headEnd = anchor.head_end === undefined ? 'free' : anchor.head_end;
+    if (ANCHOR_ENDS.indexOf(headEnd) < 0) return 'The head end is free or fixed.';
+    // A free head on no structure is a node of the soil mesh (headProblem).
+    if (headEnd === 'free' && !onStructure(target, anchor)
+        && anchor.head[1] > extent(target).y_top) {
+      return HEAD_IN_AIR;
     }
     return tailEndProblem(target, anchor.tail_end, anchor.tail);
   }
 
+  var HEAD_IN_AIR = 'An anchor head on no structure must be in the soil. Move the head '
+    + 'down, onto a structure, or make the head end fixed.';
+
   /* Why an anchor cannot start at `head`, or null (core/model/drafts.py
-     `head_problem`). A head on no structure is a node of the soil mesh, so it has to
-     be where soil can be, as a free tail does. */
-  function headProblem(project, head) {
-    if (!project) return null;
+     `head_problem`). A free head on no structure is a node of the soil mesh, so it has
+     to be where soil can be, as a free tail does. A fixed head is held in place and may
+     be anywhere in the model. */
+  function headProblem(project, head, headEnd) {
+    if (headEnd !== undefined && ANCHOR_ENDS.indexOf(headEnd) < 0) {
+      return 'The head end is free or fixed.';
+    }
+    if (!project || headEnd === 'fixed') return null;
     var on = nearestOnPile(project, head);
     if (on && on.distance <= 1e-6) return null;
-    if (head[1] > extent(project).y_top) {
-      return 'An anchor head on no structure must be in the soil. Move the head '
-        + 'down, or onto a structure.';
-    }
+    if (head[1] > extent(project).y_top) return HEAD_IN_AIR;
     return null;
   }
 
-  /* What an anchor's tail is joined to (core/model/schemas.py `TailEnd`). A new anchor
-     is free; a record that does not say is fixed, as every anchor was before. */
-  var TAIL_ENDS = ['free', 'fixed'];
-  var TAIL_END_LABELS = { free: 'Free (joined to the soil)', fixed: 'Fixed (held in place)' };
+  /* What an anchor end is joined to (core/model/schemas.py `AnchorEnd`). A new anchor
+     has both ends free. A record that does not say has a free head and a fixed tail,
+     as every anchor had before the choice existed. */
+  var ANCHOR_ENDS = ['free', 'fixed'];
+  var END_LABELS = { free: 'Free (attached to the mesh)', fixed: 'Fixed (held in place)' };
 
   /* Why `tailEnd` cannot be used with this tail, or null (core/model/drafts.py
      `tail_end_problem`). A free tail is a node of the soil mesh, so it has to be where
@@ -339,7 +344,7 @@ App.Anchors = (function () {
      the export says so if there is not. */
   function tailEndProblem(project, tailEnd, tail) {
     if (tailEnd === undefined) return null;
-    if (TAIL_ENDS.indexOf(tailEnd) < 0) return 'The tail end is free or fixed.';
+    if (ANCHOR_ENDS.indexOf(tailEnd) < 0) return 'The tail end is free or fixed.';
     if (tailEnd === 'free' && project && tail[1] > extent(project).y_top) {
       return 'A free anchor tail must be in the soil. Move the tail down, '
         + 'or make the tail end fixed.';
@@ -473,21 +478,24 @@ App.Anchors = (function () {
   }
 
   /* A typed head a little off the structure is moved onto it, as a picked one is
-     (draftFromPoints); further away it is left where it is, for validate to refuse. */
-  function snapHead(project, head) {
+     (draftFromPoints); further away it is left where it is, for validate to refuse. A
+     fixed head is held in place, so it is never moved. */
+  function snapHead(project, head, headEnd) {
+    if (headEnd === 'fixed') return head;
     var snapped = nearestOnPile(project, head);
     if (!snapped || snapped.distance > SNAP_DISTANCE) return head;
     return snapped.point.map(round);
   }
 
   /* The window the Create anchor tool and the Edit anchor… button open, as the sheet
-     pile's does (beams.js `open`): a name, both ends, what the tail is joined to, the
+     pile's does (beams.js `open`): a name, both ends and what each is joined to, the
      prestress, whether it is active, and the numbers of its tendon. Editing the tendon
      here edits the shared tendon, as the Selection explorer's own fields do. */
   function open(source) {
     if (!App.Dialogs || !App.Dialogs.open) return;
     var anchor = copy(source);
-    if (TAIL_ENDS.indexOf(anchor.tail_end) < 0) anchor.tail_end = 'fixed';
+    if (ANCHOR_ENDS.indexOf(anchor.head_end) < 0) anchor.head_end = 'free';
+    if (ANCHOR_ENDS.indexOf(anchor.tail_end) < 0) anchor.tail_end = 'fixed';
     var editing = collection().some(function (item) { return item.id === anchor.id; });
     var library = sectionsFor(App.PROJECT, anchor);
     var section = copy(library.filter(function (s) { return s.id === anchor.section; })[0]
@@ -501,8 +509,9 @@ App.Anchors = (function () {
       ['head', 'tail'].forEach(function (end) {
         anchor[end] = ends[end].map(function (control) { return Number(control.value); });
       });
-      anchor.head = snapHead(App.PROJECT, anchor.head);
+      anchor.head_end = controls.head_end.value;
       anchor.tail_end = controls.tail_end.value;
+      anchor.head = snapHead(App.PROJECT, anchor.head, anchor.head_end);
       anchor.prestress = Number(controls.prestress.value);
       anchor.active = controls.active.checked;
       section.variables = section.variables || {};
@@ -522,7 +531,7 @@ App.Anchors = (function () {
 
     shell = App.Dialogs.open({
       title: (editing ? 'Edit ' : 'Create ') + 'anchor',
-      width: 560, height: anchor.kind === 'anchor3d' ? 840 : 790,
+      width: 560, height: anchor.kind === 'anchor3d' ? 900 : 850,
       buttons: [
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
         { label: 'Cancel' }
@@ -540,23 +549,27 @@ App.Anchors = (function () {
         controls.name = el('input.mesh-setting-control', { type: 'text', value: anchor.name });
         row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
 
-        // The head is moved onto the nearest structure on Save (snapHead).
+        // Each end's coordinates, then what that end is joined to. A free head is
+        // moved onto the nearest structure on Save (snapHead).
+        var endHelp = {
+          head: 'Free: a node of the structure within 1 m, or else of the soil. '
+            + 'Fixed: held in place.',
+          tail: 'Free: a node of the soil. Fixed: held in place.'
+        };
         [['head', 'Head'], ['tail', 'Tail']].forEach(function (end) {
           anchor[end[0]].forEach(function (value, axis) {
             var control = input(value);
             ends[end[0]].push(control);
             row(end[1] + ' ' + axes[axis], control, 'World ' + axes[axis] + ' [m].');
           });
+          var key = end[0] + '_end';
+          controls[key] = el('select.mesh-setting-control');
+          ANCHOR_ENDS.forEach(function (value) {
+            controls[key].appendChild(el('option', { value: value, text: END_LABELS[value] }));
+          });
+          controls[key].value = anchor[key];
+          row(end[1] + ' end', controls[key], endHelp[end[0]]);
         });
-
-        controls.tail_end = el('select.mesh-setting-control');
-        TAIL_ENDS.forEach(function (value) {
-          controls.tail_end.appendChild(el('option', { value: value,
-                                                       text: TAIL_END_LABELS[value] }));
-        });
-        controls.tail_end.value = anchor.tail_end;
-        row('Tail end', controls.tail_end,
-            'Free: a soil node. Fixed: held in place.');
 
         controls.prestress = input(anchor.prestress);
         row('TRUSS_PRESTRESS_PK2', controls.prestress,
@@ -613,6 +626,7 @@ App.Anchors = (function () {
     validate: validate, validateSection: validateSection,
     save: save, remove: remove, start: start, edit: edit, open: open,
     isAnchorKey: isAnchorKey, length: length, inclination: inclination,
-    defaultSection: defaultSection, TAIL_ENDS: TAIL_ENDS, TAIL_END_LABELS: TAIL_END_LABELS
+    defaultSection: defaultSection, ANCHOR_ENDS: ANCHOR_ENDS, END_LABELS: END_LABELS
+
   };
 })();

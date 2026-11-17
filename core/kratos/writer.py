@@ -365,8 +365,9 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     parts.extend(condition_parts)
     water_pressures = _water_pressures(project, resolved, warnings)
     parts.extend(load_parts)
-    supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
-                for key, tag in anchor_supports.items() if tag in node_id]
+    supports: list[tuple[str, list[int], list[int], list[int]]] = [
+        (f"{names[key]}_Support", [node_id[tag] for tag in tags if tag in node_id], [], [])
+        for key, tags in anchor_supports.items() if any(tag in node_id for tag in tags)]
     parts.extend(supports)
     # A node-only part per side of every tie `_split_ties` found, so the process below
     # can name them; see `_interface_elements`.
@@ -436,9 +437,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         )
 
     load_mask = [True, True, dim == 3]
-    # The far end of an anchor with a fixed tail is pinned: the grouted body is idealised
-    # as a fixed point, so the tie reacts against a restraint rather than against the
-    # soil. A free tail is a soil node and has no support (`_anchor_ties`).
+    # A fixed end of an anchor is pinned: the grouted body is idealised as a fixed
+    # point, so the tie reacts against a restraint rather than against the soil. A free
+    # end is a node of the mesh and has no support (`_anchor_ties`).
+
     anchor_fixities = [(name, list(load_mask), "") for name, _, _, _ in supports]
     # A sheet pile does not exist before it is installed: it and whichever interface(s)
     # tie it to the soil are staged together, deactivated in the deck's initial state and
@@ -1278,14 +1280,15 @@ def _interface_of(project: Project, key: str):
 def _anchor_ties(project: Project, dim: int,
                  world: dict[int, tuple[float, float, float]],
                  soil: set[int] | None = None
-                 ) -> tuple[list[tuple[str, str, list[list[int]]]], dict[str, int]]:
-    """One two-node truss per active anchor, plus the tail node of each one whose tail
-    is fixed, which its own node group holds.
+                 ) -> tuple[list[tuple[str, str, list[list[int]]]], dict[str, list[int]]]:
+    """One two-node truss per active anchor, plus the fixed end nodes of each one with a
+    fixed head or tail, which its own node group holds.
 
     Built from located nodes rather than harvested from a meshed curve, the same way a
     point load's condition is. That is what makes the result match the reference deck
     exactly: one linear element whatever the mesh order, with the head node the beam
-    already owns. A fixed tail node is bonded to nothing; a free one, and a head on no
+    already owns. A fixed end node is bonded to nothing, so it is looked for among the
+    nodes of neither the soil nor a structure; a free tail, and a free head on no
     structure, is the node of the soil mesh `soil` (the soil's node tags) that
     `solid_model._embed_beams` put there.
 
@@ -1309,18 +1312,23 @@ def _anchor_ties(project: Project, dim: int,
     structural |= {tag for _, _, rows in _harvest(_panel_bodies(project, dim), 2, SHELLS,
                                                   model_dim=dim)
                    for row in rows for tag in row}
-    blocks, supports = [], {}
+    # A fixed end is its own node, which neither the soil nor a structure owns.
+    loose = set(world) - structural - (soil or set())
+    blocks: list[tuple[str, str, list[list[int]]]] = []
+    supports: dict[str, list[int]] = {}
     for anchor in anchors:
         if not anchor.active:
             continue
         free = anchor.tail_end == "free"
-        # A head on no structure is a node of the soil mesh, as a free tail is.
+        free_head = anchor.head_end == "free"
+        # A free head on no structure is a node of the soil mesh, as a free tail is.
         on_structure = project.anchor_on_structure(anchor)
         head = _node_at(_placed(anchor.head, project, dim), project, world,
+                        loose if not free_head else
                         structural if on_structure else (soil or set()))
         tail = _node_at(_placed(anchor.tail, project, dim), project, world,
-                        (soil or set()) if free else None)
-        if head is None and not on_structure:
+                        (soil or set()) if free else loose)
+        if head is None and free_head and not on_structure:
             raise ExportError(
                 f"anchor {anchor.name!r} has a head that is on no structure and not in "
                 "the soil, so it is joined to nothing. Move the head into the soil or "
@@ -1338,8 +1346,9 @@ def _anchor_ties(project: Project, dim: int,
                 f"{'head' if head is None else 'tail'}; re-mesh the model."
             )
         blocks.append((anchor.id, TRUSSES[dim], [[head, tail]]))
-        if not free:
-            supports[anchor.id] = tail
+        held = ([head] if not free_head else []) + ([tail] if not free else [])
+        if held:
+            supports[anchor.id] = held
     return blocks, supports
 
 

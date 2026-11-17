@@ -627,7 +627,7 @@ ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "spacing": 2.5,
                       "YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006, "DENSITY": 7850.0}}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
           "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0,
-          "tail_end": "free", "active": True}
+          "head_end": "free", "tail_end": "free", "active": True}
 
 
 def test_patch_structures_creates_an_anchor_on_a_sheet_pile(client):

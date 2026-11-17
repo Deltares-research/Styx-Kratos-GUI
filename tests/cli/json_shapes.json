@@ -3,6 +3,7 @@
   {
    "active": "boolean",
    "head": "array",
+   "head_end": "string",
    "id": "string",
    "kind": "string",
    "name": "string",

@@ -585,20 +585,20 @@ class AnchorSection(KratosPropertySet):
     """Left None for a tendon, which takes no compression at all."""
 
 
-TailEnd = Literal["free", "fixed"]
-"""What an anchor's tail is joined to: the soil mesh ("free"), or nothing, held in
-place ("fixed")."""
+AnchorEnd = Literal["free", "fixed"]
+"""What an anchor end is joined to: the mesh ("free") -- for a head the structure it is
+on, or else the soil; for a tail the soil -- or nothing, held in place ("fixed")."""
 
 
 class Anchor(Base):
     """One anchor: a two-node tie from its head to its tail.
 
-    A single `LinearTrussElement2D2N`. A head on a sheet pile shares the beam's node; a
-    head on no pile is a node of the soil mesh (`Project.anchor_on_structure`). What the
-    tail is joined to is `tail_end`: a free tail is a node of the soil mesh, so the tie
-    pulls on the soil there; a fixed tail belongs to no other element and is held by
-    its own node group, the formulation Kratos' reference decks write, which idealises
-    the grouted body as a fixed point.
+    A single `LinearTrussElement2D2N`. What each end is joined to is `head_end` and
+    `tail_end`. A free head on a sheet pile shares the beam's node; a free head on no
+    pile is a node of the soil mesh (`Project.anchor_on_structure`). A free tail is a
+    node of the soil mesh, so the tie pulls on the soil there. A fixed end belongs to no
+    other element and is held by its own node group, the formulation Kratos' reference
+    decks write for the tail, which idealises the grouted body as a fixed point.
 
     Dimension-native `(x, y)` like every other 2D record.
     """
@@ -613,7 +613,12 @@ class Anchor(Base):
     positive in tension (smeared by the tendon's spacing in 2D, like its area). Per
     anchor rather than per section: two anchors of the same tendon are routinely
     stressed differently, and each anchor is its own property set in the deck."""
-    tail_end: TailEnd = "fixed"
+    head_end: AnchorEnd = "free"
+    """"free": the head is a node of the structure it is on, or of the soil mesh.
+    "fixed": the head is in no element and held in place, and is not snapped onto a
+    structure. A record that does not say is free, which is what every head was before
+    the choice existed."""
+    tail_end: AnchorEnd = "fixed"
     """"free": the tail is a node of the soil mesh. "fixed": the tail is in no element
     and held in place. A new anchor is free (`core.model.drafts.anchor`,
     `App.Anchors.draft`); a record that does not say is fixed, which is what every
@@ -996,9 +1001,9 @@ class Member(Base):
 class SpaceAnchor(Base):
     """One 3D anchor: a two-node tie in space, from its head to its tail.
 
-    The same formulation as the 2D `Anchor` -- head shared with the wall or member it is
-    on, or a node of the soil mesh; tail a node of the soil mesh or held by its own node
-    group (`tail_end`) -- one dimension up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
+    The same formulation as the 2D `Anchor` -- a free head shared with the wall or member
+    it is on, or a node of the soil mesh; a free tail a node of the soil mesh; a fixed end
+    held by its own node group (`head_end`, `tail_end`) -- one dimension up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
     smear and means nothing here, where every anchor is a discrete member.
     """
     id: Ident
@@ -1008,7 +1013,9 @@ class SpaceAnchor(Base):
     head: tuple[float, float, float]
     tail: tuple[float, float, float]
     prestress: float = 0.0
-    tail_end: TailEnd = "fixed"
+    head_end: AnchorEnd = "free"
+    """As `Anchor.head_end`."""
+    tail_end: AnchorEnd = "fixed"
     """As `Anchor.tail_end`."""
     active: bool = True
 
@@ -2653,7 +2660,10 @@ class Project(Base):
     def anchor_on_structure(self, anchor: Anchor | SpaceAnchor) -> bool:
         """Whether the head of `anchor` is on a live structure, whose node it then
         shares: a sheet pile for a 2D anchor, a wall or a member for a 3D one. A head
-        on none is a node of the soil mesh instead -- an anchor needs no structure."""
+        on none is a node of the soil mesh instead -- an anchor needs no structure. A
+        fixed head shares no node, so it is on no structure wherever it is."""
+        if anchor.head_end == "fixed":
+            return False
         if isinstance(anchor, SpaceAnchor):
             return (any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
                         for panel in self.panels if panel.active)
@@ -2666,9 +2676,10 @@ class Project(Base):
     def anchor_soil_ends(self, anchor: Anchor | SpaceAnchor
                          ) -> list[tuple[str, tuple[float, ...]]]:
         """The ends of `anchor` that are nodes of the soil mesh, as ("head" | "tail",
-        point): the head when it is on no structure, the tail when it is free."""
+        point): a free head when it is on no structure, the tail when it is free."""
         ends: list[tuple[str, tuple[float, ...]]] = []
-        if not self.anchor_on_structure(anchor):
+        if anchor.head_end == "free" and not self.anchor_on_structure(anchor):
+
             ends.append(("head", anchor.head))
         if anchor.tail_end == "free":
             ends.append(("tail", anchor.tail))

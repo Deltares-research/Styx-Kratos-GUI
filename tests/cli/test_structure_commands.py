@@ -435,6 +435,21 @@ def test_a_new_anchor_has_a_free_tail_and_tail_end_makes_it_fixed(cli, pit):
     assert "tail fixed" in cli("anchor", pit, "list").out
 
 
+def test_head_end_fixed_holds_the_head_where_it_is_typed(cli, pit):
+    assert cli("anchor", pit, "add", "tie", "--head", "6.4", "-2", "--tail", "20", "-8",
+               "--head-end", "fixed").code == 0
+    anchor = session.load(pit).anchors[-1]
+    assert (anchor.head, anchor.head_end) == ((6.4, -2), "fixed")
+    assert "head fixed, tail free" in cli("anchor", pit, "list").out
+
+    ran = cli("anchor", pit, "set", "tie", "--head-end", "free", "--head", "6.4", "-2")
+
+    assert ran.code == 0, ran.err
+    anchor = session.load(pit).anchors[-1]
+    assert (anchor.head, anchor.head_end) == ((6, -2), "free"), "a free head is snapped"
+
+
+
 def test_a_free_tail_in_the_air_is_refused_without_saving(cli, pit):
     before = pit.read_bytes()
 

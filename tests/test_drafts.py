@@ -8,7 +8,6 @@ and `tests/test_draft_parity.py` holds the two to one document.
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -296,15 +295,15 @@ def test_a_new_member_stands_vertical_in_the_middle_of_the_site():
 
 
 def test_a_new_anchor_rakes_back_from_a_quarter_down_the_pile():
-    """anchors.js `draft`: 10 m at 35 degrees, into the longer side of the domain."""
+    """anchors.js `draft`: 8 m back and 6 m down, into the longer side of the domain, with
+    the tail on whole metres."""
     project = excavation_project(staged=False)
 
     anchor = drafts.anchor(project)
 
     assert isinstance(anchor, Anchor)
     assert anchor.head == (6.0, -3.0)
-    assert anchor.tail == pytest.approx((6 + 10 * math.cos(math.radians(35)),
-                                         -3 - 10 * math.sin(math.radians(35))), abs=1e-6)
+    assert anchor.tail == (14.0, -9.0)
     assert (anchor.id, anchor.section) == ("anchor_1", "strand")
 
 
@@ -319,8 +318,36 @@ def test_an_anchor_head_near_a_pile_is_snapped_onto_it():
 def test_an_anchor_head_given_alone_takes_the_usual_rake():
     anchor = drafts.anchor(excavation_project(staged=False), head=(6.0, -2.0))
 
-    assert anchor.tail == pytest.approx((6 + 10 * math.cos(math.radians(35)),
-                                         -2 - 10 * math.sin(math.radians(35))), abs=1e-6)
+    assert anchor.tail == (14.0, -8.0)
+
+
+def test_a_new_anchor_tail_is_on_whole_metres_below_a_head_that_is_not():
+    anchor = drafts.anchor(excavation_project(staged=False), head=(6.0, -2.75))
+
+    assert anchor.tail == (14.0, -9.0)
+
+
+def test_a_fixed_anchor_head_is_not_snapped_and_may_be_in_the_air():
+    project = excavation_project(staged=False)
+    top = project.extent().y_top
+
+    near = drafts.anchor(project, head=(6.4, -2.0), tail=(20.0, -8.0), head_end="fixed")
+    high = drafts.anchor(project, head=(20.0, top + 1.0), tail=(25.0, -8.0),
+                         head_end="fixed")
+
+    assert (near.head, near.head_end) == ((6.4, -2.0), "fixed")
+    assert not project.anchor_on_structure(near)
+    assert high.head == (20.0, top + 1.0)
+    with pytest.raises(drafts.DraftError, match="head end is free or fixed"):
+        drafts.anchor(project, head_end="loose")
+
+
+def test_an_anchor_saved_without_a_head_end_keeps_its_free_head():
+    old = Anchor.model_validate({"id": "a", "name": "A", "section": "s",
+                                 "head": [6.0, -2.0], "tail": [14.0, -8.0]})
+
+    assert (old.head_end, old.tail_end) == ("free", "fixed")
+
 
 
 def test_an_anchor_head_far_from_any_pile_stays_in_the_soil():
