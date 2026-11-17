@@ -434,3 +434,63 @@ def test_check_says_a_seepage_face_needs_a_flow_calculation(cli, dry):
 
     ran = cli("check", dry)
     assert "seepage condition 'Seepage face 1' is left out" in ran.err + ran.out
+
+
+# ── boundary soil-water ─────────────────────────────────────────────────────
+
+@pytest.fixture
+def lines(cli, dry):
+    """The dry section with a phreatic line on the whole soil and an aquifer's head drawn
+    on a line, sloping."""
+    assert cli("boundary", dry, "add", "phreatic", "--domain", "--water-pressure",
+               "Phreatic_Multi_Line", "--phreatic-line", "0", "-1", "25", "-1").code == 0
+    ran = cli("boundary", dry, "add", "head", "--line", "0", "1", "25", "3",
+              "--water-pressure", "Head_Line", "--phreatic-line", "0", "1", "25", "3")
+    assert ran.code == 0, ran.err
+    return dry
+
+
+def test_each_soil_takes_the_phreatic_line_until_it_is_given_another(cli, lines):
+    ran = cli("boundary", lines, "soil-water")
+    assert ran.code == 0, ran.err
+    assert "soil_L1  the phreatic line phreatic" in ran.out
+
+    ran = cli("boundary", lines, "soil-water", "soil_L2", "head")
+    assert ran.code == 0, ran.err
+    assert "soil_L2  the head line head (head)" in ran.out
+    ran = cli("boundary", lines, "soil-water", "soil_L1", "interpolate")
+    assert ran.code == 0, ran.err
+    assert session.load(lines).soil_water == {"soil_L2": "head", "soil_L1": "interpolate"}
+
+    assert cli("boundary", lines, "soil-water", "soil_L1", "default").code == 0
+    assert session.load(lines).soil_water == {"soil_L2": "head"}
+
+
+@pytest.mark.parametrize("argv, said", [
+    (["soil_L9", "head"], "not a soil of this project"),
+    (["soil_L1", "nowhere"], "not a head line"),
+    (["soil_L1", "phreatic"], "not a head line"),
+    (["soil_L1"], "give the soil's water"),
+])
+def test_a_soil_s_water_must_name_a_soil_and_a_line(cli, lines, argv, said):
+    ran = cli("boundary", lines, "soil-water", *argv)
+    assert ran.code == 1
+    assert said in ran.err
+
+
+def test_a_head_line_needs_its_points(cli, lines):
+    ran = cli("boundary", lines, "add", "--domain", "--water-pressure", "Head_Line")
+    assert ran.code == 1
+    assert "a Head_Line needs its points" in ran.err
+
+
+def test_a_head_line_is_listed_as_one(cli, lines):
+    ran = cli("boundary", lines, "list")
+    assert "head line (0, 1) -> (25, 3), fixed" in ran.out
+
+
+def test_a_second_phreatic_line_is_refused(cli, lines):
+    ran = cli("boundary", lines, "add", "--face", "left", "--water-pressure",
+              "Phreatic_Multi_Line", "--phreatic-line", "0", "-2", "25", "-2")
+    assert ran.code == 1
+    assert "one phreatic line" in ran.err
