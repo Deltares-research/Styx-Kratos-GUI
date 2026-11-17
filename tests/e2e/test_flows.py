@@ -236,8 +236,10 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
                                ".indexOf('fixed_bottom') >= 0", timeout=LONG)
 
     app_page.evaluate("App.runAction({action: 'boundaryConditions'})")
-    rows = app_page.locator(".boundary-conditions table.bc-grid tr")
-    soil = rows.last
+    # The window's Soil water grid is a bc-grid too: take the Whole soil row of the
+    # conditions grid by its name, not as the last row of every grid.
+    soil = app_page.locator(".boundary-conditions table.bc-grid:not(.bc-soil-water) tr").filter(
+        has=app_page.locator("td:first-child", has_text="Whole soil"))
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
