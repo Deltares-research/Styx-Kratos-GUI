@@ -284,7 +284,11 @@ soil_L_bot  Soil_Bottom  ·  Sand
 
 #### Step 8. The strut
 
-A strut is an anchor whose free end is a pinned support:
+In the finite element model, the strut is a truss element: a straight bar between two
+points that carries only an axial force, in tension and in compression. In engineering, a
+strut takes compression and an anchor takes tension, but both are the same truss element.
+`kratos-cli` makes this element with the `anchor` commands, so the strut is an anchor whose
+tail is a pinned support:
 
 ```text
 crow.json> section add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0

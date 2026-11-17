@@ -57,8 +57,7 @@ How the GUI takes the values that you type:
   click that button. **Cancel** leaves the model as it was.
 - In the Soil material window and in the Selection explorer, a value is used when you
   leave the field (press Tab) or press Enter.
-- The decimal sign is a point, for example `0.5`, whatever the region settings of your
-  computer are. In a number field, a comma that you type becomes a point.
+- The decimal sign is a point (`.`).
 - The Styx server keeps the project in its memory. Save it at the end (step 15), or at any
   time with **File** > **Save**.
 
@@ -99,13 +98,13 @@ The model has two Mohr-Coulomb soils:
 | **K0, normally consolidated** | `0.62` | `0.46` |
 | **Rinter** | `0.48021693505171` | `0.571318827227732` |
 
-- Kratos calculates the unit weight of the soil from the density of the solid ρs, the
-  density of the water ρw and the porosity n:
+- Kratos calculates the unit weight of the soil from the density of the solid
+  ρ<sub>s</sub>, the density of the water ρ<sub>w</sub> and the porosity n:
 
-  - dry: γdry = (1 − n) · ρs · g
-  - saturated: γsat = ((1 − n) · ρs + n · ρw) · g
+  - Dry unit weight: γ<sub>dry</sub> = (1 − n) · ρ<sub>s</sub> · g
+  - Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · ρ<sub>w</sub>) · g
 
-  With n = 0, the two are the same: γ = ρs · g. The densities in the table give
+  With n = 0, the two are the same: γ = ρ<sub>s</sub> · g. The densities in the table give
   γ = 18 kN/m³ for the clay and 20 kN/m³ for the sand, the unit weights of the CROW case.
 - The **Mechanical only** drainage type solves the displacements with an imposed pore
   pressure, which you give in step 4. It does not calculate groundwater flow.
@@ -291,8 +290,15 @@ After you rename all six parts, the Model explorer shows the new names:
 
 ## 8. Add the strut
 
-The strut is an anchor from the wall to a fixed point 1 m into the pit. One strut per
-metre of wall: E = 210 GPa, A = 4.76 × 10⁻⁵ m².
+The strut holds the wall from the pit side, at y = −1.5 m. It goes from the wall to a fixed
+point 1 m into the pit. There is one strut per metre of wall, with E = 210 GPa and
+A = 4.76 × 10⁻⁵ m².
+
+In the finite element model, the strut is a truss element: a straight bar between two
+points that carries only an axial force, in tension and in compression. In engineering, a
+strut takes compression and an anchor takes tension, but both are the same truss element.
+Styx makes this element with the **Create anchor** tool, so you make the strut as an anchor
+and then rename it.
 
 1. On the tool rail, click **Create anchor…**. Styx adds an anchor on the wall, named
    `Anchor 1`, and selects it.
