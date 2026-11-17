@@ -297,14 +297,17 @@ anchor.
    | **DENSITY** (kg/m³) | `0` |
    | **Spacing** (m) | `1` |
 
-3. In **Tail end**, select **Fixed (held in place)**. The tail of a new anchor is
-   **Free**: it is a node of the soil mesh. The tail of this strut is in the pit, where
-   the soil is removed, so it must be a fixed support.
+3. Leave **Head end** at **Free (attached to the mesh)**. The head is on the wall, so it
+   becomes a node of the wall.
+4. In **Tail end**, select **Fixed (held in place)**. The tail of a new anchor is
+   **Free (attached to the mesh)**: it is a node of the soil mesh. The tail of this strut
+   is in the pit, where the soil is removed, so it must be a fixed support.
 
    ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
 
-4. Click **Save**. Styx adds the strut and selects it.
-5. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
+5. Click **Save**. Styx adds the strut and selects it.
+6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
+
    Leave **Compression limit** empty. The strut then has no force limits.
 
    ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)

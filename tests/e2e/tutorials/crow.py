@@ -276,7 +276,9 @@ def strut(tour: Tour) -> None:
              *STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing)]
     for label, value in typed:
         field(page, label).fill(value if isinstance(value, str) else f"{value:g}")
-    # The strut's far end is a fixed support, not a node of the soil.
+    # The strut's head is a node of the wall; its far end is a fixed support, not a node
+    # of the soil.
+    assert field(page, "Head end").input_value() == STRUT.head_end == "free"
     field(page, "Tail end").select_option(STRUT.tail_end)
     window_fits(tour)
     tour.picture(mark=rail_tool("createAnchor"))
@@ -293,7 +295,9 @@ def one_strut(tour: Tour) -> None:
     (anchor,) = got["anchors"]
     assert anchor["name"] == STRUT.name
     assert tuple(anchor["head"]) == STRUT.head and tuple(anchor["tail"]) == STRUT.tail
+    assert anchor["head_end"] == STRUT.head_end == "free"
     assert anchor["tail_end"] == STRUT.tail_end == "fixed"
+
     (section,) = got["anchor_sections"]
     assert section["variables"] == STRUT_SECTION.variables
 
