@@ -541,7 +541,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   align-items: center;
 }
 .picture-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
-.picture-row input[type="number"] { width: 70px; }
+.picture-row input[data-number] { width: 70px; }
 .picture-column { display: flex; flex-direction: column; gap: 4px; }
 .picture-tick { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .picture-note { margin-top: 14px; color: var(--c-ink-soft); line-height: 1.4; }
