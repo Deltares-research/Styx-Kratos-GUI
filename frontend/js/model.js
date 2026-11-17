@@ -1735,10 +1735,13 @@ App.Model = (function () {
       ['Name', body.name, '', true],
       ['Rename part', '', '', false, { kind: 'button', text: 'Rename…',
         run: function () {
-          var name = window.prompt('New name', body.name);
-          if (name && name.trim() && App.Lines) {
-            App.Lines.saveBody(key, { name: name.trim() }).catch(function () {});
-          }
+          return App.NameDialog.ask({ title: 'Rename part', value: body.name,
+                                      help: 'Shown in the Model explorer.' })
+            .then(function (name) {
+              if (name !== null && App.Lines) {
+                return App.Lines.saveBody(key, { name: name }).catch(function () {});
+              }
+            });
         } }],
       [owner.noun || 'Layer', owner.name, '', true],
       // The explorer shows only the parts of a cut layer or surface, so the whole of

@@ -83,11 +83,20 @@ def live_server(request, tmp_path_factory):
 
 @pytest.fixture
 def app_page(page, live_server):
-    """The app, loaded on a freshly reset project, with console errors collected."""
+    """The app, loaded on a freshly reset project, with console errors collected.
+
+    A browser prompt, alert or confirm box counts as an error too: every question the
+    GUI asks is an app window, which a screenshot of the page can show."""
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("console", lambda message: errors.append(message.text)
             if message.type == "error" else None)
+
+    def browser_box(dialog) -> None:
+        errors.append(f"a browser {dialog.type} box opened: {dialog.message}")
+        dialog.dismiss()
+
+    page.on("dialog", browser_box)
     page.request.post(live_server["url"] + "/api/project/reset")
     page.set_viewport_size({"width": 1600, "height": 1000})
     page.goto(live_server["url"] + "/")

@@ -133,7 +133,7 @@
     }
   });
 
-  test('onTreeContextMenu ignores a row that is not a custom part', function () {
+  test('onTreeContextMenu ignores a row that is no live object', function () {
     var saved = { project: App.PROJECT, menu: App.Menu };
     App.PROJECT = { custom_parts: [] };
     var openedMenu = false;
@@ -141,7 +141,7 @@
 
     var row = document.createElement('div');
     row.className = 'tree-row';
-    row.dataset.obj = 'soil_L1';
+    row.dataset.obj = 'soil_no_such_layer';
     var prevented = false;
     var event = {
       target: row,
@@ -235,8 +235,8 @@
     var saved = {
       project: App.PROJECT, layers: App.LAYERS, menu: App.Menu, viewport: App.Viewport,
       state: App.state, commit: App.commitSelectionEdit, select: App.selectObject,
-      deleteLayer: App.deleteLayerById, command: App.Command, prompt: window.prompt,
-      confirm: window.confirm
+      deleteLayer: App.deleteLayerById, command: App.Command, ask: App.NameDialog,
+      dialogs: App.Dialogs
     };
     var seen = { commits: [], selected: [], deleted: [], lines: [], asked: [] };
     App.LAYERS = [{ id: 'L1', name: 'Sand', mat: 'm1', top: 0, bottom: -5 }];
@@ -257,13 +257,24 @@
     App.Command = { ok: function (t) { seen.lines.push('ok:' + t); },
                     err: function (t) { seen.lines.push('err:' + t); },
                     note: function () {} };
-    window.confirm = function (text) { seen.asked.push(text); return true; };
+    // The app's own windows, never the browser's prompt or confirm: `answer` is what
+    // the next window is given, OK (true) or Cancel (false).
+    seen.answer = true;
+    App.Dialogs = Object.assign({}, saved.dialogs, { open: function (opts) {
+      var body = document.createElement('div');
+      opts.build(body, {});
+      seen.asked.push([opts.title, body.textContent]);
+      if (seen.answer) opts.buttons[0].onClick();
+      if (opts.onClose) opts.onClose();
+      return { close: function () {}, body: body, dialog: body };
+    } });
+    App.NameDialog = { ask: function () { throw new Error('give the test its own'); } };
     function restore() {
       App.PROJECT = saved.project; App.LAYERS = saved.layers; App.Menu = saved.menu;
       App.Viewport = saved.viewport; App.state = saved.state;
       App.commitSelectionEdit = saved.commit; App.selectObject = saved.select;
       App.deleteLayerById = saved.deleteLayer; App.Command = saved.command;
-      window.prompt = saved.prompt; window.confirm = saved.confirm;
+      App.NameDialog = saved.ask; App.Dialogs = saved.dialogs;
     }
     var result;
     try { result = run(seen); } catch (error) { restore(); throw error; }
@@ -299,10 +310,11 @@
 
   test('renaming the layer of a part saves the layer, and the part stays selected', function () {
     return withCutSoil(function (seen) {
-      window.prompt = function (message, current) {
-        T.eq(current, 'Sand');
-        return '  Dense sand ';
-      };
+      App.NameDialog = { ask: function (options) {
+        T.eq(options.title, 'Rename layer');
+        T.eq(options.value, 'Sand');
+        return Promise.resolve('Dense sand');
+      } };
       return App.LivePatches.renameBodyOwner('soil_L1__part2').then(function () {
         T.eq(App.LAYERS[0].name, 'Dense sand');
         T.eq(seen.commits, ['soil_L1'], 'saved as the layer, not as the part');
@@ -311,9 +323,22 @@
     });
   });
 
+  test('a closed Rename window renames nothing', function () {
+    return withCutSoil(function (seen) {
+      App.NameDialog = { ask: function () { return Promise.resolve(null); } };
+      return App.LivePatches.renameBodyOwner('soil_L1__part2').then(function () {
+        T.eq(App.LAYERS[0].name, 'Sand');
+        T.eq(seen.commits, []);
+      });
+    });
+  });
+
   test('renaming the soil surface of a part changes its label', function () {
     return withCutSoil(function (seen) {
-      window.prompt = function () { return 'Dike'; };
+      App.NameDialog = { ask: function (options) {
+        T.eq(options.title, 'Rename soil surface');
+        return Promise.resolve('Dike');
+      } };
       return App.LivePatches.renameBodyOwner('drawn_0__part1').then(function () {
         T.eq(App.PROJECT.custom_parts[0].label, 'Dike');
         T.eq(seen.commits, ['drawn_0']);
@@ -324,7 +349,8 @@
   test('deleting the layer of a part asks first, then removes the whole layer', function () {
     return withCutSoil(function (seen) {
       return Promise.resolve(App.LivePatches.deleteBodyOwner('soil_L1__part1')).then(function () {
-        T.eq(seen.asked, ['Delete the layer Sand with all its 2 parts?']);
+        T.eq(seen.asked, [['Delete layer',
+                           'Delete layerThis deletes layer Sand and all its 2 parts.']]);
         T.eq(seen.deleted, ['L1']);
         T.eq(seen.commits, [null]);
         T.eq(seen.selected, [null]);
@@ -334,10 +360,12 @@
 
   test('a refused delete leaves the layer', function () {
     return withCutSoil(function (seen) {
-      window.confirm = function () { return false; };
-      App.LivePatches.deleteBodyOwner('soil_L1__part1');
-      T.eq(seen.deleted, []);
-      T.eq(seen.commits, []);
+      seen.answer = false;
+      return App.LivePatches.deleteBodyOwner('soil_L1__part1').then(function () {
+        T.eq(seen.asked.length, 1);
+        T.eq(seen.deleted, []);
+        T.eq(seen.commits, []);
+      });
     });
   });
 
@@ -359,7 +387,9 @@
       T.eq(App.LivePatches.objectKind('beam_1'), 'beam');
       T.eq(App.LivePatches.objectKind('anchor_1'), 'anchor');
       T.eq(App.LivePatches.objectKind('point_1'), 'load');
-      T.eq(App.LivePatches.objectKind('soil_L1'), null);
+      // A soil layer is live too: its Rename must not fall to the frozen prompt.
+      T.eq(App.LivePatches.objectKind('soil_' + App.LAYERS[0].id), 'layer');
+      T.eq(App.LivePatches.objectKind('soil_no_such_layer'), null);
       T.eq(App.LivePatches.objectKind(null), null);
     } finally {
       App.PROJECT = saved.project; App.BEAMS = saved.beams;
@@ -367,25 +397,26 @@
     }
   });
 
-  test('renameObject prompts for a name and saves the beam under it', function () {
-    var saved = { beams: App.BEAMS, beamsModule: App.Beams, prompt: window.prompt };
+  test('renameObject asks for a name in the Rename window and saves the beam under it', function () {
+    var saved = { beams: App.BEAMS, beamsModule: App.Beams, ask: App.NameDialog };
     var beam = { id: 'beam_1', name: 'Sheet pile 1' };
     App.BEAMS = [beam];
-    window.prompt = function (message, current) {
-      T.eq(current, 'Sheet pile 1');
-      return '  New name  ';
-    };
+    App.NameDialog = { ask: function (options) {
+      T.eq(options.value, 'Sheet pile 1');
+      T.eq(options.title, 'Rename');
+      return Promise.resolve('New name');
+    } };
     var savedWith = null;
     App.Beams = Object.assign({}, App.Beams, {
       save: function (b) { savedWith = b; return Promise.resolve(b); }
     });
 
     function restore() {
-      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; window.prompt = saved.prompt;
+      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; App.NameDialog = saved.ask;
     }
 
     return Promise.resolve(App.LivePatches.renameObject('beam', 'beam_1')).then(function () {
-      T.eq(beam.name, 'New name', 'the field is trimmed before it is saved');
+      T.eq(beam.name, 'New name');
       T.eq(savedWith, beam, 'save is called with the renamed object');
     }).then(restore, function (e) { restore(); throw e; });
   });
@@ -395,7 +426,7 @@
                   normalLoads: App.NORMAL_LOADS, loads: App.LOADS,
                   anchorsModule: App.Anchors, interfacesModule: App.Interfaces,
                   normalLoadsModule: App.NormalLoads, loadsModule: App.Loads,
-                  prompt: window.prompt };
+                  ask: App.NameDialog };
     var objects = {
       anchor: { id: 'anchor_1', name: 'Anchor 1' },
       interface: { id: 'interface_1', name: 'Interface 1' },
@@ -415,14 +446,17 @@
     App.NormalLoads = Object.assign({}, App.NormalLoads, saver('normal_load'));
     App.Loads = Object.assign({}, App.Loads, saver('load'));
     var offered = [];
-    window.prompt = function (message, current) { offered.push(current); return 'Renamed ' + current; };
+    App.NameDialog = { ask: function (options) {
+      offered.push(options.value);
+      return Promise.resolve('Renamed ' + options.value);
+    } };
 
     function restore() {
       App.ANCHORS = saved.anchors; App.INTERFACES = saved.interfaces;
       App.NORMAL_LOADS = saved.normalLoads; App.LOADS = saved.loads;
       App.Anchors = saved.anchorsModule; App.Interfaces = saved.interfacesModule;
       App.NormalLoads = saved.normalLoadsModule; App.Loads = saved.loadsModule;
-      window.prompt = saved.prompt;
+      App.NameDialog = saved.ask;
     }
 
     var kinds = Object.keys(objects);
@@ -430,7 +464,7 @@
       return Promise.resolve(App.LivePatches.renameObject(kind, objects[kind].id));
     })).then(function () {
       T.eq(offered, ['Anchor 1', 'Interface 1', 'Normal load 1', 'Point load 1'],
-           'the prompt offers each object\'s current name');
+           'the Rename window offers each object\'s current name');
       kinds.forEach(function (kind) {
         T.eq(savedWith[kind], objects[kind], kind + ' is saved through its own module');
         T.ok(/^Renamed /.test(objects[kind].name), kind + ' carries the new name');
@@ -438,8 +472,8 @@
     }).then(restore, function (e) { restore(); throw e; });
   });
 
-  test('renameObject does nothing when the prompt is cancelled or blank', function () {
-    var saved = { beams: App.BEAMS, beamsModule: App.Beams, prompt: window.prompt };
+  test('renameObject does nothing when the Rename window is cancelled', function () {
+    var saved = { beams: App.BEAMS, beamsModule: App.Beams, ask: App.NameDialog };
     var beam = { id: 'beam_1', name: 'Sheet pile 1' };
     App.BEAMS = [beam];
     var saveCalled = false;
@@ -447,18 +481,15 @@
       save: function () { saveCalled = true; return Promise.resolve(); }
     });
 
-    try {
-      window.prompt = function () { return null; };
-      App.LivePatches.renameObject('beam', 'beam_1');
-      T.eq(beam.name, 'Sheet pile 1', 'a cancelled prompt must not touch the name');
-
-      window.prompt = function () { return '   '; };
-      App.LivePatches.renameObject('beam', 'beam_1');
-      T.eq(beam.name, 'Sheet pile 1', 'a blank name must not be saved');
-      T.eq(saveCalled, false);
-    } finally {
-      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; window.prompt = saved.prompt;
+    // A blank name never leaves the window: see the Rename window's own test.
+    App.NameDialog = { ask: function () { return Promise.resolve(null); } };
+    function restore() {
+      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; App.NameDialog = saved.ask;
     }
+    return App.LivePatches.renameObject('beam', 'beam_1').then(function () {
+      T.eq(beam.name, 'Sheet pile 1', 'a cancelled rename must not touch the name');
+      T.eq(saveCalled, false);
+    }).then(restore, function (e) { restore(); throw e; });
   });
 
   test('onTreeContextMenu opens a working Rename and Delete for an anchor, and Delete removes it', function () {

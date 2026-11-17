@@ -273,7 +273,14 @@ App.LivePatches = (function () {
   /* Which of the live-owned collections a tree row's key belongs to, if any --
      the frozen menu (js/explorer.js:89-98) only ever wires up rename/delete for a
      soil layer, so every other kind of live object -- drawn/imported geometry, a
-     sheet pile or wall, an anchor, a load -- needs the same two actions built here. */
+     sheet pile or wall, an anchor, a load -- needs the same two actions built here.
+     A soil layer is here too: the frozen menu renames it with the browser's prompt,
+     which a screenshot cannot show and a test cannot fill in. */
+  function layerOf(key) {
+    if (!key || key.indexOf('soil_') !== 0 || !App.layerById) return null;
+    return App.layerById(key.slice(5)) || null;
+  }
+
   function objectKind(key) {
     if (isDeletableCustomPart(key)) return 'part';
     if (App.Beams && App.Beams.isBeamKey(key)) return 'beam';
@@ -286,6 +293,7 @@ App.LivePatches = (function () {
     if (App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key)) {
       return 'condition';
     }
+    if (layerOf(key)) return 'layer';
     return null;
   }
 
@@ -331,7 +339,8 @@ App.LivePatches = (function () {
       : kind === 'line' ? lineByKey(key)
       : kind === 'body' ? App.Lines.bodyOf(key)
       : kind === 'load' ? loadByKey(key)
-      : kind === 'condition' ? conditionByKey(key) : null;
+      : kind === 'condition' ? conditionByKey(key)
+      : kind === 'layer' ? layerOf(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
   }
 
@@ -339,17 +348,21 @@ App.LivePatches = (function () {
     if (App.Command && App.Command.err) App.Command.err(error.message);
   }
 
-  /* One rename path for every live kind: prompt, write the field the frozen grid
-     already treats as the display name, then save through each kind's own door --
-     a custom part goes back through the layers/domain/custom_parts PATCH (see
-     commitSelectionEdit), a beam/anchor/load through its own module, which is what
-     validates, persists and refreshes the tree for it already. */
+  /* One rename path for every live kind: ask in the Rename window (js/name-dialog.js),
+     write the field the frozen grid already treats as the display name, then save
+     through each kind's own door -- a custom part goes back through the
+     layers/domain/custom_parts PATCH (see commitSelectionEdit), a beam/anchor/load
+     through its own module, which is what validates, persists and refreshes the tree
+     for it already. */
   function renameObject(kind, key) {
-    var name = window.prompt('New name', objectName(kind, key));
-    if (name === null) return;
-    name = name.trim();
-    if (!name) { reportRenameError(new Error('Name cannot be empty.')); return; }
+    return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
+                                help: 'Shown in the Model explorer.' })
+      .then(function (name) {
+        if (name !== null) return renamed(kind, key, name);
+      });
+  }
 
+  function renamed(kind, key, name) {
     if (kind === 'part') {
       var part = partByKey(key);
       if (!part) return;
@@ -402,6 +415,13 @@ App.LivePatches = (function () {
       condition.name = name;
       return App.BoundaryConditions.save(condition).catch(reportRenameError);
     }
+    if (kind === 'layer') {
+      var layer = layerOf(key);
+      if (!layer) return;
+      layer.name = name;
+      if (App.Command && App.Command.ok) App.Command.ok('Renamed soil layer to ' + name + '.');
+      return App.commitSelectionEdit(key);
+    }
   }
 
   function deleteObject(kind, key) {
@@ -413,6 +433,23 @@ App.LivePatches = (function () {
     if (kind === 'line') return App.Lines.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
     if (kind === 'condition') return App.BoundaryConditions.remove(key);
+    if (kind === 'layer') return deleteLayer(key);
+  }
+
+  /* The frozen Delete of a layer, kept as it was: the stack closes the gap
+     (App.deleteLayerById is the Soil layers window's), and the soil model goes to
+     the server as one write. */
+  function deleteLayer(key) {
+    var layer = layerOf(key);
+    if (!layer) return;
+    var error = App.deleteLayerById(layer.id);
+    if (error) {
+      if (App.Command && App.Command.err) App.Command.err(error);
+      return;
+    }
+    if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + layer.name + '.');
+    if (App.state && App.state.selection === key) App.selectObject(null);
+    return App.commitSelectionEdit(null);
   }
 
   /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
@@ -434,17 +471,20 @@ App.LivePatches = (function () {
   function renameBodyOwner(key) {
     var owner = bodyOwner(key);
     if (!owner) return;
-    var name = window.prompt('New name of the ' + owner.noun, owner.name);
-    if (name === null) return;
-    name = name.trim();
-    if (!name) { reportRenameError(new Error('Name cannot be empty.')); return; }
-    if (owner.kind === 'layer') owner.record.name = name;
-    else owner.record.label = name;
-    // Saved under the owner's key: under the part's, commitSelectionEdit saves the
-    // part alone. The part stays selected, as its key does not change.
-    return Promise.resolve(App.commitSelectionEdit(owner.key)).then(function () {
-      if (App.selectObject) App.selectObject(key, 'tree');
-    });
+    var title = 'Rename ' + owner.noun;
+    return App.NameDialog.ask({ title: title.charAt(0).toUpperCase() + title.slice(1),
+                                value: owner.name,
+                                help: 'The name of every part of it in the Model explorer.' })
+      .then(function (name) {
+        if (name === null) return;
+        if (owner.kind === 'layer') owner.record.name = name;
+        else owner.record.label = name;
+        // Saved under the owner's key: under the part's, commitSelectionEdit saves the
+        // part alone. The part stays selected, as its key does not change.
+        return Promise.resolve(App.commitSelectionEdit(owner.key)).then(function () {
+          if (App.selectObject) App.selectObject(key, 'tree');
+        });
+      });
   }
 
   /* The whole layer or soil surface goes, every part of it: one part alone cannot go,
@@ -455,14 +495,19 @@ App.LivePatches = (function () {
     var parts = ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
       return other.split('__')[0] === owner.key;
     }).length;
-    if (!window.confirm('Delete the ' + owner.noun + ' ' + owner.name + ' with all its '
-                        + parts + ' parts?')) return;
-    if (owner.kind === 'part') return deleteCustomPart(owner.key);
-    var error = App.deleteLayerById(owner.record.id);
-    if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
-    if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
-    if (App.selectObject) App.selectObject(null, 'tree');
-    return App.commitSelectionEdit(null);
+    return new Promise(function (resolve) {
+      confirmDialog('Delete ' + owner.noun,
+        'This deletes ' + owner.noun + ' ' + owner.name + ' and all its ' + parts + ' parts.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) {
+      if (!sure) return;
+      if (owner.kind === 'part') return deleteCustomPart(owner.key);
+      var error = App.deleteLayerById(owner.record.id);
+      if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
+      if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
+      if (App.selectObject) App.selectObject(null, 'tree');
+      return App.commitSelectionEdit(null);
+    });
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -1621,11 +1666,17 @@ App.LivePatches = (function () {
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
 
-  function confirmDialog(title, text, onConfirm) {
+  /* An app window with OK and Cancel. `onCancel` (optional) is called when it closes
+     without OK: by Cancel, the close button or Escape. */
+  function confirmDialog(title, text, onConfirm, onCancel) {
     if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
+    var confirmed = false;
     App.Dialogs.open({
       title: title, width: 440, height: 220,
-      buttons: [{ label: 'OK', primary: true, onClick: onConfirm }, { label: 'Cancel' }],
+      buttons: [{ label: 'OK', primary: true,
+                  onClick: function () { confirmed = true; return onConfirm(); } },
+                { label: 'Cancel' }],
+      onClose: function () { if (!confirmed && onCancel) onCancel(); },
       build: function (body) {
         body.appendChild(App.UI.el('div.dlg-simple', null, [
           App.UI.el('h3', { text: title }),
@@ -3463,19 +3514,22 @@ App.LivePatches = (function () {
       if (App.Menu && App.Menu.mountBar) App.Menu.mountBar();
     }
 
-    /* The one menu entry that needs a value typed. A prompt rather than a dialog of
-       its own: it asks for one integer, and the answer is printed to the command log
-       by the same `results at` the command box runs. */
+    /* The one menu entry that needs a value typed. It asks for one integer in the
+       app's own small window (js/name-dialog.js), not the browser's prompt, and the
+       answer is printed to the command log by the same `results at` the command box
+       runs. */
     function askForNode() {
       if (App.state && App.state.mode !== 'results') App.setMode('results');
-      var node = window.prompt('Show every field at which node number?');
-      if (node === null) return;
-      node = String(node).trim();
-      if (!/^\d+$/.test(node)) {
-        if (App.Command) App.Command.err('"' + node + '" is not a node number.');
-        return;
-      }
-      resultsCommand('results at ' + node);
+      return App.NameDialog.ask({
+        title: 'Value at a node', label: 'Node number',
+        help: 'Every field at this node is printed in the Session log.',
+        empty: 'Type a node number.',
+        check: function (text) {
+          return /^\d+$/.test(text) ? null : '"' + text + '" is not a node number.';
+        }
+      }).then(function (node) {
+        if (node !== null) resultsCommand('results at ' + node);
+      });
     }
 
     function itemsOf(label) {

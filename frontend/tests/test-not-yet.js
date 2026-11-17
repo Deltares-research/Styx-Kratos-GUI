@@ -390,7 +390,8 @@
     App.Menu = { openAt: function (items) { opened = items; } };
     var row = document.createElement('div');
     row.className = 'tree-row';
-    row.dataset.obj = 'soil_L1';
+    // A group row: a soil layer's row is the live menu's now (its Rename window).
+    row.dataset.obj = 'grp_soil';
     try {
       App.LivePatches.onTreeContextMenu({ target: row, preventDefault: function () {},
                                           stopImmediatePropagation: function () {} });
