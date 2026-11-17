@@ -7,6 +7,9 @@ exclude = [
     # Where the README says the project lives. It answers 404 until the public copy is
     # made: remove this line then.
     '^https://github\.com/Deltares-research/Styx-Kratos-GUI',
+    # The screenshots of the GUI tutorials: made in CI and never committed. The site build
+    # (.github/workflows/docs-site.yml) checks them.
+    '/docs/gui_tutorials/images/',
 ]
 
 exclude_path = ["frontend/vendor"]

@@ -443,7 +443,7 @@ App.Beams = (function () {
 
     shell = App.Dialogs.open({
       title: (editing ? 'Edit ' : 'Create ') + noun(beam),
-      width: 520, height: kind === 'panel' ? 580 : 520,
+      width: 520, height: kind === 'panel' ? 760 : 820,
       buttons: [
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
         { label: 'Cancel' }

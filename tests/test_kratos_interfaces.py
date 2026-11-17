@@ -192,6 +192,50 @@ def test_a_soil_to_soil_interface_is_not_staged(session):
         "the soil-to-soil interface must not be in the staged list, only the pile"
 
 
+def auxiliary(doc: dict, stage: str, module: str) -> list[str] | None:
+    """The parts the `module` process of `stage` names, or None when there is none."""
+    listed = doc["stages"][stage]["stage_settings"]["processes"].get(
+        "auxiliary_process_list", [])
+    found = [p for p in listed if p["python_module"] == module]
+    assert len(found) <= 1
+    return [name.partition(".")[2] for name in
+            found[0]["Parameters"]["model_part_name_list"]] if found else None
+
+
+def test_the_pile_s_contact_finds_its_soil_in_the_stage_it_is_installed(contacted):
+    """Without the neighbour search the contact starts at zero traction against soil
+    that already carries the ground's weight. Running the implicit deck that way gave
+    9 % more displacement in wall installation, and interface tractions up to 70 kPa
+    off."""
+    doc = json.loads(contacted["project_parameters"])
+    module = "find_neighbours_of_interfaces_process"
+    assert auxiliary(doc, "1_Initial_stage", module) is None
+    assert sorted(auxiliary(doc, "2_Wall_installation", module)) == \
+        sorted(interface_parts(deck_of(contacted)))
+
+
+def test_nothing_is_carried_when_everything_but_the_soil_arrives_with_the_wall(contacted):
+    doc = json.loads(contacted["project_parameters"])
+    assert auxiliary(doc, "2_Wall_installation",
+                     "apply_final_stresses_of_previous_stage_to_initial_state") is None
+
+
+def test_a_soil_to_soil_interface_finds_its_soil_first_and_carries_its_stress(session):
+    """Not staged, so it is in both stages: it finds its neighbours in the first, and its
+    traction is carried into wall installation, as everything in two stages is."""
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[8.0, 0.0], [8.0, -10.0]])
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
+    doc = json.loads(export["project_parameters"])
+    contact = interface_parts(deck_of(export))
+    assert contact
+    assert sorted(auxiliary(doc, "1_Initial_stage",
+                            "find_neighbours_of_interfaces_process")) == sorted(contact)
+    assert sorted(auxiliary(doc, "2_Wall_installation",
+                            "apply_final_stresses_of_previous_stage_to_initial_state")) == \
+        sorted(contact)
+
+
 def test_the_split_sides_are_tied_together_before_the_wall_is_installed(contacted):
     """Deactivating the pile and its interface (above) leaves nothing else holding the
     two soil copies the interface split apart -- without a tie the initial stage models

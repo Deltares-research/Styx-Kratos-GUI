@@ -1139,8 +1139,8 @@ def test_a_stage_inserted_before_another_takes_its_place_in_the_chain():
 def test_a_copied_stage_follows_its_original():
     project, stage = session.add_stage(excavation_project(), copy_of="dig_1")
 
-    assert (stage.id, stage.parent, stage.max_iterations) == ("stage_1", "dig_1", 150)
-    assert {p.id: p for p in project.stages}["install_strut"].parent == "stage_1"
+    assert (stage.id, stage.parent, stage.max_iterations) == ("stage_8", "dig_1", 150)
+    assert {p.id: p for p in project.stages}["install_strut"].parent == "stage_8"
 
 
 def test_a_stage_id_that_is_taken_is_refused():

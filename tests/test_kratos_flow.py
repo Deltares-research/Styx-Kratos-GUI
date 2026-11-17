@@ -432,6 +432,34 @@ def test_too_few_iterations_for_the_seepage_face_are_said(case_c):
     assert not any("seepage faces have" in w for w in export["warnings"])
 
 
+def test_a_seepage_face_a_stage_switches_off_is_left_out_of_that_stage(gmsh_session):
+    """Stageable as the other conditions are: the stage with it off has no seepage
+    process, does not assemble its part, and is solved without the seepage strategy --
+    the Van Genuchten soil still asks for Newton-Raphson. Only the stage with the face
+    on is warned about its nodes."""
+    project = muskat_model.seepage(max_iterations=50)
+    assert "seepage_face" in project.stageable_keys()
+    project = project.model_copy(update={"stages": [
+        project.stages[0],
+        Stage(id="dry", name="Dry", parent="flow", calculation="Groundwater flow",
+              max_iterations=50, tolerated_error=1e-4, deactivate=["seepage_face"])]})
+    export = writer.export_project(project)
+
+    def seepage_processes(stage: str) -> list[dict]:
+        return [p for p in settings(export, stage)["processes"]["loads_process_list"]
+                if p["process_name"] == "ApplySeepageBoundaryProcess"]
+
+    assert len(seepage_processes("1_Flow")) == 1
+    assert seepage_processes("2_Dry") == []
+    on, off = (settings(export, stage)["solver_settings"] for stage in ("1_Flow", "2_Dry"))
+    assert on["strategy_type"] == "newton_raphson_with_seepage"
+    assert off["strategy_type"] == "newton_raphson"
+    assert "Seepage_face" in on["processes_sub_model_part_list"]
+    assert "Seepage_face" not in off["processes_sub_model_part_list"]
+    said = [w for w in export["warnings"] if "seepage faces have" in w]
+    assert len(said) == 1 and "'Flow'" in said[0]
+
+
 def test_a_quadratic_seepage_face_has_three_node_conditions(gmsh_session):
     deck = mdpa.parse(writer.export_project(muskat_model.seepage(order=2))["mdpa"])
     assert {block.name for block in deck.conditions} == {"GeoSeepageCondition2D3N"}

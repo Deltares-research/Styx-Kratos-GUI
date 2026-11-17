@@ -77,6 +77,13 @@ def test_linux_gets_the_libraries_the_install_guide_tells_users_to_install(launc
         assert library in commands(job) and library in guide, library
 
 
+def test_linux_retries_transient_package_mirror_failures(launcher):
+    _, job = launcher
+    script = commands(job)
+    assert "apt-get -o Acquire::Retries=3 update" in script
+    assert "apt-get -o Acquire::Retries=3 install" in script
+
+
 # ── Lint ────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")

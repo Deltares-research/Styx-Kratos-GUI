@@ -7,6 +7,7 @@ then shows, and on what the server then holds. Opt-in: `--run-e2e`.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ MODEL_NAME = "Staged excavation"
 
 def wait_meshed(page):
     page.wait_for_function("App.Viewport.hasMesh && App.Viewport.hasMesh()", timeout=LONG)
+
+
+def stored(page, url: str, check) -> dict:
+    """The project the server holds, read again until `check(project)` is true or LONG
+    has passed. A window can show its change in the page before its request reaches the
+    server, so one read straight after the page changes can still find the old project."""
+    deadline = time.monotonic() + LONG / 1000
+    while True:
+        project = page.request.get(url).json()
+        if check(project) or time.monotonic() > deadline:
+            return project
+        page.wait_for_timeout(100)
 
 
 def run_model(page):
@@ -241,17 +254,17 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
-    # Wait for the Uniform type, not only for a whole-soil water pressure: the new project
-    # has a Hydrostatic one already, so that wait would pass before the save is stored.
-    app_page.wait_for_function("(App.PROJECT.boundary_conditions || []).some(function (c) {"
-                               " return c.kind === 'water_pressure' && c.on === 'domain'"
-                               " && c.fluid_pressure_type === 'Uniform'; })",
-                               timeout=LONG)
-    stored = app_page.request.get(url).json()
-    water = [c for c in stored["boundary_conditions"] if c["kind"] == "water_pressure"]
-    assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
-        ("domain", "Uniform", 0.0)]
-    assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
+
+    # The new project already has a hydrostatic pore pressure on the whole soil, so wait
+    # for the server to hold the uniform one.
+    def water(project):
+        return [(c["on"], c["fluid_pressure_type"], c["value"])
+                for c in project["boundary_conditions"] if c["kind"] == "water_pressure"]
+
+    project = stored(app_page, url, lambda p: water(p) == [("domain", "Uniform", 0.0)])
+    assert water(project) == [("domain", "Uniform", 0.0)]
+    assert sum(c["kind"] == "displacement" for c in project["boundary_conditions"]) == 5
+
     assert app_page.errors == []
 
 
@@ -374,9 +387,11 @@ def test_a_soil_layer_is_renamed_from_the_model_explorer_menu(app_page, live_ser
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")
 
+    # The page renames the layer first and then sends the change to the server.
     app_page.wait_for_function("App.LAYERS[0].name === 'Clay top'", timeout=LONG)
-    stored = app_page.request.get(url + "/api/project").json()
-    assert stored["layers"][0]["name"] == "Clay top"
+    project = stored(app_page, url + "/api/project",
+                     lambda p: p["layers"][0]["name"] == "Clay top")
+    assert project["layers"][0]["name"] == "Clay top"
     assert app_page.errors == []
 
 

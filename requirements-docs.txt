@@ -1,0 +1,4 @@
+# The GUI tutorials site (mkdocs.yml), on top of requirements.txt and requirements-dev.txt.
+# Not needed to run the app or the tests.
+#   pip install -r requirements-docs.txt
+zensical==0.1.1

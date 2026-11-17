@@ -1162,7 +1162,8 @@
     withProject(project(TWO), function () {
       App.Model.setMeshStats({
         nodes: 146321, elements: 82809, seconds: 5.125,
-        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {}
+        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {},
+        average_size: 1.23456
       });
 
       var rows = App.OBJECT_PROPS.mesh.groups.Statistics;
@@ -1170,6 +1171,7 @@
       T.eq(value('Elements'), '82 809');
       T.eq(value('Nodes'), '146 321');
       T.eq(value('Element type'), 'Tetrahedron 10');
+      T.eq(value('Average element size'), '1.235', 'the size the server measured');
 
       var labels = [];
       (function walk(nodes) {

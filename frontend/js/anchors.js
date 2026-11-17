@@ -522,7 +522,7 @@ App.Anchors = (function () {
 
     shell = App.Dialogs.open({
       title: (editing ? 'Edit ' : 'Create ') + 'anchor',
-      width: 520, height: anchor.kind === 'anchor3d' ? 620 : 580,
+      width: 560, height: anchor.kind === 'anchor3d' ? 840 : 790,
       buttons: [
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
         { label: 'Cancel' }
@@ -556,7 +556,7 @@ App.Anchors = (function () {
         });
         controls.tail_end.value = anchor.tail_end;
         row('Tail end', controls.tail_end,
-            'Free: joined to the soil mesh. Fixed: held in place.');
+            'Free: a soil node. Fixed: held in place.');
 
         controls.prestress = input(anchor.prestress);
         row('TRUSS_PRESTRESS_PK2', controls.prestress,
