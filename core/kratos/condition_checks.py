@@ -25,8 +25,9 @@ for loading the mesher.
 from __future__ import annotations
 
 from core.model import stages
-from core.model.schemas import (SECTION_FACES, DisplacementCondition, Material, Stage,
-                                Project, SeepageCondition, WaterPressureCondition)
+from core.model.schemas import (INTERPOLATE, SECTION_FACES, DisplacementCondition,
+                                Material, Stage, Project, SeepageCondition,
+                                WaterPressureCondition)
 
 
 def warnings(project: Project) -> list[str]:
@@ -47,6 +48,7 @@ def warnings(project: Project) -> list[str]:
     out += _unpinned_water(project)
     out += _free_water_in_stages(project)
     out += _unused_water_level(project)
+    out += _soil_water(project)
     return out
 
 
@@ -308,7 +310,25 @@ def _water_fixed_everywhere(project: Project) -> list[str]:
     return [f"{noun(c)} fixes the water pressure at every node of the soil, so no water "
             "can flow. Fix it on the faces or lines where the head is known instead, and "
             "give the soil a start value (not fixed) if it needs one."
-            for c in _water_pressures(project) if c.is_fixed and c.on == "domain"]
+            for c in _water_pressures(project)
+            if c.is_fixed and project.on_the_whole_soil(c)]
+
+
+def _soil_water(project: Project) -> list[str]:
+    """A head line acts only on the soils that take it, so one that none takes acts
+    nowhere; an interpolated soil in a 3D model takes the phreatic line, as Kratos
+    interpolates in a vertical section only."""
+    taken = set(project.water_of_bodies().values())
+    out = [f"{noun(c)} is a head line, which acts only on the soils that take it, and no "
+           "soil does: give it to a soil in Soil water, or remove it."
+           for c in project.head_lines() if written(project, c) and c.id not in taken]
+    if project.dimension != 2 and INTERPOLATE in taken:
+        interpolated = sorted(key for key, water in project.soil_water.items()
+                              if water == INTERPOLATE)
+        out.append("the water of " + ", ".join(interpolated) + " is interpolated, which "
+                   "Kratos does in a 2D section only; this 3D deck gives them the "
+                   "phreatic line.")
+    return out
 
 
 def _names(records: list) -> str:

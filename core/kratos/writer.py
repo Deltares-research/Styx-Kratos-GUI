@@ -40,7 +40,7 @@ from core.kratos import condition_checks
 from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
-from core.model.schemas import (STAGED_CONDITIONS, TARGET_ORDER, Beam,
+from core.model.schemas import (INTERPOLATE, STAGED_CONDITIONS, TARGET_ORDER, Beam,
                                 DisplacementCondition, LineLoad, Member, MeshRequest, Panel, PanelSection, PointLoad, Project,
                                 SeepageCondition, SurfaceLoad, WaterPressureCondition)
 
@@ -367,7 +367,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         {key: nodes for key, nodes in body_nodes.items() if key in soil_keys},
         node_id, warnings, flow)
     parts.extend(condition_parts)
-    water_pressures = _water_pressures(project, resolved, warnings)
+    chosen, interpolated = _soil_waters(
+        project, dim, {key: nodes for key, nodes in body_nodes.items() if key in soil_keys},
+        names)
+    water_pressures = _water_pressures(project, resolved, warnings, chosen, interpolated)
     parts.extend(load_parts)
     parts.extend((name, sorted(node_id[tag] for tag in tags), [], [])
                  for name, tags in surface_water.node_parts)
@@ -1814,9 +1817,11 @@ def _rotated(face: tuple[int, ...], row: list[int]) -> bool:
 
 # ── Water on the ground ─────────────────────────────────────────────────────
 
-SURFACE_WATER_TYPES = ("Hydrostatic", "Phreatic_Multi_Line")
-"""The water pressure conditions that have a water level, and so can stand above the
-ground (`_water_surface_loads`)."""
+SURFACE_WATER_TYPES = ("Phreatic_Multi_Line",)
+"""The water pressure conditions whose level is the free water's, which can stand above
+the ground (`_water_surface_loads`): the phreatic line. A head line is the head of the
+water in a soil -- an aquifer under an aquitard -- and a hydrostatic level is the pore
+pressure's; neither is water standing on the ground."""
 
 SURFACE_WATER_KEY = "surface_water:"
 """The stem of the condition keys `_water_surface_loads` adds. No model key has a colon
@@ -1870,16 +1875,16 @@ def _water_surface_loads(project: Project,
                          conditions: list[tuple[str, str, list[list[int]]]],
                          coordinates: dict[int, tuple[float, float, float]],
                          names: dict[str, str]) -> _SurfaceWater:
-    """The water standing on the ground, pressing on it: one normal load per water
-    pressure condition whose level is above the soil somewhere, in every stage.
+    """The water standing on the ground, pressing on it: one normal load for the phreatic
+    line where it is above the soil somewhere, in every stage.
 
     A water pressure condition sets the pore pressure, but water above the ground also
     weighs on it -- on the ground surface, the floor of a pit, the faces dug into the
     soil and the face of a wall the water stands against. Without that load the ground
-    under open water heaves. So for every Hydrostatic or Phreatic_Multi_Line condition
-    this finds, stage by stage, the exposed boundary of the soil in that stage below the
-    water, and writes the water's weight on it as Kratos' `ApplyNormalLoadTableProcess`
-    does a `NormalLoad`'s. Its level is the free water's wherever the condition fixes
+    under open water heaves. So for the phreatic line, the one Phreatic_Multi_Line
+    condition a project has (`SURFACE_WATER_TYPES`), this finds, stage by stage, the
+    exposed boundary of the soil in that stage below the water, and writes the water's
+    weight on it as Kratos' `ApplyNormalLoadTableProcess` does a `NormalLoad`'s. Its level is the free water's wherever the condition fixes
     the pore pressure -- the whole soil, a face, a drawn phreatic line, a point -- so it
     stands on the whole surface; a condition on a soil part stands on that part's.
 
@@ -2057,25 +2062,21 @@ def _water_surface_loads(project: Project,
         names[key] = part
         out.conditions.append((key, name, rows))
         written = [part]
-        if water.fluid_pressure_type == "Hydrostatic":
-            out.processes.append((part, "Hydrostatic", 0.0,
-                                  float(water.reference_coordinate or 0.0), specific_weight))
-        else:
-            points = list(zip(water.x_coordinates or [], water.y_coordinates or []))
-            stretches = list(zip(points, points[1:]))
-            out.processes.append((part, "Phreatic_Line", 0.0, 0.0, specific_weight,
-                                  stretches[0]))
-            tags = sorted({tag for row in rows for tag in row})
-            for at, stretch in enumerate(stretches[1:], start=1):
-                last = at == len(stretches) - 1
-                under = [tag for tag in tags if xy[tag][0] > stretch[0][0]
-                         and (last or xy[tag][0] <= stretch[1][0])]
-                if under:
-                    group = _unique(f"{part}_stretch_{at + 1}", used)
-                    out.node_parts.append((group, under))
-                    out.processes.append((group, "Phreatic_Line", 0.0, 0.0,
-                                          specific_weight, stretch))
-                    written.append(group)
+        points = list(zip(water.x_coordinates or [], water.y_coordinates or []))
+        stretches = list(zip(points, points[1:]))
+        out.processes.append((part, "Phreatic_Line", 0.0, 0.0, specific_weight,
+                              stretches[0]))
+        tags = sorted({tag for row in rows for tag in row})
+        for at, stretch in enumerate(stretches[1:], start=1):
+            last = at == len(stretches) - 1
+            under = [tag for tag in tags if xy[tag][0] > stretch[0][0]
+                     and (last or xy[tag][0] <= stretch[1][0])]
+            if under:
+                group = _unique(f"{part}_stretch_{at + 1}", used)
+                out.node_parts.append((group, under))
+                out.processes.append((group, "Phreatic_Line", 0.0, 0.0,
+                                      specific_weight, stretch))
+                written.append(group)
         for tag in sorted({tag for row in backward for tag in row}):
             depth = _water_level(water, xy[tag][0]) - xy[tag][1]
             if depth <= 0:
@@ -2429,6 +2430,9 @@ Resolved = tuple[DisplacementCondition | WaterPressureCondition, list[str | None
 """A condition, the deck parts it is written on (`None` for the whole porous domain), and
 the node ids those hold."""
 
+Watered = tuple[WaterPressureCondition, list[str | None], set[int]]
+"""A water pressure condition, resolved as a `Resolved` is."""
+
 
 def _condition_targets(project: Project, dim: int,
                        boundaries: list[tuple[str, int, list[int]]],
@@ -2470,6 +2474,13 @@ def _condition_targets(project: Project, dim: int,
             continue
         noun = condition_checks.noun(condition)
         targets: list[str | None]
+        if isinstance(condition, WaterPressureCondition) and any(
+                condition is line for line in project.water_lines()):
+            if not project.on_the_whole_soil(condition):
+                # A head line, for the soils that take it (`_soil_waters`) and no other.
+                continue
+            # The phreatic line, the whole soil's water wherever it was drawn.
+            condition = condition.model_copy(update={"on": "domain", "points": None})
         if condition.on == "domain":
             targets = [None]
             nodes = set().union(*body_nodes.values()) if body_nodes else set()
@@ -2530,21 +2541,55 @@ def _displacements(dim: int, boundaries: list[tuple[str, int, list[int]]],
     return out
 
 
+def _soil_waters(project: Project, dim: int, body_nodes: dict[str, set[int]],
+                 names: dict[str, str]) -> tuple[list[Watered], list[str]]:
+    """The water the soils take of their own (`Project.soil_water`): each head line with
+    the soil bodies that take it, as a condition on those parts, and the deck parts of the
+    bodies whose pressure is interpolated. `body_nodes` is the soil bodies of the mesh.
+
+    A head line a stage switches off leaves its soils the phreatic line in that stage.
+    Kratos interpolates in a vertical section only, so a 3D deck interpolates nothing
+    (`condition_checks._soil_water` says so)."""
+    chosen = {key: water for key, water in project.water_of_bodies().items()
+              if key in body_nodes}
+    resolved: list[Watered] = []
+    for line in project.head_lines():
+        bodies = [key for key, water in chosen.items() if water == line.id]
+        if bodies and condition_checks.written(project, line):
+            resolved.append((line.model_copy(update={"on": "part", "part": bodies[0],
+                                                     "points": None}),
+                             [names[key] for key in bodies],
+                             set().union(*(body_nodes[key] for key in bodies))))
+    interpolated = ([names[key] for key, water in chosen.items() if water == INTERPOLATE]
+                    if dim == 2 else [])
+    return resolved, interpolated
+
+
 def _water_pressures(project: Project, resolved: list[Resolved],
-                     warnings: list[str]) -> list[parameters.WaterPressure]:
+                     warnings: list[str], chosen: Sequence[Watered] = (),
+                     interpolated: Sequence[str] = ()) -> list[parameters.WaterPressure]:
     """Every water pressure condition, as the processes it is written as.
 
     Written start values first, then the fixed ones least specific first
     (`schemas.TARGET_ORDER`): Kratos keeps the value written last on a node, so a face
-    beats the whole soil and a point beats a face.
+    beats the whole soil and a point beats a face. `chosen` is the lines the soils take
+    (`_soil_waters`), written as conditions on parts are; they meet at the boundaries
+    between soils, so they are not said to overlap. `interpolated` is the parts whose
+    pressure Kratos interpolates, last: it reads them off their boundaries once every
+    other pressure is set (`parameters._water_pressure`).
     """
     pressures = [(condition, targets, nodes) for condition, targets, nodes in resolved
                  if isinstance(condition, WaterPressureCondition)]
+    _overlapping_water_pressures(project, pressures, warnings)
+    pressures += list(chosen)
     # Stable, so each group keeps the order the user gave the conditions in.
     pressures.sort(key=lambda entry: (entry[0].is_fixed, TARGET_ORDER.index(entry[0].on)))
-    _overlapping_water_pressures(project, pressures, warnings)
     return [parameters.WaterPressure(
-        part=target, fluid_pressure_type=condition.fluid_pressure_type,
+        # A head line is a phreatic multi-line to Kratos; only the deck's own water on
+        # the ground tells them apart (`SURFACE_WATER_TYPES`).
+        part=target, fluid_pressure_type=("Phreatic_Multi_Line"
+                                          if condition.fluid_pressure_type == "Head_Line"
+                                          else condition.fluid_pressure_type),
         is_fixed=condition.is_fixed, value=condition.value,
         # Required of a hydrostatic record, and read for nothing else.
         reference_coordinate=(condition.reference_coordinate
@@ -2556,7 +2601,13 @@ def _water_pressures(project: Project, resolved: list[Resolved],
         pressure_tension_cut_off=condition.pressure_tension_cut_off,
         specific_weight=project.water_specific_weight,
         condition=condition.id)
-        for condition, targets, _ in pressures for target in targets]
+        for condition, targets, _ in pressures for target in targets] + [
+        parameters.WaterPressure(
+            part=part, fluid_pressure_type=parameters.INTERPOLATE_LINE, is_fixed=True,
+            value=0.0, reference_coordinate=0.0, x_coordinates=(), y_coordinates=(),
+            z_coordinates=(), pressure_tension_cut_off=0.0,
+            specific_weight=project.water_specific_weight)
+        for part in interpolated]
 
 
 def _overlapping_water_pressures(

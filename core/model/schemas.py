@@ -1107,9 +1107,25 @@ asks. The second -- which face, which part, where -- is the field it names (`fac
 `part`, `points`). Two fields rather than one overloaded value, so the record holds the
 dialog's two answers as they are and nothing has to guess what kind a value is."""
 
-PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"]
+PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line", "Head_Line"]
 """How a water pressure condition gives each node its pressure: Kratos'
-`fluid_pressure_type`, under its own names (`WaterPressureCondition`)."""
+`fluid_pressure_type`, under its own names (`WaterPressureCondition`) -- except
+`"Head_Line"`, the head of the water in one soil, which Kratos is given as a
+`"Phreatic_Multi_Line"` too."""
+
+LINE_TYPES = ("Phreatic_Multi_Line", "Head_Line")
+"""The pressure types of a water line: a polyline through points, hydrostatic below it.
+On the whole soil or drawn on a line, a condition of one of these is a water line
+(`Project.water_lines`): the phreatic line, or a head line a soil takes
+(`Project.soil_water`)."""
+
+LINE_TARGETS = ("domain", "line")
+"""Where a water line is: on the whole soil, or drawn on a line, which is only where it
+was drawn. On a face, a part or a point it is a boundary condition like any other."""
+
+INTERPOLATE = "interpolate"
+"""What `Project.soil_water` says for a soil whose water pressure is interpolated between
+the pressures of the soils above and below it: Kratos' `Interpolate_Line`."""
 
 TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
@@ -1134,7 +1150,14 @@ class WaterPressureCondition(Base):
     *   `"Hydrostatic"`: zero at the horizontal level `reference_coordinate`, growing with
         depth below it.
     *   `"Phreatic_Multi_Line"`: hydrostatic below the phreatic line through
-        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`).
+        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`). A project has one.
+    *   `"Head_Line"`: the same, through the points of a head line -- the head of the
+        water in a soil, an aquifer's. Any number. Written to Kratos as a
+        `Phreatic_Multi_Line`; no water stands on the ground for it.
+
+    On the whole soil or drawn on a line, a phreatic or head line is a water line
+    (`Project.water_lines`): the phreatic line is the water of every soil, and a head line
+    of the soils that take it (`Project.soil_water`), wherever it was drawn.
 
     Above the level Kratos' formula gives suction, which is positive in its sign
     convention; `pressure_tension_cut_off` is the most it may reach, and the Kratos
@@ -1172,12 +1195,11 @@ class WaterPressureCondition(Base):
     x_coordinates: list[float] | None = None
     y_coordinates: list[float] | None = None
     z_coordinates: list[float] | None = None
-    """The phreatic line, m, x increasing; `z_coordinates` may be left out, which is all
-    zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"`; the line may
-    start and end outside the domain."""
+    """The phreatic or head line, m, x increasing; `z_coordinates` may be left out, which
+    is all zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"` or
+    `"Head_Line"`; the line may start and end outside the domain."""
     pressure_tension_cut_off: float = Field(default=0.0, ge=0)
-    """A stress in the project's units. Read by `"Hydrostatic"` and
-    `"Phreatic_Multi_Line"`."""
+    """A stress in the project's units. Read by every type but `"Uniform"`."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -1209,9 +1231,9 @@ class WaterPressureCondition(Base):
             if any(second <= first for first, second in zip(xs, xs[1:])):
                 raise ValueError(f"{noun}: the x coordinates of the phreatic line must "
                                  "increase")
-        elif self.fluid_pressure_type == "Phreatic_Multi_Line":
-            raise ValueError(f"{noun} is a Phreatic_Multi_Line, which needs the points of "
-                             "the line (x_coordinates and y_coordinates)")
+        elif self.fluid_pressure_type in LINE_TYPES:
+            raise ValueError(f"{noun} is a {self.fluid_pressure_type}, which needs the "
+                             "points of the line (x_coordinates and y_coordinates)")
         return self
 
 def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition,
@@ -1666,6 +1688,9 @@ class ConditionsUpdate(Base):
     (`core.session.replace_conditions`). Left out, they stay as they are."""
     boundary_conditions: list[BoundaryCondition] | None = None
     gravity_acceleration: float | None = Field(default=None, gt=0)
+    soil_water: dict[str, str] | None = None
+    """The water each soil takes (`Project.soil_water`), as a whole. Edited in the same
+    window as the conditions, whose lines it names."""
 
 
 class LinesUpdate(Base):
@@ -1883,6 +1908,19 @@ class Project(Base):
     fluid: Fluid = Field(default_factory=Fluid)
     """The water in every soil's pores: its bulk modulus and viscosity. Its weight is
     `water`'s (`water_specific_weight`)."""
+    soil_water: dict[str, str] = Field(default_factory=dict)
+    """The water each soil takes, for an aquifer under an aquitard: a soil part key
+    (`soil_part_keys`: a layer, a body cut off one, or a custom soil part) to the id of a
+    head line (`head_lines`), or `INTERPOLATE`.
+
+    A soil that is not in it takes the phreatic line (`phreatic_line`), which is the
+    water of the whole soil wherever it was drawn. A head line acts only on the soils
+    that take it. A soil takes its own entry, else its layer's (`water_of_bodies`). An
+    interpolated soil gets the pressure of its boundary, which the soils around it set,
+    interpolated down through it (Kratos' `ApplyConstantInterpolateLinePressureProcess`);
+    2D only.
+
+    An entry whose soil or line is gone goes with it, as a body's mesh size does."""
     boundary_conditions: list[BoundaryCondition] = Field(
         default_factory=standard_conditions)
     """The conditions the user prescribes on the model's boundaries and soil. The deck
@@ -2057,6 +2095,45 @@ class Project(Base):
                                                            self.dimension)
         return self
 
+    def water_lines(self) -> list[WaterPressureCondition]:
+        """The phreatic line and the head lines (`LINE_TYPES`) on the whole soil or drawn
+        on a line (`LINE_TARGETS`), in the order of the list: the water the soils take.
+        Where one was drawn is not where it acts (`on_the_whole_soil`, `soil_water`)."""
+        return [c for c in self.boundary_conditions
+                if isinstance(c, WaterPressureCondition) and c.on in LINE_TARGETS
+                and c.fluid_pressure_type in LINE_TYPES]
+
+    def phreatic_line(self) -> WaterPressureCondition | None:
+        """The phreatic line, the water of every soil that takes no other (`soil_water`),
+        or None. A project has one at most."""
+        return next((c for c in self.water_lines()
+                     if c.fluid_pressure_type == "Phreatic_Multi_Line"), None)
+
+    def head_lines(self) -> list[WaterPressureCondition]:
+        """The head lines a soil can take its water from (`soil_water`)."""
+        return [c for c in self.water_lines() if c.fluid_pressure_type == "Head_Line"]
+
+    def on_the_whole_soil(self, condition: WaterPressureCondition) -> bool:
+        """Whether `condition` acts on the whole soil: the phreatic line, wherever it was
+        drawn, and anything else on the whole soil but a head line, which acts only on
+        the soils that take it (`soil_water`)."""
+        if condition.on == "domain":
+            return condition.fluid_pressure_type != "Head_Line"
+        return condition is self.phreatic_line()
+
+    def water_of_bodies(self) -> dict[str, str]:
+        """Each soil body that takes water of its own (`soil_water`), to the id of its line
+        or `INTERPOLATE`: a body's own entry, else its layer's. The bodies are the keys
+        `soil_bodies` and the custom soil parts have, which the deck writes."""
+        bodies = [key for key, *_ in self.soil_bodies()]
+        bodies += [part.key for part in self.custom_parts if part.mat is not None]
+        out = {}
+        for key in bodies:
+            water = self.soil_water.get(key, self.soil_water.get(key.partition("__")[0]))
+            if water is not None:
+                out[key] = water
+        return out
+
     @property
     def water_specific_weight(self) -> float:
         """The water's specific weight in the project's units: the project's own, or
@@ -2178,6 +2255,22 @@ class Project(Base):
                     f"boundary condition {condition.id!r} is on part {condition.part!r}, "
                     "which is not a soil part of this project; the soil parts are "
                     + (", ".join(soil) or "none"))
+        phreatic = [c.name for c in self.boundary_conditions
+                    if isinstance(c, WaterPressureCondition)
+                    and c.fluid_pressure_type == "Phreatic_Multi_Line"]
+        if len(phreatic) > 1:
+            raise ValueError(
+                "a project has one phreatic line, and "
+                + ", ".join(repr(name) for name in phreatic) + " are all Phreatic_Multi_Line; "
+                "make the others head lines (Head_Line), and give each to its soils in "
+                "Soil water")
+        if any(c.id == INTERPOLATE for c in self.boundary_conditions):
+            raise ValueError(f"a boundary condition cannot be called {INTERPOLATE!r}: a "
+                             "soil's water says that for interpolated")
+        # What the soil or the line it named took with it goes too.
+        lines = {line.id for line in self.head_lines()}
+        self.soil_water = {key: water for key, water in self.soil_water.items()
+                           if key in soil and (water == INTERPOLATE or water in lines)}
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a

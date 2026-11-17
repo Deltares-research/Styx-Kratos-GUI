@@ -1,11 +1,15 @@
 """The water standing on the ground, added to the deck as a normal load that presses on it.
 
-A Hydrostatic or Phreatic_Multi_Line water pressure condition whose level is above the
-soil somewhere has water standing on the ground there, and that water weighs on it: on
+The phreatic line -- the Phreatic_Multi_Line water pressure condition, one in a project --
+is the free water. Where it is above the soil, water stands on the ground, and that
+water weighs on it: on
 the ground surface, on the floor of a pit and on the faces dug into it, and on a wall the
 water stands against. The export adds that load itself
 (core/kratos/writer.py:_water_surface_loads), stage by stage, as Kratos'
 `ApplyNormalLoadTableProcess` -- the same process a drawn `NormalLoad` is written as.
+
+A Hydrostatic condition is the head of the water in a soil, not open water, so it adds
+none however high it is.
 
 What these hold it to: it is there where the water is above the ground and nowhere else;
 it follows the surface each stage has; and it always presses on what it stands on, never
@@ -49,6 +53,12 @@ def section(**water) -> Project:
 
 def hydrostatic(level: float) -> Project:
     return section(fluid_pressure_type="Hydrostatic", reference_coordinate=level)
+
+
+def phreatic(level: float) -> Project:
+    """A level phreatic line across the section."""
+    return section(fluid_pressure_type="Phreatic_Multi_Line", x_coordinates=[0.0, 25.0],
+                   y_coordinates=[level, level])
 
 
 def surface_processes(export: dict, stage: str | None = None) -> list[dict]:
@@ -97,7 +107,7 @@ def soil_triangles(deck: mdpa.Deck, parts: set[str]) -> list:
 # ── Where it is ──────────────────────────────────────────────────────────────
 
 def test_water_above_the_ground_presses_on_the_whole_surface():
-    export = writer.export_project(hydrostatic(2.0), MESH)
+    export = writer.export_project(phreatic(2.0), MESH)
     deck = mdpa.parse(export["mdpa"])
 
     rows = surface_rows(deck, "Pore_pressure_on_surface")
@@ -105,22 +115,30 @@ def test_water_above_the_ground_presses_on_the_whole_surface():
     assert min(x for row in rows for x, _ in row) == pytest.approx(0.0)
     assert max(x for row in rows for x, _ in row) == pytest.approx(25.0)
     (process,) = surface_processes(export)
-    assert process["fluid_pressure_type"] == "Hydrostatic"
-    assert process["reference_coordinate"] == 2.0
+    assert process["fluid_pressure_type"] == "Phreatic_Line"
+    assert process["first_reference_coordinate"] == [0.0, 2.0, 0.0]
+    assert process["second_reference_coordinate"] == [25.0, 2.0, 0.0]
     assert process["specific_weight"] == GAMMA
     assert any("stands above the ground" in note for note in export["notes"])
 
 
 def test_the_surface_load_presses_down_into_the_ground():
-    deck = mdpa.parse(writer.export_project(hydrostatic(2.0), MESH)["mdpa"])
+    deck = mdpa.parse(writer.export_project(phreatic(2.0), MESH)["mdpa"])
     for row in surface_rows(deck, "Pore_pressure_on_surface"):
         assert left_of(row)[1] < 0.0, row
 
 
 def test_water_below_the_ground_adds_nothing():
-    export = writer.export_project(hydrostatic(-3.5), MESH)
+    export = writer.export_project(phreatic(-3.5), MESH)
     assert surface_processes(export) == []
     assert not any("_on_surface" in name for name in mdpa.parse(export["mdpa"]).parts)
+    assert not any("stands above the ground" in note for note in export["notes"])
+
+
+def test_a_hydrostatic_level_is_no_open_water_and_adds_nothing():
+    """However high: an aquifer's head above the ground is not water standing on it."""
+    export = writer.export_project(hydrostatic(2.0), MESH)
+    assert surface_processes(export) == []
     assert not any("stands above the ground" in note for note in export["notes"])
 
 
@@ -196,11 +214,18 @@ def test_a_phreatic_line_drawn_as_a_line_puts_its_water_in_a_pit():
 
 # ── Stage by stage ───────────────────────────────────────────────────────────
 
-def dug(flip_wall: bool = False) -> Project:
+def dug(flip_wall: bool = False, drawn_loads: bool = False) -> Project:
     """The staged excavation with its drawn water loads taken out, so the water on the
-    floor of the pit is the export's own. Its water stands at -1 everywhere; the pit is
-    dug to -2, -4.5 and -7, left of the wall at x = 6."""
+    floor of the pit is the export's own, or kept with `drawn_loads`. Its water stands at
+    -1 everywhere, a level phreatic line; the pit is dug to -2, -4.5 and -7, left of the
+    wall at x = 6."""
     data = excavation.excavation_project().model_dump()
+    water = next(c for c in data["boundary_conditions"] if c["id"] == "pore_pressure")
+    water.update(fluid_pressure_type="Phreatic_Multi_Line", reference_coordinate=None,
+                 x_coordinates=[data["domain"]["x0"], data["domain"]["x1"]],
+                 y_coordinates=[-1.0, -1.0])
+    if drawn_loads:
+        return Project.model_validate(data)
     data["normal_loads"] = []
     for stage in data["stages"]:
         stage["activate"] = [k for k in stage["activate"] if not k.startswith("water_")]
@@ -284,7 +309,7 @@ def test_a_wall_drawn_the_other_way_still_has_the_water_pushing_it():
     deck = mdpa.parse(export["mdpa"])
 
     processes = surface_processes(export, "4_First_excavation")
-    assert processes[0]["fluid_pressure_type"] == "Hydrostatic"
+    assert processes[0]["fluid_pressure_type"] == "Phreatic_Line"
     turned = processes[1:]
     assert turned and all(p["fluid_pressure_type"] == "Uniform" for p in turned)
     for p in turned:
@@ -298,7 +323,7 @@ def test_a_wall_drawn_the_other_way_still_has_the_water_pushing_it():
 def test_the_water_loads_drawn_by_hand_are_the_ones_used():
     """The staged excavation draws its own water load per lift; where one is, the export
     adds none of its own on top."""
-    export = writer.export_project(excavation.excavation_project())
+    export = writer.export_project(dug(drawn_loads=True))
     for stage in stage_names(export):
         assert surface_processes(export, stage) == [], stage
     assert not any("stands above the ground" in note for note in export["notes"])
@@ -313,7 +338,7 @@ def test_a_stage_with_the_water_switched_off_has_no_water_on_the_ground():
 
 
 def test_a_3d_project_adds_none():
-    payload = hydrostatic(2.0).model_dump()
+    payload = phreatic(2.0).model_dump()
     payload["dimension"] = 3
     export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=8.0, order=1))

@@ -4717,6 +4717,7 @@ window.STAGE_FIXTURE =
       "bulk_modulus": null,
       "dynamic_viscosity": null
     },
+    "soil_water": {},
     "boundary_conditions": [
       {
         "id": "fixed_bottom",

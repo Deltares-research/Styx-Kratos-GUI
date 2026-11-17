@@ -442,6 +442,183 @@
     });
   });
 
+  /* ── The water of each soil ───────────────────────────────────────── */
+
+  function phreatic(id, extra) {
+    return pressure(id, 'domain', Object.assign({
+      fluid_pressure_type: 'Phreatic_Multi_Line', reference_coordinate: null,
+      x_coordinates: [0, 20], y_coordinates: [-1, -1] }, extra || {}));
+  }
+
+  function head(id, extra) {
+    return phreatic(id, Object.assign({ fluid_pressure_type: 'Head_Line',
+                                        y_coordinates: [1, 3] }, extra || {}));
+  }
+
+  test('the water lines are the phreatic and head lines, on the soil or drawn', function () {
+    var list = [head('head'), phreatic('pl', { on: 'line', points: [[0, -1], [20, -1]] }),
+                pressure('level', 'domain'),
+                pressure('dry', 'domain', { fluid_pressure_type: 'Uniform' }),
+                head('left', { on: 'face', face: 'left' })];
+    T.eq(BC().waterLines(list).map(function (r) { return r.id; }), ['head', 'pl']);
+    T.eq(BC().phreaticLine(list).id, 'pl', 'drawn on a line, it is the phreatic line');
+    T.eq(BC().headLines(list).map(function (r) { return r.id; }), ['head']);
+    T.eq(BC().phreaticLine([pressure('level', 'domain')]), null);
+  });
+
+  test('a head line is said as one', function () {
+    T.ok(/head line \(0, 1\) -> \(20, 3\), fixed/.test(BC().line(head('h'))));
+    T.ok(/·  head line$/.test(BC().label(head('h'))));
+  });
+
+  test('a project has one phreatic line, wherever the second is', function () {
+    BC().checkOnePhreatic([phreatic('pl')]);
+    var error = null;
+    try {
+      BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2', { on: 'face', face: 'left' })]);
+    } catch (e) { error = e; }
+    T.ok(error && /one phreatic line, pl\. Make pl2 a head line/.test(error.message));
+  });
+
+  test('the whole soil row is the phreatic line, the head lines listed apart', function () {
+    var project = section(standard().concat([head('head'), phreatic('pl')]));
+    var whole = BC().grid(project).filter(function (row) { return !row.face; })[0];
+    T.eq([whole.water, whole.waterId], ['Phreatic_Multi_Line', 'pl']);
+    T.eq(BC().others(project).map(function (r) { return r.id; }), ['head']);
+    var drawnLine = section(standard().concat(
+      [phreatic('pl', { on: 'line', points: [[0, -1], [20, -1]] })]));
+    T.eq(BC().grid(drawnLine).filter(function (row) { return !row.face; })[0].water, 'none',
+         'a phreatic line drawn on a line is listed with the lines');
+  });
+
+  test('a soil takes the phreatic line, a head line, or is interpolated', function () {
+    var list = [phreatic('pl', { on: 'line', points: [[0, -1], [20, -1]] }),
+                head('head', { name: 'Aquifer head', on: 'line', points: [[0, 1], [20, 3]] }),
+                pressure('level', 'domain')];
+    T.eq(BC().soilWaterChoices(list), [
+      ['', 'Phreatic line (pl)'], ['head', 'Head line (Aquifer head)'],
+      ['interpolate', 'Interpolated between the soils above and below']]);
+    T.eq(BC().soilWaterChoices([pressure('level', 'domain')])[0],
+         ['', 'Phreatic line (none yet)']);
+  });
+
+  test('each soil has a row with its name and its water', function () {
+    var project = section(standard(), {
+      layers: [{ id: 'L1', name: 'Sand' }, { id: 'L2', name: 'Clay' }],
+      soil_body_keys: ['soil_L1', 'soil_L2__a'], soil_body_labels: { soil_L2__a: 'Clay · A' },
+      custom_parts: [{ key: 'peat', label: 'Peat', mat: 'm' }, { key: 'box', label: 'Box' }],
+      soil_water: { soil_L2: 'interpolate', peat: 'head' } });
+    T.eq(BC().soilWaterRows(project), [
+      { key: 'soil_L1', label: 'Sand', water: '' },
+      { key: 'soil_L2', label: 'Clay', water: 'interpolate' },
+      { key: 'soil_L2__a', label: 'Clay · A', water: '' },
+      { key: 'peat', label: 'Peat', water: 'head' }]);
+  });
+
+  test('a soil whose line is gone takes the whole soil water again', function () {
+    var rows = [{ key: 'soil_L1', water: '' }, { key: 'soil_L2', water: 'interpolate' },
+                { key: 'soil_L3', water: 'head' }, { key: 'soil_L4', water: 'gone' }];
+    T.eq(BC().applySoilWater([phreatic('pl'), head('head')], rows),
+         { soil_L2: 'interpolate', soil_L3: 'head' });
+    T.eq(BC().applySoilWater([phreatic('pl'), pressure('head', 'domain')], rows),
+         { soil_L2: 'interpolate' }, 'a hydrostatic level is no head line');
+  });
+
+  /* ── The colours of the water ─────────────────────────────────────── */
+
+  test('the phreatic line and interpolated keep their colours, whatever the order',
+       function () {
+    var P = BC().PHREATIC_COLOR, I = BC().INTERPOLATE_COLOR;
+    var a = [phreatic('pl'), head('h1'), head('h2')];
+    var b = [head('h2'), head('h1'), phreatic('pl')];
+    [a, b].forEach(function (list) {
+      T.eq(BC().waterLineColor(list.filter(function (r) { return r.id === 'pl'; })[0], list), P);
+    });
+    var heads = a.slice(1).map(function (r) { return BC().waterLineColor(r, a); });
+    T.ok(heads[0] !== heads[1], 'each head line its own colour');
+    heads.forEach(function (color) { T.ok(color !== P && color !== I, color); });
+    T.eq(BC().waterLineColor(pressure('level', 'domain'), a), null, 'a level is no line');
+    var project = section(b, { layers: [{ id: 'L1', name: 'Sand' }],
+                                soil_water: { soil_L1: 'interpolate' } });
+    T.eq(BC().soilWaterColors(project, ['soil_L1']).soil_L1.color, I);
+  });
+
+  test('a piece of a layer takes its own water, else its layer\'s', function () {
+    var project = section([phreatic('pl'), head('aq')], {
+      soil_body_keys: ['soil_L1__a', 'soil_L1__b', 'soil_L2'],
+      soil_water: { soil_L1: 'aq', soil_L1__b: 'interpolate', soil_L2: 'gone' } });
+    T.eq(['soil_L1__a', 'soil_L1__b', 'soil_L2'].map(function (key) {
+      return BC().soilWaterOf(project, key);
+    }), ['aq', 'interpolate', ''], 'a line that is gone is the phreatic line');
+    var colors = BC().soilWaterColors(project, ['soil_L1__a', 'soil_L2']);
+    T.eq(colors.soil_L2.color, BC().PHREATIC_COLOR);
+    T.eq(colors.soil_L2.fill, BC().tint(BC().PHREATIC_COLOR, 0.45));
+    T.eq(colors.soil_L1__a.label, 'Head line: aq');
+  });
+
+  test('a project with no water line keeps the soils in their own colours', function () {
+    var project = section([pressure('level', 'domain')]);
+    T.eq(BC().soilWaterColors(project, ['soil_L1']), null);
+    T.eq(BC().waterLegend(project, ['soil_L1']), []);
+    var none = section([head('aq')], { soil_water: { soil_L2: 'aq' } });
+    T.eq(BC().soilWaterColors(none, ['soil_L1']).soil_L1,
+         { water: '', color: BC().NO_WATER_COLOR, fill: BC().tint(BC().NO_WATER_COLOR, 0.45),
+           label: 'No water line' }, 'no phreatic line: no water line');
+  });
+
+  test('the legend has each water line, and interpolated when a soil takes it',
+       function () {
+    var project = section([head('aq', { name: 'Aquifer' }), phreatic('pl', { name: 'PL' })],
+                          { soil_water: { soil_L2: 'interpolate' } });
+    T.eq(BC().waterLegend(project, ['soil_L1', 'soil_L2']).map(function (row) {
+      return [row.label, row.line];
+    }), [['Phreatic line: PL', 'solid'], ['Head line: Aquifer', 'dashed'],
+         ['Interpolated', null]]);
+    T.eq(BC().waterLegend(project, ['soil_L1']).length, 2);
+  });
+
+  test('right-clicking a soil offers each water, the one it takes ticked', function () {
+    var project = section([phreatic('pl'), head('aq', { name: 'Aquifer' })],
+                          { soil_water: { soil_L1: 'aq' } });
+    var menu = BC().soilWaterMenu(project, 'soil_L1');
+    T.eq(menu.map(function (row) { return [row.soilWater, !!row.checked, !!row.disabled]; }),
+         [['', false, false], ['aq', true, false], ['interpolate', false, false]]);
+    T.eq(menu[1].action, 'soilWater');
+    T.eq(menu[1].soilKey, 'soil_L1');
+    var solid = BC().soilWaterMenu(Object.assign({}, project, { dimension: 3 }), 'soil_L1');
+    T.eq(solid[2].disabled, true, 'interpolated is 2D only');
+  });
+
+  test('a soil set back on the phreatic line leaves its layer\'s water to the rest',
+       function () {
+    var project = section([phreatic('pl'), head('aq')], {
+      soil_body_keys: ['soil_L1__a', 'soil_L1__b', 'soil_L1__c', 'soil_L2'],
+      soil_water: { soil_L1: 'aq', soil_L1__c: 'interpolate' } });
+    T.eq(BC().withSoilWater(project, 'soil_L1__a', ''),
+         { soil_L1__b: 'aq', soil_L1__c: 'interpolate' });
+    T.eq(BC().withSoilWater(project, 'soil_L2', 'aq'),
+         { soil_L1: 'aq', soil_L1__c: 'interpolate', soil_L2: 'aq' });
+    T.eq(BC().withSoilWater(project, 'soil_L1', ''), { soil_L1__c: 'interpolate' });
+    T.eq(project.soil_water, { soil_L1: 'aq', soil_L1__c: 'interpolate' }, 'not changed');
+  });
+
+  test('the phreatic line is drawn solid with its mark, a head line dashed and named',
+       function () {
+    var pl = phreatic('pl', { y_coordinates: [-1, -3] });
+    var aq = head('aq', { name: 'Aquifer' });
+    var project = section(standard().concat([pl, aq]));
+    var line = App.Viewport.conditionGlyphSpec(pl, project);
+    T.eq([line.waterLine, line.dashed, line.color], ['phreatic', false, BC().PHREATIC_COLOR]);
+    T.eq(line.symbols.length, 1);
+    T.eq(line.symbols[0].waterTable, true);
+    T.eq(line.label.text, 'Phreatic · h = -3.00 m');
+    var other = App.Viewport.conditionGlyphSpec(aq, project);
+    T.eq([other.waterLine, other.dashed], ['head', true]);
+    T.eq(other.color, BC().waterLineColor(aq, project.boundary_conditions));
+    T.eq(other.label.text, 'Aquifer · h = 3.00 m');
+    T.eq(App.Viewport.alongPath([[0, 0, 5], [10, 0, 5], [10, 10, 5]], 0.75), [10, 5, 5]);
+  });
+
   test('a condition is shown until it is hidden', function () {
     App.PROJECT = section(standard().concat([pressure('pore', 'domain')]));
     T.eq(App.Viewport.isVisible('roller_left'), true);

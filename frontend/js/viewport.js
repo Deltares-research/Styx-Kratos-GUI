@@ -926,6 +926,27 @@ App.Viewport = (function () {
 
   var OUTWARD = { bottom: [0, -1], top: [0, 1], left: [-1, 0], right: [1, 0] };
 
+  /* The point a fraction `t` of the way along the polyline `path` of [x, y, z], by
+     length; null for a path with none. */
+  function alongPath(path, t) {
+    var total = 0, k;
+    for (k = 1; k < path.length; k += 1) {
+      total += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]);
+    }
+    if (!(total > 0)) return null;
+    var left = total * t;
+    for (k = 1; k < path.length; k += 1) {
+      var a = path[k - 1], b = path[k];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (left <= length && length > 0) {
+        var f = left / length;
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2]];
+      }
+      left -= length;
+    }
+    return path[path.length - 1].slice();
+  }
+
   function conditionGlyphSpec(record, project, outlines) {
     var spec = { kind: record.kind, lines: [], symbols: [], dashed: false, label: null,
                  active: record.active !== false };
@@ -1005,14 +1026,36 @@ App.Viewport = (function () {
       spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
         : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
       spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
-    } else if (type === 'Phreatic_Multi_Line' && record.x_coordinates) {
+    } else if ((type === 'Phreatic_Multi_Line' || type === 'Head_Line')
+               && record.x_coordinates) {
       var zs = record.z_coordinates;
-      spec.lines.push(record.x_coordinates.map(function (x, k) {
+      var waterPath = record.x_coordinates.map(function (x, k) {
         return [x, record.y_coordinates[k], two ? z : (zs ? zs[k] : z)];
-      }));
+      });
+      spec.lines.push(waterPath);
       var last = record.x_coordinates.length - 1;
-      spec.label = { text: 'h = ' + record.y_coordinates[last].toFixed(2) + ' m',
-                     at: [record.x_coordinates[last], record.y_coordinates[last], z] };
+      var h = 'h = ' + record.y_coordinates[last].toFixed(2) + ' m';
+      spec.label = { text: h, at: [record.x_coordinates[last], record.y_coordinates[last], z] };
+      // A water line the soils take (`App.BoundaryConditions.waterLines`): in the colour
+      // its soils are filled with in Flow conditions. The phreatic line solid, with the
+      // water-table mark (an inverted triangle) where it starts; a head line dashed, and
+      // named, so the two never read as one another.
+      var BC = App.BoundaryConditions;
+      var list = project.boundary_conditions || [];
+      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list) : null;
+      if (color) {
+        spec.color = color;
+        if (type === 'Phreatic_Multi_Line') {
+          spec.waterLine = 'phreatic';
+          spec.dashed = false;
+          var mark = alongPath(waterPath, 0.15);
+          if (two && mark) spec.symbols.push({ at: mark, outward: [0, 1], waterTable: true });
+          spec.label.text = 'Phreatic · ' + h;
+        } else {
+          spec.waterLine = 'head';
+          spec.label.text = record.name + ' · ' + h;
+        }
+      }
     } else if (type === 'Uniform') {
       var where = record.on === 'face' ? faceOutline(project, record.face, outlines)
         : (record.on === 'line' || record.on === 'point')
@@ -1030,7 +1073,8 @@ App.Viewport = (function () {
     var group = new THREE.Group();
     group.name = record.id + '-condition';
     var color = !spec.active ? 0x777777
-      : record.kind === 'displacement' ? SUPPORT_COLOR : WATER_COLOR;
+      : record.kind === 'displacement' ? SUPPORT_COLOR
+      : spec.color ? new THREE.Color(spec.color).getHex() : WATER_COLOR;
 
     spec.lines.forEach(function (points) {
       if (points.length < 1) return;
@@ -1065,7 +1109,13 @@ App.Viewport = (function () {
         group.add(segments ? new THREE.LineSegments(geometry, material)
                            : new THREE.Line(geometry, material));
       }
-      if (symbol.arrow) {
+      if (symbol.waterTable) {
+        // The water table: an inverted triangle standing on the line, and two short
+        // strokes under it.
+        stroke([p(0, 0), p(-0.5 * s, 0.85 * s), p(0.5 * s, 0.85 * s), p(0, 0)]);
+        stroke([p(-0.4 * s, -0.25 * s), p(0.4 * s, -0.25 * s),
+                p(-0.22 * s, -0.5 * s), p(0.22 * s, -0.5 * s)], true);
+      } else if (symbol.arrow) {
         // Water leaving the soil: a short arrow pointing out of it.
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
                 p(0.25 * s, 0.7 * s)]);
@@ -1703,18 +1753,23 @@ App.Viewport = (function () {
   /* Canvas-texture text label facing the camera. */
   function makeLabel(text, x, y, z, scale) {
     var c = document.createElement('canvas');
-    c.width = 256; c.height = 64;
+    var font = 'bold 40px Segoe UI, Arial, sans-serif';
     var ctx = c.getContext('2d');
-    ctx.font = 'bold 40px Segoe UI, Arial, sans-serif';
+    ctx.font = font;
+    // Wide enough for the text: a water line's label carries its name as well as its
+    // level. 256 px (four heights) at the least, as every label was before.
+    var width = Math.max(256, Math.ceil(ctx.measureText(text).width) + 16);
+    c.width = width; c.height = 64;
+    ctx.font = font;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(255,255,255,.92)';
-    ctx.strokeText(text, 128, 34);
+    ctx.strokeText(text, width / 2, 34);
     ctx.fillStyle = '#1d2430';
-    ctx.fillText(text, 128, 34);
+    ctx.fillText(text, width / 2, 34);
     var tex = new THREE.CanvasTexture(c);
     tex.minFilter = THREE.LinearFilter;
     var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    sp.scale.set(4 * (scale || 1), 1 * (scale || 1), 1);
+    sp.scale.set(4 * (width / 256) * (scale || 1), 1 * (scale || 1), 1);
     sp.position.set(x, y, z);
     sp.userData.noPick = true;
     sp.userData.pictureText = { text: text, fraction: 40 / 64, color: 0x1d2430, halo: true,
@@ -2481,8 +2536,83 @@ App.Viewport = (function () {
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
     // A stage may have switched a part off, and a coloured part follows that.
     syncPartColors();
+    applySoilWaterColors(mode);
     applyImportedVisibility(mode);
     needsRender = true;
+  }
+
+  /* ── The water of each soil, in Flow conditions ─────────────────────────
+     Each soil is filled with a tint of the water line it takes
+     (`App.BoundaryConditions.soilWaterColors`): the phreatic line's blue, a head line's
+     own colour, the interpolated amber. Only in that tab; every other tab, and a
+     project with no water line, keeps the soils in their own colours. The legend over
+     the viewport says which colour is which. */
+  function soilWaterKeys() {
+    return soilKeys.concat(((App.PROJECT && App.PROJECT.custom_parts) || [])
+      .filter(function (part) { return part.mat && soilKeys.indexOf(part.key) < 0; })
+      .map(function (part) { return part.key; }));
+  }
+
+  function applySoilWaterColors(mode) {
+    var BC = App.BoundaryConditions;
+    var keys = soilWaterKeys();
+    var colors = mode === 'flow' && App.PROJECT && !App.PROJECT.deck && BC
+      && BC.soilWaterColors ? BC.soilWaterColors(App.PROJECT, keys) : null;
+    keys.forEach(function (key) {
+      var g = groups[key];
+      if (!g) return;
+      var fill = colors && colors[key] ? colors[key].fill : null;
+      g.children.forEach(function (o) {
+        var m = o.isMesh && o.material;
+        if (!m || Array.isArray(m) || !m.color || (m.userData && m.userData.glyph)) return;
+        if (!m.userData.soilBase) m.userData.soilBase = m.color.clone();
+        if (fill) m.color.set(fill); else m.color.copy(m.userData.soilBase);
+      });
+    });
+    syncWaterLegend(colors ? BC.waterLegend(App.PROJECT, keys) : []);
+  }
+
+  var waterLegendHost = null;
+
+  function syncWaterLegend(rows) {
+    if (!rows.length) {
+      if (waterLegendHost) waterLegendHost.hidden = true;
+      return;
+    }
+    var parent = typeof document === 'undefined' ? null : document.getElementById('viewport');
+    if (!parent) return;
+    if (!waterLegendHost) {
+      waterLegendHost = document.createElement('div');
+      waterLegendHost.id = 'vp-water-legend';
+      waterLegendHost.className = 'vp-hud vp-water-legend';
+    }
+    if (waterLegendHost.parentNode !== parent) parent.appendChild(waterLegendHost);
+    waterLegendHost.hidden = false;
+    waterLegendHost.textContent = '';
+    var title = document.createElement('div');
+    title.className = 'vp-water-legend-title';
+    title.textContent = 'Soil water';
+    waterLegendHost.appendChild(title);
+    rows.forEach(function (row) {
+      var item = document.createElement('div');
+      item.className = 'vp-water-legend-row';
+      var swatch = document.createElement('i');
+      swatch.className = 'vp-water-legend-swatch';
+      swatch.style.background = row.fill;
+      swatch.style.borderColor = row.color;
+      if (row.line) {
+        var stroke = document.createElement('b');
+        stroke.className = 'vp-water-legend-line ' + row.line;
+        stroke.style.borderTopColor = row.color;
+        swatch.appendChild(stroke);
+      }
+      var text = document.createElement('span');
+      text.textContent = row.label;
+      text.title = row.label;
+      item.appendChild(swatch);
+      item.appendChild(text);
+      waterLegendHost.appendChild(item);
+    });
   }
 
   /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
@@ -3693,6 +3823,7 @@ App.Viewport = (function () {
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
+    alongPath: alongPath,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
     applyStageVisibility: applyStageVisibility, stageGhosts: stageGhosts,
     normalLoadGlyphSpec: normalLoadGlyphSpec,

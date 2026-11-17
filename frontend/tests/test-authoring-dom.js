@@ -880,6 +880,83 @@
     });
   });
 
+  function aquiferProject() {
+    var p = project();
+    p.boundary_conditions = [
+      App.BoundaryConditions.draftWaterPressure(p, 'domain', {
+        id: 'pl', name: 'Phreatic', fluid_pressure_type: 'Phreatic_Multi_Line',
+        x_coordinates: [0, 50], y_coordinates: [-1, -1] }),
+      App.BoundaryConditions.draftWaterPressure(p, 'line', {
+        id: 'head', name: 'Head', fluid_pressure_type: 'Head_Line',
+        points: [[0, 1], [50, 3]], x_coordinates: [0, 50], y_coordinates: [1, 3] })];
+    p.soil_water = { soil_L2: 'head' };
+    return p;
+  }
+
+  test('each soil takes its water in the boundary conditions window', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.open();
+      var dialog = latest(ctx);
+      var selects = dialog.form.querySelectorAll('select.bc-soil-water-choice');
+      T.eq(selects.length, 2, 'a row for each soil');
+      T.eq(selects[0].getAttribute('aria-label'), 'Water of Upper');
+      T.eq([selects[0].value, selects[1].value], ['', 'head']);
+      T.eq(Array.prototype.map.call(selects[0].options, function (o) { return o.value; }),
+           ['', 'head', 'interpolate']);
+      change(selects[0], 'interpolate');
+      return button(dialog, 'Save').then(function () {
+        var body = ctx.requests[0].body;
+        T.eq(body.soil_water, { soil_L1: 'interpolate', soil_L2: 'head' });
+        T.eq(body.boundary_conditions.map(function (c) { return c.id; }), ['pl', 'head']);
+      });
+    });
+  });
+
+  test('a soil whose line the grid takes away takes the whole soil water', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.open();
+      var dialog = latest(ctx);
+      realButton(dialog.form.querySelector('.bc-other'), 'Delete').click();
+      return drain().then(function () {
+        T.eq(ctx.requests[0].body.boundary_conditions.map(function (c) { return c.id; }),
+             ['pl']);
+        App.PROJECT.soil_water = {};
+        App.BoundaryConditions.open();
+        var again = latest(ctx);
+        T.eq(again.form.querySelectorAll('select.bc-soil-water-choice')[1].value, '');
+      });
+    });
+  });
+
+  test('the record dialog refuses a second phreatic line, saying what to do', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.openRecord(App.BoundaryConditions.find('head'));
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Phreatic_Multi_Line');
+      field(dialog, 'Phreatic line').value = '0 -3, 50 -3';
+      var result = button(dialog, 'Save');
+      T.eq(result, null);
+      T.eq(ctx.requests.length, 0);
+      T.ok(/one phreatic line, Phreatic\. Make Head a head line/.test(
+        dialog.form.querySelector('.mesh-settings-message').textContent));
+    });
+  });
+
+  test('a head line drawn on a line takes its points, as a phreatic line does', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.draw('water_pressure', 'line');
+      ctx.drawn.options.onComplete([[50, 2, 0], [0, 0, 0]]);
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Head_Line');
+      T.eq(field(dialog, 'Head line').value, '0 0, 50 2', 'its row says head line');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.fluid_pressure_type, saved.x_coordinates, saved.y_coordinates],
+             ['Head_Line', [0, 50], [0, 2]]);
+      });
+    });
+  });
+
   test('boundary grid lists, edits and deletes a condition on an individually drawn point', function () {
     return withEnvironment(project(), function (ctx) {
       var record = App.BoundaryConditions.draftWaterPressure(App.PROJECT, 'point', {

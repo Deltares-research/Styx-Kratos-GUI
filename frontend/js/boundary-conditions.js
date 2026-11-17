@@ -9,7 +9,8 @@
      • "displacement": the components `fixed` (x, y, z) held at zero, on a face, a
        soil part, a drawn line or a point;
      • "water_pressure": Kratos' `fluid_pressure_type` (Uniform, Hydrostatic,
-       Phreatic_Multi_Line) on the whole soil, a face, a part, a line or a point.
+       Phreatic_Multi_Line, and Head_Line: a phreatic multi-line to Kratos) on the whole
+       soil, a face, a part, a line or a point.
 
    The target is two fields, the dialog's two questions: `on` (Whole soil / Face /
    Part / Line / Point), then the field it names (`face`, `part`, `points`).
@@ -33,7 +34,17 @@ App.BoundaryConditions = (function () {
   var SECTION_FACES = ['bottom', 'left', 'right', 'top'];
   /* The axis normal to each face (x 0, y 1, z 2): what a roller on it holds. */
   var FACE_NORMALS = { bottom: 1, top: 1, left: 0, right: 0, front: 2, back: 2 };
-  var PRESSURE_TYPES = ['Uniform', 'Hydrostatic', 'Phreatic_Multi_Line'];
+  var PRESSURE_TYPES = ['Uniform', 'Hydrostatic', 'Phreatic_Multi_Line', 'Head_Line'];
+  /* What the type lists call them. */
+  var TYPE_LABELS = { Uniform: 'Uniform', Hydrostatic: 'Hydrostatic',
+                      Phreatic_Multi_Line: 'Phreatic line', Head_Line: 'Head line' };
+  /* `schemas.LINE_TYPES` on `schemas.LINE_TARGETS`: a water line, the phreatic line or a
+     head line, on the whole soil or drawn on a line. `schemas.INTERPOLATE`: a soil whose
+     water is interpolated between the soils above and below it (Kratos'
+     Interpolate_Line). */
+  var LINE_TYPES = ['Phreatic_Multi_Line', 'Head_Line'];
+  var LINE_TARGETS = ['domain', 'line'];
+  var INTERPOLATE = 'interpolate';
   var TARGETS = [['domain', 'Whole soil'], ['face', 'Face'], ['part', 'Part'],
                  ['line', 'Line'], ['point', 'Point']];
   var AXES = ['x', 'y', 'z'];
@@ -318,7 +329,8 @@ App.BoundaryConditions = (function () {
     else if (record.fluid_pressure_type === 'Hydrostatic') {
       what = 'hydrostatic about ' + String(record.reference_coordinate) + ' m';
     } else {
-      what = 'phreatic line ' + (record.x_coordinates || []).map(function (x, i) {
+      what = (record.fluid_pressure_type === 'Head_Line' ? 'head line ' : 'phreatic line ')
+        + (record.x_coordinates || []).map(function (x, i) {
         return xy([x, record.y_coordinates[i]]);
       }).join(' -> ');
     }
@@ -346,7 +358,7 @@ App.BoundaryConditions = (function () {
     } else if (record.fluid_pressure_type === 'Uniform') {
       what = 'p = ' + record.value;
     } else {
-      what = 'phreatic line';
+      what = record.fluid_pressure_type === 'Head_Line' ? 'head line' : 'phreatic line';
     }
     return record.name + '  ·  ' + what;
   }
@@ -526,12 +538,260 @@ App.BoundaryConditions = (function () {
                    'The standard supports: the bottom fixed, the sides on rollers.');
   }
 
+  /* ── The water of each soil: pure ────────────────────────────────────── */
+
+  /* `Project.water_lines`: the phreatic line and the head lines, on the whole soil or
+     drawn on a line. */
+  function waterLines(list) {
+    return list.filter(function (record) {
+      return record.kind === 'water_pressure' && LINE_TARGETS.indexOf(record.on) >= 0
+        && LINE_TYPES.indexOf(record.fluid_pressure_type) >= 0;
+    });
+  }
+
+  /* `Project.phreatic_line`: the phreatic line, every soil's water by default, or null. */
+  function phreaticLine(list) {
+    return waterLines(list).filter(function (record) {
+      return record.fluid_pressure_type === 'Phreatic_Multi_Line';
+    })[0] || null;
+  }
+
+  /* `Project.head_lines`: the lines a soil can take instead. */
+  function headLines(list) {
+    return waterLines(list).filter(function (record) {
+      return record.fluid_pressure_type === 'Head_Line';
+    });
+  }
+
+  /* A project has one phreatic line (`Project._cross_references`): said before the
+     server says it, with what to do instead. */
+  function checkOnePhreatic(list) {
+    var phreatic = list.filter(function (record) {
+      return record.kind === 'water_pressure'
+        && record.fluid_pressure_type === 'Phreatic_Multi_Line';
+    });
+    if (phreatic.length > 1) {
+      throw new Error('A project has one phreatic line, ' + phreatic[0].name + '. Make '
+                      + phreatic[1].name + ' a head line, and give it to its soils under '
+                      + 'Soil water.');
+    }
+  }
+
+  /* What the user calls the soil `key`: its layer, its piece of one, or its part. */
+  function soilName(project, key) {
+    var layer = (project.layers || []).filter(function (l) {
+      return 'soil_' + l.id === key;
+    })[0];
+    if (layer) return layer.name;
+    var part = (project.custom_parts || []).filter(function (p) { return p.key === key; })[0];
+    if (part) return part.label;
+    return (project.soil_body_labels || {})[key] || key;
+  }
+
+  /* The water a soil can take, as [value, label]: the phreatic line (''), a head line,
+     or interpolated. */
+  function soilWaterChoices(list) {
+    var phreatic = phreaticLine(list);
+    var out = [['', 'Phreatic line' + (phreatic ? ' (' + phreatic.name + ')' : ' (none yet)')]];
+    headLines(list).forEach(function (record) {
+      out.push([record.id, 'Head line (' + record.name + ')']);
+    });
+    out.push([INTERPOLATE, 'Interpolated between the soils above and below']);
+    return out;
+  }
+
+  /* Each soil and the water it takes, '' for the phreatic line: the rows of Soil water. */
+  function soilWaterRows(project) {
+    var chosen = (project && project.soil_water) || {};
+    return soilPartKeys(project).map(function (key) {
+      return { key: key, label: soilName(project, key), water: chosen[key] || '' };
+    });
+  }
+
+  /* `Project.soil_water` after the rows, with the conditions `list`: a soil whose head
+     line is no longer one takes the phreatic line. */
+  function applySoilWater(list, rows) {
+    var lines = headLines(list).map(function (record) { return record.id; });
+    var out = {};
+    rows.forEach(function (row) {
+      if (row.water === INTERPOLATE || lines.indexOf(row.water) >= 0) {
+        out[row.key] = row.water;
+      }
+    });
+    return out;
+  }
+
+  /* ── The colours of the water: pure ──────────────────────────────────── */
+
+  /* The phreatic line and an interpolated soil are always drawn in the same colour,
+     whatever order the lines were drawn or listed in, so a user learns them once. The
+     head lines take the colours of `HEAD_COLORS` in their order in the list, none of
+     them the phreatic blue or the interpolated amber. A soil is filled with a light
+     tint of its line's colour (`SOIL_TINT`), so the line itself still shows over it. */
+  var PHREATIC_COLOR = '#1565c0';
+  var INTERPOLATE_COLOR = '#e09b00';
+  var NO_WATER_COLOR = '#9aa3ad';
+  var HEAD_COLORS = ['#c62828', '#7b1fa2', '#00897b', '#d81b60', '#6d4c41', '#5d7a00'];
+  var SOIL_TINT = 0.45;
+
+  /* `hex` mixed toward white by `amount` (0 keeps it, 1 is white). */
+  function tint(hex, amount) {
+    var n = parseInt(String(hex).slice(1), 16);
+    return '#' + [16, 8, 0].map(function (shift) {
+      var c = (n >> shift) & 255;
+      var mixed = Math.round(c + (255 - c) * amount);
+      return (mixed < 16 ? '0' : '') + mixed.toString(16);
+    }).join('');
+  }
+
+  /* The colour of the water line `record` among the conditions `list`: the phreatic
+     blue, a head line's own colour, or null for any other condition. */
+  function waterLineColor(record, list) {
+    if (!record || record.kind !== 'water_pressure') return null;
+    var phreatic = phreaticLine(list);
+    if (phreatic && phreatic.id === record.id) return PHREATIC_COLOR;
+    var at = headLines(list).map(function (r) { return r.id; }).indexOf(record.id);
+    return at < 0 ? null : HEAD_COLORS[at % HEAD_COLORS.length];
+  }
+
+  /* The water the soil `key` takes, as `Project.water_of_bodies` reads it: its own
+     entry, else its layer's (a body `soil_L__a` is a piece of `soil_L`), else '' for
+     the phreatic line. An entry naming a line that is no head line is no entry. */
+  function soilWaterOf(project, key) {
+    var chosen = (project && project.soil_water) || {};
+    var lines = headLines(records(project)).map(function (r) { return r.id; });
+    function valid(water) { return water === INTERPOLATE || lines.indexOf(water) >= 0; }
+    if (valid(chosen[key])) return chosen[key];
+    var layer = String(key).split('__')[0];
+    if (layer !== key && valid(chosen[layer])) return chosen[layer];
+    return '';
+  }
+
+  /* What the water `water` ('' for the phreatic line, a head line's id, or
+     INTERPOLATE) is called and drawn in. A soil on the phreatic line of a project that
+     has none takes no water line. */
+  function waterLook(list, water) {
+    if (water === INTERPOLATE) {
+      return { color: INTERPOLATE_COLOR, label: 'Interpolated' };
+    }
+    if (water) {
+      var line = headLines(list).filter(function (r) { return r.id === water; })[0];
+      if (line) return { color: waterLineColor(line, list), label: 'Head line: ' + line.name };
+    }
+    var phreatic = phreaticLine(list);
+    return phreatic
+      ? { color: PHREATIC_COLOR, label: 'Phreatic line: ' + phreatic.name }
+      : { color: NO_WATER_COLOR, label: 'No water line' };
+  }
+
+  /* Whether the Flow conditions tab colours the soils by their water: once there is a
+     water line, or a soil takes a water of its own. A project with neither keeps the
+     soils in their own colours. */
+  function soilWaterShown(project) {
+    return waterLines(records(project)).length > 0
+      || Object.keys((project && project.soil_water) || {}).length > 0;
+  }
+
+  /* Each soil of `keys` and how the Flow conditions tab draws it, as
+     `{key: {water, color, fill, label}}`: `color` its line's, `fill` the lighter tint
+     the soil is filled with. Null when the soils keep their own colours
+     (`soilWaterShown`). */
+  function soilWaterColors(project, keys) {
+    if (!soilWaterShown(project)) return null;
+    var list = records(project);
+    var out = {};
+    (keys || []).forEach(function (key) {
+      var water = soilWaterOf(project, key);
+      var look = waterLook(list, water);
+      out[key] = { water: water, color: look.color, fill: tint(look.color, SOIL_TINT),
+                   label: look.label };
+    });
+    return out;
+  }
+
+  /* The legend of the Flow conditions tab: one row for each water line, and one for
+     interpolated and for no water line when a soil of `keys` takes it, as
+     `[{color, fill, label, line}]` -- `line` 'solid' for the phreatic line, 'dashed'
+     for a head line, null for a soil-only entry. Empty when the soils keep their own
+     colours. */
+  function waterLegend(project, keys) {
+    var colors = soilWaterColors(project, keys);
+    if (!colors) return [];
+    var list = records(project);
+    var taken = Object.keys(colors).map(function (key) { return colors[key].water; });
+    var out = [];
+    function add(water, line) {
+      var look = waterLook(list, water);
+      out.push({ color: look.color, fill: tint(look.color, SOIL_TINT), label: look.label,
+                 line: line });
+    }
+    if (phreaticLine(list)) add('', 'solid');
+    else if (taken.indexOf('') >= 0) add('', null);
+    headLines(list).forEach(function (record) { add(record.id, 'dashed'); });
+    if (taken.indexOf(INTERPOLATE) >= 0) add(INTERPOLATE, null);
+    return out;
+  }
+
+  /* The right-click menu's choices for the soil `key`: each water it can take, the
+     one it takes now ticked, as menu rows carrying `soilKey` and `soilWater`.
+     Interpolated is 2D only. */
+  function soilWaterMenu(project, key) {
+    var now = soilWaterOf(project, key);
+    var two = !project || project.dimension === 2;
+    return soilWaterChoices(records(project)).map(function (choice) {
+      var interpolate = choice[0] === INTERPOLATE;
+      return {
+        label: interpolate ? 'Interpolated (above and below)' + (two ? '' : ' — 2D only')
+          : choice[1],
+        action: 'soilWater', soilKey: key, soilWater: choice[0],
+        checked: choice[0] === now, disabled: interpolate && !two
+      };
+    });
+  }
+
+  /* `Project.soil_water` with the soil `key` taking `water` ('' for the phreatic line).
+     A piece of a layer takes its layer's entry unless it has its own, and an entry
+     cannot say "the phreatic line": a piece put back on the phreatic line while its
+     layer takes another water leaves the layer's entry to its other pieces, by name,
+     and the layer none. */
+  function withSoilWater(project, key, water) {
+    var out = Object.assign({}, (project && project.soil_water) || {});
+    var layer = String(key).split('__')[0];
+    if (water) {
+      out[key] = water;
+      return out;
+    }
+    delete out[key];
+    if (layer !== key && out[layer] !== undefined) {
+      var inherited = out[layer];
+      delete out[layer];
+      ((project && project.soil_body_keys) || []).forEach(function (body) {
+        if (body !== key && body.split('__')[0] === layer && out[body] === undefined) {
+          out[body] = inherited;
+        }
+      });
+    }
+    return out;
+  }
+
+  /* The right-click's edit: the soil `key` takes `water`, in one PATCH, as
+     `kratos-cli boundary soil-water` does. */
+  function setSoilWater(key, water) {
+    var project = App.PROJECT;
+    var name = soilName(project, key);
+    var said = water === INTERPOLATE
+      ? name + ': water interpolated between the soils above and below.'
+      : name + ' takes its water from: ' + waterLook(records(project), water).label + '.';
+    return send({ soil_water: withSoilWater(project, key, water) }, said);
+  }
+
   /* ── The face grid of the dialog: pure ───────────────────────────────── */
 
-  /* The first condition of `kind` on a face (or on the whole soil, `face` null). */
+  /* The first condition of `kind` on a face (or on the whole soil, `face` null). A head
+     line on the whole soil is no row's: it is for the soils that take it. */
   function onFace(list, kind, face) {
     return list.filter(function (record) {
-      return record.kind === kind
+      return record.kind === kind && record.fluid_pressure_type !== 'Head_Line'
         && (face ? record.on === 'face' && record.face === face : record.on === 'domain');
     })[0] || null;
   }
@@ -552,7 +812,11 @@ App.BoundaryConditions = (function () {
      column is its water pressure, or else its seepage face ('seepage'). */
   function gridRow(list, face) {
     var support = face ? onFace(list, 'displacement', face) : null;
-    var water = onFace(list, 'water_pressure', face);
+    // The whole soil's row is the phreatic line on it, when there is one: every soil's
+    // water unless it takes another. The head lines are listed with the rest.
+    var phreatic = phreaticLine(list);
+    var water = (!face && phreatic && phreatic.on === 'domain' && phreatic)
+      || onFace(list, 'water_pressure', face);
     var seepage = face && !water ? onFace(list, 'seepage', face) : null;
     return {
       face: face,
@@ -676,6 +940,7 @@ App.BoundaryConditions = (function () {
         list.push(draftWaterPressure(work, row.face ? 'face' : 'domain', options));
       }
     });
+    checkOnePhreatic(list);
     return list;
   }
 
@@ -714,12 +979,15 @@ App.BoundaryConditions = (function () {
 
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
-     on parts, lines and points. Save writes them all in one request. */
+     on parts, lines and points, and the water each soil takes. Save writes them all in
+     one request. */
   function open() {
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var rows = grid(project);
     var controls = [];
+    var soils = soilWaterRows(project);
+    var soilControls = [];
     var message, shell;
 
     function read() {
@@ -743,7 +1011,11 @@ App.BoundaryConditions = (function () {
         message.textContent = error.message;
         return null;
       }
-      return send({ boundary_conditions: list }, 'Saved the boundary conditions.').then(function () {
+      var chosen = applySoilWater(list, soils.map(function (row, i) {
+        return Object.assign({}, row, { water: soilControls[i].value });
+      }));
+      return send({ boundary_conditions: list, soil_water: chosen },
+                  'Saved the boundary conditions.').then(function () {
         shell.close();
       }, function (error) { message.textContent = error.message; });
     }
@@ -883,6 +1155,45 @@ App.BoundaryConditions = (function () {
         });
         body.appendChild(list);
 
+        body.appendChild(el('div.bc-heading', { text: 'Soil water' }));
+        var choices = soilWaterChoices(records(project));
+        var waters = el('table.bc-grid.bc-soil-water');
+        soils.forEach(function (row) {
+          var tr = el('tr');
+          // The colour the Flow conditions tab fills this soil with.
+          var swatch = el('span.bc-water-swatch');
+          var name = el('td');
+          name.appendChild(swatch);
+          name.appendChild(document.createTextNode(row.label));
+          tr.appendChild(name);
+          var select = options(el('select.bc-soil-water-choice'), choices, '');
+          select.value = choices.some(function (choice) { return choice[0] === row.water; })
+            ? row.water : '';
+          select.setAttribute('aria-label', 'Water of ' + row.label);
+          function paint() {
+            var look = waterLook(records(project), select.value);
+            swatch.style.background = tint(look.color, SOIL_TINT);
+            swatch.style.borderColor = look.color;
+            swatch.title = look.label;
+          }
+          select.addEventListener('change', paint);
+          paint();
+          tr.appendChild(el('td', null, select));
+          soilControls.push(select);
+          waters.appendChild(tr);
+        });
+        if (!soils.length) {
+          body.appendChild(el('div.mesh-setting-help', { text: 'No soil yet.' }));
+        } else {
+          body.appendChild(waters);
+        }
+        body.appendChild(el('div.mesh-setting-help', { text:
+          'The water each soil takes: the phreatic line, by default; a head line, for an '
+          + 'aquifer, which acts only on the soils that take it; or interpolated between '
+          + 'the soils above and below, for an aquitard (2D only). A project has one '
+          + 'phreatic line; draw the other lines as water pressures of the type Head line. '
+          + 'Only the phreatic line puts water on the ground.' }));
+
         message = el('div.mesh-settings-message');
         body.appendChild(message);
       }
@@ -913,7 +1224,7 @@ App.BoundaryConditions = (function () {
        line's points, x increasing, unless one of its own was typed. */
     function followPoints() {
       if (!c.phreatic || c.kind.value !== 'water_pressure' || c.on.value !== 'line'
-          || c.type.value !== 'Phreatic_Multi_Line' || !phreaticFollows()) return;
+          || LINE_TYPES.indexOf(c.type.value) < 0 || !phreaticFollows()) return;
       var points = parsePoints(c.points.value);
       if (!points || points.length < 2) return;
       autoPhreatic = c.phreatic.value = pointsText(phreaticPoints(points));
@@ -957,10 +1268,11 @@ App.BoundaryConditions = (function () {
           var cut = Number(c.cutoff.value || 0);
           if (!isFinite(cut) || cut < 0) throw new Error('The cut-off is a stress of 0 or more.');
           opts.pressure_tension_cut_off = cut;
-          if (type === 'Phreatic_Multi_Line') {
+          if (LINE_TYPES.indexOf(type) >= 0) {
             var phreatic = parsePoints(c.phreatic.value);
             if (!phreatic || phreatic.length < 2) {
-              throw new Error('A phreatic line needs two points or more, x y, x y.');
+              throw new Error('A ' + TYPE_LABELS[type].toLowerCase() + ' needs two points '
+                              + 'or more, x y, x y.');
             }
             opts.x_coordinates = phreatic.map(function (p) { return p[0]; });
             opts.y_coordinates = phreatic.map(function (p) { return p[1]; });
@@ -975,6 +1287,11 @@ App.BoundaryConditions = (function () {
       var typed = c.name.value.trim();
       if (typed && !(record === null && typed === draftName)) made.name = typed;
       made.active = c.active.checked;
+      try {
+        checkOnePhreatic(records().filter(function (item) {
+          return item.id !== made.id;
+        }).concat([made]));
+      } catch (error) { message.textContent = error.message; return null; }
       return save(made).then(function () { shell.close(); }, function (error) {
         message.textContent = error.message;
       });
@@ -1104,10 +1421,12 @@ App.BoundaryConditions = (function () {
 
         var water = record.kind === 'water_pressure' ? record : {};
         c.type = options(el('select.mesh-setting-control'), PRESSURE_TYPES.map(function (t) {
-          return [t, t.replace(/_/g, ' ')];
+          return [t, TYPE_LABELS[t]];
         }), water.fluid_pressure_type || 'Hydrostatic');
         row('type', 'Type', c.type, 'Uniform: one value. Hydrostatic: zero at its level, '
-            + 'growing with depth. Phreatic line: hydrostatic below a line.');
+            + 'growing with depth. Phreatic line: hydrostatic below a line, the water of '
+            + 'every soil; one in a project. Head line: the same, for the soils that take '
+            + 'it under Soil water.');
         c.value = number(water.value);
         row('value', 'Value', c.value, '[' + App.Units.label('stress') + '], compression '
             + 'negative.');
@@ -1151,7 +1470,8 @@ App.BoundaryConditions = (function () {
           ['type', 'cutoff', 'initial'].forEach(function (key) { show(key, water); });
           show('value', water && type === 'Uniform');
           show('level', water && type === 'Hydrostatic');
-          show('phreatic', water && type === 'Phreatic_Multi_Line');
+          show('phreatic', water && LINE_TYPES.indexOf(type) >= 0);
+          rows.phreatic[0].textContent = type === 'Head_Line' ? 'Head line' : 'Phreatic line';
           show('cutoff', water && type !== 'Uniform');
           followPoints();
         }
@@ -1217,6 +1537,16 @@ App.BoundaryConditions = (function () {
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
     phreaticPoints: phreaticPoints,
+    INTERPOLATE: INTERPOLATE, waterLines: waterLines, phreaticLine: phreaticLine,
+    headLines: headLines,
+    checkOnePhreatic: checkOnePhreatic, soilWaterChoices: soilWaterChoices,
+    soilWaterRows: soilWaterRows, applySoilWater: applySoilWater,
+    PHREATIC_COLOR: PHREATIC_COLOR, INTERPOLATE_COLOR: INTERPOLATE_COLOR,
+    NO_WATER_COLOR: NO_WATER_COLOR, HEAD_COLORS: HEAD_COLORS, tint: tint,
+    waterLineColor: waterLineColor, soilWaterOf: soilWaterOf,
+    soilWaterShown: soilWaterShown, soilWaterColors: soilWaterColors,
+    waterLegend: waterLegend, soilWaterMenu: soilWaterMenu, withSoilWater: withSoilWater,
+    setSoilWater: setSoilWater, soilName: soilName,
     isConditionKey: isConditionKey, find: find,
     save: save, remove: remove, applyStandard: applyStandard,
     activeState: activeState, setActive: setActive,

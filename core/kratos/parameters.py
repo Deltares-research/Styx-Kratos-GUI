@@ -322,6 +322,11 @@ class Stage:
 PhreaticLine = tuple[tuple[float, float], tuple[float, float]]
 """Two (x, y) points of a straight phreatic line, at different x (`_normal_load`)."""
 
+INTERPOLATE_LINE = "Interpolate_Line"
+"""The `fluid_pressure_type` of a soil whose pressure Kratos interpolates between its
+neighbours' (`Project.soil_water`): a `WaterPressure` of this type has no condition of
+its own, and is on in every stage that has water (`project_parameters`)."""
+
 
 @dataclass(frozen=True)
 class WaterPressure:
@@ -331,7 +336,8 @@ class WaterPressure:
     condition on a face the excavation splits arrives as one entry per segment, so each
     one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
     per body. `reference_coordinate` is the record's own level, and `condition` the
-    record's id, which a stage switches (`Stage.conditions`)."""
+    record's id, which a stage switches (`Stage.conditions`); empty for an
+    `INTERPOLATE_LINE` soil, which is on whenever any water is."""
     part: str | None
     fluid_pressure_type: str
     is_fixed: bool
@@ -420,10 +426,16 @@ def project_parameters(
                                 if keep(name) and _switched_on(stage, of)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
-        # And it is in the stages whose stage has it switched on.
+        # And it is in the stages whose stage has it switched on. An interpolated soil
+        # reads its pressure off the others, so it is on in the stages that have any.
+        watered = (stage.conditions is None
+                   or any(pressure.condition in stage.conditions
+                          for pressure in water_pressures))
         constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
                                  if (pressure.part is None or keep(pressure.part))
-                                 and (stage.conditions is None
+                                 and (watered
+                                      if pressure.fluid_pressure_type == INTERPOLATE_LINE
+                                      else stage.conditions is None
                                       or pressure.condition in stage.conditions)]
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
@@ -900,6 +912,13 @@ def _water_pressure(pressure: WaterPressure) -> dict:
         value everywhere.
     *   `"Phreatic_Multi_Line"` from Kratos' `tests/Muskat/van_genuchten_hydrostatic`,
         with one `table` entry per point of the line.
+    *   `"Interpolate_Line"` (`INTERPOLATE_LINE`): the keys
+        `ApplyConstantInterpolateLinePressureProcess` declares, and no others -- it has
+        no level, no line and no specific weight. At the start of the stage, after every
+        other process has set its pressures, it finds the edges of the part's elements
+        that no other element of the part shares, and gives each node the pressure of
+        that boundary above and below it, interpolated along the vertical: the pressure
+        the soils around it set. Its `table` must be 0; Kratos has no time-dependent one.
 
     Two things worth pointing at:
 
@@ -919,6 +938,13 @@ def _water_pressure(pressure: WaterPressure) -> dict:
     }
     if pressure.fluid_pressure_type == "Uniform":
         parameters.update({"value": pressure.value, "table": 0})
+    elif pressure.fluid_pressure_type == INTERPOLATE_LINE:
+        parameters.update({
+            "table": 0,
+            "fluid_pressure_type": INTERPOLATE_LINE,
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+        })
     elif pressure.fluid_pressure_type == "Hydrostatic":
         parameters.update({
             "table": 0,
