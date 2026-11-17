@@ -12,17 +12,8 @@ For the ready-made model and a comparison of its results with a reference calcul
 
 A 2D plane-strain section, 90 m wide and 28 m high, in SI units (m, N, Pa, kg/m³):
 
-```text
- x =      -36         -18    0  4          22                          54
-                             +--+  crest, y = 6
-  river at 5.0 m  ~ ~ ~ ~   /core\
-                           /      \   seepage face: inner slope and polder
- y = 0     +--------------+        +. . . . . . . . . . . . . . . . . . . +
-           |  Cover, clay                                                 |  polder groundwater
- y = -2    +--------------------------------------------------------------+  level at -0.5 m
-           |  Aquifer, sand                                               |
- y = -22   +--------------------------------------------------------------+
-```
+![Levee section](levee_model.svg)
+
 
 - A sand aquifer from y = −22 to −2 m and a clay cover from −2 to 0 m, across the section.
 - A clay levee on the cover, drawn as two polygons: a core, which reaches 0.5 m into the
