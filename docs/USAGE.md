@@ -333,7 +333,7 @@ components to hold.
 | Support | Holds the displacement at zero in x, y or z. **Fixed** holds all components. **Roller** holds the component normal to the face, or to a vertical or horizontal line. A 2D model does not hold z. |
 | Water pressure, Uniform | One pressure at each node of the target, compression negative |
 | Water pressure, Hydrostatic | Zero at its **Reference level**, growing with depth below it. **Tension cut-off** is the most suction above the level; 0 holds the pressure at zero there. |
-| Water pressure, Phreatic line | Hydrostatic below a line through points that you type, x increasing |
+| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. |
 
 Water above the ground also presses on it. When the level of a hydrostatic or phreatic line
 condition is above the soil, the calculation adds the weight of that water on the ground

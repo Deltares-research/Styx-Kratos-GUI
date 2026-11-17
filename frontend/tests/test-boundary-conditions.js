@@ -206,6 +206,14 @@
     T.ok(error && /points of its line/.test(error.message));
   });
 
+  test('a drawn line becomes a phreatic line with x increasing', function () {
+    T.eq(BC().phreaticPoints([[0, -1, 5], [10, -2, 5], [20, -3, 5]]),
+         [[0, -1], [10, -2], [20, -3]]);
+    T.eq(BC().phreaticPoints([[20, -3], [10, -2], [0, -1]]),
+         [[0, -1], [10, -2], [20, -3]], 'a line drawn from right to left is turned round');
+    T.eq(BC().phreaticPoints(null), []);
+  });
+
   test('the conditions the grid does not show are listed apart', function () {
     var line = support('strip', null, [false, true, false],
                        { on: 'line', points: [[0, -5], [5, -5]] });

@@ -853,6 +853,33 @@
     });
   });
 
+  test('a phreatic line on a drawn line takes its points until one is typed', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.draw('water_pressure', 'line');
+      ctx.drawn.options.onComplete([[50, -4, 0], [25, -3, 0], [0, -2, 0]]);
+      var dialog = latest(ctx);
+      T.eq(field(dialog, 'Phreatic line').value, '', 'a new line has no phreatic line');
+      change(field(dialog, 'Type'), 'Phreatic_Multi_Line');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -2, 25 -3, 50 -4',
+           'filled in from the drawn points, x increasing');
+      change(field(dialog, 'Points'), '0 -1, 50 -5');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -1, 50 -5', 'it follows the points');
+      button(dialog, 'Pick on model…');
+      ctx.drawn.options.onComplete([[0, -6, 0], [50, -7, 0]]);
+      dialog = latest(ctx);
+      T.eq(field(dialog, 'Type').value, 'Phreatic_Multi_Line', 'picking keeps the type');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -6, 50 -7', 'and follows the new line');
+      field(dialog, 'Phreatic line').value = '0 -2, 50 -2';
+      change(field(dialog, 'Points'), '0 -8, 50 -9');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -2, 50 -2', 'a typed line is kept');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq(saved.points, [[0, -8], [50, -9]]);
+        T.eq([saved.x_coordinates, saved.y_coordinates], [[0, 50], [-2, -2]]);
+      });
+    });
+  });
+
   test('boundary grid lists, edits and deletes a condition on an individually drawn point', function () {
     return withEnvironment(project(), function (ctx) {
       var record = App.BoundaryConditions.draftWaterPressure(App.PROJECT, 'point', {

@@ -704,6 +704,14 @@ App.BoundaryConditions = (function () {
     return (points || []).map(function (p) { return p[0] + ' ' + p[1]; }).join(', ');
   }
 
+  /* A drawn line's points as a phreatic line, which Kratos reads with x increasing: a
+     line drawn from right to left is turned round. */
+  function phreaticPoints(points) {
+    var out = (points || []).map(function (p) { return [p[0], p[1]]; });
+    if (out.length > 1 && out[out.length - 1][0] < out[0][0]) out.reverse();
+    return out;
+  }
+
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
      on parts, lines and points. Save writes them all in one request. */
@@ -892,8 +900,27 @@ App.BoundaryConditions = (function () {
     var known = !!(source && find(source.id));
     var c = {};
     var message, shell;
+    // The phreatic line last filled in from the points: while the field still holds it
+    // (or nothing), it follows the points; a line typed by hand is left alone.
+    var autoPhreatic = null;
+
+    function phreaticFollows() {
+      var typed = c.phreatic.value.trim();
+      return typed === '' || typed === autoPhreatic;
+    }
+
+    /* A water pressure on a line with a phreatic line: the phreatic line is the drawn
+       line's points, x increasing, unless one of its own was typed. */
+    function followPoints() {
+      if (!c.phreatic || c.kind.value !== 'water_pressure' || c.on.value !== 'line'
+          || c.type.value !== 'Phreatic_Multi_Line' || !phreaticFollows()) return;
+      var points = parsePoints(c.points.value);
+      if (!points || points.length < 2) return;
+      autoPhreatic = c.phreatic.value = pointsText(phreaticPoints(points));
+    }
 
     function submit() {
+      followPoints();
       var kind = c.kind.value;
       var on = c.on.value;
       // A new condition opens as a support; switched to another kind, it takes that
@@ -956,14 +983,27 @@ App.BoundaryConditions = (function () {
     function pick() {
       if (!App.DrawInput || !App.DrawInput.start) return;
       var on = c.on.value;
+      var kind = c.kind.value;
+      // The kind and the pressure type chosen in the form come back with the drawn
+      // points; a phreatic line that followed the old points follows the new ones.
+      var type = c.type.value;
+      var follows = phreaticFollows();
       shell.close();
       App.DrawInput.start(on === 'point' ? 'load' : 'line', {
         count: 1, atPointer: true,
         onComplete: function (points) {
-          var next = record ? copy(record) : { kind: c.kind.value };
+          var next = record && record.kind === kind ? copy(record) : { kind: kind };
           next.on = on;
           next.points = points.map(function (p) { return [p[0], p[1]]; });
-          openRecord(Object.assign(blank(next.kind, on), next));
+          if (kind === 'water_pressure') {
+            next.fluid_pressure_type = type;
+            if (follows) {
+              next.x_coordinates = null;
+              next.y_coordinates = null;
+              next.z_coordinates = null;
+            }
+          }
+          openRecord(Object.assign(blank(kind, on), next));
         }
       });
     }
@@ -1080,7 +1120,9 @@ App.BoundaryConditions = (function () {
           (water.x_coordinates || []).map(function (x, i) {
             return x + ' ' + water.y_coordinates[i];
           }).join(', ') });
-        row('phreatic', 'Phreatic line', c.phreatic, 'x y, x y … [m], x increasing.');
+        row('phreatic', 'Phreatic line', c.phreatic, 'x y, x y … [m], x increasing. On a '
+            + 'line, filled in from its points until you type one of your own.');
+        autoPhreatic = record.points ? pointsText(phreaticPoints(record.points)) : null;
         c.cutoff = number(water.pressure_tension_cut_off || 0);
         row('cutoff', 'Tension cut-off', c.cutoff, 'The most suction above the level ['
             + App.Units.label('stress') + ']; 0 holds it at zero.');
@@ -1111,9 +1153,13 @@ App.BoundaryConditions = (function () {
           show('level', water && type === 'Hydrostatic');
           show('phreatic', water && type === 'Phreatic_Multi_Line');
           show('cutoff', water && type !== 'Uniform');
+          followPoints();
         }
         [c.kind, c.on, c.type].forEach(function (control) {
           control.addEventListener('change', sync);
+        });
+        ['input', 'change'].forEach(function (event) {
+          c.points.addEventListener(event, followPoints);
         });
         sync();
       }
@@ -1170,6 +1216,7 @@ App.BoundaryConditions = (function () {
     line: line, listedLines: listedLines, label: label,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
+    phreaticPoints: phreaticPoints,
     isConditionKey: isConditionKey, find: find,
     save: save, remove: remove, applyStandard: applyStandard,
     activeState: activeState, setActive: setActive,
