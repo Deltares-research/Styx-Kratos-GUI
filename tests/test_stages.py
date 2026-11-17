@@ -571,14 +571,14 @@ def test_add_puts_a_blank_stage_at_the_end_of_the_sequence():
     listed = stages.added(project)
 
     new = listed[-1]
-    assert (new.id, new.name, new.parent) == ("stage_1", "Stage 8", "dig_3")
-    assert new == schemas.Stage(id="stage_1", name="Stage 8", parent="dig_3")
+    assert (new.id, new.name, new.parent) == ("stage_8", "Stage 8", "dig_3")
+    assert new == schemas.Stage(id="stage_8", name="Stage 8", parent="dig_3")
 
 
 def test_insert_puts_a_stage_between_a_stage_and_its_parent():
     listed = stages.inserted(_test_model(), "dig_1")
 
-    assert _ids(listed)[3:5] == [("stage_1", "install_sheetpile"), ("dig_1", "stage_1")]
+    assert _ids(listed)[3:5] == [("stage_8", "install_sheetpile"), ("dig_1", "stage_8")]
     assert listed[3].name == "New stage"
 
 
@@ -593,13 +593,13 @@ def test_copy_repeats_the_solver_settings_but_not_the_parts():
     listed = stages.copied(_test_model(), "install_sheetpile")
 
     made = listed[3]
-    assert (made.id, made.name, made.parent) == ("stage_1",
+    assert (made.id, made.name, made.parent) == ("stage_8",
                                                  "SheetPileWall installation (copy)",
                                                  "install_sheetpile")
     assert (made.reset_displacements, made.max_iterations, made.tolerated_error) == (
         True, 150, 1e-3)
     assert made.activate == [] and made.deactivate == []
-    assert ("dig_1", "stage_1") in _ids(listed)
+    assert ("dig_1", "stage_8") in _ids(listed)
 
 
 def test_set_active_gives_the_smallest_instruction():
@@ -613,6 +613,23 @@ def test_set_active_gives_the_smallest_instruction():
     back = stages.set_active(project, "install_sheetpile", ["sheetpile"], False)
     assert next(p for p in back if p.id == "install_sheetpile").activate == [
         "wall_contact", "surcharge"]
+
+
+def test_set_active_changes_no_other_stage():
+    """Switching a part in one stage keeps every other stage as it was: the stage after
+    it gets the instruction that holds it there, rather than following its parent."""
+    project = _test_model()
+    ids = [stage.id for stage in project.stages]
+
+    for key in project.stageable_keys():
+        for wanted in (True, False):
+            edited = project.model_copy(update={
+                "stages": stages.set_active(project, "install_sheetpile", [key], wanted)})
+            assert (key in stages.active_parts(edited, "install_sheetpile")) is wanted
+            for id in ids:
+                if id != "install_sheetpile":
+                    assert ((key in stages.active_parts(edited, id))
+                            == (key in stages.active_parts(project, id))), (key, id)
 
 
 def test_an_edit_of_a_stage_that_is_not_there_changes_nothing():
@@ -642,7 +659,7 @@ def test_adding_a_stage_to_an_unresolved_branch_uses_the_last_stored_stage():
     assert all(new is not old for new, old in zip(added, project.stages))
 
 
-def test_adding_a_stage_reuses_the_first_free_number_without_duplicating_an_id():
+def test_adding_a_stage_skips_a_taken_number_without_duplicating_an_id():
     project = blank_project().model_copy(update={"stages": [
         schemas.Stage(id="stage_1", name="Initial"),
         schemas.Stage(id="stage_3", name="Dig", parent="stage_1"),
@@ -650,6 +667,31 @@ def test_adding_a_stage_reuses_the_first_free_number_without_duplicating_an_id()
 
     added = stages.added(project)
 
-    assert added[-1].id == "stage_2"
+    assert (added[-1].id, added[-1].name) == ("stage_4", "Stage 4")
     assert added[-1].parent == "stage_3"
     assert len({stage.id for stage in added}) == len(added)
+
+
+def test_a_new_stage_has_the_same_number_in_its_name_and_its_id():
+    """Issue #135: after two stages, Add made `Stage 3` with the id `stage_1`. The name
+    and the id now carry the same number."""
+    project = blank_project().model_copy(update={"stages": [
+        schemas.Stage(id="initial", name="Initial stage"),
+        schemas.Stage(id="null_step", name="Null step", parent="initial"),
+    ]})
+
+    added = stages.added(project)
+
+    assert (added[-1].id, added[-1].name) == ("stage_3", "Stage 3")
+
+
+def test_a_new_stage_skips_a_number_whose_name_is_taken():
+    project = blank_project().model_copy(update={"stages": [
+        schemas.Stage(id="initial", name="Initial"),
+        schemas.Stage(id="dig", name="Stage 4", parent="initial"),
+        schemas.Stage(id="more", name="More", parent="dig"),
+    ]})
+
+    added = stages.added(project)
+
+    assert (added[-1].id, added[-1].name) == ("stage_5", "Stage 5")

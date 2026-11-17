@@ -419,13 +419,13 @@ HIGH_THEN_LOW = [
 ]
 
 
-def test_a_water_condition_is_a_key_a_stage_switches_and_a_support_is_not():
+def test_a_water_condition_and_a_support_are_keys_a_stage_switches():
     project = section([condition("pore"), {"id": "fix", "name": "fix",
                                            "kind": "displacement", "on": "face",
                                            "face": "bottom", "fixed": [True, True, True]}])
     assert "pore" in project.stageable_keys()
     assert "pore" in project.stageable_parts
-    assert "fix" not in project.stageable_keys()
+    assert "fix" in project.stageable_keys()
 
 
 def test_each_stage_writes_the_water_conditions_its_stage_has_on(gmsh_session):

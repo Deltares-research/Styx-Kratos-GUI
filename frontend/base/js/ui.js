@@ -20,9 +20,13 @@ App.UI = (function () {
       if (t[0] === '.') node.classList.add(t.slice(1));
       else node.id = t.slice(1);
     });
+    // Before the attributes, so its input listener runs before any the caller adds.
+    var number = !!attrs && attrs.type === 'number' && node.tagName === 'INPUT';
+    if (number) numberField(node);
     if (attrs) Object.keys(attrs).forEach(function (k) {
       var v = attrs[k];
       if (v === null || v === undefined || v === false) return;
+      if (number && k === 'type') return;
       if (k === 'html') node.innerHTML = v;
       else if (k === 'text') node.textContent = v;
       else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2).toLowerCase(), v);
@@ -34,6 +38,59 @@ App.UI = (function () {
       node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
     });
     return node;
+  }
+
+  /* Characters that are no part of a number: what a number field drops as you type. */
+  var NOT_NUMBER = /[^0-9eE+\-.]/g;
+
+  function numberText(text) { return text.replace(/,/g, '.').replace(NOT_NUMBER, ''); }
+
+  /* The number of decimals in a number's text: 2 for "0.25", 0 for "3". */
+  function decimals(value) {
+    var text = String(value), dot = text.indexOf('.');
+    return dot < 0 || /e/i.test(text) ? 0 : text.length - dot - 1;
+  }
+
+  /**
+   * Makes an input a number field that shows and takes a point as the decimal sign on
+   * every computer. An <input type="number"> shows its value with the decimal sign of
+   * the computer's region settings (0,15 on a Dutch Windows), and a page cannot change
+   * that, so el() gives every type 'number' input to this function instead. The field
+   * is a text field: a typed comma becomes a point, other characters that are no part
+   * of a number are dropped, and the up and down arrow keys step the value by the
+   * `step` attribute within `min` and `max`, as they do in a type 'number' field.
+   * @param {!HTMLInputElement} node
+   */
+  function numberField(node) {
+    node.type = 'text';
+    node.setAttribute('inputmode', 'decimal');
+    node.setAttribute('autocomplete', 'off');
+    node.setAttribute('data-number', '');
+    node.spellcheck = false;
+    node.addEventListener('input', function () {
+      var typed = node.value, clean = numberText(typed);
+      if (clean === typed) return;
+      var caret = numberText(typed.slice(0, node.selectionStart || 0)).length;
+      node.value = clean;
+      node.setSelectionRange(caret, caret);
+    });
+    node.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      var text = node.value.trim(), now = text === '' ? 0 : Number(text);
+      if (!isFinite(now)) return;
+      event.preventDefault();
+      var step = parseFloat(node.getAttribute('step'));
+      if (!(step > 0)) step = 1;
+      var next = now + (event.key === 'ArrowUp' ? step : -step);
+      var min = parseFloat(node.getAttribute('min')), max = parseFloat(node.getAttribute('max'));
+      if (isFinite(min)) next = Math.max(next, min);
+      if (isFinite(max)) next = Math.min(next, max);
+      next = Number(next.toFixed(Math.max(decimals(step), decimals(text))));
+      if (text !== '' && next === now) return;
+      node.value = String(next);
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+    });
   }
 
   /**

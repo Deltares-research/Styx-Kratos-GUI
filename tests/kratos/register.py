@@ -77,6 +77,12 @@ REGISTER = [
     {"id": "K2", "where": "gid_output output_interval", "what": "GiD writes every sub-step",
      "status": "closed", "evidence": "core.results.gid_reader takes the last step (finding F6, "
      "test_results_round_trip)"},
+    {"id": "K3", "where": "kratos/prestress_workaround.py",
+     "what": "TEMPORARY: a prestressed anchor's stress carried without its prestress",
+     "status": "fixed", "evidence": "test_live_prestress: null stages after a prestressed "
+     "strut moved 0.28 mm each without it and do not move with it. The canary "
+     "test_kratos_still_counts_the_prestress_twice fails once Kratos is fixed, and the "
+     "workaround then goes"},
 ]
 
 COVERED_FILES = {"kratos/writer.py", "kratos/materials.py", "kratos/parameters.py"}

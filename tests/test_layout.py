@@ -119,6 +119,9 @@ ROOT_FILES = {
     "run.bat", "run.sh",                                    # what a user double-clicks
     "kratos-cli.bat", "kratos-cli.sh",                      # ... and types, beside them
     "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot
+    "requirements-docs.txt",                                # Dependabot, beside them
+    "mkdocs.yml",                                           # the site builder writes only
+                                                            # under its folder: to build/
     "pyproject.toml",                                       # pytest, coverage, mypy, ruff
     "eslint.config.mjs",                                    # its globs are root-relative
     ".graphifyignore",                                      # graphify reads it only here

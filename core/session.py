@@ -1491,8 +1491,9 @@ def remove_stage(project: Project, id: str) -> Project:
 
 
 def switch_parts(project: Project, id: str, keys: list[str], active: bool) -> Project:
-    """The parts `keys` in the model (`active`) or out of it from stage `id` on, as the
-    Model explorer's checkbox switches them in Staged construction mode."""
+    """The parts `keys` in the model (`active`) or out of it in stage `id` alone -- the
+    other stages keep what they had -- as the Model explorer's checkbox switches them in
+    Staged construction mode (`stages.set_active`)."""
     _index(project.stages, id, "stage")
     stageable = project.stageable_keys()
     for key in keys:

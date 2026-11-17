@@ -14,7 +14,7 @@ To use Styx, see the user guides: [INSTALLATION.md](../INSTALLATION.md),
 |---|---|
 | This page | The big picture: who does what, from a drawn model to its results |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The libraries, the modules, the HTTP API, the browser modules and Results mode |
-| [TESTING.md](TESTING.md) | How to run the tests, and what CI runs |
+| [TESTING.md](TESTING.md) | How to run the tests, what CI runs, and how CI makes the [GUI tutorials site](TESTING.md#the-gui-tutorials) |
 | [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) | The size of the code in each module |
 | [code-map/](code-map/GRAPH_REPORT.md) | A generated map of the code: the central classes, the groups of code that belong together, and a tree of files and functions that you can click |
 | [CONTRIBUTING.md](../../CONTRIBUTING.md) | How to set up, how to make a change (test first), and the checks of CI |
@@ -147,8 +147,9 @@ frontend/      the browser app (index.html, js/, css/, three.js), with its tests
 tests/         pytest tests: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    the Kratos benchmark cases and the script that runs them
 tools/test.py  runs the test tiers (see TESTING.md)
+tools/gui_tutorial.py  makes the GUI tutorial screenshots and site (see TESTING.md)
 docs/          the user guides; docs/cli_tutorials/ for the kratos-cli tutorials,
-               docs/developer/ for this guide
+               docs/gui_tutorials/ for the GUI tutorials, docs/developer/ for this guide
 run.bat        the launcher for Windows
 run.sh         the launcher for Linux and macOS
 kratos-cli.bat the command line for Windows

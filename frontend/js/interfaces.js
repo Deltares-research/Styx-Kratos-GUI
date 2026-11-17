@@ -848,7 +848,7 @@ App.Interfaces = (function () {
 
     shell = App.Dialogs.open({
       title: (editing ? 'Edit' : 'Create') + ' interface',
-      width: 560, height: 660,
+      width: 560, height: 680,
       buttons: [
         { label: 'Pick on model…', onClick: function () { pick(current()); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },

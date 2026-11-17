@@ -22,6 +22,7 @@ import asyncio
 import html
 from contextlib import asynccontextmanager
 from pathlib import Path
+import importlib.resources
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exception_handlers import http_exception_handler
@@ -34,7 +35,13 @@ from backend.middleware import do_not_cache_sources, keep_api_requests, only_thi
 from backend.routes import decks, feedback, files, geometry, mesh, project, results
 from core import gmsh_worker, version
 
-ROOT = Path(__file__).resolve().parents[1]
+# Try to get frontend path from installed package, fall back to development path
+try:
+    ROOT = Path(str(importlib.resources.files("backend"))).parents[0]
+except (ModuleNotFoundError, TypeError):
+    # Development mode: get path relative to this file
+    ROOT = Path(__file__).resolve().parents[1]
+
 FRONTEND = ROOT / "frontend"
 BASE = FRONTEND / "base"
 

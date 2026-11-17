@@ -41,6 +41,9 @@ ALLOWED_3D_WARNINGS = [
     r"^interfaces are plane-strain only and none was written into this 3D deck",
     r"^a normal load is plane-strain only and none was written into this 3D deck",
     r"^the wall panels are written as linear shells inside a quadratic soil mesh",
+    # Kratos cannot carry a shell's or a 3D beam's forces into the next stage.
+    r"^wall panel\(s\) .* stay in the model from one stage to the next",
+    r"^member\(s\) .* stay in the model from one stage to the next",
 ]
 
 ALLOWED_SAVED_WARNINGS = [

@@ -126,6 +126,11 @@ EDITS = [
     ("setActive", ["prop", ["soil_L1", "anchors"], False]),
     ("setActive", ["settle", ["soil_L1__lift1"], True]),
     ("setActive", ["build_wall", ["wall"], False]),
+    # The stage after is kept as it was: build_wall gains a "deactivate" for the lift
+    # null_step now switches on, and dig_2's "activate soil_L1" is dropped once prop
+    # already has it on.
+    ("setActive", ["null_step", ["soil_L1__lift1"], True]),
+    ("setActive", ["prop", ["soil_L1"], True]),
     ("edited", ["initial", "calculation", "flow"]),
     ("edited", ["dig_1", "calculation", "flow"]),
     ("edited", ["initial", "stress_initialisation", "gravity"]),

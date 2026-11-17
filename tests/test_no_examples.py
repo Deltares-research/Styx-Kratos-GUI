@@ -41,23 +41,39 @@ ALLOWED = ("README.md", "docs/CLI.md", "docs/developer/README.md",
            "docs/cli_tutorials/3_run_the_python_script.md",
            "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md",
            "docs/cli_tutorials/Muskat_case.md",
+           "docs/superpowers/specs/2026-11-03-" + _CASES[0] + "-gui-tutorial-design.md",
+           "docs/gui_tutorials/" + _CASES[0].upper() + "_case.md",
+           "docs/gui_tutorials/" + _CASES[0] + "_model.svg",
+           "docs/gui_tutorials/index.md",
+           "mkdocs.yml",
            "docs/developer/code-map/GRAPH_REPORT.md",
            "docs/developer/code-map/GRAPH_TREE.html")
 """Besides the files under `EXAMPLES`, what may name them: the pages that point at them,
-and the generated code map, which lists every tracked file and so names them too."""
+the GUI tutorial built on the same case (its design, its page, the page's copy of the
+example's model picture, as the site is built from `docs/gui_tutorials/` only, and the
+site's index and settings that list the page), and the generated code map, which lists
+every tracked file and so names them too."""
 
 KRATOS_REFERENCE = ("benchmarks/cases.py",
                     *(f"benchmarks/reference/{_CASES[0]}/{name}" for name in
                       ("README.md", "linear_elastic.csv", "mohr_coulomb.csv")),
                     "tests/models/" + _CASES[0] + ".py",
-                    "tests/kratos/test_live_interfaces.py")
+                    "tests/kratos/test_live_interfaces.py",
+                    "tests/e2e/tutorials/" + _CASES[0] + ".py",
+                    "tests/e2e/test_gui_tutorials.py")
 """What names Kratos' own validation case of the same name (its
 `tests/` + _CASES[0] + `_validation`), not the example: the benchmark built after it, its
-reference values and the tests that read Kratos' files. None of them reads the example."""
+reference values, the tests that read Kratos' files, and the GUI tutorial that builds the
+model of `tests/models/` from its numbers. None of them reads the example."""
+
+KRATOS_REFERENCE_FOLDERS = ("tests/fixtures/tutorial_runs/" + _CASES[0] + "/",)
+"""The Kratos run of that GUI tutorial, recorded for its replay: the deck and the output
+are named after the model, file by file."""
 
 
 def allowed(name: str) -> bool:
-    return name.startswith(EXAMPLES) or name in ALLOWED or name in KRATOS_REFERENCE
+    return (name.startswith((EXAMPLES, *KRATOS_REFERENCE_FOLDERS)) or name in ALLOWED
+            or name in KRATOS_REFERENCE)
 
 
 def tracked_files() -> list[str]:

@@ -2172,7 +2172,10 @@ App.Model = (function () {
         if (row[0] === 'Element type') row[1] = typeNames.join(', ') || '—';
         else if (row[0] === 'Elements') row[1] = elements;
         else if (row[0] === 'Nodes') row[1] = nodes;
-        else if (row[0] === 'Average element size') row[1] = '—';
+        else if (row[0] === 'Average element size') {
+          // The mean edge length the server measured (core/geometry/meshing.py).
+          row[1] = stats.average_size ? Number(stats.average_size).toFixed(3) : '—';
+        }
       });
     }
 

@@ -1,0 +1,24 @@
+# The GUI tutorials site: docs/gui_tutorials/ only, built with Zensical
+# (requirements-docs.txt), which reads this file.
+#   python tools/gui_tutorial.py      screenshots, then the site in build/gui_tutorials/site/
+# CI builds and publishes it: .github/workflows/docs-site.yml.
+site_name: Styx GUI tutorials
+docs_dir: docs/gui_tutorials
+site_dir: build/gui_tutorials/site
+# Pages as CROW_case.html, not CROW_case/index.html: the links then also work when a
+# reader opens index.html from the unzipped CI artifact, with no web server.
+use_directory_urls: false
+
+theme:
+  name: material
+  features:
+    - navigation.footer
+    - content.code.copy
+
+markdown_extensions:
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - CROW excavation wall: CROW_case.md

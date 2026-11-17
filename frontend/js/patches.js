@@ -558,8 +558,8 @@ App.LivePatches = (function () {
   /* ── The Model explorer in Staged construction mode ──────────────────────
      The row's checkbox stops being "shown" and becomes "in the model in the selected
      stage". Ticking or unticking edits that stage alone
-     (`App.Stages.setActive`); the stages after it inherit the change until one of them
-     says otherwise, which is how Kratos runs its stages. Every part keeps its row and
+     (`App.Stages.setActive`): the other stages keep what they had, and a stage added
+     afterwards starts with the state of the one before it. Every part keeps its row and
      its checkbox in every stage, so a part an earlier stage took out can be put back
      in any later one -- before this, a switched-off part was not drawn, so in the
      stages after it there was nothing left to click to bring it back.
@@ -612,9 +612,9 @@ App.LivePatches = (function () {
      and a click switches it. It is not the eye: a condition is not drawn until the
      user selects its row or picks Show on it, so a box meaning "drawn" would be empty
      on every condition the model uses. The group row switches every condition under
-     it and shows a dash while they differ. In Staged construction a water pressure
-     row keeps its stage check (addStageChecks), which says more: in the model in the
-     selected stage. */
+     it and shows a dash while they differ. In Staged construction a condition row --
+     support or water pressure -- keeps its stage check (addStageChecks), which says
+     more: in the model in the selected stage. */
   function addConditionChecks(mode) {
     var host = document.getElementById('tree-model');
     if (!host || !App.BoundaryConditions) return;
@@ -1922,7 +1922,14 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(gateViewportItems(withPictureRows(withLabelRows(items))), x, y, function (item) {
+        openAt(gateViewportItems(withPictureRows(withStageRows(withLabelRows(items), key))), x, y,
+               function (item) {
+          if (item && item.action === 'stageActivate') {
+            return switchPartInStage(item.stageKey, true);
+          }
+          if (item && item.action === 'stageDeactivate') {
+            return switchPartInStage(item.stageKey, false);
+          }
           if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
           if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
           if (onPick) onPick(item);
@@ -1972,11 +1979,7 @@ App.LivePatches = (function () {
   }
 
   function selectedStageId() {
-    var list = (App.PROJECT && App.PROJECT.stages) || [];
-    if (!list.length) return null;
-    var wanted = App.state && App.state.phase;
-    var found = list.filter(function (ph) { return ph.id === wanted; })[0];
-    return found ? found.id : list[0].id;
+    return App.Stages.selectedId(App.PROJECT, App.state && App.state.phase);
   }
 
   function stageById(id) {
@@ -2080,32 +2083,59 @@ App.LivePatches = (function () {
     return wrap;
   }
 
-  /* Clicking a part in staged mode switches it on or off for the selected stage.
+  /* In Staged construction a click on a part in the viewport selects it, and nothing
+     more: switching a part in or out of a stage is asked for by name, with a right
+     click (Activate / Deactivate in the viewport menu) or with the part's check box in
+     the Model explorer. A click that also switched the part made every look at a part
+     an edit, and one that could switch a part off but not reliably back on.
 
-     Which is the behaviour the first screenshot shows, and the reason staged mode
-     exists as a mode rather than a filter. Wrapped around `App.selectObject` rather
-     than bound to the canvas, because that is the one funnel every pick already goes
-     through -- viewport click, context menu and tree row alike -- so a part cannot be
-     toggled by one route and merely selected by another.
+     The switch is the selected stage's alone (`App.Stages.setActive`): the other
+     stages keep what they had. */
+  function stagePartKey(key) {
+    if (!key || !App.PROJECT || App.PROJECT.deck) return null;
+    if (!App.state || App.state.mode !== 'staged') return null;
+    if (!(App.PROJECT.stages || []).length || !App.Stages) return null;
+    return App.Stages.stageableKeys(App.PROJECT).indexOf(key) >= 0 ? key : null;
+  }
 
-     Selection still happens. Toggling instead of selecting would leave the property
-     panel showing whatever was picked last, which is how you end up editing the wrong
-     load; and the panel is the only place the part's name is written down. */
-  function togglePartForStage(key) {
+  function partLabel(key) {
+    var project = App.PROJECT || {};
+    var named = (project.soil_body_labels || {})[key];
+    if (named) return named;
+    var record = [].concat(project.custom_parts || [], project.beams || [],
+                           project.anchors || [], project.interfaces || [],
+                           project.normal_loads || [], project.loads || [],
+                           project.boundary_conditions || [])
+      .filter(function (each) { return each && (each.key === key || each.id === key); })[0];
+    return (record && (record.label || record.name)) || key;
+  }
+
+  function switchPartInStage(key, wanted) {
     var stage = selectedStageId();
-    if (!stage) { App.Command.err('Select a stage first.'); return false; }
-    if (App.Stages.stageableKeys(App.PROJECT).indexOf(key) < 0) return false;
+    if (!stage) { App.Command.err('Select a stage first.'); return null; }
+    return saveStages(App.Stages.setActive(App.PROJECT, stage, [key], wanted),
+                      partLabel(key) + (wanted ? ' activated in ' : ' deactivated in ')
+                      + (stageById(stage) || {}).name + '.');
+  }
 
-    var was = (App.Stages.activeParts(App.PROJECT, stage) || []).indexOf(key) >= 0;
-    var owned = App.Stages.ownership(App.PROJECT, stage, key);
-    var list = App.Stages.toggled(App.PROJECT, stage, key);
-    var label = (App.PROJECT.soil_body_labels || {})[key] || key;
-    saveStages(list, label + (was ? ' switched off in ' : ' switched on in ') +
-                     (stageById(stage) || {}).name +
-                     (owned === 'inherited'
-                        ? ' (it was inherited from an earlier stage until now).'
-                        : '.'));
-    return true;
+  /* The viewport menu's two rows for a stageable part, in Staged construction: the
+     state the part does not have in the selected stage is offered, the other greyed,
+     so the menu also says which one it is in. */
+  function withStageRows(items, key) {
+    var part = stagePartKey(key);
+    var stage = part && selectedStageId();
+    if (!stage) return items;
+    var on = (App.Stages.activeParts(App.PROJECT, stage) || []).indexOf(part) >= 0;
+    var name = (stageById(stage) || {}).name || stage;
+    var rows = [
+      { label: 'Activate in ' + name, action: 'stageActivate', disabled: on,
+        stageKey: part },
+      { label: 'Deactivate in ' + name, action: 'stageDeactivate', disabled: !on,
+        stageKey: part },
+      '-'
+    ];
+    var at = items.length && items[0] && items[0].title ? 1 : 0;
+    return items.slice(0, at).concat(rows, items.slice(at));
   }
 
   /* Redrawn on every edit, so the panel keeps where it was scrolled to: emptying it
@@ -2600,7 +2630,9 @@ App.LivePatches = (function () {
             node.style.paddingLeft = (8 + row.depth * 4) + 'px';
             node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.label }));
+            var name = el('span.phase-name', { text: row.heading + ' ' });
+            name.appendChild(el('span.phase-id', { text: '[' + row.id + ']' }));
+            node.appendChild(name);
             node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;
@@ -2624,14 +2656,18 @@ App.LivePatches = (function () {
           right.appendChild(grid);
 
           /* What this stage changes. Read-only here: the way to change it is to
-             click the part in the viewport, which is the only place you can see
-             which part you are naming. */
+             right-click the part in the viewport, or tick it in the Model explorer. */
           var on = stage.activate || [], off = stage.deactivate || [];
           var active = App.Stages.activeParts(App.PROJECT, stage.id) || [];
+          var named = function (keys) {
+            return keys.map(function (key) {
+              return App.Stages.partLabel(App.PROJECT, key);
+            }).join(', ');
+          };
           var changes = el('div.pgrid');
           changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
-          [['Activated here', on.length ? on.join(', ') : '—'],
-           ['Deactivated here', off.length ? off.join(', ') : '—'],
+          [['Activated here', on.length ? named(on) : '—'],
+           ['Deactivated here', off.length ? named(off) : '—'],
            ['Active in this stage', active.length + ' of ' +
             App.Stages.stageableKeys(App.PROJECT).length + ' parts']
           ].forEach(function (row) {
@@ -2652,7 +2688,7 @@ App.LivePatches = (function () {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
             hidden.forEach(function (key) {
-              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var label = App.Stages.partLabel(App.PROJECT, key);
               var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
               button.addEventListener('click', function () {
                 saveStages(App.Stages.toggled(App.PROJECT, stage.id, key),
@@ -2672,8 +2708,9 @@ App.LivePatches = (function () {
               + ', shown as they are. Edit the deck to change them, then run its '
               + 'script again.'
             : 'In Staged construction mode, tick or untick a part in the Model ' +
-              'explorer to put it in or take it out of the selected stage. The ' +
-              'stages after it follow until one of them changes it again.' }));
+              'explorer, or right-click it in the viewport, to put it in or take it ' +
+              'out of the selected stage. The other stages keep what they had; a ' +
+              'stage added later starts from the stage before it.' }));
         }
 
         draw();
@@ -3563,19 +3600,6 @@ App.LivePatches = (function () {
         });
       };
       App.Calculate.run.__stages = true;
-    }
-
-    /* Staged construction editing: a pick in staged mode is also a toggle. */
-    if (typeof App.selectObject === 'function' && !App.selectObject.__staged) {
-      var frozenSelect = App.selectObject;
-      App.selectObject = function (key, source) {
-        frozenSelect(key, source);
-        if (!key || source !== 'viewport') return;
-        if (!App.state || App.state.mode !== 'staged') return;
-        if (!App.PROJECT || !(App.PROJECT.stages || []).length) return;
-        togglePartForStage(key);
-      };
-      App.selectObject.__staged = true;
     }
 
     // Model explorer: enable Delete for drawn/imported geometry (see onTreeContextMenu).

@@ -126,12 +126,26 @@ def test_set_refuses_a_time_step_longer_than_the_stage(cli, pit):
     assert "time step" in ran.err
 
 
-def test_activate_and_deactivate_switch_parts_from_a_stage_on(cli, pit):
+def test_activate_and_deactivate_switch_parts_in_a_stage(cli, pit):
     assert cli("stages", pit, "activate", "dig_1", "strut").code == 0
     assert _stage(pit, "dig_1").activate == ["water_1", "strut"]
 
     assert cli("stages", pit, "deactivate", "dig_1", "strut").code == 0
     assert _stage(pit, "dig_1").activate == ["water_1"]
+
+
+def test_a_switch_changes_that_stage_alone(cli, pit):
+    assert "sheetpile" in stages.active_parts(session.load(pit), "dig_1")
+    assert cli("stages", pit, "deactivate", "install_sheetpile", "sheetpile").code == 0
+    after = session.load(pit)
+    assert "sheetpile" not in stages.active_parts(after, "install_sheetpile")
+    assert "sheetpile" in stages.active_parts(after, "dig_1")
+
+
+def test_a_stage_added_later_starts_with_the_state_of_the_one_before(cli, pit):
+    assert cli("stages", pit, "deactivate", "dig_3", "sheetpile").code == 0
+    assert cli("stages", pit, "add", "late").code == 0
+    assert "sheetpile" not in stages.active_parts(session.load(pit), "late")
 
 
 def test_a_part_the_model_does_not_have_is_refused(cli, pit):
@@ -461,6 +475,8 @@ def test_the_stages_of_the_test_model_are_built_with_commands_alone(cli, unstage
         "--stress-initialisation", "k0")
     run("stages", p, "add", "null_step", "--name", "Null step", "--max-iterations", "150")
     run("stages", p, "deactivate", "initial", "sheetpile", "strut", "wall_contact",
+        "surcharge", "water_1", "water_2", "water_3")
+    run("stages", p, "deactivate", "null_step", "sheetpile", "strut", "wall_contact",
         "surcharge", "water_1", "water_2", "water_3")
     solver = ("--max-iterations", "150", "--tolerance", "1e-3")
     run("stages", p, "add", "install_sheetpile", "--name", "SheetPileWall installation",
