@@ -57,8 +57,8 @@ How the GUI takes the values that you type:
   click that button. **Cancel** leaves the model as it was.
 - In the Soil material window and in the Selection explorer, a value is used when you
   leave the field (press Tab) or press Enter.
-- Type a point as the decimal sign: `0.5`. Some number fields show their value with the
-  decimal sign of your Windows region settings, for example `0,15`. They take a point too.
+- The decimal sign is a point, for example `0.5`, whatever the region settings of your
+  computer are. In a number field, a comma that you type becomes a point.
 - The Styx server keeps the project in its memory. Save it at the end (step 15), or at any
   time with **File** > **Save**.
 
@@ -498,6 +498,29 @@ about 109 mm into the pit. These are the values that the benchmark BM-CROW-MC co
 the results of Kratos' own CROW test.
 
 **Save** saves the figure as PNG, PDF or SVG, or the numbers as CSV.
+
+### A faster calculation: the quasi-Newton strategy (optional)
+
+The stages use Kratos' Newton-Raphson strategy, which builds and factorises the stiffness
+matrix again in every iteration. The quasi-Newton strategy factorises it once and then
+updates its inverse from the residuals, so each iteration costs much less. For this model
+the bending moment and the wall displacement stay the same, and Kratos took about 7 s
+against about 70 s with Newton-Raphson (measured on 2026-11-16).
+
+The strategy is a setting of each stage. For each of the seven stages:
+
+1. In the Stages explorer, click the stage.
+2. Click **Stages…**.
+3. Click **Expert settings** to open them.
+4. In **Strategy**, select **Quasi-Newton**. Keep **Update** at **L-BFGS**.
+5. Click **Close**.
+
+Then click **Calculate** again. In the project file, each stage now has
+`"solver_settings": {"strategy_type": "quasi_newton", "quasi_newton_type": "lbfgs"}`.
+
+The quasi-Newton strategy always uses the Sparse LU linear solver, without scaling. On a
+fully coupled soil with a very low permeability it can settle a few percent too little, so
+on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
