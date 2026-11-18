@@ -62,8 +62,8 @@ See `ELEMENTS` and `FLOW_ELEMENTS` in [kratos/writer.py](../core/kratos/writer.p
 | `Beam` | Sheet pile | `LinearTimoshenkoCurvedBeamElement2D2N` / `2D3N` | `TimoshenkoBeamElasticConstitutiveLaw` | 2D | Tested: element from the reference deck, law from the Kratos documentation |
 | `Member` | Bored pile, king post, strut | `LinearTimoshenkoBeamElement3D2N` / `3D3N` | same | 3D | Limited |
 | `Panel` | Wall panel (a footprint swept between two levels) | `ShellThinElement3D3N` (a 6-node triangle is written from its corners) | `LinearElasticPlaneStress2DLaw` | 3D | Limited |
-| `Anchor` | Anchor: a 2-node tie, head on a sheet pile, tail fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw`, prestress as `TRUSS_PRESTRESS_PK2` (a stress) | 2D | Tested: element from a Kratos reference deck |
-| `SpaceAnchor` | 3D anchor, head on a panel or a member | `LinearTrussElement3D2N` | same | 3D | Limited |
+| `Anchor` | Anchor: a 2-node tie, head free (on a sheet pile or a soil node) or fixed, tail free (a soil node) or fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw`, prestress as `TRUSS_PRESTRESS_PK2` (a stress) | 2D | Tested: element from a Kratos reference deck |
+| `SpaceAnchor` | 3D anchor, head free (on a panel, a member or a soil node) or fixed, tail free or fixed | `LinearTrussElement3D2N` | same | 3D | Limited |
 | Anchor tension and compression limits | Fields of the anchor section | Not exported. The export shows a warning. | — | — | Not exported |
 
 A beam section has the Kratos variables `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY`,
@@ -125,13 +125,14 @@ and adds only the values that are missing
 | Normal load (uniform or hydrostatic) | `LineNormalLoadCondition2D2N` / `LineNormalLoadDiffOrderCondition2D3N` with `ApplyNormalLoadTableProcess` | 2D | Tested for hydrostatic, from a reference deck. Limited for uniform. |
 | Change between 2D and 3D | Styx converts point, line and surface loads, and sheet piles and panels, and links them with `derived_from` | — | Tested |
 | Load distribution | Uniform only. No load that changes with time. | — | Not available |
-| Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, and head lines (a `Phreatic_Multi_Line` to Kratos), fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. One phreatic line in a project. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
+| Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, and head lines (a `Phreatic_Multi_Line` to Kratos), fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. A phreatic line on the whole soil or on a drawn line is the whole soil's water, one on in each stage. As start values, a phreatic or head line is written in the stage it comes on only, so a later stage carries on from the pressure the stage before left. A project saved before 2026-11-18 with a phreatic line drawn on a line (then a pressure on that line only) opens with a level one as a `Hydrostatic` condition on that line, and a sloping one as the whole soil's water, with a note. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
 | Water of each soil | Each soil takes the phreatic line (the default, on the whole soil wherever it is drawn), a head line (a sloping polyline, written as a `Phreatic_Multi_Line` on the soils that take it only), or `Interpolate_Line` (`ApplyConstantInterpolateLinePressureProcess`): the pressures on its edges, which the soils around it set, interpolated over its depth. For aquifers and aquitards. | 2D (a head line on the whole soil in 3D too) | Tested: the deck, and in Kratos 10.4.4 a clay interpolated between sand and an aquifer under a sloping head line, both lines drawn on lines, at every node |
 | Water conditions for each stage | A stage switches a water pressure condition on or off, as it does a load. The Kratos stage writes the conditions that its stage has on. | 2D, 3D | Tested |
-| Water on the ground | The `Phreatic_Multi_Line` water pressure condition (on any target; on a soil part, that part's surface only) whose level is above the soil adds the water's weight as a normal load on the exposed surface below it: the ground surface, the floor and faces of a dug pit, and the face of a wall. It is worked out for each stage, from the soil that the stage has. It always pushes on the soil or the wall. A soil edge is written in the order of the element that stays, and a wall drawn with the water on its left gets the pressure node by node, negative. A phreatic multi-line is written as one `Phreatic_Line` for each segment, because Kratos has no multi-line normal load. Where you drew a normal load, yours is used there instead. The Staged construction tab shows it for the selected stage as small arrows into the soil (`frontend/js/surface-water.js`). | 2D | Tested on the deck, not yet in a Kratos run |
+| Water on the ground | The `Phreatic_Multi_Line` water pressure condition (on any target; on a soil part, that part's surface only) whose level is above the soil adds the water's weight as a normal load on the exposed surface below it: the ground surface, the floor and faces of a dug pit, and the face of a wall. It is worked out for each stage, from the soil that the stage has. It always pushes on the soil or the wall. A soil edge is written in the order of the element that stays, and a wall drawn with the water on its left gets the pressure node by node, negative. A phreatic multi-line is written as one `Phreatic_Line` for each segment, because Kratos has no multi-line normal load. Where you drew a normal load, yours is used there instead. The Staged construction tab shows it for the selected stage, and Flow conditions for the model as built: the open water filled in light blue up to the phreatic line, small arrows into the soil and the deepest pressure (`frontend/js/surface-water.js`). A `Hydrostatic` condition on a line or a face is drawn in 2D in indigo: the line thick where it is under water, and a filled pressure diagram along it. The Model explorer lists the stages that have it under the phreatic line. A 3D model adds none, and the export warns. | 2D | Tested on the deck, not yet in a Kratos run |
+| Wet surface | Under a phreatic line as start values that stands above the ground, the water pressure on the exposed soil surface is fixed to the line's: one `ApplyScalarConstraintTableProcess` (`Phreatic_Multi_Line`, fixed) on the wet nodes, worked out for each stage like the load, and written in a flow deck too. A stage that leaves part of it dry writes those nodes again as start values, which frees them: Kratos keeps a node that a phreatic process fixed fixed after its stage. A flow stage with such a line needs no other fixed condition. | 2D | Tested: the deck, and in Kratos 10.4.4 a column under 1 m of water then lowered below the ground, or with the water switched off, hydrostatic about each level in turn at every node |
 | Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every stage; a mechanical deck leaves it out and says so. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
-| Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
+| Anchor ends | **Head end** free: the head node is a node of the structure it is on, or of the soil mesh. **Tail end** free: the tail node is a node of the soil mesh. Fixed: the end node is in no other element and is fixed; a fixed head is not moved onto a structure. A new anchor has both ends free; a project saved without the settings keeps a free head and a fixed tail. | 2D, 3D | Tested |
 
 ### A7. Construction stages
 
@@ -183,8 +184,8 @@ and adds only the values that are missing
 |---|---|---|
 | Soil layers | A stack of horizontal layers across the whole domain, each with one top and one bottom. Made in **Modify soil layers** or with `kratos-cli layer`. The stack is checked for gaps. | Tested |
 | Free soil polygons in the stack | Not supported. Layers are always a stack. | Not available |
-| Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
-| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer from edge to edge, the layer becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. | Tested |
+| Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens). In 2D also `kratos-cli surface`. | Tested |
+| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer or a soil surface from edge to edge, it becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. In 3D a line splits a soil volume only when the volume is a polygon extruded along z, or a box; an imported solid or a cylinder stays whole. | Tested |
 | Old saved excavations | A project saved with an excavation pit opens with lines and soil bodies in its place. | Tested |
 | Drawing tools | Point, surface, box and cylinder (box and cylinder in 3D only). These make display geometry. | Tested |
 | CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) | Tested |
@@ -195,7 +196,7 @@ and adds only the values that are missing
 | Feature | Detail |
 |---|---|
 | Sheet piles, wall panels, members | Sections are shared, so many piles can use one profile. You edit them in the Selection explorer. |
-| Anchors | The head moves onto a pile, a panel or a member. The prestress is set for each anchor. |
+| Anchors | A free head moves onto a pile, a panel or a member; a fixed head stays where it is typed. The prestress is set for each anchor. |
 | Interfaces | The interface window: a sheet pile by name with **From** and **To**, or own coordinates; the faces as on the screen; the contact. Contact properties are shared. |
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
@@ -219,8 +220,10 @@ and adds only the values that are missing
 |---|---|---|
 | Export | **File** → **Export model…** writes the Kratos input files in one ZIP file, and lists each assumption and warning | Tested |
 | Calculate (F9) | Makes the mesh, writes the files, and runs Kratos in a new run folder | Tested |
+| Stop a calculation | While Kratos runs, Calculate is a **Stop** button (also in the Convergence window and the Stages menu, and `calculate stop`). Kratos stops at once; the model does not change, and the run folder keeps the results of the stages that finished. <kbd>Ctrl</kbd>+<kbd>C</kbd> does the same in `kratos-cli`. | Tested |
 | Kratos location | `kratos.local.json` or environment variables: Python of Kratos, build folder, runs folder, time limit (default 3600 s) | Tested |
 | Failed runs | The log names the stage that failed | Tested |
+| Convergence while Kratos runs | The **Convergence** window opens with Calculate and shows the relative and the absolute residual of each iteration, about once a second, until the run ends. `kratos-cli run --follow` and `calculate --follow` print the same iterations. The points arrive one by one only where the Kratos build shares the C runtime of its Python, which is so on the Windows build that the tests use. Linux is not tested. | Limited |
 
 ### B6. Results mode
 
@@ -237,6 +240,7 @@ and adds only the values that are missing
 | Totals | The nodal water flow rate and the reaction components are added up over the model: the water that comes in and goes out (and the difference: what the pores stored in a transient stage), or what the supports carry | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
+| Convergence plot | The residuals of each iteration of any run, also of a run that failed, read from its `kratos.log`: targets, iterations where the criterion was met, steps cut back or at the iteration limit, and the fraction of unbalance when Kratos printed it. Each criterion (residual, displacement, water pressure) has its own colour, so a run whose stages use different criteria is read right. A slider, or `results convergence stage N`, shows one stage alone. The plot grows with its window. Save as PNG, PDF, SVG or CSV. A deck with two convergence criteria prints two lines per iteration, and the plot counts both as iterations. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
 | Slip plane, factor of safety | Not available | Not available |
 
@@ -252,11 +256,12 @@ and adds only the values that are missing
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
-| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
+| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `convergence`, `csv`, `files`, `get`, `zip` |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
-REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
+REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`,
+`/api/results/…`.
 
 ### B8. Command line (kratos-cli)
 

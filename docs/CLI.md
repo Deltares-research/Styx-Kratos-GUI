@@ -74,13 +74,14 @@ Genuchten soil.
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
-| `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
+| `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
+| `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
 | `wall P list\|add\|set\|remove ...` | Walls, in 3D: `add [ID] [--footprint x z ...] [--top Y] [--toe Y]` |
 | `member P list\|add\|set\|remove ...` | Piles, king posts and struts in 3D: `add [ID] [--points x y z ...]` |
-| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
+| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--head-end free\|fixed] [--tail-end free\|fixed] [--prestress S]`, a free head snapped onto a structure within 1 m, else in the soil |
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
@@ -92,12 +93,13 @@ Genuchten soil.
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
-| `run DECK [--runs-dir DIR] [--timeout S]` | Run a deck directory (or its `ProjectParameters.json`) |
-| `calculate P [--runs-dir DIR] [--timeout S]` | `export` and `run` in one step |
+| `run DECK [--runs-dir DIR] [--timeout S] [--follow]` | Run a deck directory (or its `ProjectParameters.json`) |
+| `calculate P [--runs-dir DIR] [--timeout S] [--follow]` | `export` and `run` in one step |
 | `results runs [--runs-dir DIR]` | The runs on this machine, newest first, numbered |
 | `results show\|stages\|files RUN` | A run's stages, its files and whether it finished; `RUN` is its id, its number, or a run directory |
 | `results fields\|field\|at RUN ... [--stage S]` | What a stage can show, one field (`--csv` for every value), every field at one node |
 | `results members\|profile RUN ...` | The walls and interfaces the run wrote curves for, and one quantity along one, stage by stage (`--csv`) |
+| `results convergence RUN [--stage S]` | How the solver converged, read off the run's log: a row per stage, or per iteration of one stage (`iter.` counts in the stage, `run` over all stages; `--csv`) |
 | `results get\|archive RUN ...` | A copy of one file of a run, or the whole run as a zip |
 | `picture geometry\|mesh P ...` | Save a picture of the model or its mesh, as the GUI's camera button does. See [Pictures](#pictures). |
 | `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
@@ -217,9 +219,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   values a choice can take and when a parameter is used. `--law` is for any other law,
   for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
   given together.
-- **Lines** split the soil. Where a line crosses a layer from one edge to another, the
-  layer becomes separate soil bodies, and each is a SubModelPart that a stage can switch
-  off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
+- **Lines** split the soil. Where a line crosses a layer or a soil surface from one edge to
+  another, it becomes separate soil bodies, and each is a SubModelPart that a stage can
+  switch off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
   a line that ends inside the soil splits nothing, and the command says so when no part of
   the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
   cuts across the whole z range; it is drawn in 2D. The commands are in
@@ -232,17 +234,43 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   names each of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
   its material in every stage. `layer set --material` gives every body of that layer the
-  new material, also a body given one of its own. In a model script, `lines=` and
-  `bodies=` say the same. A record
+  new material, also a body given one of its own. `body remove KEY` deletes one body: no
+  soil is left there, the other bodies of the layer stay, and the stages stop naming it.
+  Its record stays with `removed: true`, so it stays deleted when the lines change; it
+  comes back when no line cuts it off any more. The last body of a layer is the whole
+  layer, so `layer remove` deletes it. `body list` labels a body by its own name, or by
+  its layer's name and `Part 1`, ... while it has the name it was given. In a model
+  script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
+
+  A soil surface that a line cuts is split by the same rules. Each piece is
+  `<surface>__<id>`, for example `drawn_0__part1`, and its record names the surface with
+  `part="drawn_0"` in place of `layer=`. A stage, a mesh size or a condition on the whole
+  surface `drawn_0` means each of its pieces. `surface set drawn_0 --material M` gives every
+  piece the new material, and `body set --material layer` gives a piece the surface's
+  material. A line cuts a drawn soil volume in 3D too, when the volume is a polygon
+  extruded along z or a box.
+- **Soil surfaces** are the 2D bodies of soil that are not layers, for example an
+  embankment or a lens. `surface add --points 0 0 3 0 3 3 0 3 --material sand` draws one,
+  as **Create soil surface…** in the GUI does. It has the key `drawn_0`, `drawn_1`, ...,
+  and `--label` gives it a name (the default is *Soil surface*). `surface set KEY` changes
+  its corners, material or name and keeps its key, and `surface remove KEY` removes it with
+  its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
+  it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
+  `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
+- **Names of layers and soil surfaces** are unique. A name that is already in use, given
+  with `layer add`, `layer set`, `surface add` or `surface set`, gets a number: a second
+  *Embankment* becomes *Embankment_2*, and a note says so. Names that differ only in case
+  or punctuation count as the same. This is the name of the SubModelPart in the Kratos
+  input files too, and the name the GUI shows.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
   line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
   `pit` and `outside`. A stage that named the whole layer then names the ground outside the
   pit. A pit with one level was never dug, so it just goes. A 3D pit narrower than the
   model in z cannot be made of lines, and the file is refused.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
-  section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
+  section plane, swept across the whole model, the same as `surface add`. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
   (`--center`, `--axis`, `--radius`). `volume import FILE` reads .step, .iges, .brep, .stl
   or .obj. With `--material`, a volume is soil.
@@ -273,7 +301,7 @@ kratos-cli line pit.json add floor_2 --points 0 -4.5 6 -4.5
 kratos-cli body pit.json list                                 # the pieces, and their keys
 kratos-cli body pit.json set soil_top__part3 --name "lift 1"
 kratos-cli body pit.json set soil_top__part4 --name "lift 3" --material sand
-kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
+kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1 --tail-end fixed
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet --side right
 kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
@@ -285,7 +313,7 @@ kratos-cli mesh pit.json --body-size sheet 0.5
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
   puts a new one: a sheet pile down the middle of the section to half its depth, a wall
   across the middle of the site, an anchor a quarter of the way down the first pile and
-  raking back 10 m at 35 degrees, an interface on the first pile, a 20 kN load.
+  raking back 8 m across and 6 m down, with the tail on whole metres, an interface on the first pile, a 20 kN load.
 - **Ids and names.** Other commands and the stages refer to a record by its id. `--name`
   is what the GUI shows and what the Kratos files call it. With no id typed, the name is
   the id too: `load add line --name Heavy` makes a load whose id is `Heavy`. This holds
@@ -326,9 +354,14 @@ kratos-cli mesh pit.json --body-size sheet 0.5
   `below` and `above`. `both` is for a pile only. Two interfaces may hold the two faces
   of one pile, or two parts of one face, but not the same face over the same length.
   An interface on its own points may not run along a sheet pile: put it on the pile.
-- **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
-  because it becomes one of its nodes; a head further away is refused. With no `--tail`,
-  the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
+- **Anchors.** An anchor needs no structure. A head within a metre of a pile, wall or
+  member is snapped onto it, because it becomes one of its nodes; a head further away is
+  a node of the soil mesh, and one above the soil is refused. `--head-end fixed` holds
+  the head in place: it is joined to nothing, is not snapped, and may be in the air.
+  With no `--tail`, the anchor rakes back from its head, 8 m across and 6 m down, with
+  the tail on whole metres. The tail is free, a node of the soil mesh, unless
+  `--tail-end fixed` makes it a pinned support. A strut is an anchor with a fixed tail end.
+  A free tail must be in the soil; one in the air is refused.
 - **Removing.** A structure a stage names, or a pile an anchor or an interface depends
   on, is not removed; the refusal names what still uses it. A section in use is not
   removed either.
@@ -383,11 +416,17 @@ kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic l
   sign (compression negative); `Phreatic_Multi_Line` is hydrostatic below the line
   `--phreatic-line X Y X Y ...`, x increasing, and so is a `Head_Line`. Above the level the pressure is held at zero
   unless `--pressure-tension-cut-off` allows suction up to that value.
-- **One phreatic line.** A project has one `Phreatic_Multi_Line` condition; a second is
-  refused. On `--domain` or on a `--line` (which is only where it is drawn), it is the water
-  of every soil. The other water lines are `Head_Line`s: polylines like it
-  (`--phreatic-line`), which Kratos gets as a `Phreatic_Multi_Line` on the soils that take
-  them, and which put no water on the ground.
+- **One phreatic line in each stage.** A `Phreatic_Multi_Line` on `--domain` or on a
+  `--line` (which is only where it is drawn) is a phreatic line: the water of every soil. A
+  stage may have one on; two on in the same stage are refused, so a later stage can switch
+  to a lower one. One on a face, a part or a point is a boundary condition like any other.
+  Given as start values (`--initial`), the phreatic line is the soil's initial pressure: it
+  is written in the stage it comes on, and later stages carry on from what the calculation
+  made of it. Where it stands above the ground, the deck also fixes the pressure on the wet
+  soil surface under it (2D), and frees it again in a stage that leaves it dry. The other
+  water lines are `Head_Line`s: polylines like it (`--phreatic-line`), which Kratos gets as
+  a `Phreatic_Multi_Line` on the soils that take them, and which put no water on the
+  ground.
 - **The water of each soil.** `soil-water` lists each soil and its water. `soil-water SOIL
   WATER` gives a soil (a layer `soil_<id>`, one body, or a custom part with a material) the
   water of a head line (its id, on `--domain` or a `--line`), `interpolate` for the
@@ -662,6 +701,9 @@ kratos-cli results at 1 1234 --stage 4              # every field at node 1234
 kratos-cli results members 1                        # wall, interface_left, interface_right, ...
 kratos-cli results profile 1 wall M --csv wall_M.csv
 kratos-cli results profile 1 interface_right normal # the normal traction, by a word of it
+kratos-cli results convergence 1                    # iterations and last residuals, per stage
+kratos-cli results convergence 1 --stage 4          # every iteration of stage 4
+kratos-cli results convergence 1 --csv convergence.csv
 kratos-cli results get 1 kratos.log --out logs/
 kratos-cli results archive 1                        # <run>.zip, here
 kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
@@ -682,6 +724,15 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
+- **`convergence`** reads the values Kratos printed for each iteration from the run's
+  `kratos.log`: the criterion that printed them (`residual`, `displacement` or
+  `water pressure`), the relative and the absolute value and their targets, whether the
+  convergence criterion was met, and the steps that were cut back or reached the
+  iteration limit. Each stage can have its own criterion, so the table gives it per stage,
+  and the CSV per iteration (`criterion`). It works on a run that stopped, and on a run
+  that is still running.
+  A deck with two convergence criteria prints two lines per iteration, and both are
+  counted as iterations.
 - **Which interface members a run has.** Each face of the wall has its own member:
   `interface_left` and `interface_right`, the faces toward -x and +x
   (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has
@@ -689,8 +740,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   whose contact is on in that stage, so the face a pit is dug against starts at the pit
   floor. With more than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
-- **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
-  `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
+- **`--csv FILE`** writes the file the GUI saves (`results csv`, the plot window's
+  `results plot csv`, and `results convergence csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
   in Windows PowerShell 5.1, `>` would save that as UTF-16, so give the file instead. `--json` gives what the GUI's `/api/results`
   routes answer for the same question.
 - The numbers are the run's own, in its project's units, which `results show` names.
@@ -719,6 +770,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |
 | `materials` | `kratos-cli material P` (the window, as commands) |
 | `calculate` | `kratos-cli calculate P` (the box only says to press Calculate) |
+| `calculate stop` | <kbd>Ctrl</kbd>+<kbd>C</kbd> while `kratos-cli calculate` or `run` runs |
 | `help` | `kratos-cli --help` |
 | `soillayer`, `plate`, `beam`, `anchor` | `kratos-cli layer P add`, `kratos-cli wall P add`, `kratos-cli beam P add`, `kratos-cli anchor P add` (the box answers these with a placeholder and builds nothing) |
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
@@ -739,6 +791,10 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot members`, `results plot list` | `kratos-cli results members RUN` |
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
 | `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
+| `results convergence` | `kratos-cli results convergence RUN` |
+| `results convergence stage S` | `kratos-cli results convergence RUN --stage S` |
+| `results convergence csv` | `kratos-cli results convergence RUN --csv FILE` (with `--stage S` when the window shows one stage alone) |
+| `results convergence svg`, `results convergence png`, `results convergence pdf` | — the viewport's: a picture of the convergence plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
@@ -806,11 +862,19 @@ the deck stays as it was and every run is kept. The runs root is `KRATOS_GUI_RUN
 `~/KratosGUI/runs`, which the GUI's Results mode reads too. `--runs-dir` puts the run somewhere
 else. Kratos is found the way the GUI finds it: [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
-`run` and `calculate` print nothing while Kratos runs. The run directory and its copy of
-the deck are there from the start; `kratos.log`, Kratos' own output, is written into it
-when the run ends. The run time grows quickly with the mesh: `mesh P` reports the number
-of nodes and elements before a run, and `--timeout` (an hour by default) stops a run that
-takes too long.
+`run` and `calculate` print nothing while Kratos runs, unless `--follow` is given: then
+they print a line on stderr for each stage and for each iteration of the solver, with its
+residuals, so stdout keeps the answer alone (and `--json` stays valid JSON). The run
+directory and its copy of the deck are there from the start, and Kratos' own output goes
+into `kratos.log` there line by line while it runs; `kratos-cli results convergence RUN` in
+a second terminal reads it at any time. The run time grows quickly with the mesh: `mesh P`
+reports the number of nodes and elements before a run, and `--timeout` (an hour by default)
+stops a run that takes too long.
+
+<kbd>Ctrl</kbd>+<kbd>C</kbd> stops a run, as the GUI's **Stop** button does: Kratos stops at
+once, the answer says `run RUN stopped by the user in stage 3 of 7 (...)`, and the run
+directory keeps the log and the results of the stages that finished. `results show RUN` says
+later that the run was stopped by the user.
 
 ## Output and exit codes
 
@@ -819,5 +883,6 @@ script instead. The exit code is 0 when the command did what it was asked, 1 whe
 file or Kratos refused it, and 2 when the command line itself could not be read. A refusal is
 printed on stderr as `error: <reason>`; with `--json` it is also printed on stdout as
 `{"ok": false, "error": ...}`. The exporter's warnings go to stderr as `warning: ...`.
-`--csv`, for the commands with a table (`results field`, `results profile`), prints that
+`--csv`, for the commands with a table (`results field`, `results profile`,
+`results convergence`), prints that
 table as CSV, or writes it into the file it is given; it does not go with `--json`.

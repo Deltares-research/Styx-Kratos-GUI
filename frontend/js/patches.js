@@ -166,7 +166,7 @@ App.LivePatches = (function () {
   }
 
   /* A sheet pile in a section is a wall panel in the solid model -- one tool, two
-     structures -- and an anchor hangs from whichever of them is there. The tool has
+     structures -- and an anchor may hang from whichever of them is there. The tool has
      to say which one it is about to make, for the same reason the soil-body tool
      renames itself below. */
   function nameStructureActions(is2d) {
@@ -371,6 +371,7 @@ App.LivePatches = (function () {
      through its own module, which is what validates, persists and refreshes the tree
      for it already. */
   function renameObject(kind, key) {
+    if (kind === 'body') return renameBodyPart(key);
     return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
                                 help: 'Shown in the Model explorer.' })
       .then(function (name) {
@@ -415,9 +416,6 @@ App.LivePatches = (function () {
       if (!line) return;
       line.name = name;
       return App.Lines.save(line).catch(reportRenameError);
-    }
-    if (kind === 'body') {
-      return App.Lines.saveBody(key, { name: name }).catch(reportRenameError);
     }
     if (kind === 'load') {
       var load = loadByKey(key);
@@ -466,6 +464,112 @@ App.LivePatches = (function () {
     if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + layer.name + '.');
     if (App.state && App.state.selection === key) App.selectObject(null);
     return App.commitSelectionEdit(null);
+  }
+
+  /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
+     part) a line cut. Once a line cuts a layer or a surface, the explorer shows only
+     its parts, so a part's menu and panel are where the whole is deleted. */
+  function bodyOwner(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return null;
+    if (body.layer) {
+      var layer = App.layerById ? App.layerById(body.layer) : null;
+      return layer ? { kind: 'layer', noun: 'layer', key: 'soil_' + layer.id,
+                       record: layer, name: layer.name } : null;
+    }
+    var part = partByKey(body.part);
+    return part ? { kind: 'part', noun: in3D() ? 'soil volume' : 'soil surface',
+                    key: part.key, record: part, name: part.label } : null;
+  }
+
+  /* What the Model explorer calls the soil body `key`. */
+  function shownBodyName(key, body) {
+    return ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || body.name;
+  }
+
+  /* Rename part, from the explorer menu and from the part's panel alike. The window starts
+     with the name the Model explorer shows (`soil_body_labels`, such as `Sand · Part 2`),
+     not the shorter name the part was given (`Part 2`), so what you see in the row is what
+     you edit. OK on that name as it is changes nothing. A part is renamed on its own: its
+     layer is renamed in the Soil layers window, and a cut soil surface needs no name of its
+     own beside its parts'. */
+  function renameBodyPart(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return;
+    var shown = shownBodyName(key, body);
+    return App.NameDialog.ask({ title: 'Rename part', value: shown,
+                                help: 'Shown in the Model explorer.' })
+      .then(function (name) {
+        if (name === null || name === shown) return;
+        // saveBody puts a refusal in the log itself.
+        return App.Lines.saveBody(key, { name: name }).catch(function () {});
+      });
+  }
+
+  /* The other parts of the layer or soil surface `key` is a part of, still in the model. */
+  function otherParts(key) {
+    var stem = key.split('__')[0];
+    return ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other !== key && other.split('__')[0] === stem;
+    });
+  }
+
+  /* One part alone goes (`session.remove_body`): the soil there becomes a void, and the
+     rest of its layer or soil surface stays. The last part left is the whole of it. */
+  function deleteBodyPart(key) {
+    var owner = bodyOwner(key);
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!owner || !body) return;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete part',
+        'This deletes ' + shownBodyName(key, body) + ', one part of ' + owner.noun + ' ' + owner.name +
+        '. No soil is left there. The other parts of ' + owner.noun + ' ' + owner.name +
+        ' stay.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) { if (sure) return deleteBody(key); });
+  }
+
+  function deleteBody(key) {
+    var label = ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || key;
+    return deleteRequest('/api/project/bodies/' + encodeURIComponent(key), 'Delete failed')
+      .then(function (reply) {
+        if (reply && reply.project) App.Model.apply(reply.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.state && App.state.selection === key && App.selectObject) {
+          App.selectObject(null, 'tree');
+        }
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        if (App.Command && App.Command.ok) App.Command.ok('Deleted soil part ' + label + '.');
+      })
+      .catch(function (err) {
+        if (App.Command && App.Command.err) {
+          App.Command.err('Could not delete the soil part: ' + err.message);
+        }
+      });
+  }
+
+  /* The whole layer or soil surface goes, every part of it (Delete part takes one). */
+  function deleteBodyOwner(key) {
+    var owner = bodyOwner(key);
+    if (!owner) return;
+    var parts = ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other.split('__')[0] === owner.key;
+    }).length;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete ' + owner.noun,
+        'This deletes ' + owner.noun + ' ' + owner.name + ' and all its ' + parts + ' parts.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) {
+      if (!sure) return;
+      if (owner.kind === 'part') return deleteCustomPart(owner.key);
+      var error = App.deleteLayerById(owner.record.id);
+      if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
+      if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
+      if (App.selectObject) App.selectObject(null, 'tree');
+      return App.commitSelectionEdit(null);
+    });
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -946,9 +1050,8 @@ App.LivePatches = (function () {
       : kind === 'line' ? App.Lines
       : kind === 'condition' ? App.BoundaryConditions
       : kind === 'beam' ? App.Beams
+      : kind === 'anchor' ? App.Anchors
       : kind === 'interface' ? App.Interfaces : null;
-    // Anchors are not here: their `edit` saves the record rather than opening
-    // anything, so calling it would write, not show.
     if (owner && owner.edit) return owner.edit(key);
     if (App.selectObject) App.selectObject(key, 'tree');
   }
@@ -967,18 +1070,31 @@ App.LivePatches = (function () {
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
+    // A soil body is a part of a layer or a soil surface: Rename part… and Delete part act
+    // on the part, and Delete layer or Delete soil surface on the whole of it. The last
+    // part left is the whole of it, so it goes with the second.
+    var owner = kind === 'body' ? bodyOwner(key) : null;
+    var edits = owner ? [
+      { label: 'Rename part…', action: 'renameObject' },
+      { label: 'Delete part', icon: 'delete', action: 'deletePart',
+        disabled: !otherParts(key).length },
+      { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
+    ] : [
+      { label: 'Rename…', action: 'renameObject' },
+      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' }
+    ];
     App.Menu.openAt([
       { label: 'Zoom to object', icon: 'zoomfit', action: 'zoomFit' },
       { label: App.Viewport.isVisible(key) ? 'Hide' : 'Show', icon: 'eye' },
-      '-',
-      { label: 'Rename…', action: 'renameObject' },
-      // A soil body goes when the line that made it goes.
-      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' },
+      '-'
+    ].concat(edits, [
       '-',
       { label: 'Properties…', icon: 'settings' }
-    ], event.clientX, event.clientY, function (it) {
+    ]), event.clientX, event.clientY, function (it) {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
+      if (it.action === 'deleteOwner') return deleteBodyOwner(key);
+      if (it.action === 'deletePart') return deleteBodyPart(key);
       if (it.action) { App.runAction(it); return; }
       if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
@@ -1499,7 +1615,12 @@ App.LivePatches = (function () {
      entry's own `tip` stays the string it was, for everything else that reads it.
 
      The rail button is mounted afresh on every mode change and its tip is joined into
-     a string at mount, so it is greyed (gateRail) but keeps its plain tip. */
+     a string at mount, so it is greyed (gateRail) but keeps its plain tip.
+
+     While a run goes on, the toolbar button and the Stages menu's item are Stop: a
+     red square and "Stop", which asks and then stops Kratos (`App.Calculate.askStop`).
+     Once asked, they say "Stopping…" until the run answers. F9 and the rail do not
+     stop a run: a key pressed twice must not end an hour of work. */
 
   var CALCULATE_TIP = 'Calculate (F9): mesh the model and run it in Kratos.';
 
@@ -1517,9 +1638,24 @@ App.LivePatches = (function () {
     return !!tool && tool.action === 'calculate' && !calculateNow().ok;
   }
 
+  function stoppingNow() {
+    var calc = App.Calculate;
+    return !!(calc && typeof calc.stopping === 'function' && calc.stopping());
+  }
+
+  /* True while a run goes on and no stop has been asked: the button is Stop. */
+  function stoppable(now) {
+    return !!now.running && !stoppingNow()
+      && !!(App.Calculate && typeof App.Calculate.askStop === 'function');
+  }
+
+  /* The toolbar button is Stop while a run goes on; the rail button only spins. */
   function paintCalculating(button) {
-    var busy = !!calculateNow().running;
-    button.classList.toggle('calculating', busy);
+    var now = calculateNow();
+    var busy = !!now.running;
+    var stop = stoppable(now) && !button.classList.contains('rail-btn');
+    button.classList.toggle('calculating', busy && !stop);
+    button.classList.toggle('stop-calc', stop);
     if (busy) button.setAttribute('aria-busy', 'true');
     else button.removeAttribute('aria-busy');
   }
@@ -1527,6 +1663,7 @@ App.LivePatches = (function () {
   var calculateTip = {
     toString: function () {
       var now = calculateNow();
+      if (stoppable(now)) return App.Calculate.STOP_TIP || 'Stop the calculation.';
       return now.ok ? CALCULATE_TIP : now.reason;
     }
   };
@@ -1547,26 +1684,29 @@ App.LivePatches = (function () {
 
   function syncCalculate() {
     var now = calculateNow();
+    var stop = stoppable(now);
+    var off = !now.ok && !stop;
+    var busyLabel = stop ? 'Stop' : stoppingNow() ? 'Stopping…' : 'Calculating…';
     var entry = calculateEntry();
     // On the data as well as the button, so a remount of the toolbar keeps it.
-    if (entry) entry.disabled = !now.ok;
+    if (entry) entry.disabled = off;
 
     var button = typeof document !== 'undefined'
       && document.querySelector('#maintoolbar .tbtn[data-action="calculate"]');
     if (button) {
-      button.classList.toggle('disabled', !now.ok);
-      button.setAttribute('aria-disabled', now.ok ? 'false' : 'true');
+      button.classList.toggle('disabled', off);
+      button.setAttribute('aria-disabled', off ? 'true' : 'false');
       paintCalculating(button);
       var label = button.querySelector('span');
       if (label) {
-        label.textContent = now.running ? 'Calculating…' : ((entry && entry.wide) || 'Calculate');
+        label.textContent = now.running ? busyLabel : ((entry && entry.wide) || 'Calculate');
       }
     }
 
     menuItemsFor('calculate').forEach(function (item) {
       if (item.calculateLabel === undefined) item.calculateLabel = item.label;
-      item.disabled = !now.ok;
-      item.label = now.running ? 'Calculating…' : item.calculateLabel;
+      item.disabled = off;
+      item.label = now.running ? (stop ? 'Stop calculation' : busyLabel) : item.calculateLabel;
     });
 
     gateRail();
@@ -1626,10 +1766,33 @@ App.LivePatches = (function () {
     if (App.Calculate && typeof App.Calculate.onChange === 'function') {
       App.Calculate.onChange(syncCalculate);
     }
+    if (App.Calculate && typeof App.Calculate.onStop === 'function') {
+      App.Calculate.onStop(syncCalculate);
+    }
     syncCalculate();
   }
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
+
+  /* An app window with OK and Cancel. `onCancel` (optional) is called when it closes
+     without OK: by Cancel, the close button or Escape. */
+  function confirmDialog(title, text, onConfirm, onCancel) {
+    if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
+    var confirmed = false;
+    App.Dialogs.open({
+      title: title, width: 440, height: 220,
+      buttons: [{ label: 'OK', primary: true,
+                  onClick: function () { confirmed = true; return onConfirm(); } },
+                { label: 'Cancel' }],
+      onClose: function () { if (!confirmed && onCancel) onCancel(); },
+      build: function (body) {
+        body.appendChild(App.UI.el('div.dlg-simple', null, [
+          App.UI.el('h3', { text: title }),
+          App.UI.el('p', { text: text })
+        ]));
+      }
+    });
+  }
 
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
@@ -1975,6 +2138,9 @@ App.LivePatches = (function () {
     var total = ((App.PROJECT && App.PROJECT.stages) || []).length;
     if (!result) { stageRun = null; }
     else if (result.ok) { stageRun = { completed: total }; }
+    else if (result.stopped) {
+      stageRun = { completed: result.stage ? result.stage.index - 1 : 0, stopped: true };
+    }
     else if (result.stage) {
       stageRun = { completed: result.stage.index - 1, failed: true,
                    error: result.error || null };
@@ -2660,7 +2826,9 @@ App.LivePatches = (function () {
             node.style.paddingLeft = (8 + row.depth * 4) + 'px';
             node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.label }));
+            var name = el('span.phase-name', { text: row.heading + ' ' });
+            name.appendChild(el('span.phase-id', { text: '[' + row.id + ']' }));
+            node.appendChild(name);
             node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;
@@ -2687,10 +2855,15 @@ App.LivePatches = (function () {
              right-click the part in the viewport, or tick it in the Model explorer. */
           var on = stage.activate || [], off = stage.deactivate || [];
           var active = App.Stages.activeParts(App.PROJECT, stage.id) || [];
+          var named = function (keys) {
+            return keys.map(function (key) {
+              return App.Stages.partLabel(App.PROJECT, key);
+            }).join(', ');
+          };
           var changes = el('div.pgrid');
           changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
-          [['Activated here', on.length ? on.join(', ') : '—'],
-           ['Deactivated here', off.length ? off.join(', ') : '—'],
+          [['Activated here', on.length ? named(on) : '—'],
+           ['Deactivated here', off.length ? named(off) : '—'],
            ['Active in this stage', active.length + ' of ' +
             App.Stages.stageableKeys(App.PROJECT).length + ' parts']
           ].forEach(function (row) {
@@ -2711,7 +2884,7 @@ App.LivePatches = (function () {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
             hidden.forEach(function (key) {
-              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var label = App.Stages.partLabel(App.PROJECT, key);
               var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
               button.addEventListener('click', function () {
                 saveStages(App.Stages.toggled(App.PROJECT, stage.id, key),
@@ -2825,6 +2998,7 @@ App.LivePatches = (function () {
     ['script <file.py>', 'write the model as a Python file that builds it'],
     ['mesh', 'generate the finite element mesh'],
     ['calculate', 'mesh the model and run it in Kratos (F9)'],
+    ['calculate stop', 'stop the running calculation; what it wrote stays'],
     ['results', 'open what a calculation wrote (try "results runs")'],
     ['export', 'write the Kratos deck'],
     ['stages', 'the Stages overview: every stage, its time and result'],
@@ -3025,6 +3199,13 @@ App.LivePatches = (function () {
         else openResultsWindow();
         return;
       }
+      // The Results menu's and rail's "Convergence": `results convergence`, without
+      // switching to Results mode -- it is read while a run goes on, and of a run that
+      // wrote no results at all.
+      if (item && item.action === 'showConvergence') {
+        resultsCommand('results convergence');
+        return;
+      }
       // The rail's "Plot along the wall": the same `results plot` the command box runs,
       // which opens the plot window when it has something to draw.
       if (item && item.action === 'plotResults') {
@@ -3155,6 +3336,12 @@ App.LivePatches = (function () {
         return;
       }
       if (item && item.action === 'calculate') {
+        // While a run goes on, the toolbar button (`cta`) and the menu item are Stop.
+        // F9 (an action with no label) and the rail are refused below instead.
+        if ((item.cta || item.label) && stoppable(calculateNow())) {
+          App.Calculate.askStop();
+          return;
+        }
         // The button is greyed for the same reason; F9 and a menu left open are not.
         if (refuseCalculate()) return;
         if (App.Calculate) App.Calculate.run();
@@ -3594,7 +3781,8 @@ App.LivePatches = (function () {
         return frozenCalcRun(function (result) {
           rememberRun(result);
           if (done) done(result);
-          if (!result || !App.Results || !App.Results.ready) return;
+          // A run the user stopped leaves them where they were, at the model.
+          if (!result || result.stopped || !App.Results || !App.Results.ready) return;
           App.Results.ready().then(function () {
             if (App.Results.stage()) App.setMode('results');
           });
@@ -3668,6 +3856,11 @@ App.LivePatches = (function () {
           + '<circle cx="17.5" cy="12.5" r="1.3"/>';
       }
 
+      if (App.ICONS && !App.ICONS.convergence) {
+        App.ICONS.convergence = '<path d="M4 4v16h16"/>'
+          + '<path d="M7 6l3 5 3-2 3 6 3 2"/><path d="M6 17.5h14" stroke-dasharray="2 2"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
@@ -3675,7 +3868,9 @@ App.LivePatches = (function () {
         // The chooser opens with the mode; this is how it comes back once closed.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
-            + 'pressure on it, every stage', action: 'plotResults' }
+            + 'pressure on it, every stage', action: 'plotResults' },
+        { icon: 'convergence', tip: 'Convergence — how the solver converged, iteration '
+            + 'by iteration', action: 'showConvergence' }
       ];
 
       /* `App.setMode` is frozen and knows only about the stages panel (js/app.js:25).
@@ -3718,6 +3913,10 @@ App.LivePatches = (function () {
           }
         });
       }
+
+      // The Convergence window: its own file, which hears from App.Calculate and
+      // App.ConvergencePlot itself.
+      if (App.ConvergenceWindow) App.ConvergenceWindow.install();
 
       /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
          opens when a `results plot` asks for it -- typed, or from any button. */
@@ -3837,6 +4036,7 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Convergence…', icon: 'convergence', action: 'showConvergence' },
           { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
             cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
@@ -4093,7 +4293,8 @@ App.LivePatches = (function () {
         onClose: function () { saveMenu.close(); plotWindow = null; plotColumns = 0; }
       });
       handle.dialog.classList.add('dlg-plot');
-      saveMenu = plotSaveMenu(handle.dialog.querySelector('.dlg-foot .btn'));
+      saveMenu = App.Picture.saveMenu(handle.dialog.querySelector('.dlg-foot .btn'),
+                                      function (format) { resultsCommand('results plot ' + format); });
 
       var layer = document.getElementById('modal-layer');
       var scrims = layer ? layer.querySelectorAll('.scrim') : [];
@@ -4111,59 +4312,6 @@ App.LivePatches = (function () {
         new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
       }
       return handle;
-    }
-
-    /* The plot window's one Save button: a small menu of the formats `results plot`
-       saves, opened above the button when there is no room below it. A pick saves at
-       once, from its own click, so the browser still opens its save window. The page
-       closes an open menu on any press outside it -- on this button too -- so the click
-       that follows such a press must not open the menu again. */
-    var PLOT_SAVE_FORMATS = [
-      { label: 'PNG', format: 'png' },
-      { label: 'PDF', format: 'pdf' },
-      { label: 'SVG', format: 'svg' },
-      { label: 'CSV', format: 'csv' }
-    ];
-
-    function plotSaveMenu(button) {
-      var open = false, justClosed = false, pressClosed = false;
-      button.setAttribute('aria-haspopup', 'menu');
-      button.setAttribute('aria-expanded', 'false');
-      button.addEventListener('mousedown', function () { pressClosed = justClosed; });
-
-      function show() {
-        App.UI.closePopups(0);
-        var r = button.getBoundingClientRect();
-        var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
-          resultsCommand('results plot ' + it.format);
-        }), r.left, r.bottom);
-        // The menu layer lies under the dialogs' layer, so the menu goes up beside the
-        // window it belongs to. Both layers cover the page, so it keeps its place.
-        var dialogs = document.getElementById('modal-layer');
-        if (dialogs) dialogs.appendChild(menu);
-        var height = menu.getBoundingClientRect().height;
-        if (r.bottom + height > window.innerHeight - 4) {
-          menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
-        }
-        open = true;
-        button.setAttribute('aria-expanded', 'true');
-        App.UI.whenClosed(function () {
-          open = false;
-          button.setAttribute('aria-expanded', 'false');
-          justClosed = true;
-          setTimeout(function () { justClosed = false; }, 0);
-        });
-      }
-
-      return {
-        toggle: function () {
-          var closedByThisPress = pressClosed;
-          pressClosed = false;
-          if (open) App.UI.closePopups(0);
-          else if (!closedByThisPress) show();
-        },
-        close: function () { if (open) App.UI.closePopups(0); }
-      };
     }
 
     function closePlotWindow() {
@@ -4231,6 +4379,11 @@ App.LivePatches = (function () {
                                           function () { plotReloading = null; });
     }
 
+    function convergenceShown() {
+      var W = App.ConvergenceWindow;
+      return !!(W && W.state && W.state().open);
+    }
+
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -4239,11 +4392,15 @@ App.LivePatches = (function () {
       if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
       if (on) {
         mountResultsPanel();
-        // Entering the mode opens the chooser, every time. It is what the mode is
-        // for, and the dock panel alone is easy to miss down the side of the page.
-        // The rail's "Choose results" reopens it after it has been closed. It fills
-        // itself as it is built, so there is nothing to render afterwards.
-        openResultsWindow();
+        // Entering the mode opens the chooser. It is what the mode is for, and the
+        // dock panel alone is easy to miss down the side of the page. The rail's
+        // "Choose results" reopens it after it has been closed. It fills itself as it
+        // is built, so there is nothing to render afterwards.
+        //
+        // But not over an open Convergence window: at the end of a Calculate, the
+        // chooser would hide how the run ended, and after a failed run that is what
+        // the user came to read. The dock panel has the same controls meanwhile.
+        if (!convergenceShown()) openResultsWindow();
       } else {
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the
@@ -4550,6 +4707,11 @@ App.LivePatches = (function () {
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'calculate') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        // `calculate stop`: typed, so it does not ask first.
+        if ((text.trim().split(/\s+/)[1] || '').toLowerCase() === 'stop') {
+          if (App.Calculate && App.Calculate.stop) return App.Calculate.stop();
+          return;
+        }
         if (refuseCalculate()) return;
         if (App.Calculate) return App.Calculate.run();
         return;
@@ -4931,6 +5093,8 @@ App.LivePatches = (function () {
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
+    renameBodyPart: renameBodyPart, deleteBodyOwner: deleteBodyOwner,
+    deleteBodyPart: deleteBodyPart, deleteBody: deleteBody,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };

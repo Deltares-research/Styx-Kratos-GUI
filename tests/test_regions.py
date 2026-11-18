@@ -108,3 +108,64 @@ def test_an_end_within_the_tolerance_reaches_the_edge():
     assert len(pieces([(4.0, 1e-9), (4.0, -8.0 - 1e-9)])) == 2
     assert len(pieces([(4.0, -1e-9), (4.0, -8.0 + 1e-9)])) == 2
     assert len(pieces([(4.0, -0.01), (4.0, -8.0)])) == 1
+
+
+# ── A drawn soil surface: any polygon ───────────────────────────────────────
+
+SQUARE = ((0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0))
+
+
+def polygon(outline, *lines):
+    return regions.polygon_pieces(tuple(outline), tuple(tuple(line) for line in lines))
+
+
+def test_nothing_cuts_a_surface_without_lines():
+    only, = polygon(SQUARE)
+    assert only.outline == SQUARE
+    assert only.contains(only.point)
+
+
+def test_a_line_across_a_surface_makes_two_pieces():
+    """The steps of issue #125: a 3 m square and a line from (1, 3) down to (1, 0)."""
+    left, right = polygon(SQUARE, [(1.0, 3.0), (1.0, 0.0)])
+    assert area(left) == pytest.approx(3.0)
+    assert area(right) == pytest.approx(6.0)
+    assert left.left == 0.0 and right.left == 1.0
+
+
+def test_a_surface_drawn_clockwise_gives_the_same_pieces():
+    assert polygon(SQUARE[::-1], [(1.0, 3.0), (1.0, 0.0)]) \
+        == polygon(SQUARE, [(1.0, 3.0), (1.0, 0.0)])
+
+
+def test_a_line_past_the_edges_of_a_surface_is_clipped_to_it():
+    assert len(polygon(SQUARE, [(1.0, 10.0), (1.0, -10.0)])) == 2
+
+
+def test_a_line_that_stops_inside_a_surface_cuts_nothing():
+    assert len(polygon(SQUARE, [(1.0, 3.0), (1.0, 1.0)])) == 1
+
+
+def test_a_line_on_the_edge_of_a_surface_or_outside_it_cuts_nothing():
+    assert len(polygon(SQUARE, [(0.0, 0.0), (3.0, 0.0)])) == 1
+    assert len(polygon(SQUARE, [(5.0, 0.0), (5.0, 3.0)])) == 1
+
+
+def test_a_line_typed_just_short_of_the_edge_still_reaches_it():
+    assert len(polygon(SQUARE, [(1.0, 3.0 - 1e-7), (1.0, 1e-7)])) == 2
+
+
+def test_a_line_that_leaves_a_concave_surface_and_comes_back_cuts_it_twice():
+    # A U: two arms standing on a base, open at the top between x = 1 and x = 2.
+    u = ((0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (2.0, 3.0), (2.0, 1.0), (1.0, 1.0),
+         (1.0, 3.0), (0.0, 3.0))
+    found = polygon(u, [(-1.0, 2.0), (4.0, 2.0)])
+    assert len(found) == 3
+    assert sum(area(piece) for piece in found) == pytest.approx(7.0)
+    assert all(piece.contains(piece.point) for piece in found)
+
+
+def test_a_triangle_cut_through_a_corner():
+    triangle = ((0.0, 0.0), (4.0, 0.0), (0.0, 4.0))
+    first, second = polygon(triangle, [(0.0, 0.0), (3.0, 3.0)])
+    assert area(first) == pytest.approx(4.0) and area(second) == pytest.approx(4.0)

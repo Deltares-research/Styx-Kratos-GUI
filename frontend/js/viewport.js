@@ -397,9 +397,10 @@ App.Viewport = (function () {
   /* The soil's edges that a line puts there, where it splits a layer: each piece draws
      one along the line. They are drawn with the line, so hiding the line in the Model
      explorer hides all of it, not only its dashes over the seam. An edge on a layer's
-     outline stays the soil's, as it is there with or without the line. In 3D an edge
-     across the model at one of the line's points goes with it too, unless it is the
-     domain's side. Pure, so it is testable without a renderer.
+     outline, or on the outline of a drawn soil surface, stays the soil's, as it is there
+     with or without the line. In 3D an edge across the model at one of the line's points
+     goes with it too, unless it is the domain's side. Pure, so it is testable without a
+     renderer.
 
      Returns `edges`, each section's flat LineSegments pairs less the seams, and
      `seams`, one `{line, section, edges}` per line and section that has one. */
@@ -409,6 +410,11 @@ App.Viewport = (function () {
     var layers = {};
     ((project && project.layers) || []).forEach(function (layer) {
       layers['soil_' + layer.id] = layer;
+    });
+    // A piece of a drawn soil surface is `<part>__<id>`, and its outline is the part's.
+    ((project && project.custom_parts) || []).forEach(function (part) {
+      var outline = partOutline(part);
+      if (outline) layers[part.key] = { outline: outline };
     });
     var d = project && project.domain;
     // The edges come rounded to 4 decimals (core/geometry/tessellation.py DECIMALS).
@@ -430,6 +436,10 @@ App.Viewport = (function () {
     }
 
     function onOutline(s, layer) {
+      if (layer.outline) {
+        return [[s[0], s[1]], [s[3], s[4]], [(s[0] + s[3]) / 2, (s[1] + s[4]) / 2]]
+          .every(function (p) { return onPolyline(p[0], p[1], layer.outline); });
+      }
       var across = near(s[0], s[3]) && near(s[1], s[4]);
       var sides = [[0, d.x0], [0, d.x1]];
       if (!across) sides.push([1, layer.top], [1, layer.bottom]);
@@ -467,6 +477,23 @@ App.Viewport = (function () {
       });
     });
     return { edges: edges, seams: seams };
+  }
+
+  /* The closed outline, in the section, of a drawn part that is a polygon swept along z
+     or a box. Which parts a line can cut is the server's rule
+     (core/model/schemas.py `CustomPart.section_outline`): only a cut part has pieces
+     (`<part>__<id>` in `soil_body_keys`) that look its outline up here. */
+  function partOutline(part) {
+    var recipe = part && part.recipe;
+    var points = null;
+    if (recipe && recipe.kind === 'polygon_extrude' && recipe.vertices) {
+      points = recipe.vertices.map(function (v) { return [v[0], v[1]]; });
+    } else if (recipe && recipe.kind === 'box' && recipe.origin && recipe.size) {
+      var x0 = recipe.origin[0], y0 = recipe.origin[1];
+      var x1 = x0 + recipe.size[0], y1 = y0 + recipe.size[1];
+      points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    }
+    return points && points.length > 2 ? points.concat([points[0]]) : null;
   }
 
   /* Frees GPU memory before a group is replaced. The frozen code never does
@@ -807,6 +834,9 @@ App.Viewport = (function () {
      symbol stands, the outward direction it points from, and whether it is a roller. */
   var SUPPORT_COLOR = 0x2e7d32;
   var WATER_COLOR = 0x1f6fb0;
+  // A water pressure on a line or a face of its own: indigo, apart from the phreatic
+  // line's blue and the water on the ground's light blue, and from the head lines'.
+  var CONDITION_PRESSURE_COLOR = '#3949ab';
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
 
   /* Where the symbols stand on a line of [x, y] points: at each corner, and evenly
@@ -1026,6 +1056,24 @@ App.Viewport = (function () {
       spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
         : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
       spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
+      // On a line or a face (2D), the pressure is on that line only: the line, solid,
+      // and the pressure along it, as a diagram that grows with the depth below the
+      // level, with the deepest pressure beside it.
+      var target = !two ? null
+        : record.on === 'face' ? faceOutline(project, record.face, outlines)
+        : record.on === 'line'
+          ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
+          : null;
+      if (target && target.length > 1 && App.SurfaceWater && App.SurfaceWater.along) {
+        spec.color = CONDITION_PRESSURE_COLOR;
+        var pieces = App.SurfaceWater.along(record, target,
+                                            [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2]);
+        var reach = spec.size * 1.6;
+        var diagram = App.SurfaceWater.glyph(pieces, reach, reach * 1.4);
+        spec.diagram = { path: target, pieces: pieces, glyph: diagram,
+                         text: diagram.deepestAt
+                           ? App.SurfaceWater.pressureText(project, diagram.deepest) : null };
+      }
     } else if ((type === 'Phreatic_Multi_Line' || type === 'Head_Line')
                && record.x_coordinates) {
       var zs = record.z_coordinates;
@@ -1149,14 +1197,44 @@ App.Viewport = (function () {
       label.visible = !(App.state && App.state.mode === 'results');
       group.add(label);
     }
+    // A pressure on a line of its own: the line, thick where the water presses on it,
+    // and the diagram of the pressure filled and hatched, without heads -- a condition
+    // the soil is held to, not a load.
+    var diagramFill = null;
+    if (spec.diagram) {
+      var zd = spec.diagram.path[0][2];
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+        spec.diagram.path.map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); })),
+        new THREE.LineBasicMaterial({ color: color })));
+      spec.diagram.pieces.forEach(function (piece) {
+        group.add(pressureBand(piece, spec.size * 0.3, zd, color));
+      });
+      var tails = spec.diagram.glyph.tails;
+      if (tails.length === spec.diagram.pieces.length && tails.length) {
+        diagramFill = quadsMesh(spec.diagram.pieces.map(function (piece, i) {
+          return [piece.a, piece.b, tails[i][1], tails[i][0]];
+        }), zd, color);
+        group.add(diagramFill);
+      }
+      addPressureDiagram(group, spec.diagram.glyph, zd, color);
+      // Written past the end of the deepest tick.
+      var deep = spec.diagram.glyph.deepestAt;
+      var away = spec.diagram.glyph.deepestInward;
+      if (spec.diagram.text && deep && away) {
+        var off = spec.size * 1.6 + spec.size * 1.2;
+        group.add(makeLabel(spec.diagram.text, deep[0] - away[0] * off,
+                            deep[1] - away[1] * off, zd, spec.size * 0.7));
+      }
+    }
     group.traverse(function (child) {
       child.userData.key = record.id;
       if (child.material) {
         child.material.depthTest = false;
         child.material.transparent = true;
-        child.material.opacity = spec.active ? 1 : 0.45;
+        child.material.opacity = (spec.active ? 1 : 0.45) * (child === diagramFill ? 0.3 : 1);
+        if (child === diagramFill) child.material.depthWrite = false;
       }
-      child.renderOrder = 18;
+      child.renderOrder = child === diagramFill ? 17 : 18;
     });
     return group;
   }
@@ -1323,29 +1401,67 @@ App.Viewport = (function () {
     });
   }
 
-  /* ── The water on the ground, in Staged construction ─────────────────────
-     The normal load the export adds where the phreatic line stands above the soil
-     (core/kratos/writer.py `_water_surface_loads`), for the stage on screen: found by
-     `App.SurfaceWater` on the build's sections, drawn as small pale arrows into the
-     soil. Not a part, so not in `groups`: no eye, no pick, no ghost -- it is rebuilt
-     from the stage on every mode pass (`setMode`), and drawn in that tab only. */
+  /* ── The water on the ground, in Flow conditions and Staged construction ──
+     Where the phreatic line stands above the soil, the export puts the water's pressure
+     on the wet soil surface under it: fixed there (writer.py `_wet_surface`), and in a
+     mechanical stage as a normal load too (`_water_surface_loads`). Found by
+     `App.SurfaceWater` on the build's sections -- for the stage on screen in Staged
+     construction, for the model as built in Flow conditions -- and drawn as the open
+     water itself, a pale see-through fill up to the phreatic line, with arrows into
+     the soil hanging from that line (on an upright face, longer under deeper water),
+     and the pressure where it is deepest.
+     Lighter than the phreatic line, and filled where the lines are not, so the water,
+     its line and a water pressure condition on a line (indigo, `CONDITION_PRESSURE_COLOR`)
+     do not read as one another. Not a part, so not in `groups`: no eye, no pick, no
+     ghost -- it is rebuilt on every mode pass (`setMode`), in those two tabs only. */
   var builtSections = null;
   var surfaceWaterGroup = null;
-  var SURFACE_WATER_COLOR = 0x2f8fd8;
+  var SURFACE_WATER_COLOR = 0x0288d1;
+  var SURFACE_WATER_FILL = 0x4fc3f7;
+
+  /* The sections of the last build, or null: what the Model explorer reads the water
+     on the ground off (model.js `surfaceWaterStages`). */
+  function sectionsBuilt() { return builtSections; }
+
+  function refreshSurfaceWaterRows() {
+    if (!App.Model || !App.Model.surfaceWaterStages) return;
+    var before = JSON.stringify(App.Model.surfaceWaterStages.last || {});
+    var now = JSON.stringify(App.Model.surfaceWaterStages());
+    if (now === before || !App.Model.rebuildDerived) return;
+    App.Model.rebuildDerived();
+    if (App.Explorer && App.Explorer.mountTree && App.state) {
+      App.Explorer.mountTree(App.state.mode);
+    }
+  }
 
   function syncSurfaceWater(mode) {
     if (surfaceWaterGroup) { disposeGroup(surfaceWaterGroup); surfaceWaterGroup = null; }
     var project = App.PROJECT;
-    if (mode !== 'staged' || !scene || !App.SurfaceWater || !builtSections || !project
-        || project.dimension !== 2 || project.deck) return;
-    var pieces = App.SurfaceWater.pieces(project, builtSections, stageHidden());
+    if ((mode !== 'staged' && mode !== 'flow') || !scene || !App.SurfaceWater
+        || !builtSections || !project || project.dimension !== 2 || project.deck) return;
+    var pieces = App.SurfaceWater.pieces(project, builtSections,
+                                         mode === 'staged' ? stageHidden() : {});
     if (!pieces.length) return;
     var span = modelSpan(project, frame && frame.size);
     var length = span > 0 ? span * 0.035 : 0.5;
-    var spec = App.SurfaceWater.glyph(pieces, length, length * 1.4);
+    // The arrows in the open water hang from the phreatic line down to the ground.
+    var spec = App.SurfaceWater.glyph(pieces, length, length * 1.4,
+                                      App.SurfaceWater.linesOf(project));
     var z = sectionOffset(project);
     var group = surfaceWaterGroup = new THREE.Group();
     group.name = 'surface-water';
+
+    // The open water on the ground, up to its line.
+    var body = App.SurfaceWater.waterBody(pieces);
+    var fill = body.length ? quadsMesh(body, z, SURFACE_WATER_FILL) : null;
+    if (fill) group.add(fill);
+    // Written in the soil, clear of the water line and its mark.
+    var text = spec.deepestAt && App.SurfaceWater.pressureText(project, spec.deepest);
+    if (text) {
+      var into = spec.deepestInward || [0, -1];
+      group.add(makeLabel(text, spec.deepestAt[0] + into[0] * length * 0.7,
+                          spec.deepestAt[1] + into[1] * length * 0.7, z, length * 0.55));
+    }
 
     spec.arrows.forEach(function (entry) {
       var direction = new THREE.Vector3(entry.direction[0], entry.direction[1], 0);
@@ -1355,23 +1471,70 @@ App.Viewport = (function () {
                                       tip.clone().addScaledVector(direction, -entry.length),
                                       entry.length, SURFACE_WATER_COLOR, head, head * 0.6));
     });
+    group.traverse(function (child) {
+      child.userData.noPick = true;
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.depthWrite = false;
+        child.material.transparent = true;
+        child.material.opacity = child === fill ? 0.22 : 0.7;
+      }
+      child.renderOrder = child === fill ? 15 : 16;
+    });
+    scene.add(group);
+  }
+
+  /* One mesh of quads of [x, y] corners, at `z`: a fill under the lines. */
+  function quadsMesh(quads, z, color) {
+    var positions = [];
+    quads.forEach(function (q) {
+      [0, 1, 2, 0, 2, 3].forEach(function (i) { positions.push(q[i][0], q[i][1], z); });
+    });
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      color: color, side: THREE.DoubleSide }));
+  }
+
+  /* A band `width` wide along a piece of a pressure diagram (`App.SurfaceWater`), on
+     the side its `inward` points to: the stretch the pressure is on. */
+  function pressureBand(piece, width, z, color) {
+    var n = piece.inward, a = piece.a, b = piece.b;
+    var corners = [[a[0], a[1]], [b[0], b[1]],
+                   [b[0] + n[0] * width, b[1] + n[1] * width],
+                   [a[0] + n[0] * width, a[1] + n[1] * width]];
+    var positions = [];
+    [0, 1, 2, 0, 2, 3].forEach(function (i) {
+      positions.push(corners[i][0], corners[i][1], z);
+    });
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      color: color, side: THREE.DoubleSide }));
+  }
+
+  /* A pressure diagram's ticks and outline (`App.SurfaceWater.glyph`), in `group`: from
+     the line out to the outline, without heads, as a water pressure condition has no
+     direction. */
+  function addPressureDiagram(group, spec, z, color) {
+    var ticks = [];
+    spec.arrows.forEach(function (entry) {
+      var tip = entry.tip, n = entry.direction;
+      ticks.push(new THREE.Vector3(tip[0], tip[1], z),
+                 new THREE.Vector3(tip[0] - n[0] * entry.length,
+                                   tip[1] - n[1] * entry.length, z));
+    });
+    if (ticks.length) {
+      group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ticks),
+                                       new THREE.LineBasicMaterial({ color: color })));
+    }
     spec.tails.forEach(function (points) {
       group.add(new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(points.map(function (p) {
           return new THREE.Vector3(p[0], p[1], z);
         })),
-        new THREE.LineBasicMaterial({ color: SURFACE_WATER_COLOR })));
+        new THREE.LineBasicMaterial({ color: color })));
     });
-    group.traverse(function (child) {
-      child.userData.noPick = true;
-      if (child.material) {
-        child.material.depthTest = false;
-        child.material.transparent = true;
-        child.material.opacity = 0.55;
-      }
-      child.renderOrder = 16;
-    });
-    scene.add(group);
   }
 
   function buildGroups(payload) {
@@ -1379,6 +1542,9 @@ App.Viewport = (function () {
     groups = {};
     glyphs = [];
     builtSections = payload.sections;
+    // The Model explorer's water on the ground is read off these sections: a build
+    // that changes it shows there (model.js `surfaceWaterStages`).
+    refreshSurfaceWaterRows();
 
     var cut = lineSeams(payload.sections, App.PROJECT);
     var lineDepth = {};
@@ -1530,8 +1696,12 @@ App.Viewport = (function () {
 
   function rebuildModeGroups() {
     soilKeys = soilKeysOf(App.PROJECT, App.LAYERS);
+    // A part a line cut is drawn as its pieces, which are soil keys (`<part>__<id>`).
     var customKeys = ((App.PROJECT && App.PROJECT.custom_parts) || [])
-      .map(function (p) { return p.key; });
+      .map(function (p) { return p.key; })
+      .filter(function (key) {
+        return !soilKeys.some(function (soil) { return soil.split('__')[0] === key; });
+      });
     var loadKeys = ((App.PROJECT && App.PROJECT.loads) || []).filter(function (load) {
       return !App.Loads || App.Loads.compatible(load, App.PROJECT);
     }).map(function (load) { return load.id; });
@@ -3842,6 +4012,7 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
+    builtSections: sectionsBuilt,
     select: select, selectedKey: selectedKey, modelTabs: modelTabs,
     setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,

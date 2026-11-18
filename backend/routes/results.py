@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
 from core.analysis import calculation
-from core.results import catalog
+from core.results import catalog, convergence
 
 router = APIRouter()
 
@@ -166,6 +166,20 @@ def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
         return catalog.member_profiles(run_id, member, quantity)
     except members.UnknownQuantity as failure:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except catalog.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@router.get("/api/results/runs/{run_id}/convergence")
+def results_convergence(run_id: str) -> dict:
+    """How the solver converged in this run, read off its log, for a finished run or
+    one Kratos is still working in (`core.results.convergence`).
+
+    A plain `def`, so FastAPI runs it off the event loop: the live window asks for it
+    once a second while the log grows.
+    """
+    try:
+        return convergence.of_run(run_id)
     except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 

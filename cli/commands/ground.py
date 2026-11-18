@@ -7,9 +7,10 @@ property sets: a law and its variables under Kratos' names, typed as `NAME=VALUE
 project's own units. A soil model (`--model mohr-coulomb`) picks the law and fills in
 the defaults the material window fills in (`core.model.soil_models`).
 
-A line splits the layers it crosses from edge to edge, as a sheet pile does. Each piece is
-a soil body with its own key (`soil_<layer>__<id>`), which a stage can switch, and `body`
-names it and can give it a material of its own (`Project.split_soil`).
+A line splits the layers and the soil surfaces it crosses from edge to edge, as a sheet
+pile does. Each piece is a soil body with its own key (`soil_<layer>__<id>`, or
+`<surface>__<id>`), which a stage can switch, and `body` names it, can give it a material
+of its own, or removes it and leaves a void (`Project.split_soil`).
 """
 
 from __future__ import annotations
@@ -92,8 +93,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                 "list, add, change or remove the lines that split the soil")
     action(line, common, "list", list_lines, writes=False)
     add = action(line, common, "add", add_line,
-                 help="a line; where it crosses a layer from one edge to another, the layer "
-                      "becomes separate soil bodies")
+                 help="a line; where it crosses a layer or a soil surface from one edge to "
+                      "another, it becomes separate soil bodies")
     add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _line_fields(add)
     change = action(line, common, "set", update_line)
@@ -103,16 +104,20 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     existing(remove, "line")
 
     body = noun(commands, common, "body",
-                "list the soil bodies, and name them or give them a material")
+                "list the soil bodies, name them, give them a material or remove one")
     action(body, common, "list", list_bodies, writes=False,
            help="every soil body by its key, the word a stage takes")
     change = action(body, common, "set", update_body,
                     help="change a body that a line or a sheet pile cut off; a whole layer "
-                         "is changed with `layer set`")
+                         "is changed with `layer set`, a whole soil surface with `surface`")
     change.add_argument("key", help="the body's key, as `body list` shows it")
     change.add_argument("--name", help="what to call it")
-    change.add_argument("--material", help="its material, or `layer` for its layer's as it "
-                                           "is now")
+    change.add_argument("--material", help="its material, or `layer` for its layer's or soil "
+                                           "surface's as it is now")
+    remove = action(body, common, "remove", remove_body,
+                    help="delete one body that a line or a sheet pile cut off: the soil there "
+                         "becomes a void, and the rest of its layer or soil surface stays")
+    remove.add_argument("key", help="the body's key, as `body list` shows it")
 
     parts = commands.add_parser("parts", parents=[common],
                                 help="the parts of the model, and which a stage can switch")
@@ -218,6 +223,11 @@ def update_body(args: argparse.Namespace) -> Answer:
         fields["material"] = None if args.material == "layer" else args.material
     return edited(args, session.update_body(read(args), args.key, **fields),
                   f"changed soil body {args.key}")
+
+
+def remove_body(args: argparse.Namespace) -> Answer:
+    return edited(args, session.remove_body(read(args), args.key),
+                  f"removed soil body {args.key}")
 
 
 def _domain_line(project: Project) -> str:

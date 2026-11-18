@@ -489,12 +489,21 @@ App.BoundaryConditions = (function () {
     return send({ boundary_conditions: copy(list) }, message);
   }
 
-  function save(record) {
+  /* `record` saved, in place of the one of its id or added. `staged`, from
+     `stagedPhreatic`, sends the stages along, so both are checked as one edit. */
+  function save(record, staged) {
     var all = copy(records());
     var at = all.findIndex(function (item) { return item.id === record.id; });
     if (at < 0) all.push(copy(record)); else all[at] = copy(record);
-    return saveAll(all, 'Saved ' + record.kind.replace('_', ' ') + ' condition '
-                   + record.name + '.')
+    var message = 'Saved ' + record.kind.replace('_', ' ') + ' condition ' + record.name + '.';
+    var body = { boundary_conditions: all };
+    if (staged) {
+      body.stages = staged.stages;
+      message += ' It is the phreatic line from stage ' + staged.stageName + ' on'
+        + (staged.replaced.length ? ', in place of ' + staged.replaced.join(', ') : '')
+        + '.';
+    }
+    return send(body, message)
       .then(function () {
         if (App.selectObject) App.selectObject(record.id, 'tree');
         return record;
@@ -549,11 +558,21 @@ App.BoundaryConditions = (function () {
     });
   }
 
-  /* `Project.phreatic_line`: the phreatic line, every soil's water by default, or null. */
-  function phreaticLine(list) {
+  /* `Project.phreatic_lines`: every soil's water by default, one a stage. */
+  function phreaticLines(list) {
     return waterLines(list).filter(function (record) {
       return record.fluid_pressure_type === 'Phreatic_Multi_Line';
-    })[0] || null;
+    });
+  }
+
+  /* The first phreatic line, or null: the one the whole soil's row of the grid shows. */
+  function phreaticLine(list) {
+    return phreaticLines(list)[0] || null;
+  }
+
+  /* The phreatic lines' names, as a soil that takes them is labelled. */
+  function phreaticNames(list) {
+    return phreaticLines(list).map(function (record) { return record.name; }).join(', ');
   }
 
   /* `Project.head_lines`: the lines a soil can take instead. */
@@ -563,17 +582,87 @@ App.BoundaryConditions = (function () {
     });
   }
 
-  /* A project has one phreatic line (`Project._cross_references`): said before the
-     server says it, with what to do instead. */
-  function checkOnePhreatic(list) {
-    var phreatic = list.filter(function (record) {
-      return record.kind === 'water_pressure'
-        && record.fluid_pressure_type === 'Phreatic_Multi_Line';
+  /* A stage has one phreatic line on (`Project.phreatic_lines_together`): said before
+     the server says it, with what to do instead. Only a phreatic line on the whole soil
+     or drawn on a line counts, and only one that is on. A staged `project` may switch
+     from one to another, a lower one for a pit pumped dry, which the server checks
+     stage by stage. */
+  function checkOnePhreatic(list, project) {
+    if (project && (project.stages || []).length) return;
+    var phreatic = phreaticLines(list).filter(function (record) {
+      return record.active !== false;
     });
     if (phreatic.length > 1) {
-      throw new Error('A project has one phreatic line, ' + phreatic[0].name + '. Make '
-                      + phreatic[1].name + ' a head line, and give it to its soils under '
-                      + 'Soil water.');
+      throw new Error('A stage has one phreatic line, ' + phreatic[0].name + '. Switch '
+                      + phreatic[1].name + ' off, or make it a head line and give it to '
+                      + 'its soils under Soil water.');
+    }
+  }
+
+  /* A new phreatic line `made`, saved while the stage `stageId` is selected, in a staged
+     `project`: the phreatic line from that stage on. Everything starts in the model, so
+     saved as it is it would be on in the initial stage beside the one already there,
+     which the server refuses. So the initial stage switches it off and the stage
+     switches it on, and each phreatic line on in the stage before is switched off there
+     -- one a stage. `{stages, replaced}`, the whole sequence and the names of the lines
+     it switched off, or null when there is nothing to do: an unstaged project, a line
+     already in the project, a line that is no phreatic line or is off, or the initial
+     stage selected (two lines on there is the error `checkOnePhreatic` says). */
+  function stagedPhreatic(project, made, stageId) {
+    var S = App.Stages;
+    var list = (project && project.stages) || [];
+    if (!S || !list.length || !made || made.active === false) return null;
+    if (made.kind !== 'water_pressure' || made.fluid_pressure_type !== 'Phreatic_Multi_Line'
+        || LINE_TARGETS.indexOf(made.on) < 0) return null;
+    if (find(made.id, project)) return null;
+    var chain = S.chainTo(project, stageId);
+    if (chain.length < 2) return null;
+    var parent = chain[chain.length - 2];
+    var before = S.activeParts(project, parent.id) || [];
+    var here = S.activeParts(project, stageId) || [];
+    var others = phreaticLines(project.boundary_conditions || []).filter(function (record) {
+      return record.active !== false && here.indexOf(record.id) >= 0;
+    });
+    function without(items, key) {
+      return (items || []).filter(function (k) { return k !== key; });
+    }
+    var stages = copy(list).map(function (stage) {
+      stage.activate = (stage.activate || []).slice();
+      stage.deactivate = (stage.deactivate || []).slice();
+      if (stage.id === chain[0].id) stage.deactivate.push(made.id);
+      if (stage.id === stageId) {
+        stage.activate.push(made.id);
+        others.forEach(function (record) {
+          stage.activate = without(stage.activate, record.id);
+          stage.deactivate = without(stage.deactivate, record.id);
+          // Only an instruction the stage before does not already give.
+          if (before.indexOf(record.id) >= 0) stage.deactivate.push(record.id);
+        });
+      }
+      return stage;
+    });
+    return { stages: stages, replaced: others.map(function (record) { return record.name; }) };
+  }
+
+  /* A new phreatic line made with the initial stage selected, in a staged `project`
+     whose initial stage has one on already: said before the server says it, with how
+     to make it a later stage's. */
+  function checkInitialPhreatic(project, made, stageId) {
+    var S = App.Stages;
+    if (!S || !project || !(project.stages || []).length || !made || made.active === false
+        || made.kind !== 'water_pressure' || made.fluid_pressure_type !== 'Phreatic_Multi_Line'
+        || LINE_TARGETS.indexOf(made.on) < 0 || find(made.id, project)) return;
+    var initial = S.initialOf(project);
+    if (!initial || (stageId && stageId !== initial.id)) return;
+    var on = S.activeParts(project, initial.id) || [];
+    var there = phreaticLines(project.boundary_conditions || []).filter(function (record) {
+      return record.active !== false && on.indexOf(record.id) >= 0;
+    })[0];
+    if (there) {
+      throw new Error('A stage has one phreatic line, and ' + initial.name + ' has '
+                      + there.name + '. To make this the phreatic line of a later stage, '
+                      + 'select that stage in Staged construction and save it again; or '
+                      + 'make it a head line.');
     }
   }
 
@@ -591,8 +680,8 @@ App.BoundaryConditions = (function () {
   /* The water a soil can take, as [value, label]: the phreatic line (''), a head line,
      or interpolated. */
   function soilWaterChoices(list) {
-    var phreatic = phreaticLine(list);
-    var out = [['', 'Phreatic line' + (phreatic ? ' (' + phreatic.name + ')' : ' (none yet)')]];
+    var phreatic = phreaticNames(list);
+    var out = [['', 'Phreatic line' + (phreatic ? ' (' + phreatic + ')' : ' (none yet)')]];
     headLines(list).forEach(function (record) {
       out.push([record.id, 'Head line (' + record.name + ')']);
     });
@@ -648,8 +737,9 @@ App.BoundaryConditions = (function () {
      blue, a head line's own colour, or null for any other condition. */
   function waterLineColor(record, list) {
     if (!record || record.kind !== 'water_pressure') return null;
-    var phreatic = phreaticLine(list);
-    if (phreatic && phreatic.id === record.id) return PHREATIC_COLOR;
+    if (phreaticLines(list).some(function (r) { return r.id === record.id; })) {
+      return PHREATIC_COLOR;
+    }
     var at = headLines(list).map(function (r) { return r.id; }).indexOf(record.id);
     return at < 0 ? null : HEAD_COLORS[at % HEAD_COLORS.length];
   }
@@ -678,9 +768,9 @@ App.BoundaryConditions = (function () {
       var line = headLines(list).filter(function (r) { return r.id === water; })[0];
       if (line) return { color: waterLineColor(line, list), label: 'Head line: ' + line.name };
     }
-    var phreatic = phreaticLine(list);
+    var phreatic = phreaticNames(list);
     return phreatic
-      ? { color: PHREATIC_COLOR, label: 'Phreatic line: ' + phreatic.name }
+      ? { color: PHREATIC_COLOR, label: 'Phreatic line: ' + phreatic }
       : { color: NO_WATER_COLOR, label: 'No water line' };
   }
 
@@ -940,7 +1030,7 @@ App.BoundaryConditions = (function () {
         list.push(draftWaterPressure(work, row.face ? 'face' : 'domain', options));
       }
     });
-    checkOnePhreatic(list);
+    checkOnePhreatic(list, work);
     return list;
   }
 
@@ -1287,12 +1377,21 @@ App.BoundaryConditions = (function () {
       var typed = c.name.value.trim();
       if (typed && !(record === null && typed === draftName)) made.name = typed;
       made.active = c.active.checked;
+      var stageId = App.Stages && App.Stages.selectedId
+        ? App.Stages.selectedId(project, App.state && App.state.phase) : null;
+      var staged = stagedPhreatic(project, made, stageId);
+      if (staged) {
+        staged.stageName = (project.stages.filter(function (stage) {
+          return stage.id === stageId;
+        })[0] || {}).name || stageId;
+      }
       try {
         checkOnePhreatic(records().filter(function (item) {
           return item.id !== made.id;
-        }).concat([made]));
+        }).concat([made]), project);
+        if (!staged) checkInitialPhreatic(project, made, stageId);
       } catch (error) { message.textContent = error.message; return null; }
-      return save(made).then(function () { shell.close(); }, function (error) {
+      return save(made, staged).then(function () { shell.close(); }, function (error) {
         message.textContent = error.message;
       });
     }
@@ -1345,7 +1444,7 @@ App.BoundaryConditions = (function () {
 
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' boundary condition',
-      width: 600, height: 560,
+      width: 600, height: 620,
       buttons: [
         { label: 'Pick on model…', onClick: pick },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
@@ -1425,7 +1524,7 @@ App.BoundaryConditions = (function () {
         }), water.fluid_pressure_type || 'Hydrostatic');
         row('type', 'Type', c.type, 'Uniform: one value. Hydrostatic: zero at its level, '
             + 'growing with depth. Phreatic line: hydrostatic below a line, the water of '
-            + 'every soil; one in a project. Head line: the same, for the soils that take '
+            + 'every soil; one a stage. Head line: the same, for the soils that take '
             + 'it under Soil water.');
         c.value = number(water.value);
         row('value', 'Value', c.value, '[' + App.Units.label('stress') + '], compression '
@@ -1447,8 +1546,13 @@ App.BoundaryConditions = (function () {
             + App.Units.label('stress') + ']; 0 holds it at zero.');
         c.initial = el('input.mesh-setting-control', { type: 'checkbox' });
         c.initial.checked = water.is_fixed === false;
+        // A new phreatic line is the soil's initial pressure: start values, until the
+        // user says otherwise.
+        var initialChosen = known;
+        c.initial.addEventListener('change', function () { initialChosen = true; });
         row('initial', 'Initial only', c.initial, 'Start values, which the calculation '
-            + 'then changes.');
+            + 'then changes. A phreatic line is written so in the stage it comes on, and '
+            + 'the ground under its water is fixed to it.');
 
         c.active = el('input.mesh-setting-control', { type: 'checkbox' });
         c.active.checked = record.active !== false;
@@ -1473,6 +1577,10 @@ App.BoundaryConditions = (function () {
           show('phreatic', water && LINE_TYPES.indexOf(type) >= 0);
           rows.phreatic[0].textContent = type === 'Head_Line' ? 'Head line' : 'Phreatic line';
           show('cutoff', water && type !== 'Uniform');
+          if (water && !initialChosen) {
+            c.initial.checked = type === 'Phreatic_Multi_Line'
+              && LINE_TARGETS.indexOf(on) >= 0;
+          }
           followPoints();
         }
         [c.kind, c.on, c.type].forEach(function (control) {
@@ -1539,7 +1647,8 @@ App.BoundaryConditions = (function () {
     phreaticPoints: phreaticPoints,
     INTERPOLATE: INTERPOLATE, waterLines: waterLines, phreaticLine: phreaticLine,
     headLines: headLines,
-    checkOnePhreatic: checkOnePhreatic, soilWaterChoices: soilWaterChoices,
+    checkOnePhreatic: checkOnePhreatic, phreaticLines: phreaticLines, soilWaterChoices: soilWaterChoices,
+    stagedPhreatic: stagedPhreatic, checkInitialPhreatic: checkInitialPhreatic,
     soilWaterRows: soilWaterRows, applySoilWater: applySoilWater,
     PHREATIC_COLOR: PHREATIC_COLOR, INTERPOLATE_COLOR: INTERPOLATE_COLOR,
     NO_WATER_COLOR: NO_WATER_COLOR, HEAD_COLORS: HEAD_COLORS, tint: tint,

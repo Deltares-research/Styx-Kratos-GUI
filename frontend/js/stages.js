@@ -287,7 +287,7 @@ App.Stages = (function () {
 
      `run` is `{completed, failed}`: how many stages the last run got through, and
      whether it stopped short. A failed run failed in the stage after the last one it
-     completed. */
+     completed. `{completed, stopped}` is a run the user stopped in that stage. */
   function timeUnit() {
     return (App.Units && App.Units.label('time')) || 's';
   }
@@ -319,24 +319,36 @@ App.Stages = (function () {
       var duration = rounded(durationOf(stage));
       var unit = timeUnit();
       var failedHere = !!(run && run.failed) && position === completed;
+      var stoppedHere = !!(run && run.stopped) && position === completed;
+      // `heading` is the line without its id: the Stages window draws the `[id]`
+      // after it in a lighter colour, so the name reads first.
+      var heading = row.name + ' - ' + duration + ' ' + unit + ', T = ' + total + ' ' + unit;
       return {
         number: position + 1, id: row.id, name: row.name, kind: row.kind,
         depth: row.depth, duration: duration, total: total, unit: unit,
-        state: failedHere ? 'failed' : row.state,
-        label: row.name + ' - ' + duration + ' ' + unit + ', T = ' + total + ' ' + unit
-               + ' [' + row.id + ']',
-        log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
+        state: failedHere ? 'failed' : stoppedHere ? 'stopped' : row.state,
+        heading: heading,
+        label: heading + ' [' + row.id + ']',
+        log: position < completed ? 'OK' : failedHere ? 'Failed'
+           : stoppedHere ? 'Stopped by the user' : 'Not calculated'
       };
     });
   }
 
   /* ── Editing: every one of these returns a new list ──────────────────── */
 
-  function freshId(project, stem) {
-    var taken = index(project);
-    var n = 1;
-    while (taken[stem + '_' + n]) n += 1;
-    return stem + '_' + n;
+  /* The number N of a new stage: its place in the list (one more than the stages
+     there are), raised until both the id `stage_N` and the name `Stage N` are free.
+     The id and the name of a new stage then carry the same number (`Stage 3`,
+     `stage_3`), not two that count different things (issue #135). */
+  function freshNumber(project) {
+    var list = stagesOf(project);
+    var ids = {};
+    var names = {};
+    list.forEach(function (stage) { ids[stage.id] = true; names[stage.name] = true; });
+    var n = list.length + 1;
+    while (ids['stage_' + n] || names['Stage ' + n]) n += 1;
+    return n;
   }
 
   function blank(project, id, name, parent) {
@@ -385,8 +397,8 @@ App.Stages = (function () {
     var list = copy(stagesOf(project));
     var tail = lastOf(project);
     if (!tail) return [initialStage()];
-    var id = freshId(project, 'stage');
-    list.push(later(project, id, 'Stage ' + (list.length + 1), tail.id));
+    var n = freshNumber(project);
+    list.push(later(project, 'stage_' + n, 'Stage ' + n, tail.id));
     return list;
   }
 
@@ -402,7 +414,7 @@ App.Stages = (function () {
     // Nothing goes before the initial stage.
     if (!target || target.parent == null) return copy(stagesOf(project));
 
-    var made = later(project, freshId(project, 'stage'), 'New stage', target.parent);
+    var made = later(project, 'stage_' + freshNumber(project), 'New stage', target.parent);
     var list = copy(stagesOf(project));
     list.forEach(function (stage) {
       if (stage.id === id) stage.parent = made.id;
@@ -490,7 +502,7 @@ App.Stages = (function () {
     var original = byId[id];
     if (!original) return copy(stagesOf(project));
 
-    var made = blank(project, freshId(project, 'stage'),
+    var made = blank(project, 'stage_' + freshNumber(project),
                      original.name + ' (copy)', original.id);
     made.calculation = original.calculation || 'mechanical';
     made.time_integration = original.time_integration || 'static';
@@ -757,6 +769,25 @@ App.Stages = (function () {
     });
   }
 
+  /* The name a reader knows a stageable part by, as the Model explorer shows it: a
+     soil body's label ("Soil_Top · lift 1"), or the name of the object with that id
+     (a wall, a load, an interface ...). A key that names nothing is shown as it is. */
+  function partLabel(project, key) {
+    if (!project) return key;
+    var bodies = project.soil_body_labels || {};
+    if (bodies[key]) return bodies[key];
+    var fields = Object.keys(project).filter(function (field) {
+      return field !== 'stages' && Array.isArray(project[field]);
+    });
+    for (var i = 0; i < fields.length; i += 1) {
+      var match = project[fields[i]].filter(function (item) {
+        return item && typeof item === 'object' && item.id === key && item.name;
+      })[0];
+      if (match) return match.name;
+    }
+    return key;
+  }
+
   return {
     FLOW: FLOW, CALCULATION_TYPES: CALCULATION_TYPES,
     STRESS_INITIALISATIONS: STRESS_INITIALISATIONS, TIME_INTEGRATIONS: TIME_INTEGRATIONS,
@@ -765,7 +796,7 @@ App.Stages = (function () {
     groundwaterFlow: groundwaterFlow, kindOf: kindOf, edited: edited,
     initialOf: initialOf, isInitial: isInitial,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
-    hiddenKeys: hiddenKeys, selectedId: selectedId,
+    hiddenKeys: hiddenKeys, partLabel: partLabel, selectedId: selectedId,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,

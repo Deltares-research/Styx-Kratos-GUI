@@ -174,12 +174,13 @@ def test_a_strut_from_a_pile_above_the_ground_is_accepted():
     Project.model_validate(payload)
 
 
-def test_a_strut_above_the_ground_still_has_to_hang_from_a_pile():
+def test_a_strut_head_above_the_ground_still_has_to_hang_from_a_pile():
+    """Off the pile, the head is a node of the soil mesh, and there is no soil there."""
     top = seed_project(simple=True).domain.y_top
     payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
     payload.update(anchor_sections=[STRAND],
                    anchors=[strut((11.0, top + 4.0), (14.0, top + 4.0))])
-    with pytest.raises(Exception, match="is not on a sheet pile"):
+    with pytest.raises(Exception, match="joined to the soil but lies above it"):
         Project.model_validate(payload)
 
 

@@ -22,6 +22,7 @@
        results zeroline [on|off]  the zero water pressure line, after a coupled stage
        results range auto | <min> <max>
        results csv             the field on screen, as a file
+       results convergence     how the solver converged (convergence-plot.js)
        results files | get <file> | zip     the run directory itself
 
    The Results menu and the Results explorer are two more ways in, and neither is a
@@ -493,6 +494,8 @@ App.Results = (function () {
     'results csv            the field on screen, as a file',
     'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per stage;',
     '                        `results plot members` lists them, `plot csv`/`svg` saves',
+    'results convergence     how the solver converged, iteration by iteration;',
+    '                        `convergence csv`/`svg`/`png`/`pdf` saves it',
     'results files / get <file> / zip     the run directory itself'
   ];
 
@@ -1254,6 +1257,11 @@ App.Results = (function () {
     if (verb === 'csv') return exportCsv();
     // The wall and interface curves, stage by stage: frontend/js/results-plot.js.
     if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
+    // The solver's convergence, read off the log: frontend/js/convergence-plot.js. It
+    // works on a run that wrote no results, and on one still running.
+    if (verb === 'convergence' && App.ConvergencePlot) {
+      return App.ConvergencePlot.command(rest);
+    }
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
         || verb === 'deform' || verb === 'range' || verb === 'mesh' || verb === 'loads'
         || verb === 'zeroline' || verb === 'reverse' || verb === 'reversed') {

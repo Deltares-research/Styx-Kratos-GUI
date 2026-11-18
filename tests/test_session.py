@@ -868,10 +868,17 @@ def test_a_structure_is_changed_field_by_field():
     assert (strut.prestress, strut.name) == (1.0e5, "Prop")
 
 
-def test_an_anchor_moved_off_its_pile_is_refused():
-    with pytest.raises(ValidationError, match="not on a sheet pile"):
+def test_an_anchor_moved_off_its_pile_is_joined_to_the_soil():
+    project = session.update_structure(excavation_project(staged=False), "strut",
+                                       head=(10.0, -1.0))
+
+    assert not project.anchor_on_structure(project.anchors[0])
+
+
+def test_an_anchor_head_moved_into_the_air_is_refused():
+    with pytest.raises(ValidationError, match="joined to the soil but lies above it"):
         session.update_structure(excavation_project(staged=False), "strut",
-                                 head=(10.0, -1.0))
+                                 head=(10.0, 3.0))
 
 
 def test_a_structure_that_is_not_there_is_named_with_those_that_are():
@@ -1132,8 +1139,8 @@ def test_a_stage_inserted_before_another_takes_its_place_in_the_chain():
 def test_a_copied_stage_follows_its_original():
     project, stage = session.add_stage(excavation_project(), copy_of="dig_1")
 
-    assert (stage.id, stage.parent, stage.max_iterations) == ("stage_1", "dig_1", 150)
-    assert {p.id: p for p in project.stages}["install_strut"].parent == "stage_1"
+    assert (stage.id, stage.parent, stage.max_iterations) == ("stage_8", "dig_1", 150)
+    assert {p.id: p for p in project.stages}["install_strut"].parent == "stage_8"
 
 
 def test_a_stage_id_that_is_taken_is_refused():

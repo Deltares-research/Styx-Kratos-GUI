@@ -1,6 +1,6 @@
 """The water of each soil: the phreatic line, a head line, or interpolated.
 
-A project has one phreatic line at most. On the whole soil or drawn on a line, it is
+A stage has one phreatic line on at most. On the whole soil or drawn on a line, it is
 every soil's water, unless the soil takes another (`Project.soil_water`): a head line --
 a sloping polyline, the head of an aquifer -- which acts only on the soils that take it,
 or `interpolate`, which writes Kratos' `Interpolate_Line` on the soil so it takes the
@@ -16,6 +16,7 @@ import pytest
 from core import session
 from core.geometry import solid_model
 from core.kratos import condition_checks, writer
+from core.model import migration
 from core.model.schemas import (INTERPOLATE, ConditionsUpdate, MeshRequest, Project,
                                 WaterPressureCondition)
 from core.model.templates import seed_project
@@ -71,10 +72,56 @@ def water(export: dict, stage: str | None = None) -> list[dict]:
 
 # ── The project ──────────────────────────────────────────────────────────────
 
-def test_a_project_has_one_phreatic_line():
-    second = dict(PHREATIC, id="second", name="Second", on="face", face="left")
-    with pytest.raises(ValueError, match="one phreatic line"):
+def test_a_stage_has_one_phreatic_line():
+    second = dict(PHREATIC, id="second", name="Second", y_coordinates=[-3.0, -3.0])
+    with pytest.raises(ValueError, match="'Phreatic line' and 'Second' are both on in "
+                                         "this model, which has no stages"):
         layered((PHREATIC, second))
+    with pytest.raises(ValueError, match="both on in stage 'First'"):
+        layered((PHREATIC, second),
+                stages=[{"id": "s1", "name": "First"},
+                        {"id": "s2", "name": "Second", "parent": "s1"}])
+
+
+def test_a_later_stage_may_lower_the_phreatic_line():
+    """A pit pumped dry: the second line comes on as the first goes off."""
+    second = drawn(dict(PHREATIC, id="second", name="Second", y_coordinates=[-3.0, -3.0]))
+    project = layered((PHREATIC, second),
+                      stages=[{"id": "s1", "name": "First", "deactivate": ["second"]},
+                              {"id": "s2", "name": "Second", "parent": "s1",
+                               "activate": ["second"], "deactivate": ["phreatic"]}])
+    assert [line.id for line in project.phreatic_lines()] == ["phreatic", "second"]
+    assert all(project.on_the_whole_soil(line) for line in project.phreatic_lines())
+
+
+def test_a_phreatic_line_comes_with_the_stages_that_switch_it():
+    """Made in a later stage: neither the line nor the stages alone is a project, so the
+    GUI sends both in one edit."""
+    stages = [{"id": "s1", "name": "First"}, {"id": "s2", "name": "Second", "parent": "s1"}]
+    project = layered((PHREATIC,), stages=stages)
+    second = drawn(dict(PHREATIC, id="second", name="Second", y_coordinates=[-3.0, -3.0]))
+    lines = project.model_dump()["boundary_conditions"] + [second]
+    with pytest.raises(ValueError, match="both on in stage 'First'"):
+        session.replace_conditions(project, ConditionsUpdate(boundary_conditions=lines))
+    switched = [dict(stages[0], deactivate=["second"]),
+                dict(stages[1], activate=["second"], deactivate=["phreatic"])]
+    edited = session.replace_conditions(project, ConditionsUpdate(boundary_conditions=lines,
+                                                                  stages=switched))
+    assert [line.id for line in edited.phreatic_lines()] == ["phreatic", "second"]
+    assert edited.stages[1].deactivate == ["phreatic"]
+    with pytest.raises(EditRefused, match="cannot remove a condition that a stage still"):
+        session.replace_conditions(edited, ConditionsUpdate(
+            boundary_conditions=lines[:-1]))
+    dropped = session.replace_conditions(edited, ConditionsUpdate(
+        boundary_conditions=lines[:-1], stages=stages))
+    assert [line.id for line in dropped.phreatic_lines()] == ["phreatic"]
+
+
+def test_a_phreatic_multi_line_on_a_face_is_not_a_second_phreatic_line():
+    """A start phreatic line on the soil and a fixed one on a face, as on main."""
+    face = dict(PHREATIC, id="face", name="Face", on="face", face="left")
+    project = layered((dict(PHREATIC, is_fixed=False), face))
+    assert [line.id for line in project.phreatic_lines()] == ["phreatic"]
 
 
 def test_a_condition_cannot_be_called_interpolate():
@@ -101,7 +148,7 @@ def test_the_water_lines_are_the_phreatic_and_head_lines_on_the_soil_or_drawn():
     second = drawn(dict(HEAD, id="second", name="Second"))
     project = layered((PHREATIC, HEAD, LEVEL, uniform, face, second))
     assert [line.id for line in project.water_lines()] == ["phreatic", "head", "second"]
-    assert project.phreatic_line().id == "phreatic"
+    assert [line.id for line in project.phreatic_lines()] == ["phreatic"]
     assert [line.id for line in project.head_lines()] == ["head", "second"]
 
 
@@ -184,7 +231,7 @@ def test_one_soil_s_water_is_set_and_cleared():
 
 def test_a_second_phreatic_line_is_refused_with_what_to_do():
     second = WaterPressureCondition(**dict(PHREATIC, id="second", name="Second"))
-    with pytest.raises(ValueError, match="make the others head lines"):
+    with pytest.raises(ValueError, match="switch one off there, or make it a head line"):
         session.add_condition(layered((PHREATIC,)), second)
 
 
@@ -284,3 +331,57 @@ def test_an_interpolated_soil_is_off_when_all_the_water_is(gmsh_session):
     export = writer.export_project(staged(deactivate=["head", "phreatic"]), MESH)
     assert water(export, "2_Second") == []
     assert len(water(export, "1_First")) == 3
+
+
+# ── Files saved when a drawn phreatic line was a pressure on that line only ──
+
+def old_file(*conditions: dict) -> dict:
+    """`layered(conditions)` as a document saved before 2026-11-18."""
+    payload = json.loads(layered(()).model_dump_json())
+    del payload["drawn_phreatic_lines"]
+    payload["boundary_conditions"] += [dict(c) for c in conditions]
+    return payload
+
+
+def test_an_old_level_line_drawn_on_a_line_is_hydrostatic_on_that_line():
+    """The same pressure on the same nodes, and nothing else, as on main."""
+    bank = drawn(dict(PHREATIC, id="bank", name="Bank", y_coordinates=[-2.0, -2.0]))
+    payload = old_file(PHREATIC, bank)
+    project = Project.model_validate(payload)
+    record = project.boundary_conditions[-1]
+    assert (record.on, record.fluid_pressure_type, record.reference_coordinate) == (
+        "line", "Hydrostatic", -2.0)
+    assert [list(p) for p in record.points] == bank["points"]
+    assert [line.id for line in project.phreatic_lines()] == ["phreatic"]
+    (note,) = migration.notes(payload)
+    assert "'Bank'" in note and "Hydrostatic at -2 m now, on the same line" in note
+    again = Project.model_validate(project.model_dump())
+    assert again.boundary_conditions[-1].fluid_pressure_type == "Hydrostatic"
+    assert migration.notes(project.model_dump()) == [], "converted once only"
+
+
+def test_an_old_sloping_line_drawn_on_a_line_is_the_whole_soil_s_water_and_said():
+    sloping = drawn(dict(PHREATIC, id="slope", name="Slope", y_coordinates=[-1.0, -3.0]))
+    payload = old_file(sloping)
+    project = Project.model_validate(payload)
+    assert [line.id for line in project.phreatic_lines()] == ["slope"]
+    (note,) = migration.notes(payload)
+    assert "now the water of the whole soil" in note and "use a Hydrostatic" in note
+
+
+def test_an_old_sloping_line_beside_a_phreatic_line_is_a_head_line():
+    """Two phreatic lines a stage cannot have on: the file still opens."""
+    sloping = drawn(dict(PHREATIC, id="slope", name="Slope", y_coordinates=[-1.0, -3.0]))
+    payload = old_file(PHREATIC, sloping)
+    project = Project.model_validate(payload)
+    assert [line.id for line in project.head_lines()] == ["slope"]
+    (note,) = migration.notes(payload)
+    assert "it is a head line now" in note
+
+
+def test_a_new_line_drawn_on_a_line_is_left_as_it_is():
+    payload = json.loads(layered((drawn(PHREATIC),)).model_dump_json())
+    assert payload["drawn_phreatic_lines"] == "whole_soil"
+    project = Project.model_validate(payload)
+    assert project.boundary_conditions[-1].fluid_pressure_type == "Phreatic_Multi_Line"
+    assert migration.notes(payload) == []

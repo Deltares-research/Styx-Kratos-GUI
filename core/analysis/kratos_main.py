@@ -78,6 +78,53 @@ def announcing(orchestrator_class):
     return Announcing
 
 
+UNBUFFERED_NOTE = "[kratos-gui] note: Kratos output stays buffered and arrives in blocks"
+"""Printed when `unbuffer_output` could not turn the C runtime's buffer off. The run goes
+on: the log is still complete, only a live convergence plot updates in bursts."""
+
+# The C runtime's "no buffer" mode for `setvbuf`. The value differs per runtime: the
+# Microsoft one uses 0x4, glibc and the BSD libc use 2.
+_IONBF = 0x4 if sys.platform == "win32" else 2
+
+
+def unbuffer_output() -> bool:
+    """Make the C runtime send Kratos' output to the pipe at once, not in blocks.
+
+    Kratos prints from C++ through the C runtime's `stdout`. Into a pipe that stream is
+    block-buffered, so the server gets Kratos' lines in bursts and out of order with
+    the lines Python prints (the stage markers). Measured on Windows (2026-11-06): 20
+    residual lines came in 2 bursts, and stage markers landed inside other lines. A live
+    convergence plot would stay empty for minutes on a large model and then jump.
+    Turning the buffer off before Kratos is imported fixes both, and a run is not
+    slower. Python's own `sys.stdout` is set to line buffering for the same reason.
+
+    True when the buffer is off. False when the call failed, for example with a Kratos
+    build that has its own static C runtime; the run then works as before.
+    """
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+    try:
+        import ctypes
+
+        if sys.platform == "win32":
+            runtime = ctypes.CDLL("ucrtbase")
+            runtime.__acrt_iob_func.restype = ctypes.c_void_p
+            runtime.__acrt_iob_func.argtypes = [ctypes.c_uint]
+            stream = runtime.__acrt_iob_func(1)
+        else:
+            runtime = ctypes.CDLL(None)
+            symbol = "__stdoutp" if sys.platform == "darwin" else "stdout"
+            stream = ctypes.c_void_p.in_dll(runtime, symbol).value
+        runtime.setvbuf.restype = ctypes.c_int
+        runtime.setvbuf.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int,
+                                    ctypes.c_size_t]
+        return bool(stream) and runtime.setvbuf(stream, None, _IONBF, 0) == 0
+    except (OSError, AttributeError, ValueError):
+        return False
+
+
 def run(parameters_path: Path) -> None:
     """Run the deck `parameters_path` names, in whatever directory it sits in.
 
@@ -102,6 +149,9 @@ def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: python -m core.analysis.kratos_main <ProjectParameters.json>", file=sys.stderr)
         return 2
+    # Before Kratos is imported: its C++ half takes the C runtime's stdout as it is then.
+    if not unbuffer_output():
+        print(UNBUFFERED_NOTE, flush=True)
     run(Path(argv[1]))
     return 0
 

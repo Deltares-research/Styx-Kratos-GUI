@@ -15,23 +15,7 @@ benchmark BM-CROW-MC holds to Kratos' own results.
 
 A 2D plane-strain section, 80 m wide and 60 m deep, in SI units (m, N, Pa, kg/m³):
 
-```text
-             x = 0       x = 5                                         x = 80
-                           ↓ ↓ ↓ ↓ ↓ ↓  surcharge 20 kN/m  ↓ ↓ ↓ ↓ ↓ ↓
-  y = 0        +-----------+--------------------------------------------+
-               |  lift 1  =|  strut at -1.5      water table at -1.5    |
-  y = -2       | - - - - - |                                            |
-               |  lift 2   |                                            |
-  y = -5       | - - - - - |  Clay                                      |
-               |  lift 3   |                                            |
-  y = -8       +-----------+--------------------------------------------+
-               |           |  Clay                                      |
-  y = -12      +-----------+--------------------------------------------+
-               |           '  wall toe at -13                           |
-               |              Sand                                      |
-  y = -60      +--------------------------------------------------------+
-         symmetry plane
-```
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](../../examples/CROW_case/crow_model.svg)
 
 - A 13 m sheet pile at x = 5, with a strut at −1.5 m.
 - The pit, between the wall and the symmetry plane, is dug in three lifts: to −2, −5 and −8 m.
@@ -282,12 +266,12 @@ changed soil body soil_L_mid__part1; wrote ...\crow.json
 crow.json> body set soil_L_mid__part2 --name retained
 changed soil body soil_L_mid__part2; wrote ...\crow.json
 crow.json> body list
-soil_L_top__part3  Soil_Top · lift 1  ·  Clay
-soil_L_top__part2  Soil_Top · retained  ·  Clay
-soil_L_top__part1  Soil_Top · lift 2  ·  Clay
-soil_L_top__part4  Soil_Top · lift 3  ·  Clay
-soil_L_mid__part1  Soil_Middle · below the pit  ·  Clay
-soil_L_mid__part2  Soil_Middle · retained  ·  Clay
+soil_L_top__part3  lift 1  ·  Clay
+soil_L_top__part2  retained  ·  Clay
+soil_L_top__part1  lift 2  ·  Clay
+soil_L_top__part4  lift 3  ·  Clay
+soil_L_mid__part1  below the pit  ·  Clay
+soil_L_mid__part2  retained  ·  Clay
 soil_L_bot  Soil_Bottom  ·  Sand
 ```
 
@@ -300,20 +284,26 @@ soil_L_bot  Soil_Bottom  ·  Sand
 
 #### Step 8. The strut
 
-A strut is an anchor whose free end is a pinned support:
+In the finite element model, the strut is a truss element: a straight bar between two
+points that carries only an axial force, in tension and in compression. In engineering, a
+strut takes compression and an anchor takes tension, but both are the same truss element.
+`kratos-cli` makes this element with the `anchor` commands. Both ends of a new anchor are
+free, attached to the mesh: the tail is a node of the soil mesh, so `--tail-end fixed`
+makes the tail of this strut a pinned support:
 
 ```text
 crow.json> section add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
 added anchor section (id strut, name Strut); wrote ...\crow.json
 
-crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5
+crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5 --tail-end fixed
 added anchor (id strut, name Strut); wrote ...\crow.json
 ```
 
 - One strut per metre of wall (`--spacing 1`): E = 210 GPa, A = 4.76·10⁻⁵ m².
 - The strut is massless and has no force limits (`none` clears a limit).
-- Its head is snapped onto the wall, because it becomes one of the wall's nodes. A head more
-  than 1 m from any structure is refused.
+- Its head end stays free, so the head is snapped onto the wall and becomes one of the
+  wall's nodes. A free head more than 1 m from any structure is a node of the soil mesh.
+  `--head-end fixed` holds a head in place.
 
 #### Step 9. The interface between wall and soil
 
@@ -377,7 +367,7 @@ to the global size. These are the **Mesh size** and **Band** of the object in th
 
 ```text
 crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5 --band sheetpile 30
-3036 nodes, 1466 elements (1466 Triangle 6)
+3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
 mesh settings kept: wrote ...\crow.json
 ```
 
@@ -411,7 +401,7 @@ crow.json> stages deactivate initial sheetpile strut wall_contact surcharge wate
 sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
 crow.json> stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
 sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json
-crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --max-iterations 150 --tolerance 1e-3
+crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
 added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json
 crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
 added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json
@@ -443,6 +433,11 @@ and the surcharge, then dig lift by lift with that lift's water load, and put th
 right after the lift that exposes its head. The excavation stages get more iterations,
 because the soil yields there.
 
+`--reset-displacements` starts the displacements from zero when the wall goes in. In the K0
+stage the soil settles more than 2 m under its own weight; after the reset, the
+displacements show only what the construction does. Kratos' own CROW test resets them in
+the same stage. `stages show install_wall` says `displacements reset`.
+
 To look at a stage, or change one:
 
 ```text
@@ -471,7 +466,7 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   initial_materials.json
   ProjectParameters.json
   kratos_gui_units.json
-3036 nodes, 1466 elements (1466 Triangle 6)
+3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
 next: kratos-cli run deck
 note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
 note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...
@@ -525,6 +520,43 @@ was, and every run is kept.
   set to your working folder. Without it, the runs root is `~/KratosGUI/runs`.
   `--runs-dir DIR` puts one run somewhere else.
 - `calculate` does steps 13 and 15 in one go, without a `deck\` folder of your own.
+
+#### A faster run: the quasi-Newton strategy (optional)
+
+The stages above use Kratos' Newton-Raphson strategy, which builds and factorises the
+stiffness matrix again in every iteration. The quasi-Newton strategy factorises it once
+and then updates its inverse from the residuals, so each iteration costs much less. For
+this model the bending moment and the wall displacement stay the same, and Kratos took
+about 7 s against about 70 s with Newton-Raphson (measured on 2026-11-16).
+
+The strategy is a solver setting of each stage, so set it on all seven stages, then export
+and run again:
+
+```text
+crow.json> stages set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs         stage 1
+crow.json> stages set null_step --solver strategy_type=quasi_newton quasi_newton_type=lbfgs       stage 2
+crow.json> stages set install_wall --solver strategy_type=quasi_newton quasi_newton_type=lbfgs    stage 3
+crow.json> stages set dig_1 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 4
+crow.json> stages set install_strut --solver strategy_type=quasi_newton quasi_newton_type=lbfgs   stage 5
+crow.json> stages set dig_2 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 6
+crow.json> stages set dig_3 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 7
+crow.json> stages show dig_2                             lists strategy_type = Quasi-Newton *
+crow.json> export --out deck                             the deck again, with the new strategy
+crow.json> run deck                                      a new run
+```
+
+L-BFGS is the default update of the quasi-Newton strategy, so `quasi_newton_type=lbfgs`
+only makes the choice visible. In `crow.json` and in the model script, the same setting is
+on each stage:
+
+```python
+solver_settings={"strategy_type": "quasi_newton", "quasi_newton_type": "lbfgs"},
+```
+
+The quasi-Newton strategy always uses the Sparse LU linear solver, without scaling. On a
+fully coupled soil with a very low permeability it can settle a few percent too little, so
+on a new model compare one run with a Newton-Raphson run. To go back to Newton-Raphson:
+`stages set STAGE --solver-default strategy_type quasi_newton_type`.
 
 ### Part 5: the results
 
@@ -613,14 +645,14 @@ Stage 7 (Third excavation) offers:
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy
-u_y (m), stage 7 (Third excavation): -2.75 to 0 over 3129 nodes
-  min -2.75 at node 15
-  max 0 at node 16
+u_y (m), stage 7 (Third excavation): -0.3398 to 0.4460 over 3129 nodes
+  min -0.3398 at node 15
+  max 0.4460 at node 161
 
 crow.json> results field 1 syy --stage third --csv syy_stage7.csv
 wrote syy_stage7.csv (1262 rows)
 
-crow.json> results at 1 15 --stage 7                    every field at node 15
+crow.json> results at 1 161 --stage 7                   every field at node 161
 ```
 
 - **Which stage.** Without `--stage`, a command reads the last stage. `--stage` takes the
@@ -628,10 +660,11 @@ crow.json> results at 1 15 --stage 7                    every field at node 15
   id (`dig_3`).
 - **Stresses** are read per element, as Kratos computed them. `--location nodes` averages
   them onto the nodes.
-- **Why 2.75 m?** `u_y` is the total since the start, the K0 stage included, when the
-  soft clay settles under its own weight. The last lift adds less than a millimetre at the
-  far-right corner (node 15): `results at 1 15 --stage 7` shows Δu_y = −9.47e-4 m. To see
-  what one stage did, read the stage fields `du`, `dux` and `duy`.
+- **What `u_y` shows.** `u_y` is the total since the wall installation, the stage that
+  resets the displacements. The surface at the far right (node 15) settles 0.34 m, mostly
+  under the surcharge. The pit floor (node 161, at y = −8 m) heaves 0.45 m, and the third
+  lift alone gives 0.25 m of that: `results at 1 161 --stage 7` shows Δu_y = 0.2521 m. To
+  see what one stage did, read the stage fields `du`, `dux` and `duy`.
 
 #### The raw files
 

@@ -421,23 +421,142 @@
     });
   });
 
-  test('anchor start uses the tendon editor and edit saves the existing anchor', function () {
-    var initial = project();
-    initial.beams = [{ id: 'pile', kind: 'beam', points: [[12, 0], [12, -20]], active: true }];
-    return withEnvironment(initial, function (ctx) {
-      var proposed, tendons;
-      App.Dialogs.anchor = function (anchor, sections) { proposed = anchor; tendons = sections; };
+  function anchoredProject(dimension) {
+    var initial = project(dimension);
+    initial.beams = dimension === 3
+      ? [{ id: 'wall', kind: 'panel', footprint: [[12, 4], [12, 20]], y_top: 0, y_toe: -20,
+           active: true }]
+      : [{ id: 'pile', kind: 'beam', points: [[12, 0], [12, -20]], active: true }];
+    return initial;
+  }
+
+  test('anchor start opens the anchor window and saves nothing until Save', function () {
+    return withEnvironment(anchoredProject(2), function (ctx) {
       App.Anchors.start();
-      T.eq(proposed.head[0], 12);
-      T.eq(ctx.requests, [], 'opening the editor must not save the draft');
-      initial.anchors = [proposed]; initial.anchor_sections = tendons;
-      App.ANCHORS = initial.anchors; App.ANCHOR_SECTIONS = tendons;
-      return App.Anchors.edit(proposed.id).then(function () {
-        T.eq(ctx.requests[0].body.anchors, [proposed]);
-        T.eq(ctx.requests[0].body.anchor_sections, tendons);
-        T.eq(ctx.requests[0].body.beams, undefined, 'an anchor edit does not replace the piles');
-        T.eq(ctx.selected, [proposed.id]);
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Create anchor');
+      T.eq(ctx.requests, [], 'opening the window must not save the draft');
+      T.eq(field(dialog, 'Head x').value, '12');
+      T.eq(field(dialog, 'Tail end').value, 'free', 'a new anchor is joined to the soil');
+      T.eq(field(dialog, 'Head end').value, 'free', 'a new head is attached to the mesh');
+      T.eq(field(dialog, 'Tail x').value, '20', 'the drafted tail is on whole metres');
+      T.eq(field(dialog, 'Tail y').value, '-11');
+      T.ok(/attached to the mesh/.test(field(dialog, 'Head end').textContent));
+      field(dialog, 'Name').value = 'Ground anchor';
+      field(dialog, 'Head x').value = '12.4';      // within a metre: moved onto the pile
+      field(dialog, 'Head y').value = '-3';
+      field(dialog, 'Tail x').value = '20';
+      field(dialog, 'Tail y').value = '-9';
+      field(dialog, 'TRUSS_PRESTRESS_PK2').value = '150';
+      field(dialog, 'YOUNG_MODULUS').value = '195000000000';
+      field(dialog, 'Spacing').value = '3';
+      button(dialog, 'Save');
+      return drain().then(function () {
+        T.ok(dialog.closed);
+        var body = ctx.requests[0].body;
+        var saved = body.anchors[0];
+        T.eq(saved.name, 'Ground anchor');
+        T.eq(saved.head, [12, -3]);
+        T.eq(saved.tail, [20, -9]);
+        T.eq(saved.tail_end, 'free');
+        T.eq(saved.head_end, 'free');
+        T.eq(saved.prestress, 150);
+        T.eq(body.anchor_sections[0].variables.YOUNG_MODULUS, 195000000000);
+        T.eq(body.anchor_sections[0].spacing, 3);
+        T.eq(body.beams, undefined, 'an anchor edit does not replace the piles');
+        T.eq(ctx.selected, [saved.id]);
+      });
+    });
+  });
+
+  test('the anchor window makes a tail fixed, and Edit opens the saved anchor', function () {
+    return withEnvironment(anchoredProject(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Tail end'), 'fixed');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.tail_end, 'fixed');
+        App.Anchors.edit(saved.id);
+        var again = latest(ctx);
+        T.eq(again.options.title, 'Edit anchor');
+        T.eq(field(again, 'Tail end').value, 'fixed');
         T.eq(App.Anchors.edit('missing'), undefined);
+      });
+    });
+  });
+
+  test('the anchor window makes a head fixed, which is not snapped and may be in the air',
+    function () {
+      return withEnvironment(anchoredProject(2), function (ctx) {
+        App.Anchors.start();
+        var dialog = latest(ctx);
+        change(field(dialog, 'Head end'), 'fixed');
+        field(dialog, 'Head x').value = '12.4';    // within a metre, but held in place
+        field(dialog, 'Head y').value = '1';
+        button(dialog, 'Save');
+        return drain().then(function () {
+          T.ok(dialog.closed);
+          var saved = ctx.requests[0].body.anchors[0];
+          T.eq(saved.head_end, 'fixed');
+          T.eq(saved.head, [12.4, 1]);
+          App.Anchors.edit(saved.id);
+          T.eq(field(latest(ctx), 'Head end').value, 'fixed');
+        });
+      });
+    });
+
+  test('the anchor window refuses a free tail or a soil head in the air', function () {
+
+    return withEnvironment(anchoredProject(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      field(dialog, 'Tail y').value = '2';
+      button(dialog, 'Save');
+      T.ok(/free anchor tail must be in the soil/.test(dialog.form.textContent));
+      T.eq(ctx.requests, []);
+      change(field(dialog, 'Tail end'), 'fixed');
+      field(dialog, 'Head x').value = '20';
+      field(dialog, 'Head y').value = '1';
+      button(dialog, 'Save');
+      T.ok(/head on no structure must be in the soil/.test(dialog.form.textContent));
+      T.eq(ctx.requests, []);
+      T.ok(!dialog.closed);
+    });
+  });
+
+  test('the anchor window makes an anchor with no sheet pile', function () {
+    return withEnvironment(project(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Create anchor');
+      T.eq(field(dialog, 'Head x').value, '25');
+      T.eq(field(dialog, 'Head y').value, '-2');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        T.ok(dialog.closed);
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.head, [25, -2]);
+        T.eq(saved.tail_end, 'free');
+      });
+    });
+  });
+
+  test('the 3D anchor window has a z for each end and no spacing', function () {
+    return withEnvironment(anchoredProject(3), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      T.ok(field(dialog, 'Head z'));
+      T.ok(field(dialog, 'Tail z'));
+      var threw = false;
+      try { field(dialog, 'Spacing'); } catch (e) { threw = true; }
+      T.ok(threw, 'a 3D anchor is not smeared');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.kind, 'anchor3d');
+        T.eq(saved.tail_end, 'free');
       });
     });
   });
@@ -937,7 +1056,7 @@
       var result = button(dialog, 'Save');
       T.eq(result, null);
       T.eq(ctx.requests.length, 0);
-      T.ok(/one phreatic line, Phreatic\. Make Head a head line/.test(
+      T.ok(/one phreatic line, Phreatic\. Switch Head off, or make it a head line/.test(
         dialog.form.querySelector('.mesh-settings-message').textContent));
     });
   });

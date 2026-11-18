@@ -105,6 +105,13 @@ SUITES = {
         [JS / "download.js", JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
     ),
+    # `results convergence` and its figure, drawn from real logs the server parsed
+    # (the fixture, written by tests/test_convergence_parity.py).
+    "convergence-plot": (
+        [TESTS / "fixtures" / "convergence-cases.js", JS / "download.js",
+         JS / "results-render.js", JS / "results.js", JS / "convergence-plot.js"],
+        TESTS / "test-convergence-plot.js",
+    ),
     # A saved picture: the scene as a list of shapes, then those shapes as a file. Reading
     # the scene, the canvas, the clipboard and the save windows are in the browser suite.
     "picture-draw": (

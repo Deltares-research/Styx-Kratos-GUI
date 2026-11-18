@@ -214,6 +214,24 @@ def test_a_run_that_died_names_the_stage_it_died_in(runs_root):
     assert run["failed_at"] == {"index": 2, "of": 3, "name": "2_Excavation"}
 
 
+def test_a_run_in_progress_is_running_and_not_failed(runs_root):
+    """While Kratos works, the log has a "begin" with no "end" for the stage it is in.
+    That is a run in progress, not a run that died there."""
+    directory = make_run(runs_root, "Test_model_2026-09-22_00-49", through=1,
+                         log=failed_log(at=2))
+
+    with calculation.in_progress(directory):
+        run = catalog.describe("Test_model_2026-09-22_00-49")
+        listed = catalog.runs()[0]
+
+    assert run["running"] is True and listed["running"] is True
+    assert run["failed_at"] is None
+    assert run["complete"] is False
+    after = catalog.describe("Test_model_2026-09-22_00-49")
+    assert after["running"] is False
+    assert after["failed_at"] == {"index": 2, "of": 3, "name": "2_Excavation"}
+
+
 def test_a_run_with_no_log_says_nothing_about_why_it_is_incomplete(runs_root):
     make_run(runs_root, "Test_model_2026-09-22_00-49", through=1)
 

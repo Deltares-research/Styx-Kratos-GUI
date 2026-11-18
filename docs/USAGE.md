@@ -5,6 +5,9 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 [INSTALLATION.md](INSTALLATION.md). To calculate, you also need Kratos: see
 [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
+To learn the GUI by building one model step by step, start with the
+[GUI tutorials](gui_tutorials/index.md).
+
 > [!WARNING]
 > The Styx server keeps the open project in its memory. It does not save the project to a
 > file itself. If you stop the server before you save, you lose your changes. Save often
@@ -93,6 +96,11 @@ objects, show all, show node or element labels, and visibility settings.
 Right-click an object in the Model explorer to zoom to it, rename it, delete it, or open its
 properties. This works for every object, soil layers too. **Rename…** opens a small window:
 type the new name and click **OK**, or press <kbd>Enter</kbd>.
+
+Each soil layer and soil surface has a name of its own. If you give one a name that is
+already in use, Styx adds a number: a second *Embankment* becomes *Embankment_2*. The
+Session log says so. The Model explorer, `kratos-cli` and the Kratos input files then use
+the same name.
 
 ## Soil mode
 
@@ -187,7 +195,13 @@ The preset values are only a start. Check them for your soil.
 
 **Create soil surface…** (in 2D) or **Create soil volume…** (in 3D) adds a body of soil that
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
-select its material.
+select its material. In a terminal, `kratos-cli surface add` makes the same soil surface.
+
+A line splits a soil surface in the same way as a layer (see below). Each part then has its
+own row in the Model explorer, for example *Embankment · Part 1*. Select a part and click
+**Edit coordinates…** to change the corners of the whole surface. A new material for the
+surface goes to all of its parts. In 3D, a line splits a soil volume only if the volume is
+a polygon extruded along z, or a box.
 
 ### Lines that split the soil
 
@@ -197,13 +211,25 @@ them there if needed, and select **Save**. The arrow in the corner of the button
 **Line by coordinates…**, which opens the same window with no drawing first. While you
 draw, you can also type `x y` in the command box to place a point.
 
-Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
-parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+Where a line crosses a soil layer or a soil surface from one edge to another, it becomes
+separate soil parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
 own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
 part off in its own stage. Select a part to rename it or to give it another material. A
 part starts with its layer's material. Change the layer's material, in the **Soil layers**
 window or in the Selection explorer, and every part of that layer takes the new material,
 also a part you gave a material of its own.
+
+A part you rename shows the new name alone, for example *Clay*. A part with the name it
+was given, such as *Part 1*, also shows its layer or soil surface.
+
+Right-click a part to rename it or delete it, or to delete its whole layer or soil surface.
+The Selection explorer of a part has the same buttons. The Rename window starts with the
+name the Model explorer shows, for example *Soil_Top · Part 1*. To rename a layer, use the
+**Soil layers** window. **Delete part** deletes that
+part alone: no soil is left there, and the other parts stay. The last part of a layer or a
+soil surface cannot be deleted alone; delete the whole layer or surface. A deleted part
+comes back when you delete the line that cut it off, or with undo. To take soil away in one
+stage only, switch the part off in that stage instead.
 
 Lines have their own group in the Model explorer. Delete a line there, and the parts join
 again, unless a stage still uses one of them. Then the deletion is refused.
@@ -215,7 +241,7 @@ An excavation is made in this way: a wall and a line at each level make the lift
 stage switches each lift off.
 
 A project saved with an excavation pit opens with lines and soil parts in its place, for
-example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+example *lift 1*, a part of the layer *Soil_Top*. A pit with one level was never dug, so it just goes. A 3D pit
 narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode
@@ -225,7 +251,7 @@ narrower than the model in z cannot be made of lines, and the project does not o
 | Sheet pile (2D) | Click **Create sheet pile…**. Type the two end points and the section properties, then click **Save**. |
 | Wall panel (3D) | Click **Create wall panel…**. Type the corners of the footprint, the **Top level** and the **Toe level**. |
 | Member (3D): a bored pile, a king post or a strut | Click **Create member…**. |
-| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
+| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). A window opens, as for a sheet pile. Type the name, the head, the tail, the prestress and the tendon properties, then click **Save**. An anchor does not need a structure. When the head is less than 1 m from a sheet pile, wall panel or member, Styx moves it onto that structure, and the anchor shares its node. A head further away is a node of the soil mesh, so it must be in the soil. With no structure in the model, a new anchor starts 2 m below the top of the soil, in the middle of the model. **Head end** and **Tail end** set what each end is joined to. **Free (attached to the mesh)** is the default for a new anchor: a free head is a node of the structure it is on, or of the soil mesh; a free tail is a node of the soil mesh, so the anchor pulls on the soil. **Fixed (held in place)** holds the end in place and joins it to nothing, as for a strut to a fixed point. Styx does not move a fixed head onto a structure. A free end on no structure must be in the soil: in the air, or in soil that a stage removes, use **Fixed**. A new anchor goes 8 m across and 6 m down from its head, with the tail on whole metres. To change an anchor later, click **Edit anchor…** in the Selection explorer, or **Properties…** in the Model explorer, or change the values in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
 | Interface (2D only) | Click **Create interface…**. Select the sheet pile in **Along**, or **Own coordinates**, then click **Save**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
 | Normal load (2D only) | Click **Create normal load**. Type the points of the line: **Add point** adds one after the last, and **Remove** takes one away. Or click **Pick on model…**, click the points in the viewport and press <kbd>Enter</kbd>. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. A hydrostatic load does not use a pressure. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
@@ -333,7 +359,7 @@ components to hold.
 | Support | Holds the displacement at zero in x, y or z. **Fixed** holds all components. **Roller** holds the component normal to the face, or to a vertical or horizontal line. A 2D model does not hold z. |
 | Water pressure, Uniform | One pressure at each node of the target, compression negative |
 | Water pressure, Hydrostatic | Zero at its **Reference level**, growing with depth below it. **Tension cut-off** is the most suction above the level; 0 holds the pressure at zero there. |
-| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. A project has one phreatic line, and it is the water of every soil, wherever it is drawn. |
+| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. A phreatic line on the whole soil or on a line is the water of every soil, wherever it is drawn. A stage can have one on, so a later stage can switch to a lower one. A new phreatic line is **Initial only**: it gives the soil its starting pressures, and a flow or coupled calculation can change them. |
 | Water pressure, Head line | As a phreatic line, for the soils that take it under **Soil water** (see [The water of each soil](#the-water-of-each-soil)). |
 
 Water above the ground also presses on it. When the phreatic line is above the soil, the
@@ -344,8 +370,22 @@ phreatic line is on; a phreatic line on a soil part puts its water on that part 
 is done for each stage, with the soil that the stage has, and the water always pushes on the
 soil or the wall. You do not draw this load. Where you drew a normal load yourself, your load is used
 there instead. The export notes say where the water was added. In **Staged construction**,
-small pale blue arrows show where this water presses in the selected stage; the other tabs
-do not show it.
+the water standing on the ground in the selected stage is filled in light blue up to the
+phreatic line. Small light blue arrows press into the soil (longer where the water is
+deeper), and the pressure where the water is deepest is shown, for example "p = 10000 Pa"
+under 1 m of water. **Flow conditions** shows the same for the model
+as built. The other tabs do not show it. In the Model explorer, a phreatic line with water on the ground has a
+**Water on the ground** row under it, which says in which stages. A 3D model does not add
+this load, and the export warns when the phreatic line is above the ground.
+
+Under open water, the water pressure on the soil surface is the water's. So where an
+**Initial only** phreatic line stands above the ground, the calculation also fixes the
+water pressure on the wet soil surface under it, stage by stage (2D). This is the boundary
+that a flow or a coupled calculation needs. Inside the soil the line gives only the
+starting pressures. The phreatic line is written in the stage that switches it on, and the
+stages after it continue from the pressures that the stage before left. When a stage leaves
+part of the surface dry (it lowers the water, or switches it off), that part is no longer
+fixed.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
@@ -429,8 +469,21 @@ The phreatic line and the head lines are water pressures of the type **Phreatic 
 **Head line**: polylines through points, x increasing, which can slope. Draw one on a line
 (**Pick on model…**), and its points are filled in from the line, or put it on the whole
 soil and type its points. Where it is drawn is only where it is: the phreatic line acts on
-every soil, and a head line on the soils that take it. A project has one phreatic line, and
-any number of head lines. A head line that no soil takes acts nowhere, and the export warns
+every soil, and a head line on the soils that take it. A stage has one phreatic line on, and
+any number of head lines. To change the phreatic line in a later stage (a pit pumped dry),
+select that stage in **Staged construction** and then create the new phreatic line: it is
+switched off in the initial stage and on from the selected stage, and the phreatic line
+that was on there is switched off from that stage on. The status line names the stage.
+With the initial stage selected, a second phreatic line is refused. For a pressure on a line only, use a **Hydrostatic** condition on
+that line. In 2D the viewport draws it in indigo on that line: the line is thick where it
+is below the level, a filled diagram grows with the depth, and the deepest pressure is
+shown. The same applies to a
+Hydrostatic condition on a face.
+
+A project saved before 2026-11-18 read a phreatic line drawn on a line as a pressure on
+that line only. When you open it, a level one becomes a Hydrostatic condition on the same
+line, which sets the same pressure there. A sloping one becomes the water of the whole soil
+(or a head line, if the project has another phreatic line), and a note says so. A head line that no soil takes acts nowhere, and the export warns
 about it.
 
 You can also right-click a soil in Flow conditions mode, in the viewport or in the Model
@@ -460,7 +513,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
+| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer or a soil surface that a line splits has one row for each part, named as in the Model explorer. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
 | Object mesh sizes | The element size at each structure, anchor, interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. With the layers, these rows cover every node group that the Kratos input file has. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
@@ -499,7 +552,8 @@ at once, and the object stays selected, so you can click the tool again.
 Some objects use the size of another object:
 
 - An anchor is one element. Its size applies at its head, where it connects to the
-  structure. The tail is a fixed point outside the soil mesh.
+  structure. A free tail is a node of the soil mesh; a fixed end is a point outside
+  the mesh.
 - A condition on a face uses the size of that face. All conditions on the same face share
   one size, because the Kratos input file has one node group for each face. The Mesh group
   of the condition shows **Size of** with the name of the face. The faces are also in the
@@ -696,12 +750,105 @@ Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. St
 3. runs Kratos, and
 4. opens Results mode when Kratos is done.
 
-While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*. You can run
-one calculation at a time. If a stage fails, the log shows which stage failed and why, and
-the Stages explorer shows which stages finished.
+While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*, and the
+**Convergence** window shows each iteration of the solver (see
+[Follow the solver](#follow-the-solver)). You can run one calculation at a time. If a stage
+fails, the log shows which stage failed and why, and the Stages explorer shows which stages
+finished.
+
+### Stop a calculation
+
+While Kratos runs, the **Calculate** button in the toolbar is a red **Stop** button. Click it
+and then **Stop calculation** to stop Kratos at once. The **Convergence** window has the same
+button, and the **Stages** menu has **Stop calculation**. To stop without the question, type
+`calculate stop` in the command box.
+
+When you stop a calculation:
+
+- your model does not change, and Styx stays in the mode you were in;
+- the run folder keeps the input files, the log and the results of the stages that finished,
+  so you can still open them in Results mode;
+- the log says *Calculation stopped after 41 s, in stage 3 of 7*, and the Stages window marks
+  that stage *Stopped by the user*.
+
+<kbd>F9</kbd> does not stop a calculation, so a key pressed twice cannot end a long run.
 
 Styx never overwrites or deletes a run folder. See
 [What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
+
+### Follow the solver
+
+When you click **Calculate**, the **Convergence** window opens at the bottom right. It shows
+how the solver converges while Kratos runs, so you can see early if a stage has problems.
+You can move the window, and make it bigger with its bottom-right corner: the plot grows
+with it. If you close the window, the run continues. To stop the run, click
+**Stop calculation** (see [Stop a calculation](#stop-a-calculation)).
+
+After each iteration, Kratos compares two values with their targets: a relative value and
+an absolute value. The criterion is met when one of the two is below its target. What the
+values measure depends on the stage's convergence criterion:
+
+| Criterion | What Kratos compares |
+|---|---|
+| Residual | The force that is still out of balance |
+| Displacement | The change of the displacements in the iteration |
+| Water pressure | The change of the water pressures in the iteration |
+
+Each stage has its own criterion, so one run can use more than one. The plot draws each
+criterion in its own colour, and the legend names them. When all stages use the same
+criterion, the axes name it too, for example *Relative residual*.
+
+The top of the window gives the stage that runs and the last values in words, for example
+*Iteration 57 (stage 3, step 2, iteration 5 of the step). Relative residual 3.2e-03 (target
+1.0e-04).* The first number counts the iterations of the whole run, as the horizontal axis
+of the plot does. Below it, the plot has two panels:
+
+| Item | What it shows |
+|---|---|
+| Upper panel | The relative value of each iteration, on a log scale |
+| Lower panel | The absolute value of each iteration, on a log scale |
+| Horizontal axis | The iteration number, counted over all stages (from 0 in the stage, when one stage is shown alone) |
+| Dashed line | The target |
+| Green X | An iteration where the criterion was met |
+| Red mark after an iteration | A step that reached the maximum number of iterations, or that Kratos cut back to a smaller step |
+| Red dot on the top edge | A residual that is not a number (`nan`) or infinite: the solution diverged |
+| Grey bands | The stages, with the stage name where it fits |
+| Red line and right axis | The fraction of unbalance, from 0 to 1. Kratos prints it only when the stage uses load stepping, so most runs do not show it. |
+
+Point at a dot to see its stage, step, iteration and values. Point at a stage name to see
+its criterion.
+
+With many stages, the early stages are narrow. If the run has two stages or more, use the
+**Show** slider under the status line to show one stage alone: move it to the right to go
+through the stages one by one, and back to the left end for all stages. A stage shown
+alone has its own horizontal axis: it starts at 0 and counts the iterations of that stage.
+Point at a dot to see its number in the whole run too. You can also type
+`results convergence stage 3`, or
+words of the stage name such as `results convergence stage first excavation`, and
+`results convergence stage all`.
+
+When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
+the run stopped. Styx opens Results mode, but it does not open the **Choose results**
+window while the Convergence window is open, because it would cover it. Use the Results
+explorer in the dock, or click **Choose results** in the tool rail.
+
+If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
+`solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
+`ProjectParameters.json`, and calculate again.
+
+To see the plot of a run later, also of a run that failed, do one of these:
+
+- Click **Results** → **Convergence…**.
+- In Results mode, click **Convergence** in the tool rail.
+- Type `results convergence`.
+
+Styx shows the run that Kratos works on, else the open run, else the newest run.
+
+To save the plot, click **Save ▾** in the window and choose a format. **PNG**, **PDF** or
+**SVG** saves the figure, and **CSV** saves one row for each iteration, with the criterion
+of that iteration in the `criterion` column. The file is of the run and the stages that the
+window shows. When one stage is shown alone, its number is in the file name, for example
+`Pit_A_2026-10-12_09-14_convergence_stage_3.csv`.
 
 ## Export and import Kratos files
 
@@ -779,6 +926,8 @@ same way: the sum of R_y is the vertical force the supports carry.
   that stage, so the face a pit is dug against starts at the pit floor.
   Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
   **CSV** saves the numbers. The plot of an interface is saved in the same way.
+- **Convergence of the solver:** click **Convergence** in the tool rail, or type
+  `results convergence`. See [Follow the solver](#follow-the-solver).
 - **Values at a node:** click **Results** → **Value at a node…**, type the node number in
   the small window and click **OK**. Or type `results at <node>`. The values appear in the
   Session log.
@@ -916,6 +1065,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `mesh` | Makes the mesh |
 | `clearmesh` | Removes the mesh from the view; its settings stay |
 | `calculate` | Calculates the model, as the **Calculate** button |
+| `calculate stop` | Stops the calculation that runs, without asking first |
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |

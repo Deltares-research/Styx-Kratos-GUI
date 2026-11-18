@@ -878,6 +878,22 @@
     T.eq(cut.seams, []);
     T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
   });
+
+  test("the edge along a line that splits a drawn soil surface is the line's", function () {
+    var project = Object.assign({}, PROJECT, {
+      lines: [{ id: 'across', points: [[1, 3], [1, 0]] }],
+      custom_parts: [{ key: 'drawn_0', mat: 'm1', recipe: {
+        kind: 'polygon_extrude', vertices: [[0, 0, 0], [3, 0, 0], [3, 3, 0], [0, 3, 0]],
+        extrusion: [0, 0, 1] } }] });
+    var sections = [{ key: 'drawn_0__part1', color: '#c8a165',
+                      edges: outline([[0, 0], [1, 0], [1, 3], [0, 3]]) }];
+    var cut = App.Viewport.lineSeams(sections, project);
+    T.eq(cut.seams.map(function (seam) { return seam.line; }), ['across']);
+    T.eq(segments(cut.seams[0].edges), [[1, 0, 0, 1, 3, 0]]);
+    T.eq(segments(cut.edges.drawn_0__part1),
+         [[0, 0, 0, 1, 0, 0], [1, 3, 0, 0, 3, 0], [0, 3, 0, 0, 0, 0]],
+         "the piece keeps the surface's outline, less the seam");
+  });
 })();
 
 /* Generate mesh meshes the whole model, as kratos-cli mesh does: no volume_keys in

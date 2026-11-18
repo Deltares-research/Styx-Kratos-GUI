@@ -490,7 +490,14 @@ def test_a_head_line_is_listed_as_one(cli, lines):
 
 
 def test_a_second_phreatic_line_is_refused(cli, lines):
-    ran = cli("boundary", lines, "add", "--face", "left", "--water-pressure",
+    ran = cli("boundary", lines, "add", "--domain", "--water-pressure",
               "Phreatic_Multi_Line", "--phreatic-line", "0", "-2", "25", "-2")
     assert ran.code == 1
     assert "one phreatic line" in ran.err
+
+
+def test_a_phreatic_multi_line_on_a_face_is_a_boundary_condition(cli, lines):
+    """Only the phreatic lines on the soil or on a line are counted, one a stage."""
+    ran = cli("boundary", lines, "add", "--face", "left", "--water-pressure",
+              "Phreatic_Multi_Line", "--phreatic-line", "0", "-2", "25", "-2")
+    assert ran.code == 0, ran.err

@@ -1,9 +1,10 @@
-/* Structure-mode anchors: a two-node tie from a structure to a restrained point.
+/* Structure-mode anchors: a two-node tie from a head to a tail.
 
-   The head has to land on that structure -- that is what makes it one shared node in
-   the mesh rather than a truss attached to nothing. In a section it hangs from a sheet
-   pile in (x, y); in the solid model it hangs from a wall panel or a member, in
-   (x, y, z), as `kind: "anchor3d"`. Same formulation, one dimension up. */
+   An anchor needs no structure. A head near one is snapped onto it, which makes it one
+   shared node in the mesh; a head further away is a node of the soil mesh. In a
+   section it may hang from a sheet pile in (x, y); in the solid model from a wall
+   panel or a member, in (x, y, z), as `kind: "anchor3d"`. Same formulation, one
+   dimension up. */
 
 (function () {
   var PILE = { id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
@@ -35,17 +36,13 @@
     }, extra || {});
   }
 
-  test('an anchor is available wherever there is a structure to hang it from',
+  test('an anchor is available in any project, with or without a structure',
     function () {
       T.eq(App.Anchors.available(section()), true);
-      T.eq(App.Anchors.available(solid()), true, 'a wall carries an anchor in 3D');
-      T.eq(App.Anchors.available(solid({ beams: [MEMBER] })), true);
-      T.eq(App.Anchors.available(solid({ beams: [] })), false);
-      T.eq(App.Anchors.available(section({ beams: [] })), false);
-      // Each dimension sees only its own kinds: a saved sheet pile is nothing to hang
-      // a space anchor from, and a wall is nothing to hang a plane anchor from.
-      T.eq(App.Anchors.available(solid({ beams: [PILE] })), false);
-      T.eq(App.Anchors.available(section({ beams: [WALL] })), false);
+      T.eq(App.Anchors.available(solid()), true);
+      T.eq(App.Anchors.available(solid({ beams: [] })), true);
+      T.eq(App.Anchors.available(section({ beams: [] })), true);
+      T.eq(App.Anchors.available(null), false);
     });
 
   /* ── Anchors in space ───────────────────────────────────────────── */
@@ -66,13 +63,11 @@
     T.eq(anchor.head, [12, -3, 10], 'the head lands on the wall surface');
   });
 
-  test('a head placed in mid-air is refused rather than snapped from far away',
+  test('a head far from any wall stays in the soil rather than being snapped',
     function () {
-      var message = '';
-      try {
-        App.Anchors.draftFromPoints(solid(), [[30, -3, 10], [35, -9, 10]]);
-      } catch (e) { message = e.message; }
-      T.ok(/wall or a member/i.test(message), message);
+      var anchor = App.Anchors.draftFromPoints(solid(), [[30, -3, 10], [35, -9, 10]]);
+      T.eq(anchor.head, [30, -3, 10]);
+      T.eq(App.Anchors.validate(anchor, solid()), null);
     });
 
   test('a space anchor may hang from a member instead', function () {
@@ -98,10 +93,20 @@
                               solid()));
   });
 
-  test('an anchor without a pile to hang from is refused with a reason', function () {
+  test('an anchor with no pile starts 2 m down in the middle of the soil', function () {
+    var anchor = App.Anchors.draft(section({ beams: [] }));
+    T.eq(anchor.head, [25, -2]);
+    T.ok(anchor.tail[1] < anchor.head[1], 'and rakes down');
+    T.eq(anchor.tail_end, 'free');
+    T.eq(App.Anchors.validate(anchor, section({ beams: [] })), null);
+  });
+
+  test('a head on no structure must be in the soil', function () {
     var message = '';
-    try { App.Anchors.draft(section({ beams: [] })); } catch (e) { message = e.message; }
-    T.ok(/sheet pile/i.test(message), 'the message names what is missing: ' + message);
+    try {
+      App.Anchors.draftFromPoints(section({ beams: [] }), [[25, 2], [30, -8]], 'fixed');
+    } catch (e) { message = e.message; }
+    T.ok(/head on no structure must be in the soil/.test(message), message);
   });
 
   test('a drafted anchor puts its head on the pile and its tail in the retained soil',
@@ -122,12 +127,28 @@
       T.eq(anchor.tail, [20, -8]);
     });
 
-  test('a head too far from any pile is refused, not silently dragged', function () {
-    var failed = false;
-    try {
-      App.Anchors.draftFromPoints(section(), [[30, 20, -3], [40, 20, -8]]);
-    } catch (e) { failed = true; }
-    T.ok(failed, 'a head metres away from the wall is a mistake, not a snap');
+  test('a fixed head is held where it was typed, and may be in the air', function () {
+    var near = App.Anchors.draftFromPoints(section(), [[12.4, -3, 20], [20, -8, 20]],
+                                           'free', 'fixed');
+    T.eq(near.head, [12.4, -3], 'a fixed head is not snapped onto the pile');
+    T.eq(near.head_end, 'fixed');
+    var high = App.Anchors.draftFromPoints(section({ beams: [] }), [[25, 2], [30, -8]],
+                                           'free', 'fixed');
+    T.eq(high.head, [25, 2]);
+    T.eq(App.Anchors.validate(high, section({ beams: [] })), null);
+    high.head_end = 'loose';
+    T.ok(/head end is free or fixed/.test(App.Anchors.validate(high, section({ beams: [] }))));
+  });
+
+  test('a drafted tail is on whole metres, 8 m back and 6 m down', function () {
+    var anchor = App.Anchors.draft(section({ beams: [] }));
+    T.eq(anchor.tail, [33, -8]);
+  });
+
+  test('a head too far from any pile is left where it was, not dragged', function () {
+
+    var anchor = App.Anchors.draftFromPoints(section(), [[30, -3, 20], [40, -8, 20]]);
+    T.eq(anchor.head, [30, -3], 'a head metres away from the wall is in the soil');
   });
 
   test('ids do not collide with the anchors already in the project', function () {
@@ -150,8 +171,10 @@
     T.ok(App.Anchors.validate(Object.assign({}, ok, { name: ' ' }), section()));
     T.ok(App.Anchors.validate(Object.assign({}, ok, { tail: [12, -2] }), section()),
          'a zero-length anchor');
-    T.ok(App.Anchors.validate(Object.assign({}, ok, { head: [30, -2] }), section()),
-         'a head off the pile');
+    T.eq(App.Anchors.validate(Object.assign({}, ok, { head: [30, -2] }), section()), null,
+         'a head off the pile is a node of the soil');
+    T.ok(App.Anchors.validate(Object.assign({}, ok, { head: [30, 2] }), section()),
+         'a head off the pile and above the ground');
     T.ok(App.Anchors.validate(Object.assign({}, ok, { prestress: NaN }), section()));
   });
 
