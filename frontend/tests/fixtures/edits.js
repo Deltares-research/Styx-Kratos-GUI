@@ -300,6 +300,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -859,6 +860,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -1474,6 +1476,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2004,6 +2007,7 @@ window.EDITS_FIXTURE =
       ],
       "interfaces": [],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2559,6 +2563,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",

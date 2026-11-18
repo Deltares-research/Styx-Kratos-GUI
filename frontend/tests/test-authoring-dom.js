@@ -937,7 +937,7 @@
       var result = button(dialog, 'Save');
       T.eq(result, null);
       T.eq(ctx.requests.length, 0);
-      T.ok(/one phreatic line, Phreatic\. Make Head a head line/.test(
+      T.ok(/one phreatic line, Phreatic\. Switch Head off, or make it a head line/.test(
         dialog.form.querySelector('.mesh-settings-message').textContent));
     });
   });

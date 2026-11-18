@@ -24,6 +24,8 @@ for loading the mesher.
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from core.model import stages
 from core.model.schemas import (INTERPOLATE, SECTION_FACES, DisplacementCondition,
                                 Material, Stage, Project, SeepageCondition,
@@ -49,6 +51,7 @@ def warnings(project: Project) -> list[str]:
     out += _free_water_in_stages(project)
     out += _unused_water_level(project)
     out += _soil_water(project)
+    out += _surface_water_in_3d(project)
     return out
 
 
@@ -182,7 +185,8 @@ def _free_water_in_stages(project: Project) -> list[str]:
     keeps its nodes fixed at their last values after its stage, so the later stages
     carry them; a fixed Uniform one frees its nodes when its stage ends. So a stage is
     unheld when no fixed condition is on in it and no fixed Hydrostatic or Phreatic one
-    was on before it. Unstaged projects are `_unpinned_water`'s."""
+    was on before it -- and no phreatic line stands above its ground, as the deck fixes
+    the wet surface under it then. Unstaged projects are `_unpinned_water`'s."""
     pressures = _water_pressures(project)
     if not project.stages or not pressures:
         return []
@@ -199,7 +203,7 @@ def _free_water_in_stages(project: Project) -> list[str]:
     for stage in order:
         on = stages.active_parts(project, stage)
         now = [c for c in fixed if c.id in on]
-        if not now and not kept:
+        if not now and not kept and not _wetting(project, stage):
             out.append(
                 f"in stage {stage.name!r} no fixed water pressure condition is on and "
                 "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
@@ -260,14 +264,16 @@ def flow_refusal(project: Project) -> str | None:
         return (f"in stage {unheld.name!r} no fixed water pressure condition is on, and "
                 "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
                 "the water pressure has no single solution. Switch on a fixed water "
-                "pressure condition where the head is known, on a face or a line.")
+                "pressure condition where the head is known, on a face or a line, or a "
+                "phreatic line above the ground, whose wet surface the deck fixes.")
     return None
 
 
 def _unheld_flow_stage(project: Project) -> Stage | None:
     """The first stage in which nothing fixes the water pressure, or None. The same
     rule as `_free_water_in_stages`: a fixed Hydrostatic or Phreatic condition keeps its
-    nodes fixed after its stage, a fixed Uniform one does not."""
+    nodes fixed after its stage, a fixed Uniform one does not, and a phreatic line above
+    the ground fixes the wet surface under it in the stages it is on."""
     try:
         order = stages.linearise(project)
     except stages.StageError:
@@ -277,7 +283,7 @@ def _unheld_flow_stage(project: Project) -> Stage | None:
     for stage in order:
         on = stages.active_parts(project, stage)
         now = [c for c in fixed if c.id in on]
-        if not now and not kept:
+        if not now and not kept and not _wetting(project, stage):
             return stage
         kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
     return None
@@ -312,6 +318,74 @@ def _water_fixed_everywhere(project: Project) -> list[str]:
             "give the soil a start value (not fixed) if it needs one."
             for c in _water_pressures(project)
             if c.is_fixed and project.on_the_whole_soil(c)]
+
+
+TOLERANCE = 1e-6
+"""m: how far above the ground water has to stand to stand on it (`above_ground`)."""
+
+
+def water_level(condition: WaterPressureCondition, x: float) -> float:
+    """The height of `condition`'s water at `x`: its level, or its phreatic line, held
+    level past either end -- as Kratos' phreatic line holds it."""
+    if condition.fluid_pressure_type == "Hydrostatic":
+        return float(condition.reference_coordinate or 0.0)
+    xs, ys = condition.x_coordinates or [], condition.y_coordinates or []
+    if x <= xs[0]:
+        return ys[0]
+    for (x1, y1), (x2, y2) in zip(zip(xs, ys), zip(xs[1:], ys[1:])):
+        if x <= x2:
+            return y1 + (y2 - y1) * (x - x1) / (x2 - x1)
+    return ys[-1]
+
+
+def above_ground(project: Project, condition: WaterPressureCondition,
+                 gone: Collection[str] = ()) -> bool:
+    """Whether `condition`'s phreatic line stands above the ground somewhere, read off the
+    project without its mesh: above the top of the layers, or above the floor of a soil
+    body in `gone`, one dug out. The writer finds the wet surface itself on the mesh
+    (`core.kratos.writer._water_surface_loads`); this is what a check says before it."""
+    if condition.fluid_pressure_type != "Phreatic_Multi_Line" or not condition.x_coordinates:
+        return False
+    domain = project.domain
+    floors = [domain.y_top] + [bottom for key, bottom, _ in project.soil_bodies()
+                               if key in gone]
+    xs = [domain.x0, domain.x1] + [x for x in condition.x_coordinates
+                                   if domain.x0 < x < domain.x1]
+    return max(water_level(condition, x) for x in xs) > min(floors) + TOLERANCE
+
+
+def _dug(project: Project, stage: Stage | None = None) -> set[str]:
+    """The soil bodies `stage` has dug out, or, without one, that any stage digs out."""
+    bodies = {key for key, *_ in project.soil_bodies()}
+    if stage is not None:
+        return bodies - stages.active_parts(project, stage)
+    return bodies & set(project.expand_body_keys(
+        [key for each in project.stages for key in each.deactivate]))
+
+
+def _surface_water_in_3d(project: Project) -> list[str]:
+    """The water on the ground -- its weight, and the fixed pressure on the wet surface --
+    is worked out in a 2D section only, while the pore pressure under it counts the water
+    above in 3D too. Said, as the ground under it may heave without the load."""
+    if project.dimension != 3:
+        return []
+    dug = _dug(project)
+    return [f"{noun(c)} stands above the ground, and this 3D deck does not put that water "
+            "on the ground: it adds no load for its weight and fixes no pressure on the wet "
+            "surface, which only a 2D section does. The pore pressure under it still counts "
+            "the water above, so the ground there may heave. Use the 2D section for a model "
+            "under open water."
+            for c in _water_pressures(project) if above_ground(project, c, dug)]
+
+
+def _wetting(project: Project, stage: Stage) -> bool:
+    """Whether the phreatic line `stage` has on stands above its ground, which makes the
+    deck fix the pressure on the wet surface (`core.kratos.writer._wet_surface`)."""
+    on = stages.active_parts(project, stage)
+    lines = [c for c in project.phreatic_lines()
+             if written(project, c) and not c.is_fixed and c.id in on]
+    return bool(lines) and any(above_ground(project, c, _dug(project, stage))
+                               for c in lines)
 
 
 def _soil_water(project: Project) -> list[str]:

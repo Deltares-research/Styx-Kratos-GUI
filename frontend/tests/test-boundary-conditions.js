@@ -191,6 +191,20 @@
     T.eq(top.symbols[0].outward, [0, 1]);
   });
 
+  test('a hydrostatic pressure on a line draws the pressure along that line', function () {
+    var record = pressure('bank', 'line', { points: [[20, 0], [20, -6]] });
+    var spec = App.Viewport.conditionGlyphSpec(record, section([record]));
+    T.eq(spec.lines[0], [[0, -2, 5], [20, -2, 5]], 'its level, as before');
+    T.ok(spec.diagram, 'and a diagram along the line');
+    T.eq(spec.diagram.path, [[20, 0, 5], [20, -6, 5]]);
+    T.near(spec.diagram.glyph.deepest, 4, 1e-9, 'deepest 4 m under the level');
+    T.eq(spec.diagram.glyph.deepestInward, [-1, 0], 'drawn towards the middle');
+    T.ok(/^p = 40000\b/.test(spec.diagram.text), spec.diagram.text);
+    var whole = App.Viewport.conditionGlyphSpec(pressure('all', 'domain'),
+                                                section([pressure('all', 'domain')]));
+    T.eq(whole.diagram, undefined, 'on the whole soil it is the level alone');
+  });
+
   test('a hydrostatic row with no level takes the water level', function () {
     var rows = BC().grid(section([]));
     rows[4].water = 'Hydrostatic';
@@ -345,6 +359,36 @@
     T.ok(App.OBJECT_PROPS.pore && !App.OBJECT_PROPS.gravity);
   });
 
+  test('the explorer says in which stages the water stands on the ground', function () {
+    /* Read off the viewport's last build: one block of soil with its top at 0, the
+       water at +1 in the second stage only. */
+    var high = phreatic('pl', { x_coordinates: [0, 20], y_coordinates: [1, 1] });
+    var low = phreatic('low', { x_coordinates: [0, 20], y_coordinates: [-3, -3] });
+    var project = section(standard().concat([low, high]), {
+      stages: [{ id: 's1', name: 'Dry', deactivate: ['pl'] },
+               { id: 's2', name: 'Flooded', parent: 's1', activate: ['pl'],
+                 deactivate: ['low'] }] });
+    var block = { key: 'soil_L1', positions: [0, -15, 0, 20, -15, 0, 20, 0, 0, 0, 0, 0],
+                  indices: [0, 1, 2, 0, 2, 3],
+                  edges: [0, -15, 0, 20, -15, 0, 20, -15, 0, 20, 0, 0,
+                          20, 0, 0, 0, 0, 0, 0, 0, 0, 0, -15, 0] };
+    var built = App.Viewport.builtSections;
+    App.Viewport.builtSections = function () { return [block]; };
+    try {
+      App.BOUNDARY_CONDITIONS = JSON.parse(JSON.stringify(project.boundary_conditions));
+      App.PROJECT = project;
+      App.Model.rebuildDerived();
+    } finally { App.Viewport.builtSections = built; }
+    var tree = App.TREES[Object.keys(App.TREES)[0]];
+    var rows = tree.filter(function (n) {
+      return n.label === 'Model conditions'; })[0].children[0].children;
+    var flooded = rows.filter(function (n) { return n.obj === 'pl'; })[0];
+    T.eq(flooded.children.map(function (n) { return n.label; }),
+         ['Water on the ground  ·  stage Flooded']);
+    T.ok(!rows.filter(function (n) { return n.obj === 'low'; })[0].children,
+         'a line below the ground has no row');
+  });
+
   test('the explorer marks the supports of a groundwater flow project as left out',
        function () {
     var project = section(standard().concat([pressure('pore', 'domain')]), {
@@ -471,13 +515,52 @@
     T.ok(/·  head line$/.test(BC().label(head('h'))));
   });
 
-  test('a project has one phreatic line, wherever the second is', function () {
+  test('a stage has one phreatic line on the soil or on a line', function () {
     BC().checkOnePhreatic([phreatic('pl')]);
+    BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2', { on: 'face', face: 'left' })]);
+    BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2', { active: false })]);
     var error = null;
     try {
-      BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2', { on: 'face', face: 'left' })]);
+      BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2', { on: 'line' })]);
     } catch (e) { error = e; }
-    T.ok(error && /one phreatic line, pl\. Make pl2 a head line/.test(error.message));
+    T.ok(error && /one phreatic line, pl\. Switch pl2 off, or make it a head line/
+      .test(error.message));
+  });
+
+  test('a staged project may switch from one phreatic line to another', function () {
+    /* Which stage has which on is the server's to check. */
+    BC().checkOnePhreatic([phreatic('pl'), phreatic('pl2')],
+                          { stages: [{ id: 's1', name: 'First' }] });
+    var list = [phreatic('pl'), phreatic('pl2')];
+    T.eq(BC().phreaticLines(list).map(function (r) { return r.id; }), ['pl', 'pl2']);
+    T.eq(BC().waterLineColor(list[1], list), BC().waterLineColor(list[0], list),
+         'both in the phreatic blue');
+  });
+
+  test('a phreatic line made in a later stage is that stage\'s, in place of the one on', function () {
+    var stages = [{ id: 's1', name: 'First', parent: null, activate: [], deactivate: [] },
+                  { id: 's2', name: 'Second', parent: 's1', activate: [], deactivate: [] },
+                  { id: 's3', name: 'Third', parent: 's2', activate: [], deactivate: [] }];
+    var project = section(standard().concat([phreatic('pl')]),
+                          { stages: stages, stageable_parts: ['pl', 'soil_L1'] });
+    var made = phreatic('pl2', { on: 'line', points: [[0, -3], [20, -3]] });
+    var staged = BC().stagedPhreatic(project, made, 's2');
+    T.eq(staged.replaced, ['pl']);
+    T.eq(staged.stages.map(function (s) { return [s.activate, s.deactivate]; }),
+         [[[], ['pl2']], [['pl2'], ['pl']], [[], []]],
+         'off in the initial stage, on from the second, the old one off from there');
+    T.eq(project.stages[0].deactivate, [], 'the project is not edited');
+
+    T.eq(BC().stagedPhreatic(project, made, 's1'), null, 'the initial stage: not a later one');
+    T.eq(BC().stagedPhreatic(project, phreatic('pl'), 's2'), null, 'a line already there');
+    T.eq(BC().stagedPhreatic(project, head('h'), 's2'), null, 'a head line');
+    T.eq(BC().stagedPhreatic(section(standard()), made, 's2'), null, 'unstaged');
+
+    var error = null;
+    try { BC().checkInitialPhreatic(project, made, 's1'); } catch (e) { error = e; }
+    T.ok(error && /First has pl\. To make this the phreatic line of a later stage, select/
+      .test(error.message));
+    BC().checkInitialPhreatic(project, made, 's2');
   });
 
   test('the whole soil row is the phreatic line, the head lines listed apart', function () {

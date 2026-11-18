@@ -116,7 +116,7 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                              "soil's outer boundary")
     parser.add_argument("--water-pressure", choices=PRESSURE_TYPES, metavar="TYPE",
                         help="Uniform (--value), Hydrostatic (--reference-coordinate), "
-                             "Phreatic_Multi_Line (--phreatic-line; one in a project) or "
+                             "Phreatic_Multi_Line (--phreatic-line; one a stage) or "
                              "Head_Line (--phreatic-line), the head of the water in the "
                              "soils that take it (soil-water)")
     parser.add_argument("--reference-coordinate", type=float, metavar="Y",
@@ -316,8 +316,9 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
 
 def soil_water_lines(project: Project) -> list[str]:
     """Each soil and the water it takes, as `boundary soil-water` prints it."""
-    phreatic = project.phreatic_line()
-    default = (f"the phreatic line {phreatic.name}" if phreatic is not None
+    phreatic = [line.name for line in project.phreatic_lines()]
+    default = ("the phreatic line its stage has on (" + ", ".join(phreatic) + ")"
+               if len(phreatic) > 1 else f"the phreatic line {phreatic[0]}" if phreatic
                else "the phreatic line (there is none)")
     lines = {line.id: line for line in project.head_lines()}
 

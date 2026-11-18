@@ -208,6 +208,97 @@
     spec.tails.forEach(function (line) { T.eq(line.length, 2, 'a straight line'); });
   });
 
+  T.test('the arrows in the open water hang from the phreatic line', function () {
+    /* The water at 1 over the ground at 0 and the pit floor at -3: each arrow on the
+       ground starts on the line, so it is as long as the water is deep. */
+    var p = project([phreatic([[0, 1], [20, 1]])]);
+    var pieces = W.pieces(p, sections(), DUG);
+    var spec = W.glyph(pieces, 1, 1, W.linesOf(p));
+    var down = spec.arrows.filter(function (a) { return a.direction[1] < -0.2; });
+    T.ok(down.length > 0, 'arrows on the ground');
+    down.forEach(function (a) {
+      T.near(a.tip[1] + a.length, 1, 1e-9, 'the tail on the water line');
+    });
+    T.ok(down.some(function (a) { return Math.abs(a.length - 4) < 1e-9; }),
+         'the pit floor\'s reach the line 4 m up');
+    var sides = spec.arrows.filter(function (a) { return a.direction[1] >= -0.2; });
+    sides.forEach(function (a) {
+      T.ok(a.length <= 1 + 1e-9, 'an upright face keeps its arrows in proportion');
+    });
+  });
+
+  T.test('the reach to a sloping phreatic line, against the arrow', function () {
+    var line = { x_coordinates: [0, 10], y_coordinates: [2, 4] };
+    T.near(W.reach(line, [5, 0], [0, -1]), 3, 1e-9, 'straight up: the line at x = 5');
+    T.near(W.reach(line, [12, 0], [0, -1]), 4, 1e-9, 'held level past its end');
+    // Slanted up and to the left from (11, 0): across the line's last corner.
+    var n = [Math.SQRT1_2, -Math.SQRT1_2];
+    var s = W.reach(line, [11, 0], n);
+    var at = [11 - n[0] * s, -n[1] * s];
+    T.near(at[1], W.level(line, at[0]), 1e-9, 'it ends on the line');
+    T.eq(W.reach(line, [5, 5], [0, -1]), 0, 'above the line, no reach');
+    T.eq(W.reach(line, [5, 0], [1, 0]), null, 'an upright face has no line above it');
+  });
+
+  T.test('the stages with water on the ground, per phreatic line', function () {
+    /* The pit is dug in the second stage; the water at -1 stands on its floor only. */
+    var order = [{ id: 's1', name: 'First' }, { id: 's2', name: 'Dig' }];
+    function hiddenOf(id) { return id === 's2' ? DUG : {}; }
+    var p = project([phreatic([[0, -1], [20, -1]])]);
+    T.eq(W.stagesWithWater(p, sections(), order, hiddenOf), { phreatic: ['Dig'] });
+    T.eq(W.stagesWithWater(p, sections(), [], hiddenOf), {},
+         'unstaged, the pit is not dug and the water is below the ground');
+    var high = project([phreatic([[0, 1], [20, 1]])]);
+    T.eq(W.stagesWithWater(high, sections(), [], hiddenOf), { phreatic: [null] },
+         'a model with no stages has it in its one stage');
+  });
+
+  T.test('the pressure along a hydrostatic condition on a line, below its level only', function () {
+    var record = { id: 'bank', fluid_pressure_type: 'Hydrostatic', reference_coordinate: -1 };
+    // A bank from (0, 0) down to (3, -3), then level: wet from y = -1 down.
+    var list = W.along(record, [[0, 0, 5], [3, -3, 5], [9, -3, 5]], [10, -20]);
+    T.eq(list.length, 2);
+    T.near(list[0].a[1], -1, 1e-9, 'the slope is wet from the level down');
+    T.near(list[0].depth[0], 0, 1e-9);
+    T.near(list[0].depth[1], 2, 1e-9);
+    T.eq(list[1].depth, [2, 2]);
+    T.ok(list.every(function (piece) { return piece.water === 'bank'; }));
+    T.ok(list[1].inward[1] < 0, 'the diagram stands on the side of the centre');
+    var spec = W.glyph(list, 1, 0.5);
+    T.eq(spec.deepest, 2);
+    T.ok(spec.deepestInward[1] < 0);
+    T.eq(W.along(Object.assign({}, record, { fluid_pressure_type: 'Uniform' }),
+                 [[0, 0], [1, -3]], [0, 0]), [], 'a uniform pressure has no diagram');
+    T.eq(W.along(Object.assign({}, record, { reference_coordinate: -5 }),
+                 [[0, 0], [3, -3]], [0, 0]), [], 'all above its level, nothing');
+  });
+
+  T.test('the pressure is the depth times the water\'s weight', function () {
+    var p = { unit_system: 'SI', water: { y: 0, specific_weight: 10000 } };
+    T.ok(/^p = 25000\b/.test(W.pressureText(p, 2.5)), W.pressureText(p, 2.5));
+    T.eq(W.pressureText(p, 0), null, 'no water, no pressure');
+  });
+
+  T.test('the deepest point of the water on the ground', function () {
+    var p = project([phreatic([[0, 1], [20, 1]])]);
+    var spec = W.glyph(W.pieces(p, sections(), {}), 1, 1);
+    T.near(spec.deepest, 1, 1e-9);
+    T.eq(spec.deepestInward, [0, -1], 'into the ground');
+  });
+
+  T.test('the open water fills from the ground up to its line', function () {
+    // The pit is dug: the water at -1 stands 2 m deep in it, and not on the ground.
+    var p = project([phreatic([[0, -1], [20, -1]])]);
+    var body = W.waterBody(W.pieces(p, sections(), DUG));
+    T.eq(body.length, 1, 'the floor only: the pit\'s sides are upright');
+    var ys = body[0].map(function (corner) { return corner[1]; }).sort();
+    T.eq(ys, [-1, -1, -3, -3]);
+    var xs = body[0].map(function (corner) { return corner[0]; }).sort(function (a, b) {
+      return a - b;
+    });
+    T.eq(xs, [8, 8, 12, 12]);
+  });
+
   T.test('no water, no arrows', function () {
     var spec = W.glyph([], 1, 1);
     T.eq(spec.arrows.length, 0);

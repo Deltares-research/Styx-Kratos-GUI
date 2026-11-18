@@ -4706,6 +4706,7 @@ window.STAGE_FIXTURE =
     "interface_sections": [],
     "interfaces": [],
     "interface_sides": "screen",
+    "drawn_phreatic_lines": "whole_soil",
     "normal_loads": [],
     "water": {
       "y": -1.5,

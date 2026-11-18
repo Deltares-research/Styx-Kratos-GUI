@@ -383,11 +383,17 @@ kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic l
   sign (compression negative); `Phreatic_Multi_Line` is hydrostatic below the line
   `--phreatic-line X Y X Y ...`, x increasing, and so is a `Head_Line`. Above the level the pressure is held at zero
   unless `--pressure-tension-cut-off` allows suction up to that value.
-- **One phreatic line.** A project has one `Phreatic_Multi_Line` condition; a second is
-  refused. On `--domain` or on a `--line` (which is only where it is drawn), it is the water
-  of every soil. The other water lines are `Head_Line`s: polylines like it
-  (`--phreatic-line`), which Kratos gets as a `Phreatic_Multi_Line` on the soils that take
-  them, and which put no water on the ground.
+- **One phreatic line in each stage.** A `Phreatic_Multi_Line` on `--domain` or on a
+  `--line` (which is only where it is drawn) is a phreatic line: the water of every soil. A
+  stage may have one on; two on in the same stage are refused, so a later stage can switch
+  to a lower one. One on a face, a part or a point is a boundary condition like any other.
+  Given as start values (`--initial`), the phreatic line is the soil's initial pressure: it
+  is written in the stage it comes on, and later stages carry on from what the calculation
+  made of it. Where it stands above the ground, the deck also fixes the pressure on the wet
+  soil surface under it (2D), and frees it again in a stage that leaves it dry. The other
+  water lines are `Head_Line`s: polylines like it (`--phreatic-line`), which Kratos gets as
+  a `Phreatic_Multi_Line` on the soils that take them, and which put no water on the
+  ground.
 - **The water of each soil.** `soil-water` lists each soil and its water. `soil-water SOIL
   WATER` gives a soil (a layer `soil_<id>`, one body, or a custom part with a material) the
   water of a head line (its id, on `--domain` or a `--line`), `interpolate` for the

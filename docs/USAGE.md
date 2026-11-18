@@ -333,7 +333,7 @@ components to hold.
 | Support | Holds the displacement at zero in x, y or z. **Fixed** holds all components. **Roller** holds the component normal to the face, or to a vertical or horizontal line. A 2D model does not hold z. |
 | Water pressure, Uniform | One pressure at each node of the target, compression negative |
 | Water pressure, Hydrostatic | Zero at its **Reference level**, growing with depth below it. **Tension cut-off** is the most suction above the level; 0 holds the pressure at zero there. |
-| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. A project has one phreatic line, and it is the water of every soil, wherever it is drawn. |
+| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. A phreatic line on the whole soil or on a line is the water of every soil, wherever it is drawn. A stage can have one on, so a later stage can switch to a lower one. A new phreatic line is **Initial only**: it gives the soil its starting pressures, and a flow or coupled calculation can change them. |
 | Water pressure, Head line | As a phreatic line, for the soils that take it under **Soil water** (see [The water of each soil](#the-water-of-each-soil)). |
 
 Water above the ground also presses on it. When the phreatic line is above the soil, the
@@ -344,8 +344,22 @@ phreatic line is on; a phreatic line on a soil part puts its water on that part 
 is done for each stage, with the soil that the stage has, and the water always pushes on the
 soil or the wall. You do not draw this load. Where you drew a normal load yourself, your load is used
 there instead. The export notes say where the water was added. In **Staged construction**,
-small pale blue arrows show where this water presses in the selected stage; the other tabs
-do not show it.
+the water standing on the ground in the selected stage is filled in light blue up to the
+phreatic line. Small light blue arrows press into the soil (longer where the water is
+deeper), and the pressure where the water is deepest is shown, for example "p = 10000 Pa"
+under 1 m of water. **Flow conditions** shows the same for the model
+as built. The other tabs do not show it. In the Model explorer, a phreatic line with water on the ground has a
+**Water on the ground** row under it, which says in which stages. A 3D model does not add
+this load, and the export warns when the phreatic line is above the ground.
+
+Under open water, the water pressure on the soil surface is the water's. So where an
+**Initial only** phreatic line stands above the ground, the calculation also fixes the
+water pressure on the wet soil surface under it, stage by stage (2D). This is the boundary
+that a flow or a coupled calculation needs. Inside the soil the line gives only the
+starting pressures. The phreatic line is written in the stage that switches it on, and the
+stages after it continue from the pressures that the stage before left. When a stage leaves
+part of the surface dry (it lowers the water, or switches it off), that part is no longer
+fixed.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
@@ -429,8 +443,21 @@ The phreatic line and the head lines are water pressures of the type **Phreatic 
 **Head line**: polylines through points, x increasing, which can slope. Draw one on a line
 (**Pick on model…**), and its points are filled in from the line, or put it on the whole
 soil and type its points. Where it is drawn is only where it is: the phreatic line acts on
-every soil, and a head line on the soils that take it. A project has one phreatic line, and
-any number of head lines. A head line that no soil takes acts nowhere, and the export warns
+every soil, and a head line on the soils that take it. A stage has one phreatic line on, and
+any number of head lines. To change the phreatic line in a later stage (a pit pumped dry),
+select that stage in **Staged construction** and then create the new phreatic line: it is
+switched off in the initial stage and on from the selected stage, and the phreatic line
+that was on there is switched off from that stage on. The status line names the stage.
+With the initial stage selected, a second phreatic line is refused. For a pressure on a line only, use a **Hydrostatic** condition on
+that line. In 2D the viewport draws it in indigo on that line: the line is thick where it
+is below the level, a filled diagram grows with the depth, and the deepest pressure is
+shown. The same applies to a
+Hydrostatic condition on a face.
+
+A project saved before 2026-11-18 read a phreatic line drawn on a line as a pressure on
+that line only. When you open it, a level one becomes a Hydrostatic condition on the same
+line, which sets the same pressure there. A sloping one becomes the water of the whole soil
+(or a head line, if the project has another phreatic line), and a note says so. A head line that no soil takes acts nowhere, and the export warns
 about it.
 
 You can also right-click a soil in Flow conditions mode, in the viewport or in the Model

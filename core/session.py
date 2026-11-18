@@ -1327,8 +1327,14 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
     """The boundary conditions, as one list: what `PATCH /api/project/conditions`
     sends. Left out, they stay."""
     payload = project.model_dump()
+    if update.stages is not None:
+        _stages_of_a_deck_are_read_only(project)
+        payload["stages"] = [stage.model_dump() for stage in update.stages]
     if update.boundary_conditions is not None:
-        _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
+        # Against the stages as they will be: the same request may take it out of them.
+        staged = (project if update.stages is None
+                  else project.model_copy(update={"stages": update.stages}))
+        _refuse_staged_conditions(staged, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
     if update.gravity_acceleration is not None:
@@ -1336,6 +1342,9 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
     if update.soil_water is not None:
         payload["soil_water"] = dict(update.soil_water)
     edited = _edited(project, payload)
+    if update.stages is not None:
+        stages.linearise(edited)
+        stages.check_settings(edited)
     if update.soil_water is not None:
         _refuse_unknown_soil_water(edited, update.soil_water)
     return edited

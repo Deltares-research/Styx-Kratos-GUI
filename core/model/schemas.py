@@ -1150,7 +1150,8 @@ class WaterPressureCondition(Base):
     *   `"Hydrostatic"`: zero at the horizontal level `reference_coordinate`, growing with
         depth below it.
     *   `"Phreatic_Multi_Line"`: hydrostatic below the phreatic line through
-        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`). A project has one.
+        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`). On the whole soil
+        or drawn on a line it is a phreatic line (`Project.phreatic_lines`), one a stage.
     *   `"Head_Line"`: the same, through the points of a head line -- the head of the
         water in a soil, an aquifer's. Any number. Written to Kratos as a
         `Phreatic_Multi_Line`; no water stands on the ground for it.
@@ -1158,6 +1159,14 @@ class WaterPressureCondition(Base):
     On the whole soil or drawn on a line, a phreatic or head line is a water line
     (`Project.water_lines`): the phreatic line is the water of every soil, and a head line
     of the soils that take it (`Project.soil_water`), wherever it was drawn.
+
+    As start values (`is_fixed=False`), a water line is the soils' initial water
+    pressure: the deck writes it in the stage it comes on, and a stage that keeps it on
+    carries on from what the calculation before it made of the pressure, so a flow or a
+    coupled stage can move the water inside the soil. Where a phreatic line stands above
+    the ground, the deck fixes the pressure on the soil surface under its water, stage by
+    stage (`core.kratos.writer._water_surface_loads`): the boundary a flow calculation
+    needs. Fixed, a water line holds every node of its soils in every stage it is on.
 
     Above the level Kratos' formula gives suction, which is positive in its sign
     convention; `pressure_tension_cut_off` is the most it may reach, and the Kratos
@@ -1691,6 +1700,11 @@ class ConditionsUpdate(Base):
     soil_water: dict[str, str] | None = None
     """The water each soil takes (`Project.soil_water`), as a whole. Edited in the same
     window as the conditions, whose lines it names."""
+    stages: list[Stage] | None = None
+    """The construction sequence, as a whole, with the conditions it switches: a
+    phreatic line made in a later stage is off before it and the one it replaces off
+    from it, which neither list says alone (`Project.phreatic_lines_together`). Checked
+    as `replace_stages` checks it."""
 
 
 class LinesUpdate(Base):
@@ -1893,6 +1907,11 @@ class Project(Base):
     """How the document reads an interface's `side`: as the face on the screen. A
     document without it was saved before 2026-10-25 and read it walking the line; its
     one-side interfaces are converted when it loads (`migration.screen_sides`)."""
+    drawn_phreatic_lines: Literal["whole_soil"] = "whole_soil"
+    """How the document reads a phreatic line drawn on a line: as the water of the whole
+    soil (`phreatic_lines`). A document without it was saved before 2026-11-18 and read
+    it as a pressure on that line only; its phreatic lines drawn on a line are converted
+    when it loads (`migration.drawn_water_lines`)."""
     # Its own collection, not folded into `loads[]`: a normal load is dimension-native
     # like a free interface (an arbitrary polyline, no 3D translation), not a
     # translated x/y vector like the three kinds `loads[]` already holds.
@@ -1913,8 +1932,8 @@ class Project(Base):
     (`soil_part_keys`: a layer, a body cut off one, or a custom soil part) to the id of a
     head line (`head_lines`), or `INTERPOLATE`.
 
-    A soil that is not in it takes the phreatic line (`phreatic_line`), which is the
-    water of the whole soil wherever it was drawn. A head line acts only on the soils
+    A soil that is not in it takes the phreatic line its stage has on (`phreatic_lines`),
+    which is the water of the whole soil wherever it was drawn. A head line acts only on the soils
     that take it. A soil takes its own entry, else its layer's (`water_of_bodies`). An
     interpolated soil gets the pressure of its boundary, which the soils around it set,
     interpolated down through it (Kratos' `ApplyConstantInterpolateLinePressureProcess`);
@@ -1955,7 +1974,9 @@ class Project(Base):
         (`migration.screen_sides`). One saved before 2026-11-02 has no `fluid`: its soils
         carry the water themselves (`migration.lift_water`). One saved before 2026-11-03
         switches gravity itself (`migration.drop_gravity`), and one saved before 2026-11
-        has flow stages with no absolute tolerance (`migration.flow_tolerance`)."""
+        has flow stages with no absolute tolerance (`migration.flow_tolerance`). One
+        saved before 2026-11-18 sets a phreatic line drawn on a line on that line only
+        (`migration.drawn_water_lines`)."""
         return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
@@ -2103,23 +2124,50 @@ class Project(Base):
                 if isinstance(c, WaterPressureCondition) and c.on in LINE_TARGETS
                 and c.fluid_pressure_type in LINE_TYPES]
 
-    def phreatic_line(self) -> WaterPressureCondition | None:
-        """The phreatic line, the water of every soil that takes no other (`soil_water`),
-        or None. A project has one at most."""
-        return next((c for c in self.water_lines()
-                     if c.fluid_pressure_type == "Phreatic_Multi_Line"), None)
+    def phreatic_lines(self) -> list[WaterPressureCondition]:
+        """The phreatic lines, the water of every soil that takes no other
+        (`soil_water`). One a stage at most (`phreatic_lines_together`): a later stage
+        may switch to another, a lower one for a pit pumped dry. A Phreatic_Multi_Line on
+        a face, a part or a point is a boundary condition like any other, not one."""
+        return [c for c in self.water_lines()
+                if c.fluid_pressure_type == "Phreatic_Multi_Line"]
+
+    def phreatic_lines_together(self) -> tuple[str | None, list[str]] | None:
+        """Two phreatic lines that are on together, as (the stage's name, or None in a
+        model with no stages, and their names), or None.
+
+        Unstaged, every active line is on in the one stage there is. Staged, the first
+        stage that has two on is named; a stage tree that does not linearise is the
+        stages' own error to say, so it is let through here."""
+        from core.model import stages        # which imports this module
+
+        lines = [c for c in self.phreatic_lines() if c.active]
+        if len(lines) < 2:
+            return None
+        if not self.stages:
+            return None, [c.name for c in lines]
+        try:
+            order = stages.linearise(self)
+        except stages.StageError:
+            return None
+        for stage in order:
+            on = stages.active_parts(self, stage)
+            both = [c.name for c in lines if c.id in on]
+            if len(both) > 1:
+                return stage.name, both
+        return None
 
     def head_lines(self) -> list[WaterPressureCondition]:
         """The head lines a soil can take its water from (`soil_water`)."""
         return [c for c in self.water_lines() if c.fluid_pressure_type == "Head_Line"]
 
     def on_the_whole_soil(self, condition: WaterPressureCondition) -> bool:
-        """Whether `condition` acts on the whole soil: the phreatic line, wherever it was
+        """Whether `condition` acts on the whole soil: a phreatic line, wherever it was
         drawn, and anything else on the whole soil but a head line, which acts only on
         the soils that take it (`soil_water`)."""
         if condition.on == "domain":
             return condition.fluid_pressure_type != "Head_Line"
-        return condition is self.phreatic_line()
+        return any(condition is line for line in self.phreatic_lines())
 
     def water_of_bodies(self) -> dict[str, str]:
         """Each soil body that takes water of its own (`soil_water`), to the id of its line
@@ -2255,15 +2303,16 @@ class Project(Base):
                     f"boundary condition {condition.id!r} is on part {condition.part!r}, "
                     "which is not a soil part of this project; the soil parts are "
                     + (", ".join(soil) or "none"))
-        phreatic = [c.name for c in self.boundary_conditions
-                    if isinstance(c, WaterPressureCondition)
-                    and c.fluid_pressure_type == "Phreatic_Multi_Line"]
-        if len(phreatic) > 1:
+        together = self.phreatic_lines_together()
+        if together is not None:
+            stage, names = together
+            where = (f"in stage {stage!r}" if stage is not None
+                     else "in this model, which has no stages")
             raise ValueError(
-                "a project has one phreatic line, and "
-                + ", ".join(repr(name) for name in phreatic) + " are all Phreatic_Multi_Line; "
-                "make the others head lines (Head_Line), and give each to its soils in "
-                "Soil water")
+                "a stage has one phreatic line, and "
+                + " and ".join(repr(name) for name in names) + f" are both on {where}: "
+                "switch one off there, or make it a head line (Head_Line) and give it to "
+                "its soils in Soil water")
         if any(c.id == INTERPOLATE for c in self.boundary_conditions):
             raise ValueError(f"a boundary condition cannot be called {INTERPOLATE!r}: a "
                              "soil's water says that for interpolated")

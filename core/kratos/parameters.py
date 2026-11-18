@@ -337,7 +337,13 @@ class WaterPressure:
     one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
     per body. `reference_coordinate` is the record's own level, and `condition` the
     record's id, which a stage switches (`Stage.conditions`); empty for an
-    `INTERPOLATE_LINE` soil, which is on whenever any water is."""
+    `INTERPOLATE_LINE` soil, which is on whenever any water is, and for the writer's own
+    pressure on the wet soil surface, which is on in the stages its part is
+    (`core.kratos.writer._wet_surface`).
+
+    `initial` is a water line's start values (`schemas.Project.water_lines`): the soils'
+    initial pressure, written in a stage that has it on only if the stage before did
+    not, so a stage that keeps it carries on from the pressure the one before left."""
     part: str | None
     fluid_pressure_type: str
     is_fixed: bool
@@ -349,6 +355,7 @@ class WaterPressure:
     pressure_tension_cut_off: float
     specific_weight: float
     condition: str = ""
+    initial: bool = False
 
 
 def stage_name(index: int, label: str) -> str:
@@ -390,9 +397,10 @@ def project_parameters(
     entry carries its line's two points as a sixth item: the water on the ground that
     the writer adds itself (`core.kratos.writer._water_surface_loads`). Written in the
     order given, which matters there: a later process on a node sets its value again.
-    `water_pressures` is the user's water pressure conditions, in the order they are
-    written: start values first, so that where a fixed value acts on the same node it is
-    the one that stays (see `_water_pressure`). Nothing else fixes a water pressure.
+    `water_pressures` is the water pressure conditions, in the order they are written:
+    start values first, so that where a fixed value acts on the same node it is the one
+    that stays (see `_water_pressure`). The user's, and the writer's own pressure on the
+    soil surface under open water (`core.kratos.writer._wet_surface`).
 
     The keyword arguments are what the analysis block needs and the process lists do
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
@@ -403,6 +411,7 @@ def project_parameters(
     process. `gravity_acceleration` is `Project.gravity_acceleration`, the self weight's
     g."""
     rendered: dict[str, dict] = {}
+    before: set[int] = set()
     for index, stage in enumerate(stages):
         live = stage.active
         keep = (lambda name: True) if live is None else (lambda name: name in live)
@@ -428,15 +437,26 @@ def project_parameters(
         # domain itself; on a face or a part it goes with the stretch or body it names.
         # And it is in the stages whose stage has it switched on. An interpolated soil
         # reads its pressure off the others, so it is on in the stages that have any.
+        # A water line's start values are written where it comes on, not again in each
+        # stage that keeps it: Kratos carries the pressure from stage to stage, and a
+        # flow or coupled stage would lose what the one before made of it.
         watered = (stage.conditions is None
                    or any(pressure.condition in stage.conditions
                           for pressure in water_pressures))
-        constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
-                                 if (pressure.part is None or keep(pressure.part))
-                                 and (watered
-                                      if pressure.fluid_pressure_type == INTERPOLATE_LINE
-                                      else stage.conditions is None
-                                      or pressure.condition in stage.conditions)]
+
+        def on(pressure: WaterPressure) -> bool:
+            if pressure.part is not None and not keep(pressure.part):
+                return False
+            if pressure.fluid_pressure_type == INTERPOLATE_LINE:
+                return watered
+            return (not pressure.condition or stage.conditions is None
+                    or pressure.condition in stage.conditions)
+
+        now = {at for at, pressure in enumerate(water_pressures) if on(pressure)}
+        constraint_processes += [_water_pressure(pressure)
+                                 for at, pressure in enumerate(water_pressures)
+                                 if at in now and not (pressure.initial and at in before)]
+        before = now
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
         auxiliary = _auxiliary(stage)

@@ -26,6 +26,15 @@
    A wall needs nothing of its own here: where water stands against it, the soil on
    its far side ends on the same line, and that is the stretch drawn.
 
+   Flow conditions draws the same for the model as built: there the surface is where
+   the export fixes the water pressure (writer.py `_wet_surface`). `along` is the
+   pressure of a Hydrostatic condition on its own line or face, drawn the same way, and
+   `pressureText` the deepest pressure written beside either.
+
+   `stagesWithWater` says, per phreatic line, which stages have water on the ground:
+   the Model explorer's row under the line (model.js `conditionChild`), so the user
+   sees where the export adds it without stepping through every stage.
+
    Pure, no DOM and no three.js: viewport.js puts `glyph`'s arrows on screen.
    ══════════════════════════════════════════════════════════════════ */
 
@@ -264,11 +273,25 @@ App.SurfaceWater = (function () {
 
      An arrow's length is in proportion to the depth, as the pressure is: nought at the
      water line, the full `length` where the water is deepest, and a straight line
-     through the tails -- the triangle or trapezoid of a water pressure. */
-  function glyph(list, length, spacing) {
-    var spec = { arrows: [], tails: [], deepest: 0 };
+     through the tails -- the triangle or trapezoid of a water pressure.
+
+     Given `lines` ({water id: its Phreatic_Multi_Line record}, `linesOf`), an arrow in
+     the open water -- on a piece that faces up, as `waterBody` fills -- reaches from
+     its water's line down to the ground instead, as long as the water is: it stands
+     in the water the fill draws, connected to the line it hangs from. An arrow on an
+     upright face keeps its length in proportion, as no line is above it. */
+  function glyph(list, length, spacing, lines) {
+    // `deepestAt` is where the water is deepest, and `deepestInward` its piece's
+    // `inward`: where the pressure is written.
+    var spec = { arrows: [], tails: [], deepest: 0, deepestAt: null, deepestInward: null };
     list.forEach(function (piece) {
-      spec.deepest = Math.max(spec.deepest, piece.depth[0], piece.depth[1]);
+      [0, 1].forEach(function (end) {
+        if (piece.depth[end] > spec.deepest) {
+          spec.deepest = piece.depth[end];
+          spec.deepestAt = (end ? piece.b : piece.a).slice();
+          spec.deepestInward = piece.inward ? piece.inward.slice() : null;
+        }
+      });
     });
     if (!(spec.deepest > 0) || !(length > 0) || !(spacing > 0)) return spec;
     function size(depth) { return length * Math.max(0, depth) / spec.deepest; }
@@ -279,20 +302,151 @@ App.SurfaceWater = (function () {
         return [p[0] - n[0] * s, p[1] - n[1] * s];
       }
       spec.tails.push([tail(a, piece.depth[0]), tail(b, piece.depth[1])]);
+      var water = lines && facesUp(piece) ? lines[piece.water] : null;
       var axis = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? 0 : 1;
       var lo = Math.min(a[axis], b[axis]), hi = Math.max(a[axis], b[axis]);
       if (!(hi > lo)) return;
       for (var g = Math.ceil(lo / spacing) * spacing; g < hi; g += spacing) {
         var t = (g - a[axis]) / (b[axis] - a[axis]);
+        var tip = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
         var depth = piece.depth[0] + (piece.depth[1] - piece.depth[0]) * t;
-        var s = size(depth);
+        var s = water ? reach(water, tip, n) : null;
+        if (s === null) s = size(depth);
         if (s < length * 0.05) continue;
-        spec.arrows.push({ tip: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
-                           direction: n.slice(), length: s });
+        spec.arrows.push({ tip: tip, direction: n.slice(), length: s });
       }
     });
     return spec;
   }
 
-  return { pieces: pieces, glyph: glyph, level: level };
+  /* A piece the open water stands on: its soil is below it. Upright and overhung faces
+     are not, the pieces above them hold that water. */
+  function facesUp(piece) { return !!piece.inward && piece.inward[1] < -0.2; }
+
+  /* How far back from `tip`, against `inward` (pointing down into the soil), the line
+     of `water` is: where an arrow on `tip` starts to hang from that line. The line is
+     straight between its corners and level past its ends, so the distance is found
+     one straight stretch at a time. Null where the line is not above `tip`. */
+  function reach(water, tip, inward) {
+    var nx = inward[0], ny = inward[1];
+    if (!(ny < 0)) return null;
+    function gap(s) { return tip[1] - ny * s - level(water, tip[0] - nx * s); }
+    var stops = [0];
+    if (Math.abs(nx) > 1e-12) {
+      water.x_coordinates.forEach(function (x) {
+        var s = (tip[0] - x) / nx;
+        if (s > 0) stops.push(s);
+      });
+    }
+    stops.sort(function (p, q) { return p - q; });
+    for (var k = 0; k < stops.length; k += 1) {
+      var s0 = stops[k], g0 = gap(s0);
+      if (g0 >= 0) return s0;
+      // Past the last corner the line is level and the gap closes at -ny per metre.
+      if (k + 1 === stops.length) return s0 - g0 / -ny;
+      var s1 = stops[k + 1], g1 = gap(s1);
+      if (g1 >= 0) return s0 + (s1 - s0) * -g0 / (g1 - g0);
+    }
+    return null;
+  }
+
+  /* The Phreatic_Multi_Line conditions of `project` by id: the lines `glyph` hangs the
+     arrows in the open water from. */
+  function linesOf(project) {
+    var out = {};
+    ((project && project.boundary_conditions) || []).forEach(function (c) {
+      if (c.kind === 'water_pressure' && c.fluid_pressure_type === 'Phreatic_Multi_Line'
+          && (c.x_coordinates || []).length >= 2
+          && (c.y_coordinates || []).length === c.x_coordinates.length) {
+        out[c.id] = c;
+      }
+    });
+    return out;
+  }
+
+  /* Which stages of `order` (App.Stages.order: the stages in execution order, empty
+     for a model with no stages) have water on the ground, per phreatic line: `{water
+     id: [stage name, ...]}`, or `{water id: [null]}` for a model with no stages.
+     `hiddenOf(stage id)` is what that stage has switched off ({key: true}). */
+  function stagesWithWater(project, sections, order, hiddenOf) {
+    var out = {};
+    var list = (order && order.length) ? order : [null];
+    list.forEach(function (stage) {
+      var hidden = stage ? hiddenOf(stage.id) : {};
+      var seen = {};
+      pieces(project, sections, hidden).forEach(function (piece) {
+        if (seen[piece.water]) return;
+        seen[piece.water] = true;
+        (out[piece.water] = out[piece.water] || []).push(stage ? stage.name : null);
+      });
+    });
+    return out;
+  }
+
+  /* The pressure of a Hydrostatic water pressure condition along the line it is on:
+     `path` ([x, y] points, its drawn line or its face), in pieces as `pieces` gives
+     them, wholly below its level. A pressure has no direction, so `inward` only says
+     which side the diagram stands on: towards `centre` (the domain's middle), so a
+     face's is drawn outside the soil, and a line's on the side away from the middle.
+     Empty for any other type: a uniform pressure is its value, and a phreatic or head
+     line is drawn as the line it is. */
+  function along(record, path, centre) {
+    if (!record || record.fluid_pressure_type !== 'Hydrostatic'
+        || typeof record.reference_coordinate !== 'number' || !path) return [];
+    var water = { x_coordinates: [0], y_coordinates: [record.reference_coordinate] };
+    var out = [];
+    for (var k = 0; k + 1 < path.length; k += 1) {
+      var a = [path[k][0], path[k][1]], b = [path[k + 1][0], path[k + 1][1]];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!(length > TOL)) continue;
+      var n = [-(b[1] - a[1]) / length, (b[0] - a[0]) / length];
+      var mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      if (centre && (centre[0] - mx) * n[0] + (centre[1] - my) * n[1] < 0) n = [-n[0], -n[1]];
+      wet(water, a, b).forEach(function (piece) {
+        piece.inward = n;
+        piece.water = record.id;
+        out.push(piece);
+      });
+    }
+    return out;
+  }
+
+  /* The open water standing on the ground, as quads of [x, y] corners: each piece of
+     `list` (`pieces`) that faces up, raised to its water's line. Together they fill
+     the water between the ground and the phreatic line -- over a pit's floor, the pit
+     -- so the water on the ground reads as water, apart from the lines. A face that
+     is upright or overhung adds nothing: the pieces above it fill that water. */
+  function waterBody(list) {
+    return list.filter(facesUp).map(function (piece) {
+      return [piece.a.slice(), piece.b.slice(),
+              [piece.b[0], piece.b[1] + piece.depth[1]],
+              [piece.a[0], piece.a[1] + piece.depth[0]]];
+    });
+  }
+
+  /* The water's specific weight in the project's units, as the export takes it
+     (`Project.water_specific_weight`): the project's own, or water's. Null where the
+     unit tables are not loaded. */
+  function specificWeight(project) {
+    var given = project && project.water && project.water.specific_weight;
+    if (typeof given === 'number') return given;
+    if (!App.SoilModels || !App.Units) return null;
+    var system = (project && project.unit_system) || undefined;
+    var g = project ? project.gravity_acceleration : undefined;
+    return App.SoilModels.water(system, null, null, null, g).DENSITY_WATER
+      * App.Units.gravity(system, g);
+  }
+
+  /* "p = 10 kPa": the pressure under `depth` of water, in the project's units, or null
+     where the weight is not known. */
+  function pressureText(project, depth) {
+    var weight = specificWeight(project);
+    if (!(weight > 0) || !(depth > 0)) return null;
+    var unit = App.Units && App.Units.label ? App.Units.label('stress', project.unit_system) : '';
+    return 'p = ' + Number((weight * depth).toPrecision(3)) + (unit ? ' ' + unit : '');
+  }
+
+  return { pieces: pieces, glyph: glyph, level: level, stagesWithWater: stagesWithWater,
+           along: along, waterBody: waterBody, specificWeight: specificWeight,
+           pressureText: pressureText, linesOf: linesOf, reach: reach };
 })();
