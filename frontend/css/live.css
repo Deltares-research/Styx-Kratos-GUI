@@ -556,3 +556,12 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 /* The presets, below the soils. */
 .material-library { margin-top: 10px; }
 .material-library h3 { margin: 0 0 4px; }
+
+/* Beside the Stages explorer the Model explorer gives way, down to its header, so the
+   Selection explorer keeps its 70 px and the Stages explorer stays inside the dock on
+   a short screen. The frozen row kept the Model explorer at its full height and pushed
+   the bottom of the Stages explorer out of view (css/layout.css #dock.has-phases). */
+#dock.has-phases {
+  --r-model: minmax(var(--h-dockhead),
+    min(var(--h-model-panel), calc(100% - 2 * var(--split) - 70px - var(--h-phases))));
+}

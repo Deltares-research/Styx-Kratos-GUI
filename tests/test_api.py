@@ -1238,6 +1238,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "name-dialog.js",
                              # Windows with help text open wide enough to read it.
                              "dialog-fit.js",
+                             # The bars that resize the panels, in place of the frozen
+                             # App.UI.splitter, which jumped on the first drag.
+                             "splitters.js",
                              "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
