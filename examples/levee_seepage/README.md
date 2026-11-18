@@ -13,6 +13,8 @@ boundary conditions, and its water pressures are compared with that calculation 
 
 ## The model
 
+![The levee section: a sand aquifer under a clay cover, the levee with its core and outer layer, the river on the left and the polder on the right](../../docs/cli_tutorials/levee_model.svg)
+
 - **Section**: x from −36 to 54 m, y from −22 m up to the ground surface at 0 and the
   crest at 6 m, plane strain.
 - **Soil**:
