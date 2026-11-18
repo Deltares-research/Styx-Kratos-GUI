@@ -548,6 +548,9 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis;
 }
 .material-sets .material-swatch { display: inline-block; width: 18px; height: 18px; vertical-align: middle; }
+/* The colour column as narrow as its heading allows; the rest goes to the name and model. */
+.material-sets th:first-child,
+.material-sets td:first-child { width: 1%; white-space: nowrap; text-align: center; }
 .material-water { margin-top: 10px; }
 .material-water h3 { margin: 0 0 4px; }
 /* The presets, below the soils. */
