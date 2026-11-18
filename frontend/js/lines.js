@@ -205,14 +205,19 @@ App.Lines = (function () {
 
   /* ── Soil bodies ───────────────────────────────────────────────────────────────── */
 
-  function bodyOf(key) {
-    var published = (App.PROJECT && App.PROJECT.bodies) || [];
-    return published.filter(function (body) {
-      return 'soil_' + body.layer + '__' + body.id === key;
-    })[0];
+  /* A body's key: `soil_<layer>__<id>`, or `<part>__<id>` for a piece of a drawn soil
+     surface (core/model/schemas.py `SoilBody.key`). */
+  function bodyKey(body) {
+    return (body.part ? body.part : 'soil_' + body.layer) + '__' + body.id;
   }
 
-  /* A body's name and its material; `mat: null` goes back to the layer's. */
+  function bodyOf(key) {
+    var published = (App.PROJECT && App.PROJECT.bodies) || [];
+    return published.filter(function (body) { return bodyKey(body) === key; })[0];
+  }
+
+  /* A body's name and its material; `mat: null` goes back to the layer's or the
+     surface's. */
   function saveBody(key, fields) {
     return App.Api.patch('/api/project/bodies/' + encodeURIComponent(key), fields)
       .then(function (response) {
@@ -238,6 +243,6 @@ App.Lines = (function () {
     available: available, draft: draft, validate: validate,
     save: save, remove: remove, start: start, typed: typed, pick: pick, open: open,
     edit: edit, isLineKey: isLineKey,
-    bodyOf: bodyOf, saveBody: saveBody
+    bodyKey: bodyKey, bodyOf: bodyOf, saveBody: saveBody
   };
 })();

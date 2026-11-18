@@ -57,6 +57,12 @@ SUITES = {
         [JS / "part-colors.js"],
         TESTS / "test-part-colors.js",
     ),
+    # How a sheet pile, an anchor and an interface are drawn: triangles a fixed number
+    # of pixels wide. Putting them on screen is viewport.js's; the arithmetic is not.
+    "structure-glyphs": (
+        [JS / "structure-glyphs.js"],
+        TESTS / "test-structure-glyphs.js",
+    ),
     # `water <level>` / `water off`: what was asked and what to send. The request and
     # the redraw are patches.js's.
     "water": (
@@ -92,6 +98,13 @@ SUITES = {
     "results-plot": (
         [JS / "download.js", JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
+    ),
+    # `results convergence` and its figure, drawn from real logs the server parsed
+    # (the fixture, written by tests/test_convergence_parity.py).
+    "convergence-plot": (
+        [TESTS / "fixtures" / "convergence-cases.js", JS / "download.js",
+         JS / "results-render.js", JS / "results.js", JS / "convergence-plot.js"],
+        TESTS / "test-convergence-plot.js",
     ),
     # A saved picture: the scene as a list of shapes, then those shapes as a file. Reading
     # the scene, the canvas, the clipboard and the save windows are in the browser suite.

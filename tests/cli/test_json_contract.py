@@ -23,7 +23,7 @@ from tests.models.excavation import excavation_project
 SNAPSHOT = Path(__file__).resolve().parent / "json_shapes.json"
 
 LISTS = ("anchor", "beam", "body", "boundary", "interface", "layer", "line", "load", "material",
-         "member", "normal-load", "phases", "section", "stages", "volume", "wall")
+         "member", "normal-load", "phases", "section", "stages", "surface", "volume", "wall")
 """Every command with a `list`."""
 
 READS = {

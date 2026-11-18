@@ -74,7 +74,8 @@ Genuchten soil.
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
-| `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
+| `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
+| `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
@@ -86,18 +87,19 @@ Genuchten soil.
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [G]` | Show whether the self weight acts, or set g in m/s² (9.81 in a new project). The initial stage's stress initialisation decides whether the self weight acts |
-| `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
+| `parts P` | Every part by its key, and every support, water pressure condition and seepage face: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2] [--body-size KEY S] [--band KEY B]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them. `--body-size` is the element size at one object, by its key: a layer (`soil_<layer>`) or soil body, a sheet pile, an anchor (at its head), an interface, a normal load, a soil line, a load, a boundary condition, or a face of the model (`face_bottom`, `face_left`, `face_right`, `face_top`, and in 3D `face_front`, `face_back`). A condition on a face keeps its size as the size of that face, and a condition on a soil part as the size of that part; a condition on the whole soil is refused. `none` takes the size and its band away. `--band` is the distance over which that size grows back to the element size; `none` takes it away |
 | `stages P [list\|show\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
-| `run DECK [--runs-dir DIR] [--timeout S]` | Run a deck directory (or its `ProjectParameters.json`) |
-| `calculate P [--runs-dir DIR] [--timeout S]` | `export` and `run` in one step |
+| `run DECK [--runs-dir DIR] [--timeout S] [--follow]` | Run a deck directory (or its `ProjectParameters.json`) |
+| `calculate P [--runs-dir DIR] [--timeout S] [--follow]` | `export` and `run` in one step |
 | `results runs [--runs-dir DIR]` | The runs on this machine, newest first, numbered |
 | `results show\|stages\|files RUN` | A run's stages, its files and whether it finished; `RUN` is its id, its number, or a run directory |
 | `results fields\|field\|at RUN ... [--stage S]` | What a stage can show, one field (`--csv` for every value), every field at one node |
 | `results members\|profile RUN ...` | The walls and interfaces the run wrote curves for, and one quantity along one, stage by stage (`--csv`) |
+| `results convergence RUN [--stage S]` | How the solver converged, read off the run's log: a row per stage, or per iteration of one stage (`iter.` counts in the stage, `run` over all stages; `--csv`) |
 | `results get\|archive RUN ...` | A copy of one file of a run, or the whole run as a zip |
 | `picture geometry\|mesh P ...` | Save a picture of the model or its mesh, as the GUI's camera button does. See [Pictures](#pictures). |
 | `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
@@ -217,9 +219,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   values a choice can take and when a parameter is used. `--law` is for any other law,
   for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
   given together.
-- **Lines** split the soil. Where a line crosses a layer from one edge to another, the
-  layer becomes separate soil bodies, and each is a SubModelPart that a stage can switch
-  off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
+- **Lines** split the soil. Where a line crosses a layer or a soil surface from one edge to
+  another, it becomes separate soil bodies, and each is a SubModelPart that a stage can
+  switch off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
   a line that ends inside the soil splits nothing, and the command says so when no part of
   the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
   cuts across the whole z range; it is drawn in 2D. The commands are in
@@ -232,17 +234,43 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   names each of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
   its material in every stage. `layer set --material` gives every body of that layer the
-  new material, also a body given one of its own. In a model script, `lines=` and
-  `bodies=` say the same. A record
+  new material, also a body given one of its own. `body remove KEY` deletes one body: no
+  soil is left there, the other bodies of the layer stay, and the stages stop naming it.
+  Its record stays with `removed: true`, so it stays deleted when the lines change; it
+  comes back when no line cuts it off any more. The last body of a layer is the whole
+  layer, so `layer remove` deletes it. `body list` labels a body by its own name, or by
+  its layer's name and `Part 1`, ... while it has the name it was given. In a model
+  script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
+
+  A soil surface that a line cuts is split by the same rules. Each piece is
+  `<surface>__<id>`, for example `drawn_0__part1`, and its record names the surface with
+  `part="drawn_0"` in place of `layer=`. A stage, a mesh size or a condition on the whole
+  surface `drawn_0` means each of its pieces. `surface set drawn_0 --material M` gives every
+  piece the new material, and `body set --material layer` gives a piece the surface's
+  material. A line cuts a drawn soil volume in 3D too, when the volume is a polygon
+  extruded along z or a box.
+- **Soil surfaces** are the 2D bodies of soil that are not layers, for example an
+  embankment or a lens. `surface add --points 0 0 3 0 3 3 0 3 --material sand` draws one,
+  as **Create soil surface…** in the GUI does. It has the key `drawn_0`, `drawn_1`, ...,
+  and `--label` gives it a name (the default is *Soil surface*). `surface set KEY` changes
+  its corners, material or name and keeps its key, and `surface remove KEY` removes it with
+  its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
+  it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
+  `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
+- **Names of layers and soil surfaces** are unique. A name that is already in use, given
+  with `layer add`, `layer set`, `surface add` or `surface set`, gets a number: a second
+  *Embankment* becomes *Embankment_2*, and a note says so. Names that differ only in case
+  or punctuation count as the same. This is the name of the SubModelPart in the Kratos
+  input files too, and the name the GUI shows.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
   line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
   `pit` and `outside`. A stage that named the whole layer then names the ground outside the
   pit. A pit with one level was never dug, so it just goes. A 3D pit narrower than the
   model in z cannot be made of lines, and the file is refused.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
-  section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
+  section plane, swept across the whole model, the same as `surface add`. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
   (`--center`, `--axis`, `--radius`). `volume import FILE` reads .step, .iges, .brep, .stl
   or .obj. With `--material`, a volume is soil.
@@ -393,16 +421,18 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   those values. A `Uniform` condition frees its nodes when its stage ends, so in a soil
   that couples the water pressure to the deformation the pressure is then free, and the
   export warns about it. A condition a stage names cannot be removed; take it out of
-  those stages first. The supports are on in every stage.
+  those stages first. A support is switched per stage the same way, and is on in every
+  stage until one switches it off.
 - **Seepage face.** `--seepage` makes a seepage face, where water may leave the soil in a
   groundwater flow calculation: on `--face F`, or on `--line X Y X Y ...` along the soil's
   outer boundary. It takes no other option. Kratos' seepage strategy decides, node by node
   while it iterates, where the face is open: there the water pressure is zero and the water
   flows out; elsewhere the face is closed, as a boundary with no condition is. It opens or
   closes one node per iteration, so the export warns when a stage allows fewer iterations
-  than its seepage faces have nodes. A seepage line through the soil is refused, and a
-  deformation calculation leaves a seepage face out, with a warning. It is on in every
-  stage.
+  than the seepage faces it has on have nodes. A seepage line through the soil is refused,
+  and a deformation calculation leaves a seepage face out, with a warning. It is on in
+  every stage until a stage switches it off (`stages P deactivate STAGE ID`), as a water
+  pressure condition is.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -421,8 +451,9 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
 
 ## The stages, command by command
 
-A stage says what it changes about the model it starts from: the parts and the water
-pressure conditions it switches on and off, and how it is solved. `kratos-cli parts P`
+A stage says what it changes about the model it starts from: the parts, the supports, the
+water pressure conditions and the seepage faces it switches on and off, and how it is
+solved. `kratos-cli parts P`
 lists the keys a stage can switch.
 
 Stages were called *phases* before Styx took Kratos' word for them. The old name still
@@ -457,10 +488,12 @@ kratos-cli stages pit.json list
   and the stages after it then start from the copy; a copy has no stress
   initialisation. **`remove`** heals the chain: the removed stage's children start from
   its parent.
-- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model from that
-  stage on, as the Model explorer's checkbox does, with the smallest instruction that
-  does it: switching a part back to what the stage inherits drops the instruction.
-  `add` and `copy` take `--activate` and `--deactivate` the same way.
+- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model in that
+  stage alone, as the Model explorer's checkbox does: the other stages keep what they
+  had. It is done with the smallest instruction that does it: switching a part back to
+  what the stage inherits drops the instruction. A stage added later starts with the
+  parts of the stage before it. `add` and `copy` take `--activate` and `--deactivate`
+  the same way.
 - **`set STAGE`** changes `--name`, `--calculation mechanical|flow`,
   `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
   `--reset-displacements` / `--keep-displacements`, `--convergence-criterion`,
@@ -507,8 +540,8 @@ kratos-cli stages pit.json list
   solves it in, both in the project's unit of time (seconds in every unit system). The
   stage runs from where the stage before it ended, in `duration / time-step` steps; a
   step longer than the duration is refused.
-- **A seepage face** (`boundary add --seepage`, above) makes every flow stage use
-  Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
+- **A seepage face** (`boundary add --seepage`, above) makes every flow stage that has
+  it on use Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
   is written in a 2D groundwater flow calculation only; a mechanical deck leaves it out.
 - **`--solver KEY=VALUE ...`** sets a stage's expert solver settings, the ones the
   Stages window shows under **Expert settings**: the strategy, the linear solver, the
@@ -640,6 +673,9 @@ kratos-cli results at 1 1234 --stage 4              # every field at node 1234
 kratos-cli results members 1                        # wall, interface_left, interface_right, ...
 kratos-cli results profile 1 wall M --csv wall_M.csv
 kratos-cli results profile 1 interface_right normal # the normal traction, by a word of it
+kratos-cli results convergence 1                    # iterations and last residuals, per stage
+kratos-cli results convergence 1 --stage 4          # every iteration of stage 4
+kratos-cli results convergence 1 --csv convergence.csv
 kratos-cli results get 1 kratos.log --out logs/
 kratos-cli results archive 1                        # <run>.zip, here
 kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
@@ -660,6 +696,15 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
+- **`convergence`** reads the values Kratos printed for each iteration from the run's
+  `kratos.log`: the criterion that printed them (`residual`, `displacement` or
+  `water pressure`), the relative and the absolute value and their targets, whether the
+  convergence criterion was met, and the steps that were cut back or reached the
+  iteration limit. Each stage can have its own criterion, so the table gives it per stage,
+  and the CSV per iteration (`criterion`). It works on a run that stopped, and on a run
+  that is still running.
+  A deck with two convergence criteria prints two lines per iteration, and both are
+  counted as iterations.
 - **Which interface members a run has.** Each face of the wall has its own member:
   `interface_left` and `interface_right`, the faces toward -x and +x
   (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has
@@ -667,8 +712,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   whose contact is on in that stage, so the face a pit is dug against starts at the pit
   floor. With more than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
-- **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
-  `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
+- **`--csv FILE`** writes the file the GUI saves (`results csv`, the plot window's
+  `results plot csv`, and `results convergence csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
   in Windows PowerShell 5.1, `>` would save that as UTF-16, so give the file instead. `--json` gives what the GUI's `/api/results`
   routes answer for the same question.
 - The numbers are the run's own, in its project's units, which `results show` names.
@@ -697,6 +742,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |
 | `materials` | `kratos-cli material P` (the window, as commands) |
 | `calculate` | `kratos-cli calculate P` (the box only says to press Calculate) |
+| `calculate stop` | <kbd>Ctrl</kbd>+<kbd>C</kbd> while `kratos-cli calculate` or `run` runs |
 | `help` | `kratos-cli --help` |
 | `soillayer`, `plate`, `beam`, `anchor` | `kratos-cli layer P add`, `kratos-cli wall P add`, `kratos-cli beam P add`, `kratos-cli anchor P add` (the box answers these with a placeholder and builds nothing) |
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
@@ -717,6 +763,10 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot members`, `results plot list` | `kratos-cli results members RUN` |
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
 | `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
+| `results convergence` | `kratos-cli results convergence RUN` |
+| `results convergence stage S` | `kratos-cli results convergence RUN --stage S` |
+| `results convergence csv` | `kratos-cli results convergence RUN --csv FILE` (with `--stage S` when the window shows one stage alone) |
+| `results convergence svg`, `results convergence png`, `results convergence pdf` | — the viewport's: a picture of the convergence plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
@@ -784,11 +834,19 @@ the deck stays as it was and every run is kept. The runs root is `KRATOS_GUI_RUN
 `~/KratosGUI/runs`, which the GUI's Results mode reads too. `--runs-dir` puts the run somewhere
 else. Kratos is found the way the GUI finds it: [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
-`run` and `calculate` print nothing while Kratos runs. The run directory and its copy of
-the deck are there from the start; `kratos.log`, Kratos' own output, is written into it
-when the run ends. The run time grows quickly with the mesh: `mesh P` reports the number
-of nodes and elements before a run, and `--timeout` (an hour by default) stops a run that
-takes too long.
+`run` and `calculate` print nothing while Kratos runs, unless `--follow` is given: then
+they print a line on stderr for each stage and for each iteration of the solver, with its
+residuals, so stdout keeps the answer alone (and `--json` stays valid JSON). The run
+directory and its copy of the deck are there from the start, and Kratos' own output goes
+into `kratos.log` there line by line while it runs; `kratos-cli results convergence RUN` in
+a second terminal reads it at any time. The run time grows quickly with the mesh: `mesh P`
+reports the number of nodes and elements before a run, and `--timeout` (an hour by default)
+stops a run that takes too long.
+
+<kbd>Ctrl</kbd>+<kbd>C</kbd> stops a run, as the GUI's **Stop** button does: Kratos stops at
+once, the answer says `run RUN stopped by the user in stage 3 of 7 (...)`, and the run
+directory keeps the log and the results of the stages that finished. `results show RUN` says
+later that the run was stopped by the user.
 
 ## Output and exit codes
 
@@ -797,5 +855,6 @@ script instead. The exit code is 0 when the command did what it was asked, 1 whe
 file or Kratos refused it, and 2 when the command line itself could not be read. A refusal is
 printed on stderr as `error: <reason>`; with `--json` it is also printed on stdout as
 `{"ok": false, "error": ...}`. The exporter's warnings go to stderr as `warning: ...`.
-`--csv`, for the commands with a table (`results field`, `results profile`), prints that
+`--csv`, for the commands with a table (`results field`, `results profile`,
+`results convergence`), prints that
 table as CSV, or writes it into the file it is given; it does not go with `--json`.

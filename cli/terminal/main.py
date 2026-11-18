@@ -15,10 +15,11 @@ import sys
 from cli.terminal import output, style
 from core import session
 from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
-                          meshing, picture, stages, project, results, structures, volumes)
+                          meshing, picture, stages, project, results, structures, surfaces,
+                          volumes)
 
-GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stages, inspection,
-          analysis, results, picture, interactive)
+GROUPS = (project, edit, ground, surfaces, volumes, structures, conditions, meshing, stages,
+          inspection, analysis, results, picture, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 KRATOS_DOCS_URL = ("https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/"

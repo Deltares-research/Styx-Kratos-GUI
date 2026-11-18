@@ -1525,16 +1525,17 @@ def test_a_load_cannot_take_a_staged_body_s_name():
         schemas.Project.model_validate(p)
 
 
-def test_each_soil_body_has_a_label_saying_which_part_of_its_layer_it_is():
+def test_each_soil_body_has_a_label_with_the_name_it_was_given():
     """The Model explorer lists bodies, and three keys that differ only by a `__lift2`
-    suffix are not something to put in front of a user."""
+    suffix are not something to put in front of a user. A named body is called by its
+    name alone."""
     p = _layered_pit()
     labels = p.soil_body_labels
     assert set(labels) == set(p.soil_body_keys)
-    assert labels["soil_L1__outside"] == "Soil_1 · outside the pit"
-    assert labels["soil_L1__lift1"] == "Soil_1 · lift 1"
-    assert labels["soil_L1__lift3"] == "Soil_1 · lift 3"
-    assert labels["soil_L2__pit"] == "Soil_2 · below the pit"
+    assert labels["soil_L1__outside"] == "outside the pit"
+    assert labels["soil_L1__lift1"] == "lift 1"
+    assert labels["soil_L1__lift3"] == "lift 3"
+    assert labels["soil_L2__pit"] == "below the pit"
 
 
 def test_an_unstaged_layer_is_labelled_with_nothing_but_its_name():

@@ -370,21 +370,56 @@
     });
   });
 
-  test('viewport: a stage hides what it has not built yet', function () {
+  /* A part the stage has switched off is drawn as a ghost -- faint, and still there to
+     right-click and activate again -- and only in Staged construction. */
+  function opacities(group) {
+    var found = [];
+    group.traverse(function (o) {
+      [].concat(o.material || []).forEach(function (m) { found.push(m.opacity); });
+    });
+    return found;
+  }
+
+  test('viewport: a stage draws what it has not built yet as a ghost', function () {
     return boot().then(function () {
       var stages = App.PROJECT.stages || [];
       T.ok(stages.length > 1, 'the test model is staged');
+      var groups = sceneGroups();
+      var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged')
+        .filter(function (key) { return groups[key]; });
+      T.ok(hidden.length, 'the first stage switches something off');
+      var structures = (App.BEAMS || []).concat(App.ANCHORS || [], App.INTERFACES || [])
+        .map(function (record) { return record.id; });
+      var solid = {};
+      hidden.forEach(function (key) { solid[key] = opacities(groups[key]); });
+
       App.state.mode = 'staged';
       App.state.phase = stages[0].id;
       App.Viewport.applyStageVisibility();
-      var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged');
-      var groups = sceneGroups();
-      hidden.filter(function (key) { return groups[key]; }).forEach(function (key) {
-        T.eq(groups[key].visible, false, key + ' is not built in the first stage');
+      var ghosts = App.Viewport.stageGhosts();
+      // A structure or interface the stage switched off stays on screen, faded its
+      // own way; any other part is drawn as a ghost.
+      hidden.forEach(function (key) {
+        if (structures.indexOf(key) >= 0) {
+          T.ok(groups[key].visible, key + ' is still drawn, faded');
+        } else if (ghosts[key]) {
+          T.ok(groups[key].visible, key + ' is drawn, as a ghost');
+          opacities(groups[key]).forEach(function (o, i) {
+            T.ok(o < solid[key][i] || solid[key][i] === 0, key + ' is drawn faint');
+          });
+        } else {
+          T.eq(groups[key].visible, false, key + ' is not built in the first stage');
+        }
       });
+
       App.state.phase = null;
       App.state.mode = 'soil';
       App.Viewport.setMode('soil');
+      // A structure is drawn at half behind the Soil tab, so only the ghosts are
+      // held to what they were before.
+      hidden.filter(function (key) { return structures.indexOf(key) < 0; }).forEach(function (key) {
+        T.eq(opacities(groups[key]), solid[key], key + ' is solid again outside the stage');
+      });
     });
   });
 
@@ -420,21 +455,142 @@
         var group = groups[record.id];
         T.ok(group, record.name + ' has a glyph group');
         T.ok(group.children.length > 0);
-        T.eq(group.visible, false, 'conditions start hidden');
+        T.eq(group.visible, true, 'conditions start shown');
+        App.Viewport.setVisible(record.id, false);
+        T.eq(group.visible, false, 'its eye hides it');
         App.Viewport.select(record.id);
         T.eq(group.visible, true, 'selecting the condition reveals it');
         App.Viewport.select(null);
         T.eq(group.visible, false, 'deselecting restores the eye');
-        App.Viewport.setVisible(record.id, true);
-        T.eq(App.Viewport.isVisible(record.id), true);
+        T.eq(App.Viewport.isVisible(record.id), false);
       });
       App.Viewport.forgetConditionEyes();
       return App.Viewport.refresh();
     }).then(function () {
       var groups = sceneGroups();
       App.PROJECT.boundary_conditions.forEach(function (record) {
-        T.eq(App.Viewport.isVisible(record.id), false);
-        T.eq(groups[record.id].visible, false);
+        T.eq(App.Viewport.isVisible(record.id), true, 'a new project shows them again');
+        T.eq(groups[record.id].visible, true);
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
+  /* A load is arrows and a line through their tails, all one pixel wide: picked on
+     screen, so a right-click on the line names the load (and offers the stage's
+     Activate / Deactivate), not the soil under it. */
+  test('viewport: a right-click on a load line names the load', function () {
+    function restore() {
+      standIns();
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }
+    var id = 'picked_load';
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      if (project.dimension !== 2) return null;
+      var d = project.domain, width = d.x1 - d.x0;
+      project.loads = [{
+        id: id, name: 'Picked load', kind: 'line',
+        x0: d.x0 + 0.05 * width, x1: d.x0 + 0.3 * width, y: d.y_top, thickness: 0.15,
+        components: [0, -20], distribution: 'Uniform', active: true
+      }];
+      var get = App.Api.get;
+      App.Api.get = function (path) {
+        return path === '/api/project' ? Promise.resolve(project) : get(path);
+      };
+      App.state.mode = 'staged'; App.state.phase = null;
+      return App.Viewport.refresh().then(function () {
+        App.Viewport.setMode('staged');
+        App.Viewport.setView('front');
+        App.Viewport.zoomFit();
+        return new Promise(function (resolve) { setTimeout(resolve, 600); });
+      }).then(function () { return project; });
+    }).then(function (project) {
+      if (!project) return;
+      var group = sceneGroups()[id];
+      T.ok(group && group.visible, 'the load is drawn in Staged construction');
+      // The line through the arrows' tails: not a mesh, so the ray alone misses it.
+      var line = null;
+      group.traverse(function (o) {
+        if (!line && o.isLine && o.userData.loadGlyph && o.userData.noPick) line = o;
+      });
+      T.ok(line, 'the load has a line through its tails');
+      line.updateMatrixWorld();
+      var position = line.geometry.attributes.position;
+      var a = new THREE.Vector3().fromBufferAttribute(position, 0).applyMatrix4(line.matrixWorld);
+      var b = new THREE.Vector3().fromBufferAttribute(position, position.count - 1)
+        .applyMatrix4(line.matrixWorld);
+      // Part of the way along: between two arrows rather than on one.
+      var mid = a.clone().lerp(b, 0.37);
+      var at = App.Viewport.projectToScreen(mid.x, mid.y, mid.z);
+      T.ok(at, 'the line is on screen');
+      var canvas = App.Viewport.getCanvas(), r = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: r.left + at.x, clientY: r.top + at.y, bubbles: true }));
+      T.eq(App.__contextKey, id, 'the context menu names the load');
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
+  /* A support or a water pressure a stage has switched off stays on screen as a ghost
+     in Staged construction, so it can be right-clicked and activated again; the stage
+     check box stands in for its eye there, so a closed eye does not hide it. */
+  test('viewport: a condition a stage switches off is drawn as a ghost', function () {
+    function restore() {
+      App.Viewport.select(null);
+      App.Viewport.forgetConditionEyes();
+      standIns();
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }
+    var support = 'staged_support', water = 'staged_water';
+    var solid = {};
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      var conditions = App.BoundaryConditions;
+      var held = conditions.draftDisplacement(project, 'face', { face: 'bottom' });
+      held.id = support;
+      var pressure = conditions.draftWaterPressure(project, 'point', {
+        points: [[10, -5]], fluid_pressure_type: 'Uniform', value: -100
+      });
+      pressure.id = water;
+      project.boundary_conditions = [held, pressure];
+      project.stageable_parts = (project.stageable_parts || []).concat([support, water]);
+      project.stages = [
+        { id: 'on', name: 'On', parent: null, activate: [], deactivate: [] },
+        { id: 'off', name: 'Off', parent: 'on', activate: [], deactivate: [support, water] }
+      ];
+      var get = App.Api.get;
+      App.Api.get = function (path) {
+        return path === '/api/project' ? Promise.resolve(project) : get(path);
+      };
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }).then(function () {
+      var groups = sceneGroups();
+      [support, water].forEach(function (key) { solid[key] = opacities(groups[key]); });
+      App.Viewport.setVisible(support, false);
+
+      App.state.mode = 'staged';
+      App.state.phase = 'on';
+      App.Viewport.applyStageVisibility();
+      [support, water].forEach(function (key) {
+        T.eq(groups[key].visible, true, key + ' is drawn in the stage that has it on');
+        T.eq(opacities(groups[key]), solid[key], key + ' is drawn solid there');
+      });
+
+      App.state.phase = 'off';
+      App.Viewport.applyStageVisibility();
+      var ghosts = App.Viewport.stageGhosts();
+      [support, water].forEach(function (key) {
+        T.ok(ghosts[key], key + ' is a ghost in the stage that has it off');
+        T.eq(groups[key].visible, true, key + ' is still there to right-click');
+        opacities(groups[key]).forEach(function (o, i) {
+          T.ok(o < solid[key][i] || solid[key][i] === 0, key + ' is drawn faint');
+        });
       });
     }).then(restore, function (error) {
       return restore().then(function () { throw error; });
@@ -538,9 +694,60 @@
         App.Viewport.select(App.BEAMS[0].id);
         T.ok(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }));
         App.state.mode = 'soil'; App.Viewport.setMode('soil');
-        T.eq(sceneGroups()[contact.id].visible, false, 'soil mode excludes contacts');
+        // Soil mode draws the structures too, half transparent.
+        function opacity(key) {
+          var found = null;
+          sceneGroups()[key].traverse(function (o) { if (o.material && found === null) found = o.material.opacity; });
+          return found;
+        }
+        T.eq(sceneGroups()[contact.id].visible, true, 'soil mode draws contacts');
+        T.near(opacity(contact.id), 0.5, 1e-9, 'faded to half in soil mode');
+        T.eq(sceneGroups()[App.BEAMS[0].id].visible, true);
+        T.near(opacity(App.BEAMS[0].id), 0.5, 1e-9);
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.near(opacity(contact.id), 1, 1e-9, 'solid again in structures mode');
+        App.Viewport.setVisible(App.BEAMS[0].id, false);
         T.eq(sceneGroups()[App.BEAMS[0].id].visible, false);
         T.eq(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }), false);
+        App.Viewport.setVisible(App.BEAMS[0].id, true);
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
+  /* The server leaves a pile whose Active box is off out of the build, so it sends no
+     section for it; the viewport draws it from its record, half transparent. */
+  test('viewport: a switched-off sheet pile is drawn half transparent', function () {
+    function restore() {
+      App.Viewport.select(null);
+      standIns();
+      App.state.mode = 'soil';
+      return App.Viewport.refresh();
+    }
+    function opacity(key) {
+      var found = null;
+      sceneGroups()[key].traverse(function (o) { if (o.material && found === null) found = o.material.opacity; });
+      return found;
+    }
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      T.ok((project.beams || []).length > 0, 'the test model has a sheet pile');
+      var pile = project.beams[0];
+      pile.active = false;
+      var geometry = Object.assign({}, P.geometry, {
+        sections: P.geometry.sections.filter(function (s) { return s.key !== pile.id; })
+      });
+      App.Api.get = function (path) {
+        return Promise.resolve(path === '/api/project' ? project : geometry);
+      };
+      return App.Viewport.refresh().then(function () {
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.ok(sceneGroups()[pile.id], 'drawn though the build left it out');
+        T.eq(sceneGroups()[pile.id].visible, true);
+        T.near(opacity(pile.id), 0.5, 1e-9, 'half transparent');
+        App.state.mode = 'soil'; App.Viewport.setMode('soil');
+        T.near(opacity(pile.id), 0.25, 1e-9, 'and faded further in soil mode');
       });
     }).then(restore, function (error) {
       return restore().then(function () { throw error; });

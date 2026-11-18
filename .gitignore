@@ -39,3 +39,8 @@ __pycache__/
 
 # Crash dumps Git for Windows tools write into the working folder (grep.exe.stackdump).
 *.stackdump
+
+# The GUI tutorials: screenshots made by tools/gui_tutorial.py and by CI, never committed.
+/build/
+# ... and in docs/gui_tutorials/images/, where the site build reads them.
+/docs/gui_tutorials/images/

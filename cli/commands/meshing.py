@@ -187,5 +187,8 @@ def _number(option: str, key: str, text: str) -> float:
 
 def _stats_line(stats: dict) -> str:
     kinds = ", ".join(f"{count} {kind}" for kind, count in sorted(stats.get("by_type", {}).items()))
+    # The average size is what the GUI shows in the mesh's Selection explorer.
+    size = stats.get("average_size")
     return (f"{stats['nodes']} nodes, {stats['elements']} elements"
-            + (f" ({kinds})" if kinds else ""))
+            + (f" ({kinds})" if kinds else "")
+            + (f", average element size {size:.3f} m" if size else ""))

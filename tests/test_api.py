@@ -1219,12 +1219,14 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
     # download.js, zip.js, stages.js, solver-settings.js, results.js, results-render.js,
     # results-view.js,
     # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
-    # results-plot.js, vocabulary.js, point-list.js.
+    # results-plot.js, vocabulary.js, structure-glyphs.js, point-list.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "vocabulary.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                             # How a sheet pile, an anchor and an interface are drawn.
+                             "structure-glyphs.js",
                              # The Modify soil layers window, in place of the frozen one in
                              # js/dialogs.js, which drew the stack once per borehole.
                              "soil-layers-dialog.js",
@@ -1251,6 +1253,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # The convergence figure, and the window that shows it live
+                             # during Calculate.
+                             "convergence-plot.js", "convergence-window.js",
                              "picture-draw.js", "picture-writers.js", "picture.js",
                              "picture-dialog.js",
                              # The version the server writes into the page, in place of

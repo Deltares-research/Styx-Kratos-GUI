@@ -140,10 +140,10 @@ and adds only the values that are missing
 | Staged excavation | A wall and lines split the soil into lifts, and a stage switches each lift off. `tests/models/excavation.py` and the tutorial model have the 7 stages of the Kratos staged-excavation reference: K0, null step, wall installation, then one stage for each lift with its water load, and the strut after the lift that uncovers it. | Tested |
 | Switch parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | Tested |
 | Settings for each stage | Reset displacements (`reset_totals`), convergence criterion, maximum iterations, relative and absolute tolerance, and the expert solver settings: strategy, linear solver, time step control, time scheme of a dynamic stage, assembly. Only those that apply are shown, each with the default for the stage's calculation type and time integration | Tested |
-| Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` | Tested |
+| Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` for the interfaces, beams and anchors in two stages in a row. This includes the two-stage deck of a project without stages. The soil keeps its own stress. A prestressed anchor also gets a **temporary workaround**: `kratos_gui_prestress_workaround.py`, shipped with the deck. Without it, Kratos adds the prestress again in every stage. The workaround goes once Kratos is fixed. In 3D, Kratos cannot carry the forces of a wall panel or a member, and the export warns when one is in two stages in a row. | Tested, in Kratos too (2D) |
 | Initial stresses | `apply_k0_procedure_process`, with its own `initial_materials.json` | Tested |
 | Soil connected before the wall is built | `AssignMasterSlaveConstraintsToNeighboursUtility` ties the split nodes together until the wall is installed | Tested |
-| Interface neighbour search | `FindNeighboursOfInterfacesProcess` | Tested |
+| Interface neighbour search | `FindNeighboursOfInterfacesProcess`, in the stage an interface arrives in, so it starts from the stress of its soil | Tested |
 | Loading type | Staged construction only | Limited |
 
 ### A8. Output that Styx asks from Kratos
@@ -180,8 +180,8 @@ and adds only the values that are missing
 |---|---|---|
 | Soil layers | A stack of horizontal layers across the whole domain, each with one top and one bottom. Made in **Modify soil layers** or with `kratos-cli layer`. The stack is checked for gaps. | Tested |
 | Free soil polygons in the stack | Not supported. Layers are always a stack. | Not available |
-| Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
-| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer from edge to edge, the layer becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. | Tested |
+| Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens). In 2D also `kratos-cli surface`. | Tested |
+| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer or a soil surface from edge to edge, it becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. In 3D a line splits a soil volume only when the volume is a polygon extruded along z, or a box; an imported solid or a cylinder stays whole. | Tested |
 | Old saved excavations | A project saved with an excavation pit opens with lines and soil bodies in its place. | Tested |
 | Drawn solids | Box, cylinder and extruded polygon with `kratos-cli volume add`; with `--material` they are soil. The GUI has no tool for them. | Limited |
 | CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) with `kratos-cli volume import`; with `--material` the solid is soil. Not in the GUI. | Limited |
@@ -216,8 +216,10 @@ and adds only the values that are missing
 |---|---|---|
 | Export | **File** → **Export model…** writes the Kratos input files in one ZIP file, and lists each assumption and warning | Tested |
 | Calculate (F9) | Makes the mesh, writes the files, and runs Kratos in a new run folder | Tested |
+| Stop a calculation | While Kratos runs, Calculate is a **Stop** button (also in the Convergence window and the Stages menu, and `calculate stop`). Kratos stops at once; the model does not change, and the run folder keeps the results of the stages that finished. <kbd>Ctrl</kbd>+<kbd>C</kbd> does the same in `kratos-cli`. | Tested |
 | Kratos location | `kratos.local.json` or environment variables: Python of Kratos, build folder, runs folder, time limit (default 3600 s) | Tested |
 | Failed runs | The log names the stage that failed | Tested |
+| Convergence while Kratos runs | The **Convergence** window opens with Calculate and shows the relative and the absolute residual of each iteration, about once a second, until the run ends. `kratos-cli run --follow` and `calculate --follow` print the same iterations. The points arrive one by one only where the Kratos build shares the C runtime of its Python, which is so on the Windows build that the tests use. Linux is not tested. | Limited |
 
 ### B6. Results mode
 
@@ -230,6 +232,7 @@ and adds only the values that are missing
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
+| Convergence plot | The residuals of each iteration of any run, also of a run that failed, read from its `kratos.log`: targets, iterations where the criterion was met, steps cut back or at the iteration limit, and the fraction of unbalance when Kratos printed it. Each criterion (residual, displacement, water pressure) has its own colour, so a run whose stages use different criteria is read right. A slider, or `results convergence stage N`, shows one stage alone. The plot grows with its window. Save as PNG, PDF, SVG or CSV. A deck with two convergence criteria prints two lines per iteration, and the plot counts both as iterations. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
 | Slip plane, factor of safety | Not available | Not available |
 
@@ -245,11 +248,12 @@ and adds only the values that are missing
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
-| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
+| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `convergence`, `csv`, `files`, `get`, `zip` |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
-REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
+REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`,
+`/api/results/…`.
 
 ### B8. Command line (kratos-cli)
 
@@ -283,6 +287,10 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
+   Kratos cannot carry the forces of a wall panel or a member from one stage to the
+   next. A panel starts each stage at zero force. A quadratic member stops the run, and
+   a linear one carries a stress of the wrong size. The export warns when one is in two
+   stages in a row.
 5. **Only the solver settings listed.** A stage's expert settings offer the
    strategies and linear solvers above, not all of Kratos': no arc-length or piping
    strategy, and no Pardiso or other linear solver this Kratos build does not have.

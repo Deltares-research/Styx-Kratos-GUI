@@ -303,7 +303,7 @@ App.Model = (function () {
     return mine.length ? mine : ['soil_' + layer.id];
   }
 
-  /* What a body is made of: its own material, or its layer's. */
+  /* What a body is made of: its own material, or its layer's or surface's. */
   function bodyMaterial(layer, key) {
     var own = (App.PROJECT && App.PROJECT.soil_body_materials) || {};
     return App.matById(own[key] || layer.mat);
@@ -314,6 +314,30 @@ App.Model = (function () {
     return layerBodies(layer).map(function (key) {
       var m = bodyMaterial(layer, key);
       return { label: (labels[key] || layer.name) + '  ·  ' + m.name,
+               swatch: m.color, leaf: true, eye: true, obj: key };
+    });
+  }
+
+  /* The bodies a line cut a drawn soil surface into, `<part>__<id>`, or none when no
+     line cuts it: then the part is one row of its own (soilBodyChild). */
+  function partBodies(part) {
+    var published = (App.PROJECT && App.PROJECT.soil_body_keys) || [];
+    return published.filter(function (key) { return key.split('__')[0] === part.key; });
+  }
+
+  /* What a piece of a soil surface is a piece of, in the shape bodyProps reads. */
+  function partOwner(part) {
+    return { name: part.label, mat: part.mat, part: part,
+             noun: App.PROJECT && App.PROJECT.dimension === 3 ? 'Soil volume' : 'Soil surface' };
+  }
+
+  function partChildren(part) {
+    var keys = partBodies(part);
+    if (!keys.length) return [soilBodyChild(part)];
+    var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
+    return keys.map(function (key) {
+      var m = bodyMaterial(part, key);
+      return { label: (labels[key] || part.label) + '  ·  ' + m.name,
                swatch: m.color, leaf: true, eye: true, obj: key };
     });
   }
@@ -1755,39 +1779,48 @@ App.Model = (function () {
   }
 
   /* A soil body a line or a sheet pile cut off: what it is called and what it is made
-     of. Which layer it came out of is fixed. */
-  function bodyProps(layer, body, key) {
+     of. Which layer or soil surface (`owner`, partOwner) it came out of is fixed. */
+  function bodyProps(owner, body, key) {
     var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
-    return {
-      title: labels[key] || body.name, icon: 'cube',
-      groups: {
-        'General': [
-          ['Name', body.name, '', true],
-          ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
-            run: function () {
-              return App.NameDialog.ask({ title: 'Rename', value: body.name,
-                                          help: 'Shown in the Model explorer.' })
-                .then(function (name) {
-                  if (name !== null && App.Lines) {
-                    return App.Lines.saveBody(key, { name: name }).catch(function () {});
-                  }
-                });
-            } }],
-          ['Layer', layer.name, '', true],
-          // The materials only, the part's chosen: it has one of its own from the moment
-          // a line cuts it off, and keeps it when its layer's changes.
-          ['Material', bodyMaterial(layer, key).name, '', false, {
-            kind: 'select',
-            options: function () {
-              return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
-            },
-            get: function () { return body.mat || layer.mat; },
-            set: function (value) { body.mat = value || layer.mat; return null; }
-          }],
-          ['Volume', '—', 'm³', true]
-        ]
-      }
-    };
+    var noun = (owner.noun || 'Layer').toLowerCase();
+    var general = [
+      // The name the Model explorer shows, so the panel, the row and the Rename window
+      // all say the same (js/patches.js renameBodyPart).
+      ['Name', labels[key] || body.name, '', true],
+      ['Rename part', '', '', false, { kind: 'button', text: 'Rename…',
+        run: function () { if (App.LivePatches) return App.LivePatches.renameBodyPart(key); }
+      }],
+      [owner.noun || 'Layer', owner.name, '', true],
+      // The materials only, the part's chosen: it has one of its own from the moment
+      // a line cuts it off, until its layer or surface is given another.
+      ['Material', bodyMaterial(owner, key).name, '', false, {
+        kind: 'select',
+        options: function () {
+          return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
+        },
+        get: function () { return body.mat || owner.mat; },
+        set: function (value) { body.mat = value || owner.mat; return null; }
+      }],
+      ['Volume', '—', 'm³', true]
+    ];
+    // The corners are the surface's, so they are edited there, for every piece at once.
+    if (owner.part && App.SoilVolumeDialog) {
+      general.push(['Corners', '', '', false, {
+        kind: 'button', text: 'Edit coordinates…',
+        run: function () { App.SoilVolumeDialog.open(owner.part); }
+      }]);
+    }
+    // This part alone, which leaves a void (js/patches.js deleteBodyPart); or the whole
+    // layer or surface, every part of it.
+    general.push(['Delete part', '', '', false, {
+      kind: 'button', text: 'Delete part',
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyPart(key); }
+    }]);
+    general.push(['Delete ' + noun, '', '', false, {
+      kind: 'button', text: 'Delete ' + noun,
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyOwner(key); }
+    }]);
+    return { title: labels[key] || body.name, icon: 'cube', groups: { 'General': general } };
   }
 
   function normalLoadProps(record) {
@@ -1983,8 +2016,12 @@ App.Model = (function () {
       var layerRows = layers.reduce(function (rows, layer) {
         return rows.concat(layerChildren(layer));
       }, []);
-      node.count = layerRows.length + soilBodies.length;
-      node.children = layerRows.concat(soilBodies.map(soilBodyChild));
+      // A soil surface a line cut is one row per piece, as a cut layer is.
+      var partRows = soilBodies.reduce(function (rows, part) {
+        return rows.concat(partChildren(part));
+      }, []);
+      node.count = layerRows.length + partRows.length;
+      node.children = layerRows.concat(partRows);
     });
 
     customGeometryNode.count = plainParts.length;
@@ -2022,6 +2059,13 @@ App.Model = (function () {
     });
     Object.keys(App.OBJECT_PROPS).forEach(function (key) {
       if (/^(drawn|imported)_/.test(key) && !currentPartKeys[key]) delete App.OBJECT_PROPS[key];
+    });
+    // Each piece of a cut soil surface shows what a piece of a layer shows.
+    soilBodies.forEach(function (part) {
+      partBodies(part).forEach(function (key) {
+        var body = App.Lines && App.Lines.bodyOf(key);
+        if (body) App.OBJECT_PROPS[key] = bodyProps(partOwner(part), body, key);
+      });
     });
 
     var loadNode = findLoadConditionsNode();
@@ -2172,7 +2216,10 @@ App.Model = (function () {
         if (row[0] === 'Element type') row[1] = typeNames.join(', ') || '—';
         else if (row[0] === 'Elements') row[1] = elements;
         else if (row[0] === 'Nodes') row[1] = nodes;
-        else if (row[0] === 'Average element size') row[1] = '—';
+        else if (row[0] === 'Average element size') {
+          // The mean edge length the server measured (core/geometry/meshing.py).
+          row[1] = stats.average_size ? Number(stats.average_size).toFixed(3) : '—';
+        }
       });
     }
 

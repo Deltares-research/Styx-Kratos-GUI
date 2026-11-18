@@ -223,8 +223,9 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
     for a mechanical stage, which is Newton-Raphson unless it says otherwise, and
     whose deck leaves a seepage face out (`core.kratos.condition_checks`).
 
-    Newton-Raphson with seepage where the project has a seepage face, as that strategy
-    is what opens and closes the face node by node. Newton-Raphson where a soil in the
+    Newton-Raphson with seepage where the stage has a seepage face on, as that strategy
+    is what opens and closes the face node by node. A stage that switches its seepage
+    faces off is solved as if the project had none. Newton-Raphson where a soil in the
     stage has a retention law that makes its permeability depend on the water pressure
     (Kratos' `tests/Muskat/van_genuchten_hydrostatic`). One linear solve otherwise, as a
     saturated soil's flow is linear in it (`saturated_hydrostatic`).
@@ -233,7 +234,9 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
         stage = next(each for each in project.stages if each.id == stage)
     if stage.calculation != FLOW:
         return None
-    if seepage(project):
+    active = active_parts(project, stage)
+    if seepage(project) and any(condition.kind == "seepage" and condition.id in active
+                                for condition in project.boundary_conditions):
         return "newton_raphson_with_seepage"
     # Keyed by body, as `core.kratos.writer._part_materials` is: a lift is still the
     # layer it was dug out of.
@@ -243,7 +246,7 @@ def model_strategy(project: Project, stage: Stage | str) -> str | None:
                         if key.partition("__")[0] in material_of})
     material_of.update({part.key: part.mat for part in project.custom_parts if part.mat})
     known = {material.id: material for material in project.materials}
-    for key in active_parts(project, stage):
+    for key in active:
         material = known.get(material_of.get(key, ""))
         if material and material.variables.get("RETENTION_LAW", SATURATED) != SATURATED:
             return "newton_raphson"
@@ -293,12 +296,17 @@ def initial_stage() -> Stage:
 # leaves the project alone; `core.session` stores it the way `PATCH /api/project/stages`
 # does. `tests/test_stage_parity.py` holds the two sides to the same answers.
 
-def _fresh_id(project: Project, stem: str) -> str:
-    taken = {stage.id for stage in project.stages}
-    number = 1
-    while f"{stem}_{number}" in taken:
+def _fresh_number(project: Project) -> int:
+    """The number N of a new stage: its place in the list (one more than the stages
+    there are), raised until both the id `stage_N` and the name `Stage N` are free.
+    The id and the name of a new stage then carry the same number (`Stage 3`,
+    `stage_3`), not two that count different things (issue #135)."""
+    ids = {stage.id for stage in project.stages}
+    names = {stage.name for stage in project.stages}
+    number = len(project.stages) + 1
+    while f"stage_{number}" in ids or f"Stage {number}" in names:
         number += 1
-    return f"{stem}_{number}"
+    return number
 
 
 def _copies(project: Project) -> list[Stage]:
@@ -328,8 +336,8 @@ def added(project: Project) -> list[Stage]:
     tail = _last(project)
     if tail is None:
         return [initial_stage()]
-    listed.append(_later(project, _fresh_id(project, "stage"), f"Stage {len(listed) + 1}",
-                         tail.id))
+    number = _fresh_number(project)
+    listed.append(_later(project, f"stage_{number}", f"Stage {number}", tail.id))
     return listed
 
 
@@ -341,7 +349,8 @@ def inserted(project: Project, id: str) -> list[Stage]:
     at = next((n for n, stage in enumerate(listed) if stage.id == id), None)
     if at is None or listed[at].parent is None:
         return listed
-    made = _later(project, _fresh_id(project, "stage"), "New stage", listed[at].parent)
+    made = _later(project, f"stage_{_fresh_number(project)}", "New stage",
+                  listed[at].parent)
     listed[at].parent = made.id
     listed.insert(at, made)
     return listed
@@ -369,7 +378,7 @@ def copied(project: Project, id: str) -> list[Stage]:
     if at is None:
         return listed
     original = listed[at]
-    made = Stage(id=_fresh_id(project, "stage"), name=f"{original.name} (copy)",
+    made = Stage(id=f"stage_{_fresh_number(project)}", name=f"{original.name} (copy)",
                  parent=original.id, calculation=original.calculation,
                  time_integration=original.time_integration,
                  reset_displacements=original.reset_displacements,
@@ -459,30 +468,44 @@ def edited_solver(project: Project, id: str, key: str, value: object) -> list[St
 
 
 def set_active(project: Project, id: str, keys: list[str], wanted: bool) -> list[Stage]:
-    """Make each of `keys` in the model (`wanted`) or out of it during stage `id`, with
-    the smallest instruction that does it: none when the stages before already give that
-    state, and never both lists for one part. Only stage `id` changes; the ones after
-    inherit the new state until one of them says otherwise."""
+    """Make each of `keys` in the model (`wanted`) or out of it during stage `id`, and
+    in that stage only, with the smallest instruction that does it: none when the
+    parent already gives that state, and never both lists for one part.
+
+    No other stage's state changes: the stages before are not edited, and each stage
+    that starts from `id` is given whatever instruction keeps it as it was -- stored as
+    a diff, it would otherwise follow its parent. Grandchildren need nothing, since
+    their parent's state is unchanged. A stage made afterwards (`added`, `inserted`,
+    `copied`) says nothing of its own, so it starts with its parent's state."""
     listed = _copies(project)
     if not any(stage.id == id for stage in listed):
         return listed
     before = _chain_to(project, id)[:-1]
+    # The stages that start from this one, and the chain each had before the edit:
+    # their state then is the state they keep.
+    children = {stage.id: _chain_to(project, stage.id)
+                for stage in project.stages if stage.parent == id and stage.id != id}
 
-    def inherited(key: str) -> bool:
+    def active_along(chain: list[Stage], key: str) -> bool:
         active = True       # everything starts in the model
-        for stage in before:
+        for stage in chain:
             if key in stage.deactivate:
                 active = False
             if key in stage.activate:
                 active = True
         return active
 
+    def restate(stage: Stage, key: str, want: bool, given: bool) -> None:
+        stage.activate = [k for k in stage.activate if k != key]
+        stage.deactivate = [k for k in stage.deactivate if k != key]
+        if want != given:       # only an instruction the parent does not already give
+            (stage.activate if want else stage.deactivate).append(key)
+
     for stage in listed:
-        if stage.id != id:
-            continue
-        for key in keys:
-            stage.activate = [k for k in stage.activate if k != key]
-            stage.deactivate = [k for k in stage.deactivate if k != key]
-            if wanted != inherited(key):
-                (stage.activate if wanted else stage.deactivate).append(key)
+        if stage.id == id:
+            for key in keys:
+                restate(stage, key, wanted, active_along(before, key))
+        elif stage.id in children:
+            for key in keys:
+                restate(stage, key, active_along(children[stage.id], key), wanted)
     return listed

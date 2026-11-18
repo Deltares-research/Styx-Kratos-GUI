@@ -342,6 +342,21 @@
     T.eq(ids.length, new Set(ids).size, 'duplicate stage id: ' + ids.join(', '));
   });
 
+  // Issue #135: after the two default stages, Add made `Stage 3` with the id `stage_1`.
+  test('add gives the new stage the same number in its name and its id', function () {
+    var p = project();
+    p.stages = [
+      { id: 'initial', name: 'Initial stage', parent: null },
+      { id: 'null_step', name: 'Null step', parent: 'initial' }
+    ];
+    var made = App.Stages.added(p)[2];
+    T.eq([made.id, made.name], ['stage_3', 'Stage 3']);
+
+    p.stages.push({ id: 'dig', name: 'Stage 4', parent: 'null_step' });
+    made = App.Stages.added(p)[3];
+    T.eq([made.id, made.name], ['stage_5', 'Stage 5'], 'a number whose name is taken is skipped');
+  });
+
   test('add on an empty project makes a root', function () {
     var p = project();
     p.stages = [];
@@ -507,6 +522,22 @@
     T.ok(hidden.indexOf('soil_L2__pit') < 0, 'an active body was hidden');
   });
 
+  test('a part is named as the Model explorer names it, not by its key', function () {
+    /* The Stages window lists the parts a stage switches; `beam_1` and
+       `normalload_2` tell the reader nothing the Model explorer would. */
+    var p = {
+      soil_body_labels: { soil_L1__lift1: 'Soil_Top · lift 1' },
+      beams: [{ id: 'beam_1', name: 'SheetPileWall' }],
+      normal_loads: [{ id: 'normalload_2', name: 'WaterLoad_Stage2' }],
+      stages: [{ id: 'beam_1', name: 'A stage that shares the id' }]
+    };
+    T.eq(App.Stages.partLabel(p, 'soil_L1__lift1'), 'Soil_Top · lift 1');
+    T.eq(App.Stages.partLabel(p, 'beam_1'), 'SheetPileWall', 'a stage is not a part');
+    T.eq(App.Stages.partLabel(p, 'normalload_2'), 'WaterLoad_Stage2');
+    T.eq(App.Stages.partLabel(p, 'gone'), 'gone', 'a key with no part is shown as it is');
+    T.eq(App.Stages.partLabel(null, 'beam_1'), 'beam_1');
+  });
+
   test('the hidden set is exactly the complement of the active one', function () {
     var p = project();
     Object.keys(FIXTURE.active_parts).forEach(function (id) {
@@ -531,10 +562,9 @@
   /* ── The Model explorer's checkbox, in Staged construction mode ─────────
      Ticked means "in the model in the selected stage". Each stage is free to switch
      any part on or off: a part an earlier stage took out is not stuck out, because the
-     checkbox is there in every stage to put it back. The state is still inherited
-     from the stage before -- that is how Kratos' stages run, one model carried from
-     stage to stage -- so switching a part off in one stage leaves it off in the
-     stages after it until one of them switches it back on. */
+     checkbox is there in every stage to put it back. And a switch is per stage: the
+     stages are stored as diffs, but switching a part in one stage gives the stage
+     after it whatever instruction keeps it as it was, so no other stage changes. */
 
   function stageOf(list, id) {
     return list.filter(function (ph) { return ph.id === id; })[0];
@@ -597,6 +627,39 @@
     keys.forEach(function (key) { T.ok(!activeAt(p, 'prop', key), key); });
   });
 
+  test('switching a part in one stage leaves the stages after it as they were', function () {
+    var before = project();
+    var p = project();
+    var ids = p.stages.map(function (ph) { return ph.id; });
+    ['soil_L2__pit', 'pile', 'tie', 'soil_L1__lift2'].forEach(function (key) {
+      [true, false].forEach(function (wanted) {
+        p = project();
+        p.stages = App.Stages.setActive(p, 'build_wall', [key], wanted);
+        T.eq(activeAt(p, 'build_wall', key), wanted, key + ' in build_wall');
+        ids.filter(function (id) { return id !== 'build_wall'; }).forEach(function (id) {
+          T.eq(activeAt(p, id, key), activeAt(before, id, key),
+               key + ' changed in ' + id + ' when build_wall was switched');
+        });
+      });
+    });
+  });
+
+  test('switching a part off in the first stage does not switch it off in the second',
+       function () {
+    var p = { stageable_parts: ['soil_1', 'soil_2'], stages: [
+      { id: 's1', name: 'Stage 1', parent: null, activate: [], deactivate: [] },
+      { id: 's2', name: 'Stage 2', parent: 's1', activate: [], deactivate: [] }
+    ] };
+    p.stages = App.Stages.setActive(p, 's1', ['soil_1'], false);
+    T.eq(App.Stages.activeParts(p, 's1'), ['soil_2']);
+    T.eq(App.Stages.activeParts(p, 's2'), ['soil_1', 'soil_2']);
+    T.eq(stageOf(p.stages, 's2').activate, ['soil_1'], 'stage 2 keeps it with an instruction');
+    // ...and switching it back on in stage 1 leaves stage 2 with nothing to say.
+    p.stages = App.Stages.setActive(p, 's1', ['soil_1'], true);
+    T.eq(stageOf(p.stages, 's1').deactivate, []);
+    T.eq(stageOf(p.stages, 's2').activate, []);
+  });
+
   test('setActive never puts a part in both lists of one stage', function () {
     var p = project();
     ['soil_L2__pit', 'pile', 'tie', 'soil_L1__lift3'].forEach(function (key) {
@@ -619,6 +682,19 @@
   test('no selected stage hides nothing', function () {
     T.eq(App.Stages.hiddenKeys(project(), null, 'staged'), []);
     T.eq(App.Stages.hiddenKeys(project(), 'no_such_stage', 'staged'), []);
+  });
+
+  test('the selected stage falls back to the first when the remembered one is gone', function () {
+    /* The panel highlights the first stage on a project just opened (App.state.phase
+       still holds the boot default), so the viewport must hide what that stage hides --
+       not nothing until the user clicks another stage and back. */
+    var p = project();
+    T.eq(App.Stages.selectedId(p, 'prop'), 'prop');
+    T.eq(App.Stages.selectedId(p, 'no_such_stage'), p.stages[0].id);
+    T.eq(App.Stages.selectedId(p, null), p.stages[0].id);
+    var empty = project();
+    empty.stages = [];
+    T.eq(App.Stages.selectedId(empty, 'prop'), null);
   });
 
   /* ── The Stages overview ───────────────────────────────────────────────
@@ -660,6 +736,7 @@
     T.eq(rows[3].label, 'Slag 2 - 22 s, T = 41 s [4_Slag_2]');
     T.eq(rows[4].label, 'Kraan load - 0.5 s, T = 41.5 s [5_Kraan]');
     T.eq(rows[0].label, 'Initial stage - 1 s, T = 1 s [1_Initial_stage]');
+    T.eq(rows[3].heading, 'Slag 2 - 22 s, T = 41 s', 'the line without its id');
   });
 
   test('a stage that names no duration lasts the default second', function () {
@@ -700,5 +777,12 @@
     T.eq(rows.map(function (r) { return r.log; }),
          ['OK', 'OK', 'Failed', 'Not calculated', 'Not calculated']);
     T.eq(rows[2].state, 'failed');
+  });
+
+  test('a run the user stopped says so in the stage it stopped in', function () {
+    var rows = App.Stages.overview(dike(), { completed: 3, stopped: true });
+    T.eq(rows.map(function (r) { return r.log; }),
+         ['OK', 'OK', 'OK', 'Stopped by the user', 'Not calculated']);
+    T.eq(rows[3].state, 'stopped');
   });
 })();

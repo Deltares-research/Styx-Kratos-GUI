@@ -7,6 +7,7 @@ then shows, and on what the server then holds. Opt-in: `--run-e2e`.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ MODEL_NAME = "Staged excavation"
 
 def wait_meshed(page):
     page.wait_for_function("App.Viewport.hasMesh && App.Viewport.hasMesh()", timeout=LONG)
+
+
+def stored(page, url: str, check) -> dict:
+    """The project the server holds, read again until `check(project)` is true or LONG
+    has passed. A window can show its change in the page before its request reaches the
+    server, so one read straight after the page changes can still find the old project."""
+    deadline = time.monotonic() + LONG / 1000
+    while True:
+        project = page.request.get(url).json()
+        if check(project) or time.monotonic() > deadline:
+            return project
+        page.wait_for_timeout(100)
 
 
 def run_model(page):
@@ -67,7 +80,11 @@ def test_the_page_boots_cleanly_with_the_live_layer_installed(app_page):
 def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     run_model(app_page)
     calculate(app_page)
+    # The Convergence window is open, so Results mode leaves the chooser closed; the
+    # rail's Choose results opens it.
     window = app_page.locator(".dlg-results")
+    assert window.count() == 0
+    app_page.evaluate("App.runAction({ action: 'chooseResults' })")
     window.wait_for(state="visible")
     stage = window.locator('select[data-res="stage"]')
     stage.select_option("1")
@@ -241,17 +258,17 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
-    # Wait for the Uniform type, not only for a whole-soil water pressure: the new project
-    # has a Hydrostatic one already, so that wait would pass before the save is stored.
-    app_page.wait_for_function("(App.PROJECT.boundary_conditions || []).some(function (c) {"
-                               " return c.kind === 'water_pressure' && c.on === 'domain'"
-                               " && c.fluid_pressure_type === 'Uniform'; })",
-                               timeout=LONG)
-    stored = app_page.request.get(url).json()
-    water = [c for c in stored["boundary_conditions"] if c["kind"] == "water_pressure"]
-    assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
-        ("domain", "Uniform", 0.0)]
-    assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
+
+    # The new project already has a hydrostatic pore pressure on the whole soil, so wait
+    # for the server to hold the uniform one.
+    def water(project):
+        return [(c["on"], c["fluid_pressure_type"], c["value"])
+                for c in project["boundary_conditions"] if c["kind"] == "water_pressure"]
+
+    project = stored(app_page, url, lambda p: water(p) == [("domain", "Uniform", 0.0)])
+    assert water(project) == [("domain", "Uniform", 0.0)]
+    assert sum(c["kind"] == "displacement" for c in project["boundary_conditions"]) == 5
+
     assert app_page.errors == []
 
 
@@ -323,10 +340,12 @@ def panel_button(page, text: str):
 
 
 def rename_body(page, row: str, name: str) -> None:
-    """Select the body's row and rename it with the button in its panel."""
+    """Select the body's row and rename it with the button in its panel. The window starts
+    with the name the row shows."""
     tree_row(page, row).click()
     panel_button(page, "Rename…").click()
     window = page.locator("#modal-layer .name-dialog-window")
+    assert window.locator("input[name=name]").input_value() == row
     window.locator("input[name=name]").fill(name)
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")
@@ -348,12 +367,14 @@ def test_a_soil_part_is_renamed_in_its_panel(app_page, live_server):
     rename_body(app_page, "Top · Part 1", "Pit")
 
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
-    tree_row(app_page, "Top · Pit").wait_for(state="visible")
-    assert "Top · Pit" in app_page.locator("#grid-selection .pgrid-header").inner_text()
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
+    tree_row(app_page, "Pit").wait_for(state="visible")
+    app_page.wait_for_function(
+        "document.querySelector('#grid-selection .pgrid-header').innerText.trim() === 'Pit'",
+        timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     mdpa = app_page.request.post(url + "/api/export/mdpa", data={}).json()["mdpa"]
     assert "Begin SubModelPart Top_Pit" in mdpa.splitlines()
     assert "Top_Part_1" not in mdpa
@@ -374,9 +395,11 @@ def test_a_soil_layer_is_renamed_from_the_model_explorer_menu(app_page, live_ser
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")
 
+    # The page renames the layer first and then sends the change to the server.
     app_page.wait_for_function("App.LAYERS[0].name === 'Clay top'", timeout=LONG)
-    stored = app_page.request.get(url + "/api/project").json()
-    assert stored["layers"][0]["name"] == "Clay top"
+    project = stored(app_page, url + "/api/project",
+                     lambda p: p["layers"][0]["name"] == "Clay top")
+    assert project["layers"][0]["name"] == "Clay top"
     assert app_page.errors == []
 
 
@@ -469,7 +492,7 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     rename_body(app_page, "Top · Part 1", "Pit")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
 
     press(app_page, "Control+z")
     app_page.wait_for_function(
@@ -478,10 +501,10 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     press(app_page, "Control+y")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     assert app_page.errors == []
 
 

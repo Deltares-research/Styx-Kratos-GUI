@@ -69,6 +69,11 @@ field. The `"Uniform"` shape is not backed by a working example the way that one
 follows the same process's own Kratos source
 (`GeoMechanicsApplication/custom_processes/apply_normal_load_table_process.cpp`) for
 which fields that branch reads, but check it against the first real run.
+
+One process here is not Kratos' own, and it is temporary: `_exclude_prestress`. It works
+around Kratos counting an anchor's prestress twice when the anchor's stress is carried
+into the next stage. It is written only for prestressed anchors, and it is removed once
+Kratos is fixed (`core/kratos/prestress_workaround.py`).
 """
 
 from __future__ import annotations
@@ -79,7 +84,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from core.kratos.deck_files import MATERIALS_NAME
+from core.kratos.deck_files import MATERIALS_NAME, PRESTRESS_WORKAROUND_MODULE
 from core.model import solver, units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
@@ -259,9 +264,9 @@ class Stage:
     contains, so nothing is filtered out of it, which is exactly how it exported before
     staged construction existed.
 
-    `conditions` is the water pressure conditions on in this stage, by id: a condition
-    a stage switched off is not written in it. `None` writes every one, as an unstaged
-    deck does.
+    `conditions` is the boundary conditions on in this stage -- water pressures and
+    supports -- by id: a condition a stage switched off is not written in it. `None`
+    writes every one, as an unstaged deck does.
 
     `convergence_criterion`, `max_iterations`, `tolerated_error` and
     `absolute_tolerance` are `None` for "whatever `SOLVER` says",
@@ -280,6 +285,9 @@ class Stage:
     `start_time`, `duration` and `time_step` are in the project's unit of time, which
     is the deck's: the stage runs from `start_time` to `start_time + duration` in steps
     of `time_step`.
+
+    `prestressed` is the anchors in `final_stresses` that have a prestress. The temporary
+    prestress workaround runs for them (`_exclude_prestress`).
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -292,6 +300,7 @@ class Stage:
     k0_parts: tuple[str, ...] = ()
     find_neighbours: tuple[str, ...] = ()
     final_stresses: tuple[str, ...] = ()
+    prestressed: tuple[str, ...] = ()
     extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
     json_output: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
     reset_displacements: bool = False
@@ -345,7 +354,7 @@ def stage_name(index: int, label: str) -> str:
 
 
 def project_parameters(
-    constraints: list[tuple[str, list[bool]]],
+    constraints: Sequence[tuple[str, list[bool]] | tuple[str, list[bool], str]],
     loads: list[tuple[str, str, list[bool], list[float]]],
     stages: list[Stage],
     normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
@@ -358,7 +367,9 @@ def project_parameters(
     gravity: bool = True,
     gravity_acceleration: float = GRAVITY,
 ) -> str:
-    """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
+    """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis), with
+    optionally the id of the support it comes from, which a stage switches
+    (`Stage.conditions`); an empty or missing id is in every stage its part is.
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
     `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos.writer`
     for where they come from. There is always at least one.
@@ -396,7 +407,8 @@ def project_parameters(
         ]
         loads_processes += [_seepage(name) for name in stage.seepage]
         constraint_processes = [_constraint(name, is_fixed)
-                                for name, is_fixed in constraints if keep(name)]
+                                for name, is_fixed, *of in constraints
+                                if keep(name) and _switched_on(stage, of)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
         # And it is in the stages whose stage has it switched on.
@@ -431,6 +443,13 @@ def project_parameters(
         },
         "stages": rendered,
     }, indent=4)
+
+
+def _switched_on(stage: Stage, of: list[str]) -> bool:
+    """Whether the support a constraint comes from (`of`, its id or nothing) is on in
+    `stage`. A constraint no support owns -- an anchor's pinned end -- always is."""
+    condition = of[0] if of else ""
+    return not condition or stage.conditions is None or condition in stage.conditions
 
 
 def _preprocess(stage: Stage, deck_name: str) -> dict | None:
@@ -478,11 +497,17 @@ def _auxiliary(stage: Stage) -> list[dict]:
     `staged_construction_for_generated_mesh.json`: K0 or the stress carry-over first,
     then the interface neighbour search, then the extrapolations that read what they
     set up.
+
+    The temporary prestress workaround comes directly before the stress carry-over. It
+    has to: it hides the prestress in its `ExecuteInitialize`, and the carry-over stores
+    the stresses in its own `ExecuteInitialize`, which Kratos runs next.
     """
     out: list[dict] = []
     if stage.k0_parts:
         out.append(_k0_procedure(stage.k0_parts))
     if stage.final_stresses:
+        if stage.prestressed:
+            out.append(_exclude_prestress(stage.prestressed))
         out.append(_apply_final_stresses(stage.final_stresses))
     if stage.find_neighbours:
         out.append(_find_neighbours_of_interfaces(stage.find_neighbours))
@@ -606,6 +631,32 @@ def _apply_final_stresses(parts: tuple[str, ...]) -> dict:
         "python_module": "apply_final_stresses_of_previous_stage_to_initial_state",
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyFinalStressesOfPreviousStageToInitialState",
+        "Parameters": {
+            "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
+        },
+    }
+
+
+PRESTRESS_WORKAROUND_PROCESS = "ExcludePrestressFromCarriedStress"
+
+
+def _exclude_prestress(parts: tuple[str, ...]) -> dict:
+    """TEMPORARY WORKAROUND for a Kratos limitation. Remove it when Kratos is fixed.
+
+    `ApplyFinalStressesOfPreviousStageToInitialState` carries an anchor's stress *with*
+    its prestress, and the truss element then adds the prestress again. Without this,
+    every stage after the anchor's installation adds the full prestress to the anchor
+    once more. This process hides the prestress while Kratos stores the stresses.
+    `core/kratos/prestress_workaround.py` explains how, and what to delete once Kratos
+    counts the prestress once.
+
+    This is a user-defined process: there is no `kratos_module`, so Kratos imports
+    `python_module` as it is, from the deck's own directory. The exporter ships the file
+    with the deck (`deck_files.PRESTRESS_WORKAROUND_NAME`).
+    """
+    return {
+        "python_module": PRESTRESS_WORKAROUND_MODULE,
+        "process_name": PRESTRESS_WORKAROUND_PROCESS,
         "Parameters": {
             "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
         },

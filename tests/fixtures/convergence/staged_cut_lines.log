@@ -1,0 +1,127 @@
+[kratos-gui] stage begin 1/7 1_Initial_stage
+::[GeoMechani[kratos-gui] stage end 1/7 1_Initial_stage
+[kratos-gui] stage begin 2/7 2_Null_step
+calSolver]:: importing constitutive law: initial_materials.json 
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  -1.0 
+AssignMasterSlaveConstraintsToNeighboursUtility: Build and Assign Master-Slave Constraints Time: 0.0015213 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0060786 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 0.0001305 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0372045 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0434754 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.035441 [s]
+ResidualBasedBlockBuilderAndSolver: Constraints build time: 0.014395 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.381978 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 5.54878e-13; Expected ratio = 0.0001; Absolute norm = 9.65631e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 15 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.935  seconds. 
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  0.0 
+AssignMasterSlaveConstraintsToNeighboursUtility: Build and Assign Master-Slave Constraints Time: 0.0002012 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0048023 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 1.54e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0363724 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0412434 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0339562 [s]
+ResidualBasedBlockBuilderAndSolver: Constraints build time: 0.012691 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.410125 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 2.17255e-12; Expected ratio = 0.0001; Absolute norm = 9.72554e-13; Expected [kratos-gui] stage end 2/7 2_Null_step
+[kratos-gui] stage begin 3/7 3_SheetPileWall_installation
+norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.690  seconds. 
+[WARNING] ReadMaterialsUtility: Th[kratos-gui] stage end 3/7 3_SheetPileWall_installation
+[kratos-gui] stage begin 4/7 4_First_excavation
+e properties ID: 18 already has GEO_COHESION.
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  1.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0049796 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 1.67e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0342474 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0392979 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0368258 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.390014 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 1.22608e-10; Expected ratio = 0.001; Absolute norm = 3.42421e-09; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.705  seconds. 
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  2.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0047324 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 2.42e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0330246 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.037843 [s]
+Residua[kratos-gui] stage end 4/7 4_First_excavation
+[kratos-gui] stage begin 5/7 5_Strut_installation
+lBasedBlockBuilderAndSolver: Build time: 0.0347984 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.51265 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 8.03468e-10; Expected ratio = 0.001; Absolute norm = 4.15595e-09; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.810  seconds. 
+[WARNING] ReadM[kratos-gui] stage end 5/7 5_Strut_installation
+[kratos-gui] stage begin 6/7 6_Second_excavation
+aterialsUtility: The properties ID: 17 already has INTERFACE_SHEAR_STIFFNESS.
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  3.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0068358 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 5e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.057843 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0647929 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.047236 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.537397 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000230365; Expected ratio = 0.001; Absolute norm = 9.57384e-13; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.934  seconds. 
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  4.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0056[kratos-gui] stage end 6/7 6_Second_excavation
+[kratos-gui] stage begin 7/7 7_Third_excavation
+83 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 2.09e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0386378 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.04445 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0509422 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.410197 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 4.58907e-10; Expected ratio = 0.001; Absolute norm = 3.25001e-09; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.734  seconds. 
+[WARNING] ReadMaterialsUtility: The[kratos-gui] stage end 7/7 7_Third_excavation
+ properties ID: 17 already has GEO_FRICTION_ANGLE.
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  5.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0055605 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 3.7e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.038313 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.043963 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0414773 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.433272 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 3.96835e-10; Expected ratio = 0.001; Absolute norm = 3.67203e-09; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedNewtonRaphsonStrategy: Convergence achieved after 1 / 150 iterations
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 0.783  seconds. 
