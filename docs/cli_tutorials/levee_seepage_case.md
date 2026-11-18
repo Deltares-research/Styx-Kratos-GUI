@@ -1,6 +1,6 @@
 # Groundwater flow: seepage through a levee with `kratos-cli`
 
-A steady-state groundwater flow calculation fo the flow under and through a clay levee, built and run from
+A steady-state groundwater flow calculation of the flow under and through a clay levee, built and run from
 the command line in PowerShell. Following the commands to build the example model will give the same results as running the python script
 [`examples/levee_seepage/levee_seepage.py`](../../examples/levee_seepage/levee_seepage.py):
 the Kratos input files they write are identical.
@@ -55,37 +55,50 @@ kratos-cli domain levee.json --x -36 54 --y -22 6
 
 The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`).
 
-## Step 2. The soils
+## Step 2. The water and the soils
+
+The water in the soils' pores is the project's, one for every soil. Its unit weight is
+the water level's specific weight, 10 kN/m³ in a new project, so Kratos gets a water
+density of 10 000 / 9.81 = 1019.367991845056 kg/m³. Its bulk modulus and viscosity are
+set here; the water is taken as incompressible:
+
+```powershell
+kratos-cli fluid levee.json --bulk-modulus 1e20 --viscosity 1e-3
+```
+> <pre>Water in every soil: bulk modulus 1e+20 Pa, viscosity 0.001 Pa·s, density 1019.37 kg/m³ (the water level's specific weight over g). wrote levee.json</pre>
 
 All four soil bodies share one set of flow properties, as in the model script:
 
 | Property | Value |
 |---|---|
 | saturated hydraulic conductivity K | 1 m/day, isotropic |
-| `PERMEABILITY_XX`, `_YY` | K μ / (ρw g) = 1.1574074074074074e-12 m², with a water unit weight of 10 kN/m³ |
-| `DYNAMIC_VISCOSITY` | 1e-3 Pa s |
-| `DENSITY_WATER` | 10 000 / 9.81 = 1019.367991845056 kg/m³ |
+| `PERMEABILITY_XX`, `_YY` | K μ / (ρw g) = 1.1574074074074074e-12 m², with the water's viscosity μ = 1e-3 Pa s and unit weight ρw g = 10 kN/m³ |
 | `RETENTION_LAW` | `VanGenuchtenLaw` |
 | `VAN_GENUCHTEN_AIR_ENTRY_PRESSURE` | 10 000 / ga = 2610.9660574412533 Pa, with ga = 3.83 1/m |
 | `VAN_GENUCHTEN_GN`, `_GL` | 1.3774, 1.25 |
 | `RESIDUAL_SATURATION` | 0.0620347394540943 |
 | `MINIMUM_RELATIVE_PERMEABILITY` | 1e-4 |
 
-Only the permeability, the viscosity, the water density and the retention law change the
-flow. Kratos' flow element checks that the other values are there. The values are typed
-out in full, so they are the script's to the last digit. A new soil starts from the
-default sand, which has Young's modulus, Poisson's ratio, a cohesion, a friction angle etc.; these properties will not be used in the intended flow computation here.
-As they also do not harm the computation, they are left as is. You may use `material m_sand --unset <property>` to remove them.
+Only the permeability and the retention law, with the water's viscosity and density,
+change the flow. Kratos' flow element checks that the other values, such as Young's
+modulus and Poisson's ratio, are there. The values are typed out in full, so they are the
+script's to the last digit.
 
 ```powershell
-kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
+kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 ```
 > <pre>added material m_sand; wrote levee.json</pre>
 
 ```powershell
-kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
+kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 ```
 > <pre>added material m_clay; wrote levee.json</pre>
+
+```powershell
+kratos-cli material levee.json list
+```
+> <pre>m_sand  Sand  Linear elastic (GeoLinearElasticPlaneStrain2DLaw), 17 variables
+> m_clay  Clay  Linear elastic (GeoLinearElasticPlaneStrain2DLaw), 17 variables</pre>
 
 > [!TIP]
 > Write `2650.0`, `1.0` and `0.0`, not `2650`, `1` and `0`: a whole number is kept as
@@ -239,20 +252,25 @@ do not change the deck. The last line is printed for every 2D model.
 
 ## Step 6. The calculation and the mesh
 
-One stage, of the type Groundwater flow. Kratos' seepage strategy opens or closes one
-node of the seepage face per iteration, and the face has about 55 nodes on this mesh,
-the stage allows 300 iterations to allow for opening or closing of all these nodes and convergence of the water pressure field.
-The mesh is made with linear interpolation triangles of 1 m:
+One stage, of the type Groundwater flow. A new project has one stage, the initial stage,
+which is mechanical; it is made the flow stage. The calculation type is chosen in the
+initial stage: a later stage cannot be of another type. Kratos' seepage strategy opens or
+closes one node of the seepage face per iteration, and the face has about 55 nodes on
+this mesh, so the stage allows 300 iterations to allow for opening or closing of all
+these nodes and convergence of the water pressure field. The stage converges on the
+residual, as the model script's does; a flow stage's own default is the change of the
+water pressure. The mesh is made with linear interpolation triangles of 1 m:
 
 ```powershell
-kratos-cli stages levee.json add flow --name Flow --calculation flow
+kratos-cli stages levee.json set initial --name Flow --calculation flow --convergence-criterion residual --max-iterations 300 --tolerance 1e-4
 ```
-> <pre>added stage (id flow, name Flow) after nothing: it is the first; wrote levee.json</pre>
+> <pre>changed stage initial; wrote levee.json</pre>
 
 ```powershell
-kratos-cli stages levee.json set flow --max-iterations 300 --tolerance 1e-4
+kratos-cli stages levee.json list
 ```
-> <pre>changed stage flow; wrote levee.json</pre>
+> <pre>1  initial  Flow
+>      calculation: flow, static</pre>
 
 ```powershell
 kratos-cli set levee.json mesh.element_size 1
@@ -286,8 +304,8 @@ kratos-cli show levee.json
 >   structures  none
 >   water       none
 >   conditions  fixed_bottom (displacement on the bottom face), roller_left (displacement on the left face), roller_right (displacement on the right face), river_head (water pressure on line (-36, -22) -&gt; (-36, 0) -&gt; (-18, 0) -&gt; (0, 6)), polder_head (water pressure on line (54, 0) -&gt; (54, -22)), seepage_face (seepage on line (4, 6) -&gt; (22, 0) -&gt; (54, 0)), start (water pressure on the whole soil)
->   gravity     on
->   stages      flow
+>   gravity     on, g = 9.81 m/s²
+>   stages      initial
 >   mesh        element size 1, order 1</pre>
 
 `show` gives the domain as `y -22 .. 0`: the command line keeps the domain's top at the
@@ -307,7 +325,7 @@ kratos-cli calculate levee.json
 kratos-cli results show 1
 ```
 > <pre>levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt;  (deck levee_seepage, started &lt;YYYY-MM-DD&gt;T&lt;hh:mm&gt;)
->   complete, SI units, 8 files, 1013.4 KB
+>   complete, SI units, 8 files, 1013.5 KB
 >     1  Flow                          results</pre>
 
 `calculate` meshes the model, writes the deck into a new run folder and runs Kratos there.

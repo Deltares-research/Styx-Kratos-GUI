@@ -101,9 +101,8 @@ model have the same values:
 - A steady flow does not depend on the stiffness, so Young's modulus and Poisson's ratio
   have no effect here. A bulk modulus of the grains of 10²⁰ Pa makes the grains
   incompressible.
-- The soils of the `kratos-cli` tutorial also have a cohesion and a friction angle. A
-  linear elastic soil does not read them, and the window does not list them. For the rest,
-  Kratos gets the same input from both tutorials.
+- Kratos gets the same input from this tutorial and from the `kratos-cli` tutorial; only
+  the order of the soils' values in the deck's materials file differs.
 
 To make the soils:
 

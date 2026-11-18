@@ -17,27 +17,22 @@
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
       "variables": {
         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-        "YOUNG_MODULUS": 10000.0,
-        "POISSON_RATIO": 0.3,
-        "DENSITY_SOLID": 2650.0,
-        "DENSITY_WATER": 1019.367991845056,
-        "POROSITY": 0.3333333333333333,
-        "BULK_MODULUS_SOLID": 1e+20,
-        "BULK_MODULUS_FLUID": 1e+20,
-        "PERMEABILITY_XX": 1.1574074074074074e-12,
-        "PERMEABILITY_YY": 1.1574074074074074e-12,
-        "PERMEABILITY_XY": 0.0,
-        "DYNAMIC_VISCOSITY": 0.001,
-        "BIOT_COEFFICIENT": 1.0,
         "RETENTION_LAW": "VanGenuchtenLaw",
         "SATURATED_SATURATION": 1.0,
         "RESIDUAL_SATURATION": 0.0620347394540943,
+        "YOUNG_MODULUS": 10000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2650.0,
+        "POROSITY": 0.3333333333333333,
+        "BULK_MODULUS_SOLID": 1e+20,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
+        "PERMEABILITY_YY": 1.1574074074074074e-12,
+        "PERMEABILITY_XY": 0.0,
+        "BIOT_COEFFICIENT": 1.0,
         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
         "VAN_GENUCHTEN_GN": 1.3774,
         "VAN_GENUCHTEN_GL": 1.25,
-        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
-        "GEO_COHESION": 0.0,
-        "GEO_FRICTION_ANGLE": 30.0
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
       },
       "tables": {},
       "id": "m_sand",
@@ -50,27 +45,22 @@
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
       "variables": {
         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-        "YOUNG_MODULUS": 10000.0,
-        "POISSON_RATIO": 0.3,
-        "DENSITY_SOLID": 2650.0,
-        "DENSITY_WATER": 1019.367991845056,
-        "POROSITY": 0.3333333333333333,
-        "BULK_MODULUS_SOLID": 1e+20,
-        "BULK_MODULUS_FLUID": 1e+20,
-        "PERMEABILITY_XX": 1.1574074074074074e-12,
-        "PERMEABILITY_YY": 1.1574074074074074e-12,
-        "PERMEABILITY_XY": 0.0,
-        "DYNAMIC_VISCOSITY": 0.001,
-        "BIOT_COEFFICIENT": 1.0,
         "RETENTION_LAW": "VanGenuchtenLaw",
         "SATURATED_SATURATION": 1.0,
         "RESIDUAL_SATURATION": 0.0620347394540943,
+        "YOUNG_MODULUS": 10000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2650.0,
+        "POROSITY": 0.3333333333333333,
+        "BULK_MODULUS_SOLID": 1e+20,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
+        "PERMEABILITY_YY": 1.1574074074074074e-12,
+        "PERMEABILITY_XY": 0.0,
+        "BIOT_COEFFICIENT": 1.0,
         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
         "VAN_GENUCHTEN_GN": 1.3774,
         "VAN_GENUCHTEN_GL": 1.25,
-        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
-        "GEO_COHESION": 0.0,
-        "GEO_FRICTION_ANGLE": 30.0
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
       },
       "tables": {},
       "id": "m_clay",
@@ -107,6 +97,10 @@
   "interface_sides": "screen",
   "normal_loads": [],
   "water": null,
+  "fluid": {
+    "bulk_modulus": 1e+20,
+    "dynamic_viscosity": 0.001
+  },
   "boundary_conditions": [
     {
       "id": "river_head",
@@ -222,7 +216,7 @@
       "active": true
     }
   ],
-  "gravity": true,
+  "gravity_acceleration": 9.81,
   "mesh": {
     "element_size": 1.0,
     "order": 1,
@@ -234,6 +228,7 @@
     "size_min_factor": 0.05,
     "second_order_linear": true,
     "body_sizes": {},
+    "size_bands": {},
     "refinements": []
   },
   "custom_parts": [
@@ -242,7 +237,7 @@
       "label": "Levee core",
       "color": "#888888",
       "source": "gui",
-      "source_file": "D:\\Checkouts\\Deltares-research\\Styx-Kratos-GUI\\.data\\recipe-6c27ceb8b54b8bc57aa6f0e66fb83435b175d007.brep",
+      "source_file": "C:\\Checkouts\\Styx-Kratos-GUI\\.data\\recipe-611988720215bf20cbe1186995266baa108edf73.brep",
       "recipe": {
         "kind": "polygon_extrude",
         "label": "Levee core",
@@ -301,7 +296,7 @@
       "label": "Levee outer layer",
       "color": "#888888",
       "source": "gui",
-      "source_file": "D:\\Checkouts\\Deltares-research\\Styx-Kratos-GUI\\.data\\recipe-795a7d09db02e605c696f3b5879913284070bea7.brep",
+      "source_file": "C:\\Checkouts\\Styx-Kratos-GUI\\.data\\recipe-29c2902ee782da143101570d749693d8c2589079.brep",
       "recipe": {
         "kind": "polygon_extrude",
         "label": "Levee outer layer",
@@ -371,14 +366,21 @@
       "id": "flow",
       "name": "Flow",
       "parent": null,
-      "calculation": "Groundwater flow",
+      "calculation": "flow",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 300,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -390,6 +392,10 @@
     "soil_cover": "Cover",
     "soil_aquifer": "Aquifer"
   },
+  "soil_body_materials": {
+    "soil_cover": "m_clay",
+    "soil_aquifer": "m_sand"
+  },
   "stageable_parts": [
     "soil_cover",
     "soil_aquifer",
@@ -397,6 +403,10 @@
     "levee_outer",
     "river_head",
     "polder_head",
+    "seepage_face",
     "start"
-  ]
+  ],
+  "model_strategies": {
+    "flow": "newton_raphson_with_seepage"
+  }
 }

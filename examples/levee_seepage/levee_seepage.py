@@ -55,7 +55,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core import scripting  # noqa: E402
-from core.model.schemas import (CustomPart, Domain, Material,  # noqa: E402
+from core.model.schemas import (CustomPart, Domain, Fluid, Material,  # noqa: E402
                                 MeshSettings, Project, SeepageCondition, SoilLayer, Stage,
                                 WaterPressureCondition)
 
@@ -133,38 +133,38 @@ BOUNDARY_CONDITIONS = [
 ]
 
 
+WATER = Fluid(bulk_modulus=1.0e20, dynamic_viscosity=VISCOSITY)
+"""The water in every soil's pores, the project's: incompressible, with water's viscosity.
+Its unit weight is water's own, 10 kN/m3 (WATER_UNIT_WEIGHT), so the deck's
+DENSITY_WATER is 10 000 / 9.81."""
+
+
 def soil(id_: str, name: str, color: str) -> Material:
-    """A soil for a groundwater flow calculation. Only the permeability, the viscosity,
-    the water density and the retention law change the flow; the rest is what Kratos'
-    flow element checks it has."""
+    """A soil for a groundwater flow calculation. Only the permeability and the retention
+    law change the flow, with the project's water (WATER); the rest is what Kratos' flow
+    element checks it has. In the order `kratos-cli material add` keeps them, so the deck
+    is the CLI tutorial's to the last character."""
     return Material(id=id_, name=name, color=color,
                     constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
                     variables={
                         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-                        "YOUNG_MODULUS": 1.0e4,
-                        "POISSON_RATIO": 0.3,
-                        "DENSITY_SOLID": 2.65e3,
-                        "DENSITY_WATER": WATER_UNIT_WEIGHT / 9.81,
-                        "POROSITY": 1.0 / 3.0,
-                        "BULK_MODULUS_SOLID": 1.0e20,
-                        "BULK_MODULUS_FLUID": 1.0e20,
-                        "PERMEABILITY_XX": PERMEABILITY,
-                        "PERMEABILITY_YY": PERMEABILITY,
-                        "PERMEABILITY_XY": 0.0,
-                        "DYNAMIC_VISCOSITY": VISCOSITY,
-                        "BIOT_COEFFICIENT": 1.0,
                         "RETENTION_LAW": "VanGenuchtenLaw",
                         "SATURATED_SATURATION": 1.0,
                         "RESIDUAL_SATURATION": 0.0620347394540943,
+                        "YOUNG_MODULUS": 1.0e4,
+                        "POISSON_RATIO": 0.3,
+                        "DENSITY_SOLID": 2.65e3,
+                        "POROSITY": 1.0 / 3.0,
+                        "BULK_MODULUS_SOLID": 1.0e20,
+                        "PERMEABILITY_XX": PERMEABILITY,
+                        "PERMEABILITY_YY": PERMEABILITY,
+                        "PERMEABILITY_XY": 0.0,
+                        "BIOT_COEFFICIENT": 1.0,
                         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE":
                             WATER_UNIT_WEIGHT / VAN_GENUCHTEN_GA,   # Pa
                         "VAN_GENUCHTEN_GN": 1.3774,
                         "VAN_GENUCHTEN_GL": 1.25,
                         "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4,
-                        # Not read by the linear elastic law; the default sand's values,
-                        # kept so the model is the CLI tutorial's to the last digit.
-                        "GEO_COHESION": 0.0,
-                        "GEO_FRICTION_ANGLE": 30.0,
                     })
 
 
@@ -190,6 +190,7 @@ def project() -> Project:
                       y_top=CREST_Y, y_bottom=BOTTOM_Y),
         # No water table: the conditions are all the water the model has.
         materials=[sand, clay],
+        fluid=WATER,
         layers=[SoilLayer(id="cover", name="Cover", mat=clay.id,
                           top=GROUND_Y, bottom=AQUIFER_TOP_Y),
                 SoilLayer(id="aquifer", name="Aquifer", mat=sand.id,
@@ -200,7 +201,9 @@ def project() -> Project:
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        # Converged on the residual, as Kratos' own seepage tests are.
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion="residual_criterion",
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
     ))
 
