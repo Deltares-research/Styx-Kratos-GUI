@@ -294,5 +294,5 @@ App.SurfaceWater = (function () {
     return spec;
   }
 
-  return { pieces: pieces, glyph: glyph, level: level };
+  return { pieces: pieces, glyph: glyph, level: level, waters: waters };
 })();

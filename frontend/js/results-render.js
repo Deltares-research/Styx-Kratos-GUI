@@ -386,11 +386,103 @@ App.ResultsRender = (function () {
     return new Float32Array(points);
   }
 
+  /* The pieces of the polylines `lines` ([[x, y], ...] each) that lie outside every
+     triangle of `meshes` ({indices, positions}, positions x,y,z as drawn), as line
+     segments x,y,z,x,y,z at height `z`. In the section's plane: x and y only.
+
+     What carries the zero pressure line on past the soil: inside it the calculation
+     found where the water stands, outside it -- over a ditch, a pit, the water against
+     a wall -- the phreatic line the user drew is the water's surface. The line's ends
+     meet the soil's boundary where the boundary's prescribed pressure is nought, which
+     is where the traced line ends too, so the two read as one line.
+
+     A stretch running along the soil's boundary, within `OUTSIDE_TOL` of it, counts as
+     inside: a phreatic line drawn on the ground surface would otherwise flicker in and
+     out of the triangles along it on round-off alone. */
+  var OUTSIDE_TOL = 1e-3;
+
+  function outside(lines, meshes, z) {
+    var triangles = [];
+    (meshes || []).forEach(function (mesh) {
+      var idx = mesh.indices || [], p = mesh.positions || [];
+      for (var i = 0; i + 2 < idx.length; i += 3) {
+        var a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+        var t = [p[a], p[a + 1], p[b], p[b + 1], p[c], p[c + 1]];
+        var area = (t[2] - t[0]) * (t[5] - t[1]) - (t[3] - t[1]) * (t[4] - t[0]);
+        if (!area) continue;
+        triangles.push({ t: t, sign: area > 0 ? 1 : -1,
+                         x0: Math.min(t[0], t[2], t[4]) - OUTSIDE_TOL,
+                         x1: Math.max(t[0], t[2], t[4]) + OUTSIDE_TOL,
+                         y0: Math.min(t[1], t[3], t[5]) - OUTSIDE_TOL,
+                         y1: Math.max(t[1], t[3], t[5]) + OUTSIDE_TOL });
+      }
+    });
+
+    // The stretch [t0, t1] of a + t·d that is inside `tr`, or null: the segment cut by
+    // each side's half-plane in turn.
+    function within(tr, ax, ay, dx, dy) {
+      var lo = 0, hi = 1, t = tr.t;
+      for (var k = 0; k < 3; k++) {
+        var px = t[k * 2], py = t[k * 2 + 1];
+        var ex = t[((k + 1) % 3) * 2] - px, ey = t[((k + 1) % 3) * 2 + 1] - py;
+        var f0 = tr.sign * (ex * (ay - py) - ey * (ax - px))
+               + OUTSIDE_TOL * Math.sqrt(ex * ex + ey * ey);
+        var f1 = tr.sign * (ex * dy - ey * dx);
+        if (f1 === 0) {
+          if (f0 < 0) return null;
+        } else if (f1 > 0) {
+          lo = Math.max(lo, -f0 / f1);
+        } else {
+          hi = Math.min(hi, -f0 / f1);
+        }
+        if (lo >= hi) return null;
+      }
+      return [lo, hi];
+    }
+
+    var points = [];
+    var at = z || 0;
+    (lines || []).forEach(function (line) {
+      for (var k = 0; k + 1 < (line || []).length; k++) {
+        var ax = line[k][0], ay = line[k][1];
+        var dx = line[k + 1][0] - ax, dy = line[k + 1][1] - ay;
+        var length = Math.sqrt(dx * dx + dy * dy);
+        if (!(length > 0)) continue;
+        var x0 = Math.min(ax, ax + dx), x1 = Math.max(ax, ax + dx);
+        var y0 = Math.min(ay, ay + dy), y1 = Math.max(ay, ay + dy);
+        var spans = [];
+        triangles.forEach(function (tr) {
+          if (tr.x1 < x0 || tr.x0 > x1 || tr.y1 < y0 || tr.y0 > y1) return;
+          var span = within(tr, ax, ay, dx, dy);
+          if (span) spans.push(span);
+        });
+        spans.sort(function (p, q) { return p[0] - q[0]; });
+        var free = [], from = 0;
+        spans.forEach(function (span) {
+          if (span[0] > from) free.push([from, span[0]]);
+          from = Math.max(from, span[1]);
+        });
+        if (from < 1) free.push([from, 1]);
+        // The tolerance the triangles were grown by, given back where a piece meets
+        // the soil, so it reaches the boundary the traced line ends on.
+        var grown = OUTSIDE_TOL / length;
+        free.forEach(function (piece) {
+          // Slivers between two triangles that share a side are round-off, not water.
+          if ((piece[1] - piece[0]) * length <= OUTSIDE_TOL) return;
+          var t0 = piece[0] > 0 ? Math.max(0, piece[0] - grown) : 0;
+          var t1 = piece[1] < 1 ? Math.min(1, piece[1] + grown) : 1;
+          points.push(ax + dx * t0, ay + dy * t0, at,
+                      ax + dx * t1, ay + dy * t1, at);
+        });
+      }
+    });
+    return new Float32Array(points);
+  }
+
   /* ── Arrows ───────────────────────────────────────────────────────────── */
 
-  /* How long the longest arrow is, as a fraction of the model's largest span, and how
-     far apart arrows are kept: one per square of that size. Long enough to read a
-     direction off, and spaced so that no arrow runs into the next one's head. */
+  /* How long the longest arrow is, as a fraction of the model's largest span: long
+     enough to read a direction off. */
   var ARROW_FRACTION = 0.04;
   var ARROW_HEAD = 0.3;          // the head's length, as a fraction of the arrow's
   var ARROW_HEAD_ANGLE = 25 * Math.PI / 180;
@@ -405,10 +497,11 @@ App.ResultsRender = (function () {
      Each arrow is to the same scale: the longest is `ARROW_FRACTION` of the model's
      largest span (`bbox`), and the others in proportion, so a length can be compared.
 
-     Thinned to one arrow per square of that length, the node nearest the square's
-     middle: a refined mesh has many nodes to an arrow's length, and an arrow on every
-     one of them is a black smear. The heads lie in the plane of the section, the xy
-     plane, which is the one this program draws. */
+     One arrow at every node the vector was written at -- none thinned out, so what is
+     drawn is what the calculation wrote. A node in no section, or whose vector is
+     shorter than `ARROW_SMALLEST` of the longest (too short to see), has none. The
+     heads lie in the plane of the section, the xy plane, which is the one this program
+     draws. */
   function arrows(vectors, placed, bbox) {
     var ids = (vectors && vectors.ids) || [];
     var values = (vectors && vectors.values) || [];
@@ -432,28 +525,16 @@ App.ResultsRender = (function () {
       }
     });
 
-    // One node per square: the one nearest its middle.
-    var cells = {};
-    for (i = 0; i < ids.length; i++) {
-      var at = where[ids[i]];
-      if (!at || size(values[i]) < ARROW_SMALLEST * largest) continue;
-      var cx = Math.floor((at[0] - bbox[0]) / length);
-      var cy = Math.floor((at[1] - bbox[1]) / length);
-      var dx = at[0] - (bbox[0] + (cx + 0.5) * length);
-      var dy = at[1] - (bbox[1] + (cy + 0.5) * length);
-      var off = dx * dx + dy * dy;
-      var key = cx + ',' + cy;
-      if (!cells[key] || off < cells[key].off) cells[key] = { off: off, at: at, v: values[i] };
-    }
-
+    // One arrow per node the vector was written at, in the order written.
     var points = [];
-    Object.keys(cells).sort().forEach(function (key) {
-      var cell = cells[key], p = cell.at, v = cell.v;
+    for (i = 0; i < ids.length; i++) {
+      var p = where[ids[i]], v = values[i];
+      if (!p || !v || size(v) < ARROW_SMALLEST * largest) continue;
       var tip = [p[0] + v[0] * scale, p[1] + v[1] * scale, p[2] + (v[2] || 0) * scale];
       points.push(p[0], p[1], p[2], tip[0], tip[1], tip[2]);
       // The head, back from the tip in the plane of the section.
       var bx = -v[0], by = -v[1], back = Math.sqrt(bx * bx + by * by);
-      if (!(back > 0)) return;
+      if (!(back > 0)) continue;
       var head = ARROW_HEAD * size(v) * scale;
       bx /= back; by /= back;
       [ARROW_HEAD_ANGLE, -ARROW_HEAD_ANGLE].forEach(function (angle) {
@@ -462,7 +543,7 @@ App.ResultsRender = (function () {
                     tip[0] + head * (c * bx - s * by), tip[1] + head * (s * bx + c * by),
                     tip[2]);
       });
-    });
+    }
     return new Float32Array(points);
   }
 
@@ -497,6 +578,6 @@ App.ResultsRender = (function () {
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
     legend: legend, format: format, rangeLines: rangeLines,
-    deform: deform, autoFactor: autoFactor, isoline: isoline, arrows: arrows, csv: csv
+    deform: deform, autoFactor: autoFactor, isoline: isoline, outside: outside, arrows: arrows, csv: csv
   };
 })();

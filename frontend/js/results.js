@@ -263,6 +263,29 @@ App.Results = (function () {
     return stageCalculation() === 'flow' || !!options.zeroLine;
   }
 
+  /* The phreatic lines the stage on screen has on, as polylines [[x, y], ...]: where the
+     zero pressure line goes on outside the soil (`ResultsRender.outside`). A section
+     only, and only for a run of the open project (`projectStage`) -- another project's
+     water says nothing about this result. The conditions are the ones
+     `App.SurfaceWater` puts water on the ground with, for the same stage. */
+  function phreaticLines() {
+    var project = App.PROJECT;
+    if (!project || project.dimension !== 2 || !App.SurfaceWater
+        || !App.SurfaceWater.waters) return [];
+    var shown = projectStage(project);
+    if (!shown) return [];
+    var hidden = {};
+    if (App.Stages && App.Stages.hiddenKeys) {
+      App.Stages.hiddenKeys(project, shown.stage, 'staged')
+        .forEach(function (key) { hidden[key] = true; });
+    }
+    return App.SurfaceWater.waters(project, hidden).map(function (record) {
+      return record.x_coordinates.map(function (x, k) {
+        return [x, record.y_coordinates[k]];
+      });
+    });
+  }
+
   /* What the viewport implements. Replaced wholesale in the headless suite, which is
      why it is reached through the module object: everything that decides *what* is
      drawn is testable here, and only the three.js that draws it is not. */
@@ -297,6 +320,7 @@ App.Results = (function () {
       field: view.field,
       displacement: displacement,
       pressure: pressure,
+      phreatic: pressure ? phreaticLines() : [],
       vectors: vectors,
       options: {
         map: options.map, bands: options.bands, deform: options.deform,

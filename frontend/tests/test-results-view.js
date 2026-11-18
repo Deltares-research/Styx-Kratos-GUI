@@ -87,6 +87,33 @@
     });
   });
 
+  test('results view: the zero line goes on along the phreatic line outside the soil',
+       function () {
+    stage(function (ctx) {
+      var pressure = { field: 'pw', label: 'Pore pressure', unit: 'kPa', location: 'nodes',
+                       ids: [1, 2, 3], values: [-10, -10, 10], min: -10, max: 10 };
+      function beyond() {
+        return group(ctx.scene).children.filter(function (c) {
+          return c.name === 'results:phreatic-outside';
+        })[0];
+      }
+      // The triangle (0,0) (2,0) (0,2); the line at y = 1 leaves it at x = 1.
+      V.draw(payload({ pressure: pressure, phreatic: [[[-3, 1], [5, 1]]] }));
+      var line = beyond();
+      T.ok(line && line.isLineSegments, 'drawn');
+      var at = line.geometry.getAttribute('position');
+      T.eq(at.count, 4, 'a piece either side of the soil');
+      T.near(at.getX(0), -3, 1e-6);
+      T.near(at.getX(1), 0, 1e-6, 'meets the soil where the traced line ends');
+      // Out through the hypotenuse, at 45 degrees: within a millimetre or so of it.
+      T.near(at.getX(2), 1, 2e-3);
+      T.near(at.getX(3), 5, 1e-6);
+
+      V.draw(payload({ phreatic: [[[-3, 1], [5, 1]]] }));
+      T.ok(!beyond(), 'not without the zero line it carries on');
+    });
+  });
+
   test('results view: the zero pressure line is drawn where the pressure sent crosses zero',
        function () {
     stage(function (ctx) {
@@ -102,6 +129,9 @@
       T.near(at.getY(0), 1, 1e-6, 'halfway up, where -10 turns into 10');
       T.near(at.getY(1), 1, 1e-6);
       T.ok(ctx.host.querySelector('.vp-legend-zero'), 'the legend names the line');
+      var wide = line.children.filter(function (c) { return c.userData.screenOnly; })[0];
+      T.ok(wide && wide.isMesh, 'drawn wide on screen');
+      T.eq(wide.geometry.getAttribute('position').count, 4, 'two triangles to a segment');
 
       V.draw(payload());
       T.ok(!group(ctx.scene).children.some(function (c) { return /zero-pressure/.test(c.name); }),

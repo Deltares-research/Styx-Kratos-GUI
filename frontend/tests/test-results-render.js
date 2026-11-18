@@ -481,15 +481,25 @@
     T.near(shafts[1], shafts[0] / 2, 1e-5, 'half the vector, half the arrow');
   });
 
-  test('a fine mesh gets one arrow per arrow length, not one per node', function () {
+  test('a fine mesh gets an arrow at every node it was written at', function () {
+    /* Nodes 1 m apart under 4 m arrows: none of them is thinned out. */
     var placed = [grid(100)];
     var values = placed[0].node_ids.map(function () { return [1, 0, 0]; });
     var lines = arrowsOf(R.arrows({ ids: placed[0].node_ids, values: values },
                                   placed, SQUARE));
-    var count = lines.length / 3;
-    // 10 201 nodes; squares of 4 m over a 100 m model: 26 x 26 at most.
-    T.ok(count <= 26 * 26, count + ' arrows');
-    T.ok(count >= 25 * 25, 'and still one in every square: ' + count);
+    T.eq(lines.length / 3, placed[0].node_ids.length, 'one arrow per node');
+    var starts = {};
+    for (var k = 0; k < lines.length; k += 3) starts[lines[k][0].join(',')] = true;
+    T.eq(Object.keys(starts).length, placed[0].node_ids.length, 'each at its own node');
+  });
+
+  test('two nodes close together each get their arrow', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 10.5, 10, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2], values: [[1, 0, 0], [0, 1, 0]] },
+                                  placed, SQUARE));
+    T.eq(lines.length, 6);
+    T.eq(lines[0][0], [10, 10, 0]);
+    T.eq(lines[3][0], [10.5, 10, 0]);
   });
 
   test('a node with no vector, or nowhere drawn, gets no arrow', function () {
@@ -531,6 +541,44 @@
     // Vertex 3 (1,1) is in the second triangle only, so the first is still cut.
     var cut = points(R.isoline(s, [-1, -1, 1, null], s.positions, 0));
     T.eq(cut.length, 2);
+  });
+
+  /* ── The phreatic line outside the soil ───────────────────────────────── */
+
+  test('the phreatic line is kept only where it is outside every triangle', function () {
+    /* The unit square of two triangles, and a level line at y = 0.5 from x = -1 to 3:
+       out on the left from -1 to 0, out on the right from 1 to 3, and not across the
+       diagonal the two triangles share. */
+    var s = section();
+    var out = sorted(points(R.outside([[[-1, 0.5], [3, 0.5]]], [s], 0)));
+    T.eq(out, [[-1, 0.5, 0], [0, 0.5, 0], [1, 0.5, 0], [3, 0.5, 0]]);
+  });
+
+  test('a polyline is cut segment by segment, at the height it is given', function () {
+    var s = section();
+    // Down into the square from above and out again: only the parts above y = 1.
+    var line = [[0.25, 2], [0.5, 0.5], [0.75, 2]];
+    var out = sorted(points(R.outside([line], [s], 4)));
+    T.eq(out.length, 4);
+    T.near(out[0][1], 2, 1e-6);
+    T.near(out[1][1], 1, 1e-3, 'ends on the top side of the square');
+    T.eq(out[0][2], 4);
+  });
+
+  test('a phreatic line along the soil surface is inside, not a row of dashes',
+       function () {
+    var s = section();
+    T.eq(R.outside([[[0, 1], [1, 1]]], [s], 0).length, 0);
+    T.eq(R.outside([[[0, 1.0004], [1, 0.9996]]], [s], 0).length, 0,
+         'round-off either side of the surface');
+  });
+
+  test('a phreatic line wholly inside the soil, or no soil, is all or nothing',
+       function () {
+    var s = section();
+    T.eq(R.outside([[[0.2, 0.5], [0.8, 0.5]]], [s], 0).length, 0);
+    T.eq(points(R.outside([[[0.2, 0.5], [0.8, 0.5]]], [], 0)).length, 2);
+    T.eq(R.outside([], [s], 0).length, 0);
   });
 
   /* ── CSV ──────────────────────────────────────────────────────────────── */

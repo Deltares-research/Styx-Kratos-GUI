@@ -267,7 +267,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .vp-legend-zero i {
   display: inline-block;
   width: 16px;
-  border-top: 2px solid;
+  border-top: 3px solid;
 }
 
 /* The ramp and its ticks share one box, so a tick can be positioned as a

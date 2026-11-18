@@ -63,6 +63,9 @@ App.Picture = (function () {
   /* `null` for what a picture cannot show: a sprite that says nothing about its text. */
   function describe(object) {
     if (!object.material || Array.isArray(object.material)) return null;
+    // Drawn by a shader on screen only (a wide line's band, results-view.js); the line
+    // it sits on is in the picture instead.
+    if (object.userData.screenOnly) return null;
     if (object.isSprite) {
       var text = object.userData.pictureText;
       if (!text) return null;
@@ -83,7 +86,8 @@ App.Picture = (function () {
     if (object.isLineSegments || object.isLine) {
       var dashed = object.material.isLineDashedMaterial;
       return Object.assign(common(object, object.isLineSegments ? 'lines' : 'strip'), {
-        dash: dashed ? { size: object.material.dashSize, gap: object.material.gapSize } : null
+        dash: dashed ? { size: object.material.dashSize, gap: object.material.gapSize } : null,
+        weight: object.userData.lineWeight || 1
       });
     }
     if (object.isPoints) {
