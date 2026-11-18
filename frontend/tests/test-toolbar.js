@@ -522,7 +522,8 @@
   test('a new project starts with a clean session', function () {
     var saved = { post: App.Api.post, command: App.Command, model: App.Model,
                   viewport: App.Viewport, select: App.selectObject,
-                  selection: App.state.selection };
+                  selection: App.state.selection, convergence: App.ConvergenceWindow,
+                  calculate: App.Calculate };
     var calls = [];
     var boxes = ['cmd-log', 'cmd-history', 'cmd-entry'].map(function (id) {
       var box = document.getElementById(id);
@@ -548,10 +549,13 @@
     };
     App.state.selection = 'soil:clay';
     App.selectObject = function (key) { calls.push('select ' + key); };
+    App.Calculate = { running: function () { return false; } };
+    App.ConvergenceWindow = { close: function () { calls.push('close convergence'); } };
     function restore() {
       App.Api.post = saved.post; App.Command = saved.command; App.Model = saved.model;
       App.Viewport = saved.viewport; App.selectObject = saved.select;
       App.state.selection = saved.selection;
+      App.ConvergenceWindow = saved.convergence; App.Calculate = saved.calculate;
       boxes.forEach(function (b) { if (b.made) b.box.remove(); });
     }
     return App.LivePatches.newProject().then(function () {
@@ -559,7 +563,7 @@
       T.eq(boxes[1].box.textContent, '', 'the Model history tab is empty');
       T.eq(boxes[2].box.value, '', 'the command box is empty');
       T.eq(calls, ['labels nodes false', 'labels elements false', 'clear mesh',
-                   'select null']);
+                   'select null', 'close convergence']);
     }).then(restore, function (err) { restore(); throw err; });
   });
 

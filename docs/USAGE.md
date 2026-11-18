@@ -53,8 +53,9 @@ Click **Calculate** between Staged construction and Results.
 - **New project:** **File** → **New project…** starts an empty site. Type the project name
   in the window. The name shows in the title bar, and **Save** names the file after it.
   The session starts clean: the command log, the Model history, the commands that the arrow
-  keys bring back, the undo history, the mesh, the results and the node and element ID
-  labels are cleared. **Open project…** clears them in the same way.
+  keys bring back, the undo history, the mesh, the results, the node and element ID
+  labels and the **Convergence** window of a finished calculation are cleared.
+  **Open project…** clears them in the same way.
 - **Project properties:** **File** → **Project properties…** changes the name of the open
   project, the gravitational acceleration g (9.81 m/s² in a new project) and the unit
   system. In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli gravity FILE G` and

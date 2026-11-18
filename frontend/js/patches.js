@@ -1837,10 +1837,11 @@ App.LivePatches = (function () {
 
   /* What the session still shows of the document that was open goes with it: the
      command log, the Model history tab, the commands the arrow keys bring back, the
-     selection, the mesh and the node and element ID labels. The next document starts
-     as clean as a fresh start of the app, without the welcome text. `run <file.py>`
-     keeps the commands: the user typed them in this session, and the arrow keys bring
-     the run back to run the edited file again. */
+     selection, the mesh, the node and element ID labels and the Convergence window of
+     a finished run. A run still going keeps its window: Stop is in it. The next
+     document starts as clean as a fresh start of the app, without the welcome text.
+     `run <file.py>` keeps the commands: the user typed them in this session, and the
+     arrow keys bring the run back to run the edited file again. */
   function wipeSession(keepCommands) {
     if (!keepCommands) {
       cmdHistory.length = 0;
@@ -1860,6 +1861,10 @@ App.LivePatches = (function () {
     }
     if (viewport.clearMesh) viewport.clearMesh();
     if (App.state && App.state.selection && App.selectObject) App.selectObject(null);
+    var running = App.Calculate && App.Calculate.running && App.Calculate.running();
+    if (App.ConvergenceWindow && App.ConvergenceWindow.close && !running) {
+      App.ConvergenceWindow.close();
+    }
   }
 
   /* An empty site, not the seeded demo -- the server owns what "empty" means, and a
