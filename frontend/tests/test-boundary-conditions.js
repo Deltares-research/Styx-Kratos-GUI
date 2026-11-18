@@ -360,10 +360,11 @@
     T.eq(bottom.strips.length, 1);
     T.eq([bottom.strips[0].from[0], bottom.strips[0].to[0]], [0, 20],
          'from one end of the face to the other');
-    T.eq([bottom.strips[0].outward, bottom.strips[0].roller], [[0, -1], false],
-         'x and y held: hatched ground');
+    T.eq(bottom.strips[0].outward, [0, -1], 'x and y held: hatched ground');
     var left = App.Viewport.conditionGlyphSpec(standard()[1], project);
-    T.eq([left.strips[0].roller, left.strips[0].outward], [true, [-1, 0]]);
+    T.eq(left.strips.length, 0, 'a roller is no strip');
+    T.ok(left.symbols.length > 1, 'but a row of the point roller symbol');
+    T.eq([left.symbols[0].roller, left.symbols[0].outward], [true, [-1, 0]]);
     var none = App.Viewport.conditionGlyphSpec(standard()[3], project);
     T.eq([none.symbols.length, none.strips.length], [0, 0]);
   });
@@ -378,7 +379,7 @@
     T.eq(outlines.left, [[0, -10, 5], [0, 0, 5]]);
     T.eq(outlines.bottom, [[0, -10, 5], [20, -10, 5]]);
     var left = App.Viewport.conditionGlyphSpec(standard()[1], project, outlines);
-    T.eq([left.strips[0].from[1], left.strips[0].to[1]], [-10, 0]);
+    T.eq([left.symbols[0].at[1], left.symbols[left.symbols.length - 1].at[1]], [-10, 0]);
     T.eq(App.Viewport.soilFaceOutlines([other], ['soil_L1'], project), null,
          'nothing to measure with no soil drawn');
     var bare = App.Viewport.conditionGlyphSpec(standard()[1], project, {});
@@ -413,12 +414,21 @@
     var project = section();
     var bottomY = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [false, true, false]), project);
-    T.eq([bottomY.strips[0].roller, bottomY.strips[0].outward], [true, [0, -1]]);
+    T.eq(bottomY.strips.length, 0);
+    T.eq([bottomY.symbols[0].roller, bottomY.symbols[0].outward], [true, [0, -1]]);
     var bottomX = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [true, false, false]), project);
     T.eq(bottomX.strips.length, 0, 'a face along the held component cannot roll on it');
     T.ok(bottomX.symbols.length > 1);
     T.eq([bottomX.symbols[0].roller, bottomX.symbols[0].outward], [true, [-1, 0]]);
+    var line = App.Viewport.conditionGlyphSpec(
+      support('l', null, [false, true, false], { on: 'line', points: [[0, -2], [20, -2]] }),
+      project);
+    T.eq(line.strips.length, 0, 'a roller on a line is no strip');
+    T.ok(line.symbols.length > 1, 'but a row of the point roller symbol');
+    T.eq([line.symbols[0].at.slice(0, 2), line.symbols[line.symbols.length - 1].at.slice(0, 2)],
+         [[0, -2], [20, -2]], 'from one end of the line to the other');
+    T.eq([line.symbols[0].roller, line.symbols[0].outward], [true, [0, -1]]);
     var point = App.Viewport.conditionGlyphSpec(
       support('p', null, [true, false, true], { on: 'point', points: [[3, -4]] }), project);
     T.eq([point.symbols.length, point.symbols[0].roller, point.symbols[0].outward],

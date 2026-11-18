@@ -569,20 +569,20 @@ App.Viewport = (function () {
   /* ── The boundary conditions ─────────────────────────────────────────────
      Each condition drawn from its own record, client side, like the water line.
 
-     2D: a support on a face or a line is a strip drawn without a break from its start
-     to its end -- hatched ground on the edge itself when it holds x and y, a row of
-     wheels on hatched ground when it holds one of them, on the side of the one it
-     holds. A support at a point is one symbol: a triangle on hatched ground, or a
-     triangle on two wheels for a roller. A water pressure is its own level or phreatic
+     2D: a fixed support on a face or a line (x and y held) is hatched ground on the
+     edge itself, drawn without a break from its start to its end. A roller on a face
+     or a line (one of them held) is a row of the point's roller symbol along it,
+     pointing along the one it holds. A support at a point is one symbol: a triangle on
+     hatched ground, or a triangle on two wheels for a roller. A water pressure is its own level or phreatic
      line, dashed, with "h = ..." beside it (a uniform one: its target outlined,
      "p = ..."). 3D: the face outline in the condition's colour, and a level as the
      outline of its plane.
 
      Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
      can reach. `lines` are polylines of [x, y, z]; `strips` are the straight pieces of
-     a face or line support, from, to, the side they stand out to and whether they are
-     rollers; `symbols` are where a single symbol stands, the outward direction it
-     points from, and whether it is a roller. */
+     a fixed face or line support, from, to and the side they stand out to; `symbols`
+     are where a single symbol stands, the outward direction it points from, and
+     whether it is a roller. */
   var SUPPORT_COLOR = 0x2e7d32;
   var WATER_COLOR = 0x1f6fb0;
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
@@ -614,36 +614,27 @@ App.Viewport = (function () {
     return held === 0 ? [-1, 0] : [0, -1];
   }
 
-  /* A face or line support as strips, one per straight piece of `points` ([x, y]),
-     each standing out on the side of `outward`. A fixed support has no side of its
-     own: a piece along `outward` stands out to -x (or -y) instead. A roller piece
-     that runs along the component it holds cannot roll on it; it gets single
-     symbols instead, about `spacing` apart, pointing along `outward`. A line with no
-     length (a face the soil only touches at a corner) is the one symbol. */
-  function supportStrips(points, outward, roller, z, spacing) {
+  /* A fixed face or line support as strips, one per straight piece of `points`
+     ([x, y]), each standing out on the side of `outward`; a piece along `outward`
+     stands out to -x (or -y) instead. A line with no length (a face the soil only
+     touches at a corner) is the one symbol. */
+  function supportStrips(points, outward, z) {
     var out = { strips: [], symbols: [] };
     for (var i = 1; i < points.length; i += 1) {
       var a = points[i - 1], b = points[i];
       var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (length < 1e-9) continue;
       var dir = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
-      var along = dir[0] * outward[0] + dir[1] * outward[1];
-      if (roller && Math.abs(along) > 0.7) {
-        alongLine([a, b], spacing).forEach(function (at) {
-          out.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: true });
-        });
-        continue;
-      }
       var normal = [dir[1], -dir[0]];
       var side = normal[0] * outward[0] + normal[1] * outward[1];
       if (Math.abs(side) < 1e-9) side = normal[0] !== 0 ? -normal[0] : -normal[1];
       if (side < 0) normal = [-normal[0], -normal[1]];
       out.strips.push({ from: [a[0], a[1], z], to: [b[0], b[1], z],
-                        outward: [normal[0] + 0, normal[1] + 0], roller: roller });
+                        outward: [normal[0] + 0, normal[1] + 0] });
     }
-    if (!out.strips.length && !out.symbols.length && points.length) {
+    if (!out.strips.length && points.length) {
       out.symbols.push({ at: [points[0][0], points[0][1], z], outward: outward,
-                         roller: roller });
+                         roller: false });
     }
     return out;
   }
@@ -771,8 +762,14 @@ App.Viewport = (function () {
         path = record.points || [];
         spec.lines.push(path.map(function (p) { return [p[0], p[1], z]; }));
       }
-      if (path) {
-        var drawn = supportStrips(path, outward, roller, z, SYMBOL_SPACING * spec.size);
+      if (path && roller) {
+        // A row of triangles on two wheels, tips on the face or line, pointing along
+        // the component it holds.
+        alongLine(path, SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: true });
+        });
+      } else if (path) {
+        var drawn = supportStrips(path, outward, z);
         spec.strips = drawn.strips;
         spec.symbols = drawn.symbols;
       } else if (record.on === 'point') {
@@ -905,18 +902,8 @@ App.Viewport = (function () {
       var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (!(length > 0)) return;
       var p = frame(a, [(b[0] - a[0]) / length, (b[1] - a[1]) / length], strip.outward);
-      if (strip.roller) {
-        // A row of wheels against the edge, on hatched ground, end to end.
-        var radius = 0.2 * s;
-        var wheels = Math.max(1, Math.round(length / (0.8 * s)));
-        for (var k = 0; k < wheels; k += 1) {
-          wheel(p, length * (k + 0.5) / wheels, radius, radius);
-        }
-        hatchedGround(p, 0, length, 2 * radius);
-      } else {
-        // Hatched ground on the edge itself, end to end.
-        hatchedGround(p, 0, length, 0);
-      }
+      // Hatched ground on the edge itself, end to end.
+      hatchedGround(p, 0, length, 0);
     });
 
     spec.symbols.forEach(function (symbol) {

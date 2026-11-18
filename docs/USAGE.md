@@ -337,8 +337,8 @@ conditions** shows all of them. A condition that you only selected goes away whe
 something else.
 In 2D, a support on a face or a line is drawn from its start to its end. A support that holds
 x and y is hatched ground along the edge. A support that holds one of them (a roller) is a
-row of wheels on hatched ground. A support on a point is a triangle on hatched ground, or a
-triangle on two wheels for a roller. A 2D model does not list its
+row of triangles on two wheels, from one end to the other. A support on a point is a triangle on hatched ground, or a triangle on two wheels for
+a roller. A 2D model does not list its
 front and back supports: the section holds z without them. They stay in the project for the
 solid model, and the calculation files of a 2D model do not contain them.
 
