@@ -569,16 +569,20 @@ App.Viewport = (function () {
   /* ── The boundary conditions ─────────────────────────────────────────────
      Each condition drawn from its own record, client side, like the water line.
 
-     2D: a support is a row of symbols along its face or line, or one at its point --
-     the clamp of a fixed support (hatched ground on the face) when it holds x and y, a
-     triangle on two rollers when it holds one of them, pointing along the one it holds --
-     and a water pressure is its own level or phreatic line, dashed, with "h = ..."
-     beside it (a uniform one: its target outlined, "p = ..."). 3D: the face outline in
-     the condition's colour, and a level as the outline of its plane.
+     2D: a support on a face or a line is a strip drawn without a break from its start
+     to its end -- hatched ground on the edge itself when it holds x and y, a row of
+     wheels on hatched ground when it holds one of them, on the side of the one it
+     holds. A support at a point is one symbol: a triangle on hatched ground, or a
+     triangle on two wheels for a roller. A water pressure is its own level or phreatic
+     line, dashed, with "h = ..." beside it (a uniform one: its target outlined,
+     "p = ..."). 3D: the face outline in the condition's colour, and a level as the
+     outline of its plane.
 
      Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
-     can reach. `lines` are polylines of [x, y, z]; `symbols` are where a support
-     symbol stands, the outward direction it points from, and whether it is a roller. */
+     can reach. `lines` are polylines of [x, y, z]; `strips` are the straight pieces of
+     a face or line support, from, to, the side they stand out to and whether they are
+     rollers; `symbols` are where a single symbol stands, the outward direction it
+     points from, and whether it is a roller. */
   var SUPPORT_COLOR = 0x2e7d32;
   var WATER_COLOR = 0x1f6fb0;
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
@@ -608,6 +612,40 @@ App.Viewport = (function () {
     var faceOut = face && OUTWARD[face];
     if (faceOut && faceOut[held] !== 0) return faceOut;
     return held === 0 ? [-1, 0] : [0, -1];
+  }
+
+  /* A face or line support as strips, one per straight piece of `points` ([x, y]),
+     each standing out on the side of `outward`. A fixed support has no side of its
+     own: a piece along `outward` stands out to -x (or -y) instead. A roller piece
+     that runs along the component it holds cannot roll on it; it gets single
+     symbols instead, about `spacing` apart, pointing along `outward`. A line with no
+     length (a face the soil only touches at a corner) is the one symbol. */
+  function supportStrips(points, outward, roller, z, spacing) {
+    var out = { strips: [], symbols: [] };
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length < 1e-9) continue;
+      var dir = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+      var along = dir[0] * outward[0] + dir[1] * outward[1];
+      if (roller && Math.abs(along) > 0.7) {
+        alongLine([a, b], spacing).forEach(function (at) {
+          out.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: true });
+        });
+        continue;
+      }
+      var normal = [dir[1], -dir[0]];
+      var side = normal[0] * outward[0] + normal[1] * outward[1];
+      if (Math.abs(side) < 1e-9) side = normal[0] !== 0 ? -normal[0] : -normal[1];
+      if (side < 0) normal = [-normal[0], -normal[1]];
+      out.strips.push({ from: [a[0], a[1], z], to: [b[0], b[1], z],
+                        outward: [normal[0] + 0, normal[1] + 0], roller: roller });
+    }
+    if (!out.strips.length && !out.symbols.length && points.length) {
+      out.symbols.push({ at: [points[0][0], points[0][1], z], outward: outward,
+                         roller: roller });
+    }
+    return out;
   }
 
   /* The faces of the soil as the build drew it. The export finds a face on the meshed
@@ -701,7 +739,8 @@ App.Viewport = (function () {
   var OUTWARD = { bottom: [0, -1], top: [0, 1], left: [-1, 0], right: [1, 0] };
 
   function conditionGlyphSpec(record, project, outlines) {
-    var spec = { kind: record.kind, lines: [], symbols: [], dashed: false, label: null,
+    var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
+                 label: null,
                  active: record.active !== false };
     var d = project.domain;
     var two = project.dimension === 2;
@@ -723,18 +762,19 @@ App.Viewport = (function () {
       var face = record.on === 'face' ? record.face : null;
       var outward = roller ? rollerOutward(heldX ? 0 : 1, face)
         : (face ? OUTWARD[face] : [0, -1]);
+      var path = null;
       if (record.on === 'face') {
         var outline = faceOutline(project, record.face, outlines);
         if (!outline) return spec;
-        alongLine([outline[0], outline[1]], SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
-        });
+        path = [outline[0], outline[1]];
       } else if (record.on === 'line') {
-        var points = record.points || [];
-        spec.lines.push(points.map(function (p) { return [p[0], p[1], z]; }));
-        alongLine(points, SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
-        });
+        path = record.points || [];
+        spec.lines.push(path.map(function (p) { return [p[0], p[1], z]; }));
+      }
+      if (path) {
+        var drawn = supportStrips(path, outward, roller, z, SYMBOL_SPACING * spec.size);
+        spec.strips = drawn.strips;
+        spec.symbols = drawn.symbols;
       } else if (record.on === 'point') {
         var p = (record.points || [[0, 0]])[0];
         spec.symbols.push({ at: [p[0], p[1], z], outward: outward, roller: roller });
@@ -825,44 +865,79 @@ App.Viewport = (function () {
       group.add(line);
     });
 
-    spec.symbols.forEach(function (symbol) {
-      var s = spec.size;
-      var o = symbol.outward, side = [-o[1], o[0]];
-      var at = symbol.at;
-      function p(along, out) {
+    var s = spec.size;
+    function stroke(points, segments) {
+      var geometry = new THREE.BufferGeometry().setFromPoints(points);
+      var material = new THREE.LineBasicMaterial({ color: color });
+      group.add(segments ? new THREE.LineSegments(geometry, material)
+                         : new THREE.Line(geometry, material));
+    }
+    // A point `along` the side direction and `out` along `o`, from `at`.
+    function frame(at, side, o) {
+      return function (along, out) {
         return new THREE.Vector3(at[0] + side[0] * along + o[0] * out,
                                  at[1] + side[1] * along + o[1] * out, at[2]);
+      };
+    }
+    /* Ground from `from` to `to` at `out`: its line and parallel slashes beyond it,
+       evenly spaced and leaning back, so none sticks out past either end. */
+    function hatchedGround(p, from, to, out) {
+      var count = Math.max(1, Math.round((to - from) / (0.3 * s)));
+      var step = (to - from) / count;
+      var pairs = [p(from, out), p(to, out)];
+      for (var k = 1; k <= count; k += 1) {
+        var u = from + step * k;
+        pairs.push(p(u, out), p(u - step, out + 0.35 * s));
       }
-      function stroke(points, segments) {
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
-        var material = new THREE.LineBasicMaterial({ color: color });
-        group.add(segments ? new THREE.LineSegments(geometry, material)
-                           : new THREE.Line(geometry, material));
+      stroke(pairs, true);
+    }
+    function wheel(p, along, out, radius) {
+      var ring = [];
+      for (var k = 0; k <= 16; k += 1) {
+        var angle = (k / 16) * Math.PI * 2;
+        ring.push(p(along + Math.cos(angle) * radius, out + Math.sin(angle) * radius));
       }
+      stroke(ring);
+    }
+
+    spec.strips.forEach(function (strip) {
+      var a = strip.from, b = strip.to;
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!(length > 0)) return;
+      var p = frame(a, [(b[0] - a[0]) / length, (b[1] - a[1]) / length], strip.outward);
+      if (strip.roller) {
+        // A row of wheels against the edge, on hatched ground, end to end.
+        var radius = 0.2 * s;
+        var wheels = Math.max(1, Math.round(length / (0.8 * s)));
+        for (var k = 0; k < wheels; k += 1) {
+          wheel(p, length * (k + 0.5) / wheels, radius, radius);
+        }
+        hatchedGround(p, 0, length, 2 * radius);
+      } else {
+        // Hatched ground on the edge itself, end to end.
+        hatchedGround(p, 0, length, 0);
+      }
+    });
+
+    spec.symbols.forEach(function (symbol) {
+      var o = symbol.outward;
+      var p = frame(symbol.at, [-o[1], o[0]], o);
       if (symbol.arrow) {
         // Water leaving the soil: a short arrow pointing out of it.
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
                 p(0.25 * s, 0.7 * s)]);
-      } else if (symbol.roller) {
-        // A triangle on two rollers.
-        stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
-        [-0.25, 0.25].forEach(function (along) {
-          var ring = [];
-          for (var k = 0; k <= 16; k += 1) {
-            var angle = (k / 16) * Math.PI * 2;
-            ring.push(p((along + Math.cos(angle) * 0.14) * s,
-                        (0.94 + Math.sin(angle) * 0.14) * s));
-          }
-          stroke(ring);
-        });
+        return;
+      }
+      // A triangle with its tip on the point.
+      stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
+      if (symbol.roller) {
+        // On two wheels, on hatched ground.
+        wheel(p, -0.25 * s, 0.94 * s, 0.14 * s);
+        wheel(p, 0.25 * s, 0.94 * s, 0.14 * s);
+        hatchedGround(p, -0.7 * s, 0.7 * s, 1.08 * s);
       } else {
-        // The clamp: hatched ground on the face itself, with no stem -- a line along
-        // the face and four parallel slashes out of it, leaning to one side.
-        var clamp = [p(-0.6 * s, 0), p(0.6 * s, 0)];
-        for (var h = -0.3; h <= 0.61; h += 0.3) {
-          clamp.push(p(h * s, 0), p((h - 0.3) * s, 0.35 * s));
-        }
-        stroke(clamp, true);
+        // On hatched ground.
+        hatchedGround(p, -0.7 * s, 0.7 * s, 0.8 * s);
       }
     });
 

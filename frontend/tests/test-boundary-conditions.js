@@ -352,18 +352,20 @@
     T.eq(conditions.children[3].label, 'pore  ·  h = -2.00 m', 'the water is written');
   });
 
-  test('a support is a row of symbols along its face; front and back draw nothing in 2D',
+  test('a support is one strip along its whole face; front and back draw nothing in 2D',
        function () {
     var project = section();
     var bottom = App.Viewport.conditionGlyphSpec(standard()[0], project);
-    T.ok(bottom.symbols.length >= 2);
-    T.eq(bottom.symbols[0].outward, [0, -1]);
-    T.eq(bottom.symbols[0].roller, false, 'x and y held: the clamp');
-    T.eq([bottom.symbols[0].at[0], bottom.symbols[bottom.symbols.length - 1].at[0]],
-         [0, 20], 'from one end of the face to the other');
+    T.eq(bottom.symbols.length, 0);
+    T.eq(bottom.strips.length, 1);
+    T.eq([bottom.strips[0].from[0], bottom.strips[0].to[0]], [0, 20],
+         'from one end of the face to the other');
+    T.eq([bottom.strips[0].outward, bottom.strips[0].roller], [[0, -1], false],
+         'x and y held: hatched ground');
     var left = App.Viewport.conditionGlyphSpec(standard()[1], project);
-    T.eq([left.symbols[0].roller, left.symbols[0].outward], [true, [-1, 0]]);
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[3], project).symbols.length, 0);
+    T.eq([left.strips[0].roller, left.strips[0].outward], [true, [-1, 0]]);
+    var none = App.Viewport.conditionGlyphSpec(standard()[3], project);
+    T.eq([none.symbols.length, none.strips.length], [0, 0]);
   });
 
   test('a face is where the soil is, not where the domain is', function () {
@@ -376,33 +378,47 @@
     T.eq(outlines.left, [[0, -10, 5], [0, 0, 5]]);
     T.eq(outlines.bottom, [[0, -10, 5], [20, -10, 5]]);
     var left = App.Viewport.conditionGlyphSpec(standard()[1], project, outlines);
-    T.eq([left.symbols[0].at[1], left.symbols[left.symbols.length - 1].at[1]], [-10, 0]);
+    T.eq([left.strips[0].from[1], left.strips[0].to[1]], [-10, 0]);
     T.eq(App.Viewport.soilFaceOutlines([other], ['soil_L1'], project), null,
          'nothing to measure with no soil drawn');
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[1], project, {}).symbols.length, 0,
+    var bare = App.Viewport.conditionGlyphSpec(standard()[1], project, {});
+    T.eq([bare.symbols.length, bare.strips.length], [0, 0],
          'and then no face to draw a support on');
   });
 
 
-  test('a support line has symbols along it, a face met at a corner has one', function () {
+  test('a support line is a strip per straight piece, a face met at a corner one symbol',
+       function () {
     var project = section();
     var slope = App.Viewport.conditionGlyphSpec(support('slope', null, [true, true, false],
       { on: 'line', points: [[0, 0], [3, 3], [9, 3]] }), project);
-    T.ok(slope.symbols.length > 3, 'between the corners too');
-    T.eq(slope.symbols[0].at.slice(0, 2), [0, 0]);
-    T.eq(slope.symbols[slope.symbols.length - 1].at.slice(0, 2), [9, 3]);
+    T.eq(slope.symbols.length, 0);
+    T.eq(slope.strips.map(function (strip) {
+      return [strip.from.slice(0, 2), strip.to.slice(0, 2)]; }),
+      [[[0, 0], [3, 3]], [[3, 3], [9, 3]]], 'without a break from start to end');
+    var h = Math.SQRT1_2;
+    T.ok(Math.abs(slope.strips[0].outward[0] - h) < 1e-12
+         && Math.abs(slope.strips[0].outward[1] + h) < 1e-12,
+         'square to the piece, on the lower side: ' + slope.strips[0].outward);
+    T.eq(slope.strips[1].outward, [0, -1]);
+    var wall = App.Viewport.conditionGlyphSpec(support('wall', null, [true, true, false],
+      { on: 'line', points: [[2, 0], [2, -5]] }), project);
+    T.eq(wall.strips[0].outward, [-1, 0], 'an upright line stands out to -x');
     var corner = { left: [[0, 0, 5], [0, 0, 5]] };
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[1], project, corner).symbols.length, 1);
+    var touch = App.Viewport.conditionGlyphSpec(standard()[1], project, corner);
+    T.eq([touch.symbols.length, touch.strips.length], [1, 0]);
   });
 
-  test('a roller points along the component it holds', function () {
+  test('a roller stands out along the component it holds', function () {
     var project = section();
     var bottomY = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [false, true, false]), project);
-    T.eq([bottomY.symbols[0].roller, bottomY.symbols[0].outward], [true, [0, -1]]);
+    T.eq([bottomY.strips[0].roller, bottomY.strips[0].outward], [true, [0, -1]]);
     var bottomX = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [true, false, false]), project);
-    T.eq(bottomX.symbols[0].outward, [-1, 0]);
+    T.eq(bottomX.strips.length, 0, 'a face along the held component cannot roll on it');
+    T.ok(bottomX.symbols.length > 1);
+    T.eq([bottomX.symbols[0].roller, bottomX.symbols[0].outward], [true, [-1, 0]]);
     var point = App.Viewport.conditionGlyphSpec(
       support('p', null, [true, false, true], { on: 'point', points: [[3, -4]] }), project);
     T.eq([point.symbols.length, point.symbols[0].roller, point.symbols[0].outward],
