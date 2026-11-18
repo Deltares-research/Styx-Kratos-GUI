@@ -37,17 +37,21 @@ Set-Alias kratos-cli <repo>\kratos-cli.bat
 $env:KRATOS_GUI_RUNS = (Get-Location)
 ```
 
-Every command below can then be pasted as it is.
+Every command below can then be pasted as it is. Each command is in a block of its own,
+which the copy button copies ready to run; what `kratos-cli` prints in reply follows it,
+indented behind a quote bar and without a copy button.
 
 ## Step 1. The project and the section
 
-```text
-PS> kratos-cli new levee.json --force --dim 2 --name levee_seepage
-wrote levee.json: levee_seepage (2D section at z = 0, SI)
-
-PS> kratos-cli domain levee.json --x -36 54 --y -22 6
-domain x -36 .. 54, y -22 .. 6 (2D section at z = 0); wrote levee.json
+```powershell
+kratos-cli new levee.json --force --dim 2 --name levee_seepage
 ```
+> <pre>wrote levee.json: levee_seepage (2D section at z = 0, SI)</pre>
+
+```powershell
+kratos-cli domain levee.json --x -36 54 --y -22 6
+```
+> <pre>domain x -36 .. 54, y -22 .. 6 (2D section at z = 0); wrote levee.json</pre>
 
 The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`).
 
@@ -73,13 +77,15 @@ out in full, so they are the script's to the last digit. A new soil starts from 
 default sand, which has Young's modulus, Poisson's ratio, a cohesion, a friction angle etc.; these properties will not be used in the intended flow computation here.
 As they also do not harm the computation, they are left as is. You may use `material m_sand --unset <property>` to remove them.
 
-```text
-PS> kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
-added material m_sand; wrote levee.json
-
-PS> kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
-added material m_clay; wrote levee.json
+```powershell
+kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 ```
+> <pre>added material m_sand; wrote levee.json</pre>
+
+```powershell
+kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
+```
+> <pre>added material m_clay; wrote levee.json</pre>
 
 > [!TIP]
 > Write `2650.0`, `1.0` and `0.0`, not `2650`, `1` and `0`: a whole number is kept as
@@ -91,20 +97,26 @@ added material m_clay; wrote levee.json
 The first layer starts at the top of the domain (here the top of the dike at 6 m), so the cover's top is moved down to
 the ground surface at 0 m. The levee comes on top of it in step 4.
 
-```text
-PS> kratos-cli layer levee.json add cover --name Cover --material m_clay --bottom -2
-added layer cover; wrote levee.json
-
-PS> kratos-cli layer levee.json set cover --top 0
-changed layer cover; wrote levee.json
-
-PS> kratos-cli layer levee.json add aquifer --name Aquifer --material m_sand --bottom -22
-added layer aquifer; wrote levee.json
-
-PS> kratos-cli layer levee.json list
-cover  Cover  of m_clay: 0 .. -2
-aquifer  Aquifer  of m_sand: -2 .. -22
+```powershell
+kratos-cli layer levee.json add cover --name Cover --material m_clay --bottom -2
 ```
+> <pre>added layer cover; wrote levee.json</pre>
+
+```powershell
+kratos-cli layer levee.json set cover --top 0
+```
+> <pre>changed layer cover; wrote levee.json</pre>
+
+```powershell
+kratos-cli layer levee.json add aquifer --name Aquifer --material m_sand --bottom -22
+```
+> <pre>added layer aquifer; wrote levee.json</pre>
+
+```powershell
+kratos-cli layer levee.json list
+```
+> <pre>cover  Cover  of m_clay: 0 .. -2
+> aquifer  Aquifer  of m_sand: -2 .. -22</pre>
 
 ## Step 4. The levee
 
@@ -113,38 +125,48 @@ from (−14, 0) up to 4.5 m and down to (18, 0), and reaches 0.5 m into the cove
 part takes the place of the layer it overlaps. The outer layer wraps the core, from
 (−18, 0) over the crest to (22, 0):
 
-```text
-PS> kratos-cli volume levee.json add polygon --label "Levee core" --material m_clay --points -14 0 0 4.5 4 4.5 18 0 4 -0.5 0 -0.5
-added drawn_0 (Levee core, soil of m_clay); wrote levee.json
-
-PS> kratos-cli volume levee.json add polygon --label "Levee outer layer" --material m_clay --points -18 0 0 6 4 6 22 0 18 0 4 4.5 0 4.5 -14 0
-added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json
+```powershell
+kratos-cli volume levee.json add polygon --label "Levee core" --material m_clay --points -14 0 0 4.5 4 4.5 18 0 4 -0.5 0 -0.5
 ```
+> <pre>added drawn_0 (Levee core, soil of m_clay); wrote levee.json</pre>
+
+```powershell
+kratos-cli volume levee.json add polygon --label "Levee outer layer" --material m_clay --points -18 0 0 6 4 6 22 0 18 0 4 4.5 0 4.5 -14 0
+```
+> <pre>added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json</pre>
 
 `volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's colour
 and keeps its label in its recipe. The model script calls the parts `levee_core` and
 `levee_outer`, draws them grey. These lines make the
 parts the script's:
 
-```text
-PS> kratos-cli set levee.json "custom_parts[drawn_0].key" levee_core
-custom_parts[drawn_0].key = "levee_core"; wrote levee.json
-
-PS> kratos-cli set levee.json "custom_parts[drawn_1].key" levee_outer
-custom_parts[drawn_1].key = "levee_outer"; wrote levee.json
-
-PS> kratos-cli set levee.json "custom_parts[levee_core].color" "#888888"
-custom_parts[levee_core].color = "#888888"; wrote levee.json
-
-PS> kratos-cli set levee.json "custom_parts[levee_outer].color" "#888888"
-custom_parts[levee_outer].color = "#888888"; wrote levee.json
-
-PS> kratos-cli parts levee.json
-soil_cover  Cover
-soil_aquifer  Aquifer
-levee_core  Levee core (soil of m_clay)
-levee_outer  Levee outer layer (soil of m_clay)
+```powershell
+kratos-cli set levee.json "custom_parts[drawn_0].key" levee_core
 ```
+> <pre>custom_parts[drawn_0].key = "levee_core"; wrote levee.json</pre>
+
+```powershell
+kratos-cli set levee.json "custom_parts[drawn_1].key" levee_outer
+```
+> <pre>custom_parts[drawn_1].key = "levee_outer"; wrote levee.json</pre>
+
+```powershell
+kratos-cli set levee.json "custom_parts[levee_core].color" "#888888"
+```
+> <pre>custom_parts[levee_core].color = "#888888"; wrote levee.json</pre>
+
+```powershell
+kratos-cli set levee.json "custom_parts[levee_outer].color" "#888888"
+```
+> <pre>custom_parts[levee_outer].color = "#888888"; wrote levee.json</pre>
+
+```powershell
+kratos-cli parts levee.json
+```
+> <pre>soil_cover  Cover
+> soil_aquifer  Aquifer
+> levee_core  Levee core (soil of m_clay)
+> levee_outer  Levee outer layer (soil of m_clay)</pre>
 
 The `key` is what the stages and the deck's part names use; the `color` shows in the GUI.
 
@@ -154,24 +176,26 @@ A new project has standard supports that block the normal movement of sides by r
 A groundwater flow calculation, like this levee case, does not make use of them. The front and back rollers are there
 for a 3D model and are not listed in 2D:
 
-```text
-PS> kratos-cli boundary levee.json list
-fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z
-roller_left  Roller left  displacement on the left face; fixed in x
-roller_right  Roller right  displacement on the right face; fixed in x
-The front and back supports are kept for the solid model; the 2D section holds z by itself.
+```powershell
+kratos-cli boundary levee.json list
 ```
+> <pre>fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z
+> roller_left  Roller left  displacement on the left face; fixed in x
+> roller_right  Roller right  displacement on the right face; fixed in x
+> The front and back supports are kept for the solid model; the 2D section holds z by itself.</pre>
 
 The riverside boundary condition specifies the water level in the river and includes the left side, the foreland and the outer slope up to the crest's outer
 corner, all as one line that connects the line pieces. The polder side boundary condition specifies the far field groundwater level in the polder on the right side:
 
-```text
-PS> kratos-cli boundary levee.json add river_head --name "River head" --line -36 -22 -36 0 -18 0 0 6 --water-pressure Hydrostatic --reference-coordinate 5 --pressure-tension-cut-off 1e5
-added river_head  River head  water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6); hydrostatic about 5 m, cut-off 100000, fixed; wrote levee.json
-
-PS> kratos-cli boundary levee.json add polder_head --name "Polder head" --line 54 0 54 -22 --water-pressure Hydrostatic --reference-coordinate -0.5 --pressure-tension-cut-off 1e5
-added polder_head  Polder head  water pressure on line (54, 0) -> (54, -22); hydrostatic about -0.5 m, cut-off 100000, fixed; wrote levee.json
+```powershell
+kratos-cli boundary levee.json add river_head --name "River head" --line -36 -22 -36 0 -18 0 0 6 --water-pressure Hydrostatic --reference-coordinate 5 --pressure-tension-cut-off 1e5
 ```
+> <pre>added river_head  River head  water pressure on line (-36, -22) -&gt; (-36, 0) -&gt; (-18, 0) -&gt; (0, 6); hydrostatic about 5 m, cut-off 100000, fixed; wrote levee.json</pre>
+
+```powershell
+kratos-cli boundary levee.json add polder_head --name "Polder head" --line 54 0 54 -22 --water-pressure Hydrostatic --reference-coordinate -0.5 --pressure-tension-cut-off 1e5
+```
+> <pre>added polder_head  Polder head  water pressure on line (54, 0) -&gt; (54, -22); hydrostatic about -0.5 m, cut-off 100000, fixed; wrote levee.json</pre>
 
 `--pressure-tension-cut-off 1e5` lets the suction above each level grow to 100 kPa. The
 river head also holds the outer slope above 5.0 m, up to the crest, where it is 10 kPa of
@@ -180,10 +204,10 @@ suction.
 The water may leave the soil through the inner slope and the polder surface, from the
 crest's inner corner (4, 6) on. This is specified by adding a `seepage_face`
 
-```text
-PS> kratos-cli boundary levee.json add seepage_face --name "Seepage face" --seepage --line 4 6 22 0 54 0
-added seepage_face  Seepage face  seepage on line (4, 6) -> (22, 0) -> (54, 0); water may leave the soil here; wrote levee.json
+```powershell
+kratos-cli boundary levee.json add seepage_face --name "Seepage face" --seepage --line 4 6 22 0 54 0
 ```
+> <pre>added seepage_face  Seepage face  seepage on line (4, 6) -&gt; (22, 0) -&gt; (54, 0); water may leave the soil here; wrote levee.json</pre>
 
 The crest, from (0, 6) to (4, 6), and the bottom have no boundary condition specified, so no water flows
 through them.
@@ -193,20 +217,22 @@ nonlinear iteration strategy starts from a given initial field for the water pre
 drops through the levee from the river level to the polder level. `--initial` makes them
 start values only, which the calculation then changes:
 
-```text
-PS> kratos-cli boundary levee.json add start --name "Start values" --domain --water-pressure Phreatic_Multi_Line --phreatic-line -36 5 -2 5 15 -0.5 54 -0.5 --pressure-tension-cut-off 1e5 --initial
-added start  Start values  water pressure on the whole soil; phreatic line (-36, 5) -> (-2, 5) -> (15, -0.5) -> (54, -0.5), cut-off 100000, initial; wrote levee.json
-
-PS> kratos-cli boundary levee.json list
-fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z
-roller_left  Roller left  displacement on the left face; fixed in x
-roller_right  Roller right  displacement on the right face; fixed in x
-river_head  River head  water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6); hydrostatic about 5 m, cut-off 100000, fixed
-polder_head  Polder head  water pressure on line (54, 0) -> (54, -22); hydrostatic about -0.5 m, cut-off 100000, fixed
-seepage_face  Seepage face  seepage on line (4, 6) -> (22, 0) -> (54, 0); water may leave the soil here
-start  Start values  water pressure on the whole soil; phreatic line (-36, 5) -> (-2, 5) -> (15, -0.5) -> (54, -0.5), cut-off 100000, initial
-The front and back supports are kept for the solid model; the 2D section holds z by itself.
+```powershell
+kratos-cli boundary levee.json add start --name "Start values" --domain --water-pressure Phreatic_Multi_Line --phreatic-line -36 5 -2 5 15 -0.5 54 -0.5 --pressure-tension-cut-off 1e5 --initial
 ```
+> <pre>added start  Start values  water pressure on the whole soil; phreatic line (-36, 5) -&gt; (-2, 5) -&gt; (15, -0.5) -&gt; (54, -0.5), cut-off 100000, initial; wrote levee.json</pre>
+
+```powershell
+kratos-cli boundary levee.json list
+```
+> <pre>fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z
+> roller_left  Roller left  displacement on the left face; fixed in x
+> roller_right  Roller right  displacement on the right face; fixed in x
+> river_head  River head  water pressure on line (-36, -22) -&gt; (-36, 0) -&gt; (-18, 0) -&gt; (0, 6); hydrostatic about 5 m, cut-off 100000, fixed
+> polder_head  Polder head  water pressure on line (54, 0) -&gt; (54, -22); hydrostatic about -0.5 m, cut-off 100000, fixed
+> seepage_face  Seepage face  seepage on line (4, 6) -&gt; (22, 0) -&gt; (54, 0); water may leave the soil here
+> start  Start values  water pressure on the whole soil; phreatic line (-36, 5) -&gt; (-2, 5) -&gt; (15, -0.5) -&gt; (54, -0.5), cut-off 100000, initial
+> The front and back supports are kept for the solid model; the 2D section holds z by itself.</pre>
 
 The supports stay in the list, but the Groundwater flow stage does not use them, so they
 do not change the deck. The last line is printed for every 2D model.
@@ -218,43 +244,51 @@ node of the seepage face per iteration, and the face has about 55 nodes on this 
 the stage allows 300 iterations to allow for opening or closing of all these nodes and convergence of the water pressure field.
 The mesh is made with linear interpolation triangles of 1 m:
 
-```text
-PS> kratos-cli stages levee.json add flow --name Flow --calculation flow
-added stage (id flow, name Flow) after nothing: it is the first; wrote levee.json
-
-PS> kratos-cli stages levee.json set flow --max-iterations 300 --tolerance 1e-4
-changed stage flow; wrote levee.json
-
-PS> kratos-cli set levee.json mesh.element_size 1
-mesh.element_size = 1; wrote levee.json
-
-PS> kratos-cli set levee.json mesh.order 1
-mesh.order = 1; wrote levee.json
+```powershell
+kratos-cli stages levee.json add flow --name Flow --calculation flow
 ```
+> <pre>added stage (id flow, name Flow) after nothing: it is the first; wrote levee.json</pre>
+
+```powershell
+kratos-cli stages levee.json set flow --max-iterations 300 --tolerance 1e-4
+```
+> <pre>changed stage flow; wrote levee.json</pre>
+
+```powershell
+kratos-cli set levee.json mesh.element_size 1
+```
+> <pre>mesh.element_size = 1; wrote levee.json</pre>
+
+```powershell
+kratos-cli set levee.json mesh.order 1
+```
+> <pre>mesh.order = 1; wrote levee.json</pre>
 
 If a stage allows fewer iterations than its seepage faces have nodes, `export` and
 `calculate` warn that it may stop too soon.
 
 ## Step 7. Check it
 
-```text
-PS> kratos-cli check levee.json
-ok: levee_seepage (2D section at z = 0, SI)
-
-PS> kratos-cli show levee.json
-levee_seepage  (levee.json)
-  2D plane strain, SI units, section at z = 0
-  domain      x -36 .. 54, y -22 .. 0
-  materials   m_sand, m_clay
-  layers      cover, aquifer
-  parts       soil_cover, soil_aquifer, levee_core, levee_outer
-  structures  none
-  water       none
-  conditions  fixed_bottom (displacement on the bottom face), roller_left (displacement on the left face), roller_right (displacement on the right face), river_head (water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6)), polder_head (water pressure on line (54, 0) -> (54, -22)), seepage_face (seepage on line (4, 6) -> (22, 0) -> (54, 0)), start (water pressure on the whole soil)
-  gravity     on
-  stages      flow
-  mesh        element size 1, order 1
+```powershell
+kratos-cli check levee.json
 ```
+> <pre>ok: levee_seepage (2D section at z = 0, SI)</pre>
+
+```powershell
+kratos-cli show levee.json
+```
+> <pre>levee_seepage  (levee.json)
+>   2D plane strain, SI units, section at z = 0
+>   domain      x -36 .. 54, y -22 .. 0
+>   materials   m_sand, m_clay
+>   layers      cover, aquifer
+>   parts       soil_cover, soil_aquifer, levee_core, levee_outer
+>   structures  none
+>   water       none
+>   conditions  fixed_bottom (displacement on the bottom face), roller_left (displacement on the left face), roller_right (displacement on the right face), river_head (water pressure on line (-36, -22) -&gt; (-36, 0) -&gt; (-18, 0) -&gt; (0, 6)), polder_head (water pressure on line (54, 0) -&gt; (54, -22)), seepage_face (seepage on line (4, 6) -&gt; (22, 0) -&gt; (54, 0)), start (water pressure on the whole soil)
+>   gravity     on
+>   stages      flow
+>   mesh        element size 1, order 1</pre>
 
 `show` gives the domain as `y -22 .. 0`: the command line keeps the domain's top at the
 top of the first layer, the ground surface. The levee above it is drawn parts, which the
@@ -263,16 +297,18 @@ domain's top.
 
 ## Step 8. Run it
 
-```text
-PS> kratos-cli calculate levee.json
-run levee_seepage_<YYYY-MM-DD>_<hh-mm> finished in <t> s: 3 files in <your folder>\levee_seepage_<YYYY-MM-DD>_<hh-mm>
-next: kratos-cli results show levee_seepage_<YYYY-MM-DD>_<hh-mm>
-
-PS> kratos-cli results show 1
-levee_seepage_<YYYY-MM-DD>_<hh-mm>  (deck levee_seepage, started <YYYY-MM-DD>T<hh:mm>)
-  complete, SI units, 8 files, 1013.4 KB
-    1  Flow                          results
+```powershell
+kratos-cli calculate levee.json
 ```
+> <pre>run levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt; finished in &lt;t&gt; s: 3 files in &lt;your folder&gt;\levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt;
+> next: kratos-cli results show levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt;</pre>
+
+```powershell
+kratos-cli results show 1
+```
+> <pre>levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt;  (deck levee_seepage, started &lt;YYYY-MM-DD&gt;T&lt;hh:mm&gt;)
+>   complete, SI units, 8 files, 1013.4 KB
+>     1  Flow                          results</pre>
 
 `calculate` meshes the model, writes the deck into a new run folder and runs Kratos there.
 The run folder is in `KRATOS_GUI_RUNS`, the folder you set it to; `1` is the newest run.
@@ -283,25 +319,29 @@ folder `KRATOS_GUI_RUNS` is set to.
 
 ## Step 9. The results
 
-```text
-PS> kratos-cli results field 1 pw
-Pore pressure (Pa), stage 1 (Flow): -2.70e+5 to 16796 over 2628 nodes
-  min -2.70e+5 at node 9
-  max 16796 at node 16
-`--csv` writes every value.
-
-PS> kratos-cli results field 1 flow_rate
-Nodal water flow rate (m³/s/m), stage 1 (Flow): -3.08e-6 to 6.10e-6 over 2628 nodes
-  min -3.08e-6 at node 236
-  max 6.10e-6 at node 15
-`--csv` writes every value.
-
-PS> kratos-cli results field 1 effective_saturation
-Effective saturation (-), stage 1 (Flow): 0.4838 to 1.04 over 2628 nodes
-  min 0.4838 at node 16
-  max 1.04 at node 2565
-`--csv` writes every value.
+```powershell
+kratos-cli results field 1 pw
 ```
+> <pre>Pore pressure (Pa), stage 1 (Flow): -2.70e+5 to 16796 over 2628 nodes
+>   min -2.70e+5 at node 9
+>   max 16796 at node 16
+> `--csv` writes every value.</pre>
+
+```powershell
+kratos-cli results field 1 flow_rate
+```
+> <pre>Nodal water flow rate (m³/s/m), stage 1 (Flow): -3.08e-6 to 6.10e-6 over 2628 nodes
+>   min -3.08e-6 at node 236
+>   max 6.10e-6 at node 15
+> `--csv` writes every value.</pre>
+
+```powershell
+kratos-cli results field 1 effective_saturation
+```
+> <pre>Effective saturation (-), stage 1 (Flow): 0.4838 to 1.04 over 2628 nodes
+>   min 0.4838 at node 16
+>   max 1.04 at node 2565
+> `--csv` writes every value.</pre>
 
 - Kratos' sign for the water pressure is suction positive. The fixed river head gives compression of
   −270 kPa at the bottom left corner. The largest suction, 16.8 kPa, is in the soil of
@@ -346,7 +386,7 @@ conditions** in the Model explorer.
 
 The same commands work in `kratos-cli shell`, one per line, without `kratos-cli` and the
 project file: `new levee.json --force --dim 2 --name levee_seepage`, then
-`domain --x -36 54 --y -22 6, and so on. See also [CROW_case.md](CROW_case.md) for the
+`domain --x -36 54 --y -22 6`, and so on. See also [CROW_case.md](CROW_case.md) for the
 shell, and [CLI.md](../CLI.md) for every command.
 
 
