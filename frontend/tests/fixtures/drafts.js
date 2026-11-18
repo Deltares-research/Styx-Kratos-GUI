@@ -1364,14 +1364,14 @@ window.DRAFTS_FIXTURE =
       {
         "law": "GeoLinearElasticPlaneStrain2DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-          "YOUNG_MODULUS": 15000000.0,
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
-          "DENSITY_SOLID": 1732.9255861365953,
-          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "DENSITY_SOLID": 1834.8623853211009,
+          "PERMEABILITY_XX": 1.1574074074074074e-14,
           "POROSITY": 0.0,
-          "GEO_COHESION": 1000,
-          "GEO_FRICTION_ANGLE": 30.0
+          "GEO_COHESION": 7000,
+          "GEO_FRICTION_ANGLE": 30
         },
         "unread": [
           "GEO_COHESION",
@@ -1410,14 +1410,14 @@ window.DRAFTS_FIXTURE =
       {
         "law": "GeoMohrCoulombLawPlaneStrain",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-          "YOUNG_MODULUS": 15000000.0,
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
-          "DENSITY_SOLID": 1732.9255861365953,
-          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "DENSITY_SOLID": 1834.8623853211009,
+          "PERMEABILITY_XX": 1.1574074074074074e-14,
           "POROSITY": 0.0,
-          "GEO_COHESION": 1000,
-          "GEO_FRICTION_ANGLE": 30.0
+          "GEO_COHESION": 7000,
+          "GEO_FRICTION_ANGLE": 30
         },
         "unread": []
       },
@@ -1446,14 +1446,14 @@ window.DRAFTS_FIXTURE =
       {
         "law": "SmallStrainUDSM2DPlaneStrainLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-          "YOUNG_MODULUS": 15000000.0,
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
-          "DENSITY_SOLID": 1732.9255861365953,
-          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "DENSITY_SOLID": 1834.8623853211009,
+          "PERMEABILITY_XX": 1.1574074074074074e-14,
           "POROSITY": 0.0,
-          "GEO_COHESION": 1000,
-          "GEO_FRICTION_ANGLE": 30.0
+          "GEO_COHESION": 7000,
+          "GEO_FRICTION_ANGLE": 30
         },
         "unread": []
       },
@@ -1535,97 +1535,205 @@ window.DRAFTS_FIXTURE =
   },
   "library": [
     {
-      "id": "m1",
+      "id": "embankment",
       "model": "mohr_coulomb",
-      "name": "Fill",
-      "color": "#d8c48a",
-      "r_inter": 0.7,
-      "interface_permeability": "Neutral",
+      "name": "Embankment",
+      "color": "#c9b27c",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
       "variables": {
-        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-        "YOUNG_MODULUS": 15000000.0,
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 14000000.0,
         "POISSON_RATIO": 0.3,
-        "DENSITY_SOLID": 1732.9255861365953,
-        "PERMEABILITY_XX": 1.1574074074074074e-12,
-        "POROSITY": 0.0,
-        "GEO_COHESION": 1000,
-        "GEO_FRICTION_ANGLE": 30.0
-      }
-    },
-    {
-      "id": "m2",
-      "model": "mohr_coulomb",
-      "name": "Sand, loose",
-      "color": "#c4a86a",
-      "r_inter": 0.7,
-      "interface_permeability": "Neutral",
-      "variables": {
-        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-        "YOUNG_MODULUS": 25000000.0,
-        "POISSON_RATIO": 0.28,
         "DENSITY_SOLID": 1834.8623853211009,
-        "PERMEABILITY_XX": 1.736111111111111e-12,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
         "POROSITY": 0.0,
-        "GEO_COHESION": 500,
-        "GEO_FRICTION_ANGLE": 32.0
+        "GEO_COHESION": 7000,
+        "GEO_FRICTION_ANGLE": 30
       }
     },
     {
-      "id": "m3",
+      "id": "clay_shallow",
       "model": "mohr_coulomb",
-      "name": "Clay, soft",
+      "name": "Clay, shallow",
       "color": "#8fa86b",
       "r_inter": 0.5,
       "interface_permeability": "Impermeable",
       "variables": {
         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-        "YOUNG_MODULUS": 4000000.0,
-        "POISSON_RATIO": 0.35,
+        "YOUNG_MODULUS": 2900000.0,
+        "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 1529.051987767584,
-        "PERMEABILITY_XX": 1.1574074074074073e-16,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
         "POROSITY": 0.0,
         "GEO_COHESION": 5000,
-        "GEO_FRICTION_ANGLE": 22.0
+        "GEO_FRICTION_ANGLE": 18
       }
     },
     {
-      "id": "m4",
+      "id": "clay_deep",
       "model": "mohr_coulomb",
-      "name": "Clay, stiff",
-      "color": "#6f8fa8",
-      "r_inter": 0.55,
+      "name": "Clay, deep",
+      "color": "#6f8f5a",
+      "r_inter": 0.5,
       "interface_permeability": "Impermeable",
       "variables": {
         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-        "YOUNG_MODULUS": 12000000.0,
-        "POISSON_RATIO": 0.33,
-        "DENSITY_SOLID": 1783.893985728848,
-        "PERMEABILITY_XX": 5.787037037037037e-16,
+        "YOUNG_MODULUS": 14000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1630.9887869520896,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
         "POROSITY": 0.0,
-        "GEO_COHESION": 15000,
-        "GEO_FRICTION_ANGLE": 25.0
+        "GEO_COHESION": 7000,
+        "GEO_FRICTION_ANGLE": 18
       }
     },
     {
-      "id": "m5",
+      "id": "organic_clay",
       "model": "mohr_coulomb",
-      "name": "Sand, dense",
-      "color": "#b08a6a",
-      "r_inter": 0.75,
+      "name": "Organic clay",
+      "color": "#7f8a6a",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 1400000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1427.1151885830784,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 5000,
+        "GEO_FRICTION_ANGLE": 15
+      }
+    },
+    {
+      "id": "peat_shallow",
+      "model": "mohr_coulomb",
+      "name": "Peat, shallow",
+      "color": "#8b6a4f",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 290000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1121.3047910295616,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 5000,
+        "GEO_FRICTION_ANGLE": 15
+      }
+    },
+    {
+      "id": "peat_deep",
+      "model": "mohr_coulomb",
+      "name": "Peat, deep",
+      "color": "#6e5240",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 290000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1121.3047910295616,
+        "PERMEABILITY_XX": 1.1574074074074074e-14,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 5000,
+        "GEO_FRICTION_ANGLE": 15
+      }
+    },
+    {
+      "id": "clay_with_silt",
+      "model": "mohr_coulomb",
+      "name": "Clay with silt",
+      "color": "#a3b48a",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 14000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1834.8623853211009,
+        "PERMEABILITY_XX": 1.1574074074074073e-13,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 5000,
+        "GEO_FRICTION_ANGLE": 23
+      }
+    },
+    {
+      "id": "sand_with_clay",
+      "model": "mohr_coulomb",
+      "name": "Sand with clay",
+      "color": "#c2b06a",
+      "r_inter": 0.67,
       "interface_permeability": "Neutral",
       "variables": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-        "YOUNG_MODULUS": 45000000.0,
-        "POISSON_RATIO": 0.25,
-        "DENSITY_SOLID": 1936.7991845056065,
-        "PERMEABILITY_XX": 5.787037037037037e-12,
+        "YOUNG_MODULUS": 14000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1834.8623853211009,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
         "POROSITY": 0.0,
-        "GEO_COHESION": 0,
-        "GEO_FRICTION_ANGLE": 36.0
+        "GEO_COHESION": 3000,
+        "GEO_FRICTION_ANGLE": 28
       }
     },
     {
-      "id": "m6",
+      "id": "sand",
+      "model": "mohr_coulomb",
+      "name": "Sand",
+      "color": "#e3cf8b",
+      "r_inter": 0.67,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 30000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2038.735983690112,
+        "PERMEABILITY_XX": 3.472222222222222e-11,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 1000,
+        "GEO_FRICTION_ANGLE": 30
+      }
+    },
+    {
+      "id": "sand_permeable",
+      "model": "mohr_coulomb",
+      "name": "Sand, permeable",
+      "color": "#d6a84e",
+      "r_inter": 0.67,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 30000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1936.7991845056065,
+        "PERMEABILITY_XX": 5.2083333333333334e-11,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 1000,
+        "GEO_FRICTION_ANGLE": 30
+      }
+    },
+    {
+      "id": "sand_less_permeable",
+      "model": "mohr_coulomb",
+      "name": "Sand, less permeable",
+      "color": "#bfb48e",
+      "r_inter": 0.67,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 30000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2038.735983690112,
+        "PERMEABILITY_XX": 1.736111111111111e-11,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 1000,
+        "GEO_FRICTION_ANGLE": 30
+      }
+    },
+    {
+      "id": "bedrock",
       "model": "linear_elastic",
       "name": "Bedrock",
       "color": "#8d8d99",
@@ -1634,7 +1742,7 @@ window.DRAFTS_FIXTURE =
       "variables": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
         "YOUNG_MODULUS": 2000000000.0,
-        "POISSON_RATIO": 0.2,
+        "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 2446.4831804281343,
         "PERMEABILITY_XX": 0.0,
         "POROSITY": 0.0

@@ -47,13 +47,15 @@ def test_every_soil_added_takes_a_colour_no_other_soil_has():
     own colour while it is free, and every soil after another free one."""
     project = blank_project()
     colours = []
-    for id, preset in (("a", None), ("b", None), ("c", "m1"), ("d", "m1"), ("e", "m2")):
+    for id, preset in (("a", None), ("b", None), ("c", "clay_shallow"), ("d", "clay_shallow"),
+                        ("e", "sand")):
         material, _ = drafts.soil(project, id, preset=preset)
         project = session.add_material(project, material)
         colours.append(material.color)
 
-    # The palette's first two; Fill's own is the first, so taken; Sand's own, free.
-    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#c4a86a"]
+    # The palette's first two; shallow clay's own is the second, so taken; Sand's own,
+    # free.
+    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#e3cf8b"]
     given, _ = drafts.soil(project, "f", color="#123456")
     assert given.color == "#123456"
 
@@ -61,18 +63,18 @@ def test_every_soil_added_takes_a_colour_no_other_soil_has():
 def test_a_preset_in_a_kn_project_is_stated_in_kn():
     project = blank_project().model_copy(update={"unit_system": "kN"})
 
-    material, _ = drafts.soil(project, "sand", preset="m2")
+    material, _ = drafts.soil(project, "sand", preset="sand")
 
-    expected, _ = units.convert_variables(drafts.preset("m2")["variables"], "SI", "kN")
+    expected, _ = units.convert_variables(drafts.preset("sand")["variables"], "SI", "kN")
     assert {name: material.variables[name] for name in expected} == expected
     assert material.variables["YOUNG_MODULUS"] == pytest.approx(
-        drafts.preset("m2")["variables"]["YOUNG_MODULUS"] / 1000)
+        drafts.preset("sand")["variables"]["YOUNG_MODULUS"] / 1000)
 
 
 def test_a_soil_can_start_from_a_library_preset():
-    material, _ = drafts.soil(blank_project(), "clay", preset="m3")
+    material, _ = drafts.soil(blank_project(), "clay", preset="clay_shallow")
 
-    preset = drafts.preset("m3")
+    preset = drafts.preset("clay_shallow")
     assert material.name == preset["name"]
     assert material.color == preset["color"]
     assert {name: material.variables[name] for name in preset["variables"]} ==         preset["variables"]
@@ -84,13 +86,42 @@ def test_a_soil_can_start_from_a_library_preset():
 
 
 def test_an_unknown_preset_says_which_there_are():
-    with pytest.raises(drafts.DraftError, match="m1, m2, m3, m4, m5, m6"):
+    with pytest.raises(drafts.DraftError, match="embankment, clay_shallow, .*, bedrock"):
         drafts.soil(blank_project(), "clay", preset="m9")
 
 
-def test_the_library_is_the_gui_s_six_soils_in_si():
-    assert [p["id"] for p in drafts.LIBRARY] == ["m1", "m2", "m3", "m4", "m5", "m6"]
-    assert drafts.preset("m6")["variables"]["YOUNG_MODULUS"] == 2.0e9
+def test_the_library_is_the_d_geo_suite_soils_in_si():
+    assert [p["name"] for p in drafts.LIBRARY] == [
+        "Embankment", "Clay, shallow", "Clay, deep", "Organic clay",
+        "Peat, shallow", "Peat, deep", "Clay with silt", "Sand with clay", "Sand",
+        "Sand, permeable", "Sand, less permeable", "Bedrock"]
+    assert drafts.preset("bedrock")["variables"]["YOUNG_MODULUS"] == 2.0e9
+    sand = drafts.preset("sand")["variables"]
+    assert sand["DENSITY_SOLID"] * 9.81 == pytest.approx(20_000)
+    assert (sand["YOUNG_MODULUS"], sand["GEO_COHESION"], sand["GEO_FRICTION_ANGLE"]) == \
+        (3.0e7, 1000, 30)
+    assert sand["PERMEABILITY_XX"] == pytest.approx(30 * drafts.PER_M_PER_DAY)
+
+
+def test_every_library_soil_can_carry_a_model_and_has_what_it_needs():
+    """One Poisson's ratio, no unit weight under 11 kN/m3, and a drainage type and
+    interface that follow from k."""
+    for entry in drafts.LIBRARY:
+        variables = entry["variables"]
+        assert variables["POISSON_RATIO"] == drafts.LIBRARY_POISSON_RATIO
+        assert variables["DENSITY_SOLID"] * 9.81 >= 11_000 - 1e-9, entry["name"]
+        if entry["model"] == soil_models.MOHR_COULOMB:
+            coupled = variables["PERMEABILITY_XX"] <= 0.1 * drafts.PER_M_PER_DAY * (1 + 1e-12)
+            assert variables["GEO_DRAINAGE_TYPE"] == (
+                "FULLY_COUPLED" if coupled else "CONSTANT_PW_FIELD"), entry["name"]
+            assert entry["interface_permeability"] == (
+                "Impermeable" if coupled else "Neutral"), entry["name"]
+            assert variables["GEO_COHESION"] >= 1000, entry["name"]
+        for model in soil_models.MODELS:
+            material, _ = drafts.soil(blank_project(), "x", preset=entry["id"], model=model)
+            assert material.constitutive_law == soil_models.law(model, 2)
+            assert soil_models.missing(material.constitutive_law, material.variables) == [], \
+                f"{entry['name']} as {model}"
 
 
 def test_a_new_layer_goes_below_the_last_one():

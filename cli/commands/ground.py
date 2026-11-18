@@ -42,8 +42,13 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     material = noun(commands, common, "material",
                      "list, add, change or remove materials (soil property sets)")
     action(material, common, "list", list_materials, writes=False)
-    action(material, common, "presets", list_presets, writes=False,
-            help="the material library a new soil can start from")
+    presets = action(material, common, "presets", list_presets, writes=False,
+                     help="the material library a new soil can start from, or one preset "
+                          "with all its values")
+    presets.add_argument("preset", nargs="?",
+                         help="a preset to show as `add --preset` would add it")
+    presets.add_argument("--model", choices=sorted(MODEL_WORDS),
+                         help="show it as this soil model instead of its own")
     action(material, common, "models", list_models, writes=False,
             help="the soil models (--model), each with its parameters and defaults in "
                  "the project's units")
@@ -293,9 +298,35 @@ def _parameter_line(p: soil_models.Parameter, system: str) -> str:
 
 
 def list_presets(args: argparse.Namespace) -> Answer:
+    if args.preset is not None:
+        return _show_preset(args)
     return Answer(data=drafts.LIBRARY, lines=[
-        f"{entry['id']}  {entry['name']}  E = {entry['variables']['YOUNG_MODULUS']:g} Pa"
-        for entry in drafts.LIBRARY])
+        f"{entry['id']}  {entry['name']}  ({soil_models.label(entry['model'])})  "
+        f"E = {entry['variables']['YOUNG_MODULUS']:g} Pa"
+        for entry in drafts.LIBRARY] + [
+        "Each is added as its own soil model; --model adds it as another, as the "
+        "material window's Model list does. `presets ID` shows one."])
+
+
+def _show_preset(args: argparse.Namespace) -> Answer:
+    """One preset as `material add --preset` would add it, in the project's units, as
+    the material window's library Properties… shows it; nothing is written."""
+    project = read(args)
+    try:
+        material, notes = drafts.soil(project, args.preset, preset=args.preset,
+                                      model=_model(args))
+    except drafts.DraftError as failure:
+        raise CommandError(str(failure)) from None
+    system = project.unit_system
+    lines = [f"{material.name}  {soil_models.label(soil_models.model_of(material.constitutive_law))}"
+             f" ({material.constitutive_law}), not in the project"]
+    for name, value in material.variables.items():
+        quantity = units.VARIABLES.get(name)
+        unit = units.label(quantity, system) if quantity is not None else ""
+        lines.append(f"  {name} = {_shown(value)}" + (f" {unit}" if unit else ""))
+    lines.append(f"  R_inter = {_shown(material.r_inter)}, interface permeability "
+                 f"{material.interface_permeability}")
+    return Answer(data=material.model_dump(mode="json"), lines=lines + notes)
 
 
 @named_ids(required=True)

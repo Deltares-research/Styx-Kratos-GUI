@@ -85,13 +85,28 @@ def test_material_presets_lists_the_library(cli, site):
         assert entry["id"] in ran.out and entry["name"] in ran.out
 
 
+def test_material_presets_shows_one_preset_without_adding_it(cli, site):
+    """As the material window's library Properties… shows a preset before it is added."""
+    before = session.load(site)
+    ran = cli("material", site, "presets", "sand")
+
+    assert ran.code == 0, ran.err
+    assert "Sand  Mohr-Coulomb (GeoMohrCoulombLawPlaneStrain), not in the project" in ran.out
+    assert "GEO_FRICTION_ANGLE = 30" in ran.out
+    assert session.load(site) == before, "nothing written"
+
+    elastic = cli("material", site, "presets", "bedrock", "--model", "mohr-coulomb")
+    assert "Filled in from the Mohr-Coulomb defaults: GEO_COHESION" in elastic.out
+    assert cli("material", site, "presets", "nothing").code == 1
+
+
 def test_material_add_from_a_preset_with_variables_of_its_own(cli, site):
-    ran = cli("material", site, "add", "clay", "--preset", "m3", "YOUNG_MODULUS=5e6",
+    ran = cli("material", site, "add", "clay", "--preset", "clay_shallow", "YOUNG_MODULUS=5e6",
               "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD")
 
     assert ran.code == 0, ran.err
     clay = session.load(site).materials[-1]
-    assert (clay.id, clay.name) == ("clay", "Clay, soft")
+    assert (clay.id, clay.name) == ("clay", "Clay, shallow")
     assert clay.variables["YOUNG_MODULUS"] == 5e6
     assert clay.variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
@@ -105,7 +120,7 @@ def test_a_material_and_a_layer_given_only_a_name_take_it_as_their_id(cli, site)
 
 
 def test_a_material_with_neither_an_id_nor_a_name_is_refused(cli, site):
-    ran = cli("material", site, "add", "--preset", "m3")
+    ran = cli("material", site, "add", "--preset", "clay_shallow")
 
     assert ran.code == 1 and "--name" in ran.err
 
@@ -203,7 +218,8 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
     assert "Filled in from the Mohr-Coulomb defaults: " in ran.out
     m1 = session.load(site).materials[0]
     assert m1.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
-    assert m1.variables["GEO_COHESION"] == drafts.preset("m1")["variables"]["GEO_COHESION"]
+    assert m1.variables["GEO_COHESION"] == \
+        soil_models.defaults_si(soil_models.MOHR_COULOMB)["GEO_COHESION"]
 
 
 def test_material_set_says_an_undrained_soil_is_coupled(cli, site):

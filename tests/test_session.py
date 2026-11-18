@@ -757,7 +757,7 @@ def test_a_water_level_may_stand_in_drawn_soil_above_the_layers():
 def test_a_material_is_added_and_its_id_must_be_free():
     from core.model import drafts
 
-    clay, _ = drafts.soil(seed_project(), "clay", preset="m3")
+    clay, _ = drafts.soil(seed_project(), "clay", preset="clay_shallow")
     project = session.add_material(seed_project(), clay)
     assert project.materials[-1].id == "clay"
 
