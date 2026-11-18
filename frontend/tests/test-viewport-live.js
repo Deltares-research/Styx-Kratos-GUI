@@ -564,6 +564,57 @@
     });
   });
 
+  /* The water a phreatic line above the ground puts on it (core/kratos/writer.py
+     `_water_surface_loads`) is drawn in Staged construction only, for the stage on
+     screen: a pit dug deeper carries more of it. */
+  test('viewport: the water on the ground is drawn per stage, in Staged construction only',
+       function () {
+    function restore() {
+      standIns();
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }
+    function arrows() {
+      var group = App.Viewport.getScene().getObjectByName('surface-water');
+      if (!group) return 0;
+      var count = 0;
+      group.traverse(function (o) { if (o.type === 'ArrowHelper') count += 1; });
+      return count;
+    }
+    var stages;
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      project.normal_loads = [];
+      project.boundary_conditions = [{
+        id: 'phreatic', name: 'Phreatic', kind: 'water_pressure', on: 'domain',
+        fluid_pressure_type: 'Phreatic_Multi_Line', is_fixed: true, active: true,
+        x_coordinates: [0, 60], y_coordinates: [1, 1]
+      }];
+      stages = project.stages;
+      var get = App.Api.get;
+      App.Api.get = function (path) {
+        return path === '/api/project' ? Promise.resolve(project) : get(path);
+      };
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }).then(function () {
+      T.eq(arrows(), 0, 'not in Soil');
+      App.state.mode = 'staged';
+      App.state.phase = stages[0].id;
+      App.Viewport.applyStageVisibility();
+      var before = arrows();
+      T.ok(before > 0, 'on the ground surface in the first stage');
+      App.state.phase = stages[stages.length - 1].id;
+      App.Viewport.applyStageVisibility();
+      T.ok(arrows() > before, 'more once the pit is dug: its floor and side too');
+      App.state.mode = 'structures';
+      App.Viewport.setMode('structures');
+      T.eq(arrows(), 0, 'gone again on leaving the tab');
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
   ['project', 'geometry'].forEach(function (endpoint) {
     test('viewport: a failed ' + endpoint + ' refresh rejects, reports its cause and removes the progress overlay', function () {
       var timeout = window.setTimeout, clear = window.clearTimeout;

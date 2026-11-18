@@ -4708,6 +4708,7 @@ window.STAGE_FIXTURE =
     "interface_sections": [],
     "interfaces": [],
     "interface_sides": "screen",
+    "drawn_phreatic_lines": "whole_soil",
     "normal_loads": [],
     "water": {
       "y": -1.5,
@@ -4719,6 +4720,7 @@ window.STAGE_FIXTURE =
       "bulk_modulus": null,
       "dynamic_viscosity": null
     },
+    "soil_water": {},
     "boundary_conditions": [
       {
         "id": "fixed_bottom",

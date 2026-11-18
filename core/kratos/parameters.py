@@ -319,6 +319,15 @@ class Stage:
     time_step: float = TIME_STEP
 
 
+PhreaticLine = tuple[tuple[float, float], tuple[float, float]]
+"""Two (x, y) points of a straight phreatic line, at different x (`_normal_load`)."""
+
+INTERPOLATE_LINE = "Interpolate_Line"
+"""The `fluid_pressure_type` of a soil whose pressure Kratos interpolates between its
+neighbours' (`Project.soil_water`): a `WaterPressure` of this type has no condition of
+its own, and is on in every stage that has water (`project_parameters`)."""
+
+
 @dataclass(frozen=True)
 class WaterPressure:
     """One `WaterPressureCondition` (core/model/schemas.py) on one deck part, resolved.
@@ -327,7 +336,14 @@ class WaterPressure:
     condition on a face the excavation splits arrives as one entry per segment, so each
     one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
     per body. `reference_coordinate` is the record's own level, and `condition` the
-    record's id, which a stage switches (`Stage.conditions`)."""
+    record's id, which a stage switches (`Stage.conditions`); empty for an
+    `INTERPOLATE_LINE` soil, which is on whenever any water is, and for the writer's own
+    pressure on the wet soil surface, which is on in the stages its part is
+    (`core.kratos.writer._wet_surface`).
+
+    `initial` is a water line's start values (`schemas.Project.water_lines`): the soils'
+    initial pressure, written in a stage that has it on only if the stage before did
+    not, so a stage that keeps it carries on from the pressure the one before left."""
     part: str | None
     fluid_pressure_type: str
     is_fixed: bool
@@ -339,6 +355,7 @@ class WaterPressure:
     pressure_tension_cut_off: float
     specific_weight: float
     condition: str = ""
+    initial: bool = False
 
 
 def stage_name(index: int, label: str) -> str:
@@ -357,7 +374,8 @@ def project_parameters(
     constraints: Sequence[tuple[str, list[bool]] | tuple[str, list[bool], str]],
     loads: list[tuple[str, str, list[bool], list[float]]],
     stages: list[Stage],
-    normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
+    normal_loads: Sequence[tuple[str, str, float, float, float]
+                           | tuple[str, str, float, float, float, PhreaticLine]] = (),
     *,
     water_pressures: Sequence[WaterPressure] = (),
     deck_name: str = "model",
@@ -375,10 +393,14 @@ def project_parameters(
     for where they come from. There is always at least one.
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
-    for the mode `fluid_pressure_type` names (see `_normal_load`).
-    `water_pressures` is the user's water pressure conditions, in the order they are
-    written: start values first, so that where a fixed value acts on the same node it is
-    the one that stays (see `_water_pressure`). Nothing else fixes a water pressure.
+    for the mode `fluid_pressure_type` names (see `_normal_load`). A `"Phreatic_Line"`
+    entry carries its line's two points as a sixth item: the water on the ground that
+    the writer adds itself (`core.kratos.writer._water_surface_loads`). Written in the
+    order given, which matters there: a later process on a node sets its value again.
+    `water_pressures` is the water pressure conditions, in the order they are written:
+    start values first, so that where a fixed value acts on the same node it is the one
+    that stays (see `_water_pressure`). The user's, and the writer's own pressure on the
+    soil surface under open water (`core.kratos.writer._wet_surface`).
 
     The keyword arguments are what the analysis block needs and the process lists do
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
@@ -389,6 +411,7 @@ def project_parameters(
     process. `gravity_acceleration` is `Project.gravity_acceleration`, the self weight's
     g."""
     rendered: dict[str, dict] = {}
+    before: set[int] = set()
     for index, stage in enumerate(stages):
         live = stage.active
         keep = (lambda name: True) if live is None else (lambda name: name in live)
@@ -401,8 +424,9 @@ def project_parameters(
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
         loads_processes += [
-            _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight)
-            for name, fluid_pressure_type, pressure, water_y, specific_weight
+            _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight,
+                         line[0] if line else None)
+            for name, fluid_pressure_type, pressure, water_y, specific_weight, *line
             in normal_loads if keep(name)
         ]
         loads_processes += [_seepage(name) for name in stage.seepage]
@@ -411,11 +435,28 @@ def project_parameters(
                                 if keep(name) and _switched_on(stage, of)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
-        # And it is in the stages whose stage has it switched on.
-        constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
-                                 if (pressure.part is None or keep(pressure.part))
-                                 and (stage.conditions is None
-                                      or pressure.condition in stage.conditions)]
+        # And it is in the stages whose stage has it switched on. An interpolated soil
+        # reads its pressure off the others, so it is on in the stages that have any.
+        # A water line's start values are written where it comes on, not again in each
+        # stage that keeps it: Kratos carries the pressure from stage to stage, and a
+        # flow or coupled stage would lose what the one before made of it.
+        watered = (stage.conditions is None
+                   or any(pressure.condition in stage.conditions
+                          for pressure in water_pressures))
+
+        def on(pressure: WaterPressure) -> bool:
+            if pressure.part is not None and not keep(pressure.part):
+                return False
+            if pressure.fluid_pressure_type == INTERPOLATE_LINE:
+                return watered
+            return (not pressure.condition or stage.conditions is None
+                    or pressure.condition in stage.conditions)
+
+        now = {at for at, pressure in enumerate(water_pressures) if on(pressure)}
+        constraint_processes += [_water_pressure(pressure)
+                                 for at, pressure in enumerate(water_pressures)
+                                 if at in now and not (pressure.initial and at in before)]
+        before = now
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
         auxiliary = _auxiliary(stage)
@@ -891,6 +932,13 @@ def _water_pressure(pressure: WaterPressure) -> dict:
         value everywhere.
     *   `"Phreatic_Multi_Line"` from Kratos' `tests/Muskat/van_genuchten_hydrostatic`,
         with one `table` entry per point of the line.
+    *   `"Interpolate_Line"` (`INTERPOLATE_LINE`): the keys
+        `ApplyConstantInterpolateLinePressureProcess` declares, and no others -- it has
+        no level, no line and no specific weight. At the start of the stage, after every
+        other process has set its pressures, it finds the edges of the part's elements
+        that no other element of the part shares, and gives each node the pressure of
+        that boundary above and below it, interpolated along the vertical: the pressure
+        the soils around it set. Its `table` must be 0; Kratos has no time-dependent one.
 
     Two things worth pointing at:
 
@@ -910,6 +958,13 @@ def _water_pressure(pressure: WaterPressure) -> dict:
     }
     if pressure.fluid_pressure_type == "Uniform":
         parameters.update({"value": pressure.value, "table": 0})
+    elif pressure.fluid_pressure_type == INTERPOLATE_LINE:
+        parameters.update({
+            "table": 0,
+            "fluid_pressure_type": INTERPOLATE_LINE,
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+        })
     elif pressure.fluid_pressure_type == "Hydrostatic":
         parameters.update({
             "table": 0,
@@ -968,7 +1023,8 @@ def _master_slave_constraint(master_part_name: str, slave_part_name: str) -> dic
 
 
 def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
-                 water_y: float, specific_weight: float) -> dict:
+                 water_y: float, specific_weight: float,
+                 line: PhreaticLine | None = None) -> dict:
     """Apply a pressure normal to a `NormalLoad`'s line (core/model/schemas.py).
 
     `"Hydrostatic"` is copied field for field from a real working example (see the
@@ -980,6 +1036,13 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
     component left off (`active` has one entry per component, and only the first is
     set): unlike the hydrostatic case there is no reference deck for this branch to
     match field for field, so check it against the first real run.
+
+    `"Phreatic_Line"` is hydrostatic below the straight line through `line`'s two
+    points, and level with each end beyond it. The keys are the ones the process copies
+    for that branch (`apply_normal_load_table_process.cpp`), read by
+    `ApplyConstantBoundaryPhreaticLinePressureProcess`, which needs the two points at
+    different x. Kratos has no multi-line normal load, so the water the writer puts on
+    the ground under a phreatic multi-line is one of these per stretch of the line.
     """
     parameters: dict[str, Any] = {
         "model_part_name": f"PorousDomain.{part_name}",
@@ -999,6 +1062,18 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         parameters.update({
             "gravity_direction": 1,
             "reference_coordinate": water_y,
+            "specific_weight": specific_weight,
+        })
+    elif fluid_pressure_type == "Phreatic_Line":
+        if line is None:
+            raise ValueError(f"the Phreatic_Line normal load on {part_name!r} needs its "
+                             "line's two points")
+        (x1, y1), (x2, y2) = line
+        parameters.update({
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+            "first_reference_coordinate": [x1, y1, 0.0],
+            "second_reference_coordinate": [x2, y2, 0.0],
             "specific_weight": specific_weight,
         })
     return {

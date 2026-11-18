@@ -1063,7 +1063,7 @@ App.LivePatches = (function () {
     if (!kind) {
       // Not ours -- the frozen menu handles it (soil layers, groups, …), with its dead
       // "Properties…" greyed on the way. See greyFrozenTreeProperties.
-      if (row) greyFrozenTreeProperties();
+      if (row) greyFrozenTreeProperties(key);
       return;
     }
 
@@ -1314,7 +1314,7 @@ App.LivePatches = (function () {
      listener runs right after this, inside the same event, and calls App.Menu.openAt
      -- so a one-shot openAt is lent for that call and greys the row on the way
      through. The timer puts the real one back should the frozen listener not run. */
-  function greyFrozenTreeProperties() {
+  function greyFrozenTreeProperties(key) {
     if (!App.Menu || typeof App.Menu.openAt !== 'function' || App.Menu.openAt.__tree) return;
     var menu = App.Menu;
     var openAt = menu.openAt;
@@ -1323,7 +1323,14 @@ App.LivePatches = (function () {
       (items || []).forEach(function (item) {
         if (item && /^Properties/.test(item.label || '') && !item.action) item.disabled = true;
       });
-      return openAt(items, x, y, onPick);
+      // A soil's row in Flow conditions: the water it takes, as in the viewport.
+      return openAt(withSoilWaterRows(items || [], key), x, y, function (item) {
+        if (item && item.action === 'soilWater') {
+          return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
+        }
+        if (onPick) return onPick(item);
+        return App.runAction(item);
+      });
     };
     lent.__tree = true;
     menu.openAt = lent;
@@ -2080,8 +2087,11 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(gateViewportItems(withPictureRows(withStageRows(withLabelRows(items), key))), x, y,
-               function (item) {
+        openAt(gateViewportItems(withPictureRows(withSoilWaterRows(
+          withStageRows(withLabelRows(items), key), key))), x, y, function (item) {
+          if (item && item.action === 'soilWater') {
+            return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
+          }
           if (item && item.action === 'stageActivate') {
             return switchPartInStage(item.stageKey, true);
           }
@@ -2282,6 +2292,31 @@ App.LivePatches = (function () {
   /* The viewport menu's two rows for a stageable part, in Staged construction: the
      state the part does not have in the selected stage is offered, the other greyed,
      so the menu also says which one it is in. */
+  /* A soil right-clicked in Flow conditions: the water it takes, a submenu of the
+     phreatic line, each head line and interpolated, the one it takes now ticked -- the
+     same choice as its row of Soil water in the Boundary conditions window
+     (`App.BoundaryConditions.soilWaterMenu`). */
+  function soilWaterKey(key) {
+    var BC = App.BoundaryConditions;
+    if (!key || !App.PROJECT || App.PROJECT.deck || !BC || !BC.soilWaterMenu) return null;
+    if (!App.state || App.state.mode !== 'flow') return null;
+    return BC.soilPartKeys(App.PROJECT).indexOf(key) >= 0 ? key : null;
+  }
+
+  function withSoilWaterRows(items, key) {
+    var soil = soilWaterKey(key);
+    if (!soil) return items;
+    var BC = App.BoundaryConditions;
+    var choices = BC.soilWaterMenu(App.PROJECT, soil);
+    var now = choices.filter(function (choice) { return choice.checked; })[0];
+    var rows = [
+      { label: 'Water: ' + (now ? now.label : 'phreatic line'), sub: choices },
+      '-'
+    ];
+    var at = items.length && items[0] && items[0].title ? 1 : 0;
+    return items.slice(0, at).concat(rows, items.slice(at));
+  }
+
   function withStageRows(items, key) {
     var part = stagePartKey(key);
     var stage = part && selectedStageId();

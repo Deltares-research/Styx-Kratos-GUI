@@ -1,0 +1,476 @@
+"""The water standing on the ground, added to the deck as a normal load that presses on it.
+
+The phreatic line -- the Phreatic_Multi_Line water pressure condition, one in a project --
+is the free water. Where it is above the soil, water stands on the ground, and that
+water weighs on it: on
+the ground surface, on the floor of a pit and on the faces dug into it, and on a wall the
+water stands against. The export adds that load itself
+(core/kratos/writer.py:_water_surface_loads), stage by stage, as Kratos'
+`ApplyNormalLoadTableProcess` -- the same process a drawn `NormalLoad` is written as.
+
+A Hydrostatic condition is the head of the water in a soil, not open water, so it adds
+none however high it is.
+
+What these hold it to: it is there where the water is above the ground and nowhere else;
+it follows the surface each stage has; and it always presses on what it stands on, never
+pulls, however the mesh or the wall happens to be ordered.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from core.geometry import solid_model
+from core.kratos import writer
+from core.model.schemas import MeshRequest, Project
+from core.model.templates import seed_project
+from tests import mdpa
+from tests.models import excavation
+
+MESH = MeshRequest(element_size=3.0, order=2)
+GAMMA = 10_000.0
+
+
+@pytest.fixture(scope="module", autouse=True)
+def gmsh_session():
+    with solid_model.session():
+        yield
+
+
+def section(**water) -> Project:
+    """The seed's ground, 25 m wide with its surface at 0, as a 2D section, with its
+    supports and one water pressure condition on the whole soil."""
+    payload = seed_project().model_dump()
+    payload.update(dimension=2, section_offset=20.0)
+    payload["boundary_conditions"] = [
+        c for c in payload["boundary_conditions"] if c["kind"] == "displacement"
+    ] + [{"id": "pp", "name": "Pore pressure", "kind": "water_pressure", "on": "domain",
+          **water}]
+    return Project.model_validate(payload)
+
+
+def hydrostatic(level: float) -> Project:
+    return section(fluid_pressure_type="Hydrostatic", reference_coordinate=level)
+
+
+def phreatic(level: float) -> Project:
+    """A level phreatic line across the section."""
+    return section(fluid_pressure_type="Phreatic_Multi_Line", x_coordinates=[0.0, 25.0],
+                   y_coordinates=[level, level])
+
+
+def surface_processes(export: dict, stage: str | None = None) -> list[dict]:
+    doc = json.loads(export["project_parameters"])
+    stage = stage or next(iter(doc["stages"]))
+    processes = doc["stages"][stage]["stage_settings"]["processes"]["loads_process_list"]
+    return [p["Parameters"] for p in processes
+            if p["process_name"] == "ApplyNormalLoadTableProcess"
+            and "_on_surface" in p["Parameters"]["model_part_name"]]
+
+
+def surface_rows(deck: mdpa.Deck, part: str) -> list[list[tuple[float, float]]]:
+    """The rows of a surface part's conditions, as the coordinates of their nodes."""
+    block = next(b for b in deck.conditions
+                 if set(deck.parts[part].conditions) <= set(b.entries))
+    return [[deck.nodes[n][:2] for n in block.entries[c]]
+            for c in deck.parts[part].conditions]
+
+
+def inside(point, corners) -> bool:
+    (ax, ay), (bx, by), (cx, cy) = corners
+    px, py = point
+    d1 = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+    d2 = (cx - bx) * (py - by) - (cy - by) * (px - bx)
+    d3 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx)
+    return (d1 >= 0 and d2 >= 0 and d3 >= 0) or (d1 <= 0 and d2 <= 0 and d3 <= 0)
+
+
+def left_of(row) -> tuple[float, float]:
+    """A point a hair to the left of a condition's first two nodes, which is where Kratos
+    presses it."""
+    (ax, ay), (bx, by) = row[0], row[1]
+    reach = 1e-3
+    length = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5
+    return ((ax + bx) / 2 - (by - ay) / length * reach,
+            (ay + by) / 2 + (bx - ax) / length * reach)
+
+
+def soil_triangles(deck: mdpa.Deck, parts: set[str]) -> list:
+    elements = {e for name in parts for e in deck.parts[name].elements}
+    return [[deck.nodes[n][:2] for n in nodes[:3]]
+            for block in deck.elements if "UPw" in block.name and "Interface" not in block.name
+            for e, nodes in block.entries.items() if e in elements]
+
+
+# ── Where it is ──────────────────────────────────────────────────────────────
+
+def test_water_above_the_ground_presses_on_the_whole_surface():
+    export = writer.export_project(phreatic(2.0), MESH)
+    deck = mdpa.parse(export["mdpa"])
+
+    rows = surface_rows(deck, "Pore_pressure_on_surface")
+    assert rows and all(abs(y) < 1e-9 for row in rows for _, y in row)
+    assert min(x for row in rows for x, _ in row) == pytest.approx(0.0)
+    assert max(x for row in rows for x, _ in row) == pytest.approx(25.0)
+    (process,) = surface_processes(export)
+    assert process["fluid_pressure_type"] == "Phreatic_Line"
+    assert process["first_reference_coordinate"] == [0.0, 2.0, 0.0]
+    assert process["second_reference_coordinate"] == [25.0, 2.0, 0.0]
+    assert process["specific_weight"] == GAMMA
+    assert any("stands above the ground" in note for note in export["notes"])
+
+
+def test_the_surface_load_presses_down_into_the_ground():
+    deck = mdpa.parse(writer.export_project(phreatic(2.0), MESH)["mdpa"])
+    for row in surface_rows(deck, "Pore_pressure_on_surface"):
+        assert left_of(row)[1] < 0.0, row
+
+
+def test_water_below_the_ground_adds_nothing():
+    export = writer.export_project(phreatic(-3.5), MESH)
+    assert surface_processes(export) == []
+    assert not any("_on_surface" in name for name in mdpa.parse(export["mdpa"]).parts)
+    assert not any("stands above the ground" in note for note in export["notes"])
+
+
+def test_a_hydrostatic_level_is_no_open_water_and_adds_nothing():
+    """However high: an aquifer's head above the ground is not water standing on it."""
+    export = writer.export_project(hydrostatic(2.0), MESH)
+    assert surface_processes(export) == []
+    assert not any("stands above the ground" in note for note in export["notes"])
+
+
+def test_a_uniform_water_pressure_has_no_level_and_adds_nothing():
+    export = writer.export_project(section(fluid_pressure_type="Uniform", value=-5_000.0),
+                                   MESH)
+    assert surface_processes(export) == []
+
+
+def test_a_phreatic_multi_line_loads_only_where_it_is_above_the_ground():
+    """Above the ground left of x = 4, below it to the right. Kratos has no multi-line
+    normal load, so the part carries the first stretch of the line and the nodes under
+    the second are a node part with theirs."""
+    project = section(fluid_pressure_type="Phreatic_Multi_Line",
+                      x_coordinates=[-10.0, 2.0, 6.0, 100.0],
+                      y_coordinates=[2.0, 1.0, -1.0, -1.0])
+    export = writer.export_project(project, MESH)
+    deck = mdpa.parse(export["mdpa"])
+
+    rows = surface_rows(deck, "Pore_pressure_on_surface")
+    assert rows
+    # Every edge has a node under the water; none lies wholly past where it meets the
+    # ground at x = 4.
+    assert all(min(x for x, _ in row) < 4.0 for row in rows)
+    first, second = surface_processes(export)
+    assert first["model_part_name"] == "PorousDomain.Pore_pressure_on_surface"
+    assert first["fluid_pressure_type"] == "Phreatic_Line"
+    assert first["first_reference_coordinate"] == [-10.0, 2.0, 0.0]
+    assert first["second_reference_coordinate"] == [2.0, 1.0, 0.0]
+    assert second["model_part_name"] == "PorousDomain.Pore_pressure_on_surface_stretch_2"
+    assert second["first_reference_coordinate"] == [2.0, 1.0, 0.0]
+    assert second["second_reference_coordinate"] == [6.0, -1.0, 0.0]
+    stretch = deck.parts["Pore_pressure_on_surface_stretch_2"]
+    assert stretch.nodes and not stretch.conditions
+    assert all(2.0 < deck.nodes[n][0] <= 6.0 for n in stretch.nodes)
+
+
+def test_a_phreatic_line_drawn_as_a_line_puts_its_water_in_a_pit():
+    """The GUI draws a phreatic line as a condition on a line. Its level is the free
+    water's all the same: in a pit dug to -5 left of x = 4, with the line at -2, the
+    water stands on the pit's floor and on the dug face up to -2, and presses on both."""
+    payload = seed_project().model_dump()
+    payload.update(dimension=2, section_offset=0.0,
+                   domain={"x0": 0, "x1": 20, "z0": -10, "z1": 10,
+                           "y_top": 0, "y_bottom": -10})
+    material = payload["layers"][0]["mat"]
+    payload["layers"] = [{"id": "L1", "name": "Top", "mat": material, "top": 0, "bottom": -5},
+                         {"id": "L2", "name": "Bottom", "mat": material, "top": -5,
+                          "bottom": -10}]
+    payload["lines"] = [{"id": "cut", "name": "Cut", "points": [[4, 0], [4, -5]]}]
+    payload["bodies"] = [{"id": "pit", "name": "Pit", "layer": "L1", "point": [2, -2.5]},
+                         {"id": "rest", "name": "Rest", "layer": "L1", "point": [12, -2.5]}]
+    payload["boundary_conditions"] = [
+        c for c in payload["boundary_conditions"] if c["kind"] == "displacement"
+    ] + [{"id": "phreatic", "name": "Phreatic line", "kind": "water_pressure", "on": "line",
+          "points": [[0, -2], [20, -2]], "fluid_pressure_type": "Phreatic_Multi_Line",
+          "x_coordinates": [0, 20], "y_coordinates": [-2, -2]}]
+    payload["stages"] = [{"id": "initial", "name": "Initial", "deactivate": ["soil_L1__pit"]}]
+    export = writer.export_project(Project.model_validate(payload), MESH)
+    deck = mdpa.parse(export["mdpa"])
+
+    rows = surface_rows(deck, "Phreatic_line_on_surface")
+    floor = [row for row in rows if all(abs(y + 5.0) < 1e-9 for _, y in row)]
+    face = [row for row in rows if all(abs(x - 4.0) < 1e-9 for x, _ in row)]
+    assert floor and face and len(floor) + len(face) == len(rows)
+    assert min(x for row in floor for x, _ in row) == pytest.approx(0.0)
+    assert max(y for row in face for _, y in row) == pytest.approx(-2.0)
+    assert all(left_of(row)[1] < -5.0 for row in floor)
+    assert all(left_of(row)[0] > 4.0 for row in face)
+    (process,) = surface_processes(export)
+    assert process["fluid_pressure_type"] == "Phreatic_Line"
+
+
+# ── Stage by stage ───────────────────────────────────────────────────────────
+
+def dug(flip_wall: bool = False, drawn_loads: bool = False) -> Project:
+    """The staged excavation with its drawn water loads taken out, so the water on the
+    floor of the pit is the export's own, or kept with `drawn_loads`. Its water stands at
+    -1 everywhere, a level phreatic line; the pit is dug to -2, -4.5 and -7, left of the
+    wall at x = 6."""
+    data = excavation.excavation_project().model_dump()
+    water = next(c for c in data["boundary_conditions"] if c["id"] == "pore_pressure")
+    water.update(fluid_pressure_type="Phreatic_Multi_Line", reference_coordinate=None,
+                 x_coordinates=[data["domain"]["x0"], data["domain"]["x1"]],
+                 y_coordinates=[-1.0, -1.0])
+    if drawn_loads:
+        return Project.model_validate(data)
+    data["normal_loads"] = []
+    for stage in data["stages"]:
+        stage["activate"] = [k for k in stage["activate"] if not k.startswith("water_")]
+        stage["deactivate"] = [k for k in stage["deactivate"] if not k.startswith("water_")]
+    if flip_wall:
+        data["beams"][0]["points"] = data["beams"][0]["points"][::-1]
+    return Project.model_validate(data)
+
+
+@pytest.fixture(scope="module")
+def dug_export():
+    return writer.export_project(dug())
+
+
+def stage_names(export: dict) -> list[str]:
+    return json.loads(export["project_parameters"])["orchestrator"]["settings"][
+        "execution_list"]
+
+
+def test_the_ground_above_the_water_carries_none_until_the_pit_is_dug(dug_export):
+    for stage in stage_names(dug_export)[:3]:
+        assert surface_processes(dug_export, stage) == [], stage
+
+
+def test_each_lift_has_the_surface_of_its_own_stage(dug_export):
+    """One part per surface: the first lift's floor, then the second's, then the third's,
+    each in the stages that have that surface and no other."""
+    applied = {stage: [p["model_part_name"] for p in surface_processes(dug_export, stage)]
+               for stage in stage_names(dug_export)[3:]}
+    assert applied == {
+        "4_First_excavation": ["PorousDomain.Pore_pressure_on_surface"],
+        "5_Strut_installation": ["PorousDomain.Pore_pressure_on_surface"],
+        "6_Second_excavation": ["PorousDomain.Pore_pressure_on_surface_2"],
+        "7_Third_excavation": ["PorousDomain.Pore_pressure_on_surface_3"],
+    }
+    deck = mdpa.parse(dug_export["mdpa"])
+    for part, floor in (("Pore_pressure_on_surface", -2.0),
+                        ("Pore_pressure_on_surface_2", -4.5),
+                        ("Pore_pressure_on_surface_3", -7.0)):
+        points = [p for row in surface_rows(deck, part) for p in row]
+        assert min(y for _, y in points) == pytest.approx(floor), part
+        # The pit's floor and the face of the wall, up to the water; not the ground
+        # behind the wall, which is above it.
+        assert all(x <= 6.0 + 1e-9 and y <= -1.0 + 1e-9 for x, y in points), part
+        assert any(abs(x - 6.0) < 1e-9 and y > floor + 0.1 for x, y in points), part
+
+
+def test_the_pit_water_presses_on_the_floor_and_the_wall_it_stands_on(dug_export):
+    """Down into the floor, and towards the ground behind the wall: never up out of the
+    floor or into the pit, which is the way an edge taken in the dug lift's order would
+    press."""
+    deck = mdpa.parse(dug_export["mdpa"])
+    for part in ("Pore_pressure_on_surface", "Pore_pressure_on_surface_2",
+                 "Pore_pressure_on_surface_3"):
+        for row in surface_rows(deck, part):
+            on_wall = abs(row[0][0] - 6.0) < 1e-9 and abs(row[1][0] - 6.0) < 1e-9
+            px, py = left_of(row)
+            if on_wall:
+                assert px > 6.0, row
+            else:
+                assert py < row[0][1], row
+
+
+def test_the_soil_edges_are_pressed_into_the_soil_that_is_there(dug_export):
+    """Probed against the mesh rather than the drawing: left of every floor edge is an
+    element of the soil left after the lift is dug."""
+    deck = mdpa.parse(dug_export["mdpa"])
+    soil = {name for name in deck.parts if name.startswith("Soil_")}
+    remaining = soil - {"Soil_Top_lift1"}
+    triangles = soil_triangles(deck, remaining)
+    for row in surface_rows(deck, "Pore_pressure_on_surface"):
+        if abs(row[0][0] - 6.0) < 1e-9 and abs(row[1][0] - 6.0) < 1e-9:
+            continue
+        assert any(inside(left_of(row), t) for t in triangles), row
+
+
+def test_a_wall_drawn_the_other_way_still_has_the_water_pushing_it():
+    """The wall's condition can only take the wall's own order, which now has the pit on
+    its left: so the pressure is written negative, node by node, at the water's depth."""
+    export = writer.export_project(dug(flip_wall=True))
+    deck = mdpa.parse(export["mdpa"])
+
+    processes = surface_processes(export, "4_First_excavation")
+    assert processes[0]["fluid_pressure_type"] == "Phreatic_Line"
+    turned = processes[1:]
+    assert turned and all(p["fluid_pressure_type"] == "Uniform" for p in turned)
+    for p in turned:
+        (node,) = deck.parts[p["model_part_name"].split(".")[1]].nodes
+        x, y = deck.nodes[node][:2]
+        assert x == pytest.approx(6.0)
+        assert p["value"][0] == pytest.approx(-GAMMA * (-1.0 - y))
+    assert any("node by node" in note for note in export["notes"])
+
+
+def test_the_water_loads_drawn_by_hand_are_the_ones_used():
+    """The staged excavation draws its own water load per lift; where one is, the export
+    adds none of its own on top."""
+    export = writer.export_project(dug(drawn_loads=True))
+    for stage in stage_names(export):
+        assert surface_processes(export, stage) == [], stage
+    assert not any("stands above the ground" in note for note in export["notes"])
+
+
+def test_a_stage_with_the_water_switched_off_has_no_water_on_the_ground():
+    data = dug().model_dump()
+    data["stages"][-1]["deactivate"] = [*data["stages"][-1]["deactivate"], "pore_pressure"]
+    export = writer.export_project(Project.model_validate(data))
+    assert surface_processes(export, "7_Third_excavation") == []
+    assert surface_processes(export, "6_Second_excavation")
+
+
+def test_a_3d_project_adds_none():
+    payload = phreatic(2.0).model_dump()
+    payload["dimension"] = 3
+    export = writer.export_project(Project.model_validate(payload),
+                                   MeshRequest(element_size=8.0, order=1))
+    assert surface_processes(export) == []
+
+
+# ── The wet surface: fixed under the water, the soil's start values inside ───
+
+def water_processes(export: dict, stage: str | None = None) -> list[dict]:
+    doc = json.loads(export["project_parameters"])
+    stage = stage or next(iter(doc["stages"]))
+    processes = doc["stages"][stage]["stage_settings"]["processes"]
+    return [p["Parameters"] for p in processes["constraints_process_list"]
+            if p["Parameters"].get("variable_name") == "WATER_PRESSURE"]
+
+
+def started(level: float) -> Project:
+    """`phreatic(level)` as start values: the soil's initial pressure."""
+    payload = phreatic(level).model_dump()
+    payload["boundary_conditions"][-1]["is_fixed"] = False
+    return Project.model_validate(payload)
+
+
+def test_the_wet_surface_is_fixed_to_the_phreatic_line():
+    """Water at +2 on ground at 0: the whole soil starts on the line, and the ground
+    surface under the water is fixed to it, after the soil's start values."""
+    export = writer.export_project(started(2.0), MESH)
+    deck = mdpa.parse(export["mdpa"])
+    soil, surface = water_processes(export)
+    assert (soil["model_part_name"], soil["is_fixed"]) == ("PorousDomain", False)
+    assert surface["model_part_name"] == "PorousDomain.Pore_pressure_wet_surface"
+    assert surface["is_fixed"] is True
+    assert surface["fluid_pressure_type"] == "Phreatic_Multi_Line"
+    assert surface["y_coordinates"] == [2.0, 2.0]
+    nodes = [deck.nodes[n] for n in deck.parts["Pore_pressure_wet_surface"].nodes]
+    assert nodes and all(abs(y) < 1e-9 for _, y, _ in nodes)
+    assert min(x for x, _, _ in nodes) == pytest.approx(0.0)
+    assert max(x for x, _, _ in nodes) == pytest.approx(25.0)
+    assert any("is fixed to the line's water pressure" in note for note in export["notes"])
+
+
+def test_a_fixed_phreatic_line_or_a_dry_ground_fixes_no_surface():
+    for project in (phreatic(2.0), started(-1.0)):
+        export = writer.export_project(project, MESH)
+        assert [p["model_part_name"] for p in water_processes(export)] == ["PorousDomain"]
+
+
+def started_dig() -> Project:
+    data = dug().model_dump()
+    next(c for c in data["boundary_conditions"]
+         if c["id"] == "pore_pressure")["is_fixed"] = False
+    return Project.model_validate(data)
+
+
+@pytest.fixture(scope="module")
+def started_export():
+    return writer.export_project(started_dig())
+
+
+def test_the_soil_starts_on_the_phreatic_line_once(started_export):
+    """The start values are written in the stage the line comes on, not again in each
+    stage after it: a stage carries on from the pressure the one before left."""
+    on_the_soil = [stage for stage in stage_names(started_export)
+                   if any(p["model_part_name"] == "PorousDomain"
+                          for p in water_processes(started_export, stage))]
+    assert on_the_soil == stage_names(started_export)[:1]
+
+
+def test_the_pit_floor_is_fixed_stage_by_stage(started_export):
+    """The ground behind the wall is above the water at -1; the pit's floor is under it
+    from the first excavation, one part per floor, each in its own stages."""
+    applied = {stage: [p["model_part_name"] for p in water_processes(started_export, stage)
+                       if p["is_fixed"]]
+               for stage in stage_names(started_export)}
+    assert all(applied[stage] == [] for stage in stage_names(started_export)[:3])
+    assert applied["4_First_excavation"] == ["PorousDomain.Pore_pressure_wet_surface"]
+    assert applied["5_Strut_installation"] == ["PorousDomain.Pore_pressure_wet_surface"]
+    assert applied["6_Second_excavation"] == ["PorousDomain.Pore_pressure_wet_surface_2"]
+    assert applied["7_Third_excavation"] == ["PorousDomain.Pore_pressure_wet_surface_3"]
+    deck = mdpa.parse(started_export["mdpa"])
+    for part, floor in (("Pore_pressure_wet_surface", -2.0),
+                        ("Pore_pressure_wet_surface_2", -4.5),
+                        ("Pore_pressure_wet_surface_3", -7.0)):
+        points = [deck.nodes[n] for n in deck.parts[part].nodes]
+        assert min(y for _, y, _ in points) == pytest.approx(floor), part
+        assert all(x <= 6.0 + 1e-9 and y <= -1.0 + 1e-9 for x, y, _ in points), part
+
+
+def test_a_surface_the_water_leaves_is_freed():
+    """Kratos keeps a node a phreatic process fixed fixed after its stage. With the water
+    switched off when the strut goes in, the floor of the first lift it fixed in the
+    stage before is given its values again as start values, which frees it."""
+    data = started_dig().model_dump()
+    strut = next(stage for stage in data["stages"] if stage["name"] == "Strut installation")
+    strut["deactivate"] = [*strut["deactivate"], "pore_pressure"]
+    export = writer.export_project(Project.model_validate(data))
+    freed = water_processes(export, "5_Strut_installation")
+    assert [(p["model_part_name"], p["is_fixed"]) for p in freed] == [
+        ("PorousDomain.Pore_pressure_dried", False)]
+    assert freed[0]["y_coordinates"] == [-1.0, -1.0], "the values it was fixed to"
+    deck = mdpa.parse(export["mdpa"])
+    dried = set(deck.parts["Pore_pressure_dried"].nodes)
+    assert dried == set(deck.parts["Pore_pressure_wet_surface"].nodes)
+    # Off for good: dug deeper, the floor fixes nothing more.
+    assert water_processes(export, "6_Second_excavation") == []
+
+
+def test_a_flow_deck_fixes_the_wet_surface_too(gmsh_session):
+    """The boundary a flow calculation needs, without a load: a flow deck has none."""
+    from tests.models.muskat import FLOW, muskat
+    from core.kratos import condition_checks
+    from core.model.schemas import WaterPressureCondition
+
+    line = WaterPressureCondition(
+        id="phreatic", name="Phreatic line", on="domain", is_fixed=False,
+        fluid_pressure_type="Phreatic_Multi_Line", x_coordinates=[0.0, 1.62],
+        y_coordinates=[5.0, 5.0])
+    project = muskat(conditions=[line], stages=[FLOW])
+    assert condition_checks.flow_refusal(project) is None
+    export = writer.export_project(project, MeshRequest(element_size=0.5, order=1))
+    assert [(p["model_part_name"], p["is_fixed"]) for p in water_processes(export)] == [
+        ("PorousDomain", False), ("PorousDomain.Phreatic_line_wet_surface", True)]
+
+
+def test_a_3d_project_says_the_water_on_the_ground_is_left_out():
+    from core.kratos import condition_checks
+
+    payload = started(2.0).model_dump()
+    payload["dimension"] = 3
+    said = condition_checks.warnings(Project.model_validate(payload))
+    assert any("'Pore pressure' stands above the ground, and this 3D deck does not put "
+               "that water on the ground" in line for line in said)
+    payload["boundary_conditions"][-1]["y_coordinates"] = [-1.0, -1.0]
+    said = condition_checks.warnings(Project.model_validate(payload))
+    assert not any("stands above the ground" in line for line in said)
