@@ -336,11 +336,12 @@ def panel_button(page, text: str):
 
 
 def rename_body(page, row: str, name: str) -> None:
-    """Select the body's row and rename it with the button in its panel: the first one, as
-    the second renames its layer."""
+    """Select the body's row and rename it with the button in its panel. The window starts
+    with the name the row shows."""
     tree_row(page, row).click()
-    panel_button(page, "Rename…").first.click()
+    panel_button(page, "Rename…").click()
     window = page.locator("#modal-layer .name-dialog-window")
+    assert window.locator("input[name=name]").input_value() == row
     window.locator("input[name=name]").fill(name)
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")

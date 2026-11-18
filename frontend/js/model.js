@@ -1784,24 +1784,13 @@ App.Model = (function () {
     var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
     var noun = (owner.noun || 'Layer').toLowerCase();
     var general = [
-      ['Name', body.name, '', true],
+      // The name the Model explorer shows, so the panel, the row and the Rename window
+      // all say the same (js/patches.js renameBodyPart).
+      ['Name', labels[key] || body.name, '', true],
       ['Rename part', '', '', false, { kind: 'button', text: 'Rename…',
-        run: function () {
-          return App.NameDialog.ask({ title: 'Rename part', value: body.name,
-                                      help: 'Shown in the Model explorer.' })
-            .then(function (name) {
-              if (name !== null && App.Lines) {
-                return App.Lines.saveBody(key, { name: name }).catch(function () {});
-              }
-            });
-        } }],
-      [owner.noun || 'Layer', owner.name, '', true],
-      // The explorer shows only the parts of a cut layer or surface, so the whole of
-      // it is renamed here (js/patches.js renameBodyOwner).
-      ['Rename ' + noun, '', '', false, {
-        kind: 'button', text: 'Rename…',
-        run: function () { if (App.LivePatches) App.LivePatches.renameBodyOwner(key); }
+        run: function () { if (App.LivePatches) return App.LivePatches.renameBodyPart(key); }
       }],
+      [owner.noun || 'Layer', owner.name, '', true],
       // The materials only, the part's chosen: it has one of its own from the moment
       // a line cuts it off, until its layer or surface is given another.
       ['Material', bodyMaterial(owner, key).name, '', false, {

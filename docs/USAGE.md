@@ -222,8 +222,10 @@ also a part you gave a material of its own.
 A part you rename shows the new name alone, for example *Clay*. A part with the name it
 was given, such as *Part 1*, also shows its layer or soil surface.
 
-Right-click a part to rename it or delete it, or to rename or delete its whole layer or soil
-surface. The Selection explorer of a part has the same buttons. **Delete part** deletes that
+Right-click a part to rename it or delete it, or to delete its whole layer or soil surface.
+The Selection explorer of a part has the same buttons. The Rename window starts with the
+name the Model explorer shows, for example *Soil_Top · Part 1*. To rename a layer, use the
+**Soil layers** window. **Delete part** deletes that
 part alone: no soil is left there, and the other parts stay. The last part of a layer or a
 soil surface cannot be deleted alone; delete the whole layer or surface. A deleted part
 comes back when you delete the line that cut it off, or with undo. To take soil away in one

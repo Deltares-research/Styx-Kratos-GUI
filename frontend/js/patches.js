@@ -371,6 +371,7 @@ App.LivePatches = (function () {
      through its own module, which is what validates, persists and refreshes the tree
      for it already. */
   function renameObject(kind, key) {
+    if (kind === 'body') return renameBodyPart(key);
     return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
                                 help: 'Shown in the Model explorer.' })
       .then(function (name) {
@@ -415,9 +416,6 @@ App.LivePatches = (function () {
       if (!line) return;
       line.name = name;
       return App.Lines.save(line).catch(reportRenameError);
-    }
-    if (kind === 'body') {
-      return App.Lines.saveBody(key, { name: name }).catch(reportRenameError);
     }
     if (kind === 'load') {
       var load = loadByKey(key);
@@ -470,7 +468,7 @@ App.LivePatches = (function () {
 
   /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
      part) a line cut. Once a line cuts a layer or a surface, the explorer shows only
-     its parts, so a part's menu and panel are where the whole is renamed or deleted. */
+     its parts, so a part's menu and panel are where the whole is deleted. */
   function bodyOwner(key) {
     var body = App.Lines && App.Lines.bodyOf(key);
     if (!body) return null;
@@ -484,22 +482,27 @@ App.LivePatches = (function () {
                     key: part.key, record: part, name: part.label } : null;
   }
 
-  function renameBodyOwner(key) {
-    var owner = bodyOwner(key);
-    if (!owner) return;
-    var title = 'Rename ' + owner.noun;
-    return App.NameDialog.ask({ title: title.charAt(0).toUpperCase() + title.slice(1),
-                                value: owner.name,
-                                help: 'The name of every part of it in the Model explorer.' })
+  /* What the Model explorer calls the soil body `key`. */
+  function shownBodyName(key, body) {
+    return ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || body.name;
+  }
+
+  /* Rename part, from the explorer menu and from the part's panel alike. The window starts
+     with the name the Model explorer shows (`soil_body_labels`, such as `Sand · Part 2`),
+     not the shorter name the part was given (`Part 2`), so what you see in the row is what
+     you edit. OK on that name as it is changes nothing. A part is renamed on its own: its
+     layer is renamed in the Soil layers window, and a cut soil surface needs no name of its
+     own beside its parts'. */
+  function renameBodyPart(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return;
+    var shown = shownBodyName(key, body);
+    return App.NameDialog.ask({ title: 'Rename part', value: shown,
+                                help: 'Shown in the Model explorer.' })
       .then(function (name) {
-        if (name === null) return;
-        if (owner.kind === 'layer') owner.record.name = name;
-        else owner.record.label = name;
-        // Saved under the owner's key: under the part's, commitSelectionEdit saves the
-        // part alone. The part stays selected, as its key does not change.
-        return Promise.resolve(App.commitSelectionEdit(owner.key)).then(function () {
-          if (App.selectObject) App.selectObject(key, 'tree');
-        });
+        if (name === null || name === shown) return;
+        // saveBody puts a refusal in the log itself.
+        return App.Lines.saveBody(key, { name: name }).catch(function () {});
       });
   }
 
@@ -519,7 +522,7 @@ App.LivePatches = (function () {
     if (!owner || !body) return;
     return new Promise(function (resolve) {
       confirmDialog('Delete part',
-        'This deletes ' + body.name + ', one part of ' + owner.noun + ' ' + owner.name +
+        'This deletes ' + shownBodyName(key, body) + ', one part of ' + owner.noun + ' ' + owner.name +
         '. No soil is left there. The other parts of ' + owner.noun + ' ' + owner.name +
         ' stay.',
         function () { resolve(true); }, function () { resolve(false); });
@@ -1068,15 +1071,14 @@ App.LivePatches = (function () {
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
-    // A soil body is a part of a layer or a soil surface: Rename… and Delete part act on
-    // the part, and the owner's own Rename and Delete stand beside them. The last part
-    // left is the whole of it, so it goes with Delete layer or Delete soil surface.
+    // A soil body is a part of a layer or a soil surface: Rename part… and Delete part act
+    // on the part, and Delete layer or Delete soil surface on the whole of it. The last
+    // part left is the whole of it, so it goes with the second.
     var owner = kind === 'body' ? bodyOwner(key) : null;
     var edits = owner ? [
       { label: 'Rename part…', action: 'renameObject' },
       { label: 'Delete part', icon: 'delete', action: 'deletePart',
         disabled: !otherParts(key).length },
-      { label: 'Rename ' + owner.noun + '…', action: 'renameOwner' },
       { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
     ] : [
       { label: 'Rename…', action: 'renameObject' },
@@ -1092,7 +1094,6 @@ App.LivePatches = (function () {
     ]), event.clientX, event.clientY, function (it) {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
-      if (it.action === 'renameOwner') return renameBodyOwner(key);
       if (it.action === 'deleteOwner') return deleteBodyOwner(key);
       if (it.action === 'deletePart') return deleteBodyPart(key);
       if (it.action) { App.runAction(it); return; }
@@ -4952,7 +4953,7 @@ App.LivePatches = (function () {
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
-    renameBodyOwner: renameBodyOwner, deleteBodyOwner: deleteBodyOwner,
+    renameBodyPart: renameBodyPart, deleteBodyOwner: deleteBodyOwner,
     deleteBodyPart: deleteBodyPart, deleteBody: deleteBody,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
