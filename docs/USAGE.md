@@ -338,20 +338,42 @@ level** in the Model explorer. Then change **Level** or **Specific weight** in t
 explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water off` to
 remove the water. A condition keeps its own level when the water level changes.
 
-**Create water pressure line** draws a water pressure along a line or at a point (2D).
-**Boundary conditions…** opens the window of all conditions.
+**Create flow boundary condition…** opens the window of one new water pressure or seepage
+face. **Create water pressure line** draws a water pressure along a line or at a point
+(2D). **Flow boundary conditions…** opens the window of all water pressures and seepage
+faces.
 
 ## Boundary conditions
 
-Kratos gets the boundary conditions of the model and no others. Open the **Boundary
-conditions** window from the Structures or Flow conditions tool rail, or from **Flow
-conditions** → **Boundary conditions…**. The Model explorer lists the conditions under
-**Model conditions** → **Boundary conditions**. Select one to change it in the Selection
-explorer.
+Kratos gets the boundary conditions of the model and no others. The conditions are in two
+groups:
 
-To add one condition, click **Create boundary condition** in the Structures tool rail, or
-select **Create boundary condition…** in the **Structures** menu. The
-window asks for the condition and where it acts. For a line, type the points or click **Pick
+| Group | Conditions | Where to set them |
+|---|---|---|
+| Mechanical | Supports | Structures mode |
+| Flow | Water pressures and seepage faces | Flow conditions mode |
+
+Each mode has a window for all conditions of its group: **Mechanical boundary
+conditions…** on the Structures tool rail and in the **Structures** menu, and **Flow
+boundary conditions…** on the Flow conditions tool rail and in the **Flow conditions**
+menu.
+
+- The **Mechanical boundary conditions** window shows one row for each face of the model,
+  and the supports on parts, lines and points below the rows. A save keeps the water
+  conditions as they are.
+- The **Flow boundary conditions** window is a table of the water pressures and seepage
+  faces of the model, one row each: name, condition, where it acts, type, level or value,
+  tension cut-off, and if it gives start values only. Clear **Active** to leave a
+  condition out of the calculation. Click **Edit…** to change a condition, or **Delete** to
+  remove it.
+
+The Model explorer lists all conditions under **Model conditions** → **Boundary
+conditions**. Select one to change it in the Selection explorer.
+
+To add one support, click **Create boundary condition** in the Structures tool rail, or
+select **Create boundary condition…** in the **Structures** menu. To add one water pressure
+or seepage face, click **Create flow boundary condition…** in the Flow conditions tool
+rail or menu. The window asks for the condition and where it acts. For a line, type the points or click **Pick
 on model…** and click them in the viewport; right-click to end the line.
 
 Styx finds a face of the model on the soil: the left face is the soil at the lowest x, and

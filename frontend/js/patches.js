@@ -848,10 +848,11 @@ App.LivePatches = (function () {
     return true;
   }
 
-  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
-     "Create water level" draws nothing -- the water level is the `water` command and
-     its explorer row -- so the rail's water tools are the conditions' instead. */
-  /* The rail button of the boundary conditions, in Structures mode. A new
+  /* The boundary conditions come in two groups, each in its own mode: the
+     mechanical ones (supports) in Structures, the flow ones (water pressure, seepage
+     face) in Flow conditions. Each mode has a button that opens the window of one new
+     condition of its group, and one that opens the window of all of its group.
+     The rail button of the boundary conditions, in Structures mode. A new
      object each call: a rail item is one button, and the dimension gate below sets each
      flyout's items on their own. */
   function conditionTool() {
@@ -861,7 +862,8 @@ App.LivePatches = (function () {
       flyout: [
         { icon: 'prescribed', label: 'Create boundary condition…',
           action: 'createBoundaryCondition' },
-        { icon: 'prescribed', label: 'Boundary conditions…', action: 'boundaryConditions' },
+        { icon: 'conditionlist', label: 'Mechanical boundary conditions…',
+          action: 'mechanicalConditions' },
         { icon: 'prescribed', label: 'Line prescribed displacement',
           action: 'createSupportLine' },
         { icon: 'prescribed', label: 'Point prescribed displacement',
@@ -870,11 +872,24 @@ App.LivePatches = (function () {
     };
   }
 
+  /* The Structures rail button of the window of all mechanical conditions. */
+  function mechanicalConditionsTool() {
+    return { icon: 'conditionlist', tip: 'Mechanical boundary conditions…',
+             action: 'mechanicalConditions' };
+  }
+
+  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
+     "Create water level" draws nothing -- the water level is the `water` command and
+     its explorer row -- so the rail's water tools are the conditions' instead: a new
+     flow condition in its window, one drawn along a line or at a point, and the
+     window of them all. */
   function installBoundaryConditionTools() {
     var flow = (App.RAILS || {}).flow;
-    if (flow && !flow.some(function (tool) { return tool && tool.action === 'boundaryConditions'; })) {
+    if (flow && !flow.some(function (tool) { return tool && tool.action === 'flowConditions'; })) {
+      var drawTool = null;
       flow.forEach(function (tool) {
         if (tool && tool.icon === 'waterlevel' && !tool.action) {
+          drawTool = tool;
           tool.action = 'createWaterPressureLine';
           tool.tip = 'Create water pressure line';
           tool.flyout = [
@@ -887,21 +902,30 @@ App.LivePatches = (function () {
           ];
         }
       });
-      flow.splice(2, 0, { icon: 'settings', tip: 'Boundary conditions…',
-                          action: 'boundaryConditions' });
+      // New in its window, then drawn, then the window of them all.
+      var at = drawTool ? flow.indexOf(drawTool) : Math.min(2, flow.length);
+      flow.splice(at, 0, { icon: 'watercondition', tip: 'Create flow boundary condition…',
+                           action: 'createFlowCondition' });
+      flow.splice(at + (drawTool ? 2 : 1), 0, { icon: 'conditionlist',
+                                                tip: 'Flow boundary conditions…',
+                                                action: 'flowConditions' });
     }
     var menus = App.MENUS || [];
     var flowMenu = menus.filter(function (m) { return m.label === 'Flow conditions'; })[0];
-    if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'boundaryConditions'; })) {
-      flowMenu.items.unshift({ label: 'Boundary conditions…', icon: 'settings',
-                               action: 'boundaryConditions' }, '-');
+    if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'flowConditions'; })) {
+      flowMenu.items.unshift(
+        { label: 'Create flow boundary condition…', icon: 'watercondition',
+          action: 'createFlowCondition' },
+        { label: 'Flow boundary conditions…', icon: 'conditionlist',
+          action: 'flowConditions' }, '-');
     }
     var structuresMenu = menus.filter(function (m) { return m.label === 'Structures'; })[0];
     var items = structuresMenu ? structuresMenu.items : [];
     items.slice().forEach(function (item) {
       if (item && item.label === 'Create prescribed displacement') {
-        item.label = 'Boundary conditions…';
-        item.action = 'boundaryConditions';
+        item.label = 'Mechanical boundary conditions…';
+        item.icon = 'conditionlist';
+        item.action = 'mechanicalConditions';
         item.sub = false;
         items.splice(items.indexOf(item), 0, { label: 'Create boundary condition…',
                                                icon: 'prescribed',
@@ -1365,7 +1389,7 @@ App.LivePatches = (function () {
     ['drawLine'],
     ['plate', 'beam', 'embedded', 'createSheetPile', 'createMember', 'createAnchor',
      'interface'],
-    ['createLoad', 'createBoundaryCondition'],
+    ['createLoad', 'createBoundaryCondition', 'mechanicalConditions'],
     ['tunnel']
   ];
 
@@ -3467,12 +3491,19 @@ App.LivePatches = (function () {
         if (App.NormalLoads) App.NormalLoads.start();
         return;
       }
-      if (item && item.action === 'boundaryConditions') {
-        if (App.BoundaryConditions) App.BoundaryConditions.open();
+      // The window of all conditions, of the mechanical ones, or of the flow ones.
+      var conditionWindows = { boundaryConditions: 'all', mechanicalConditions: 'mechanical',
+                               flowConditions: 'flow' };
+      if (item && conditionWindows.hasOwnProperty(item.action)) {
+        if (App.BoundaryConditions) App.BoundaryConditions.open(conditionWindows[item.action]);
         return;
       }
       if (item && item.action === 'createBoundaryCondition') {
-        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null);
+        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'mechanical');
+        return;
+      }
+      if (item && item.action === 'createFlowCondition') {
+        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'flow');
         return;
       }
       var drawnConditions = {
@@ -3653,6 +3684,15 @@ App.LivePatches = (function () {
     App.ICONS.prescribed = '<path d="M12 3.5l-6.5 11h13z"/><path d="M3 17.5h18"/>'
                          + '<path d="M6.5 17.5L4 21M11 17.5L8.5 21M15.5 17.5L13 21'
                          + 'M20 17.5L17.5 21"/>';
+
+    /* A new flow condition: the water table symbol, a triangle point down on the
+       water line, over the water. */
+    App.ICONS.watercondition = '<path d="M8 3.5h8L12 9.5z"/><path d="M3 9.5h18"/>'
+                             + '<path d="M3 14.5c3-3 6 3 9 0s6-3 9 0"/>'
+                             + '<path d="M3 19.5c3-3 6 3 9 0s6-3 9 0"/>';
+    // The window of all conditions of a group: a table of rows.
+    App.ICONS.conditionlist = '<path d="M3 4h18v16H3z"/>'
+                            + '<path d="M3 9h18M3 14.5h18M8.5 4v16"/>';
 
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {
@@ -3886,6 +3926,13 @@ App.LivePatches = (function () {
       if (!App.RAILS.structures.some(function (tool) { return tool && tool.action === 'importModel'; })) {
         App.RAILS.structures.push({ icon: 'open', tip: 'Import model…', action: 'importModel' });
         App.RAILS.structures.push({ icon: 'cube', tip: 'Create box', action: 'drawBox' });
+      }
+
+      // Beside the condition tool: the window of all mechanical conditions.
+      if (!App.RAILS.structures.some(function (tool) {
+        return tool && tool.action === 'mechanicalConditions';
+      })) {
+        App.RAILS.structures.push(mechanicalConditionsTool());
       }
 
       // Everything above appends; this is what puts the rail back in order.

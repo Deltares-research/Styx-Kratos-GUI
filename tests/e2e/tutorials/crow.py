@@ -161,15 +161,15 @@ WATER = _by_id(MODEL.boundary_conditions, "pore_pressure")
 
 def water(tour: Tour) -> None:
     page = tour.page
-    mode(tour, "structures")
-    rail(tour, "createBoundaryCondition", "Create boundary condition…")
+    mode(tour, "flow")
+    rail(tour, "createFlowCondition")
     field(page, "Name").fill(WATER.name)
     field(page, "Condition").select_option("Water pressure")
     field(page, "Where").select_option(label="Whole soil")
     field(page, "Type").select_option(WATER.fluid_pressure_type)
     field(page, "Reference level").fill(f"{WATER.reference_coordinate:g}")
     window_fits(tour)
-    tour.picture(mark=rail_tool("createBoundaryCondition"))
+    tour.picture(mark=rail_tool("createFlowCondition"))
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.some(b => b.name === {WATER.name!r})")
 
@@ -188,6 +188,7 @@ WALL_SECTION = _by_id(MODEL.beam_sections, WALL.section)
 
 def wall(tour: Tour) -> None:
     page = tour.page
+    mode(tour, "structures")
     rail(tour, "createSheetPile")
     (x1, y1), (x2, y2) = WALL.points
     for label, value in [("Name", WALL.name), ("x1", x1), ("y1", y1), ("x2", x2),

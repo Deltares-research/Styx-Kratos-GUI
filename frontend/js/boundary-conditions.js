@@ -37,6 +37,21 @@ App.BoundaryConditions = (function () {
   var TARGETS = [['domain', 'Whole soil'], ['face', 'Face'], ['part', 'Part'],
                  ['line', 'Line'], ['point', 'Point']];
   var AXES = ['x', 'y', 'z'];
+  /* The two groups of conditions, each with its own windows: the mechanical ones
+     (supports) in Structures mode, the flow ones (water pressure, seepage face) in
+     Flow conditions mode. */
+  var GROUPS = {
+    mechanical: { kinds: ['displacement'], title: 'Mechanical boundary conditions' },
+    flow: { kinds: ['water_pressure', 'seepage'], title: 'Flow boundary conditions' }
+  };
+  var KIND_CHOICES = [['displacement', 'Support'], ['water_pressure', 'Water pressure'],
+                      ['seepage', 'Seepage face']];
+
+  /* The group a condition of `kind` belongs to. */
+  function groupOf(kind) { return kind === 'displacement' ? 'mechanical' : 'flow'; }
+
+  /* Whether a condition of `kind` is shown in the windows of `group` (all, with none). */
+  function inGroup(kind, group) { return !GROUPS[group] || groupOf(kind) === group; }
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -575,8 +590,8 @@ App.BoundaryConditions = (function () {
   }
 
   /* The conditions the grid does not show: on parts, lines and points, and a second
-     condition of a kind on one face. */
-  function others(project) {
+     condition of a kind on one face. With `group`, only that group's. */
+  function others(project, group) {
     var shown = {};
     grid(project).forEach(function (row) {
       if (row.supportId) shown[row.supportId] = true;
@@ -584,12 +599,15 @@ App.BoundaryConditions = (function () {
       if (row.seepageId) shown[row.seepageId] = true;
     });
     return records(project).filter(function (record) {
-      return !shown[record.id] && !heldBySection(record, project);
+      return !shown[record.id] && !heldBySection(record, project)
+        && inGroup(record.kind, group);
     });
   }
 
   /* The conditions after the grid's rows are applied to `project`'s: a row's records are
-     changed in place, made, or taken out; every other condition stays as it is. */
+     changed in place, made, or taken out; every other condition stays as it is. A row
+     with no `support` leaves the face's support alone, one with no `water` its water
+     pressure and seepage face: the window of one group sends only its own columns. */
   function applyGrid(project, rows) {
     var list = copy(records(project));
     var work = Object.assign({}, project, { boundary_conditions: list });
@@ -607,7 +625,7 @@ App.BoundaryConditions = (function () {
       return row.fixed.map(Boolean);
     }
     rows.forEach(function (row) {
-      if (row.face) {
+      if (row.face && row.support !== undefined) {
         if (row.support === 'free') {
           if (row.supportId) drop(row.supportId);
         } else {
@@ -626,6 +644,7 @@ App.BoundaryConditions = (function () {
           }
         }
       }
+      if (row.water === undefined) return;
       var where = row.face ? 'the ' + row.face + ' face' : 'the whole soil';
       if (row.water !== 'seepage' && row.seepageId) drop(row.seepageId);
       if (row.water === 'seepage') {
@@ -706,11 +725,16 @@ App.BoundaryConditions = (function () {
 
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
-     on parts, lines and points. Save writes them all in one request. */
-  function open() {
+     on parts, lines and points. Save writes them all in one request.
+     `group` 'mechanical' shows the supports alone (no whole-soil row), and keeps the
+     water conditions as they are; with none, both. 'flow' is the table of the flow
+     conditions instead (`openFlowList`). */
+  function open(group) {
+    if (group === 'flow') return openFlowList();
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
-    var rows = grid(project);
+    var water = group !== 'mechanical';
+    var rows = grid(project).filter(function (row) { return water || row.face; });
     var controls = [];
     var message, shell;
 
@@ -721,10 +745,12 @@ App.BoundaryConditions = (function () {
         if (c.support) {
           out.support = c.support.value;
           out.fixed = c.axes.map(function (box) { return box.checked; });
-        }
-        out.water = c.water.value;
-        out.number = c.number.value.trim();
-        out.initial = c.initial.checked;
+        } else delete out.support;
+        if (c.water) {
+          out.water = c.water.value;
+          out.number = c.number.value.trim();
+          out.initial = c.initial.checked;
+        } else delete out.water;
         return out;
       });
     }
@@ -753,20 +779,51 @@ App.BoundaryConditions = (function () {
     function clear() {
       controls.forEach(function (c) {
         if (c.support) c.support.value = 'free';
-        c.water.value = 'none';
+        if (c.water) c.water.value = 'none';
         c.sync();
       });
     }
 
+    /* The window of one condition of this row: its own, or a new one on the row. */
+    function more(row) {
+      var record = !water ? row.supportId && find(row.supportId)
+        : (row.waterId && find(row.waterId)) || (row.seepageId && find(row.seepageId));
+      shell.close();
+      if (record) return openRecord(record, group);
+      try {
+        return openRecord(!water
+          ? draftDisplacement(App.PROJECT, 'face', { face: row.face })
+          : draftWaterPressure(App.PROJECT, row.face ? 'face' : 'domain', {
+            face: row.face || undefined,
+            fluid_pressure_type: App.PROJECT.water ? 'Hydrostatic' : 'Uniform' }), group);
+      } catch (error) { if (App.Command) App.Command.err(error.message); }
+      return null;
+    }
+
+    var heads = ['Where', 'Support', 'x', 'y', 'z'];
+    if (water) heads = heads.concat(['Water pressure', 'Level / value', 'Initial']);
+    heads.push('');
+
+    var help = ['Support: Roller holds the component normal to the face, Fixed holds all; '
+                + 'x, y, z: tick the components to hold.'];
+    if (water) {
+      help.push('Level / value: the level where a hydrostatic pressure is zero [m], or a '
+                + 'uniform pressure [' + App.Units.label('stress') + '], compression '
+                + 'negative. A new hydrostatic pressure with no level takes the water '
+                + 'level. Initial: start values only, which the calculation then changes. '
+                + 'Seepage face: water may leave the soil there, in a groundwater flow '
+                + 'calculation.');
+    }
+
     shell = App.Dialogs.open({
-      title: 'Boundary conditions',
-      width: 760, height: 560,
+      title: (GROUPS[group] || { title: 'Boundary conditions' }).title,
+      width: water ? 760 : 640, height: 560,
       buttons: [
         { label: 'Standard conditions', keepOpen: true, onClick: standard },
         { label: 'Clear', keepOpen: true, onClick: clear },
         { label: 'Add condition…', keepOpen: true, onClick: function () {
           shell.close();
-          openRecord(null);
+          openRecord(null, group);
         } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
         { label: 'Cancel' }
@@ -777,8 +834,7 @@ App.BoundaryConditions = (function () {
         host.appendChild(body);
         var table = el('table.bc-grid');
         var head = el('tr');
-        ['Where', 'Support', 'x', 'y', 'z', 'Water pressure', 'Level / value',
-         'Initial', ''].forEach(function (text) { head.appendChild(el('th', { text: text })); });
+        heads.forEach(function (text) { head.appendChild(el('th', { text: text })); });
         table.appendChild(head);
 
         rows.forEach(function (row) {
@@ -800,32 +856,22 @@ App.BoundaryConditions = (function () {
             tr.appendChild(el('td', { text: '—' }));
             ['', '', ''].forEach(function () { tr.appendChild(el('td')); });
           }
-          c.water = options(el('select.bc-water'), [['none', 'None'],
-            ['Uniform', 'Uniform'], ['Hydrostatic', 'Hydrostatic'],
-            ['Phreatic_Multi_Line', 'Phreatic line']].concat(
-              row.face ? [['seepage', 'Seepage face']] : []), row.water);
-          tr.appendChild(el('td', null, c.water));
-          c.number = el('input.bc-number', { type: 'number', step: '0.1',
-            value: row.number === null ? '' : String(row.number) });
-          tr.appendChild(el('td', null, c.number));
-          c.initial = el('input.bc-initial', { type: 'checkbox' });
-          c.initial.checked = row.initial;
-          tr.appendChild(el('td', null, c.initial));
-          var more = el('button.btn.btn-sm', { type: 'button', text: 'More…' });
-          more.addEventListener('click', function () {
-            var record = (row.waterId && find(row.waterId))
-              || (row.seepageId && find(row.seepageId));
-            shell.close();
-            if (record) openRecord(record);
-            else {
-              try {
-                openRecord(draftWaterPressure(App.PROJECT, row.face ? 'face' : 'domain', {
-                  face: row.face || undefined,
-                  fluid_pressure_type: App.PROJECT.water ? 'Hydrostatic' : 'Uniform' }));
-              } catch (error) { if (App.Command) App.Command.err(error.message); }
-            }
-          });
-          tr.appendChild(el('td', null, more));
+          if (water) {
+            c.water = options(el('select.bc-water'), [['none', 'None'],
+              ['Uniform', 'Uniform'], ['Hydrostatic', 'Hydrostatic'],
+              ['Phreatic_Multi_Line', 'Phreatic line']].concat(
+                row.face ? [['seepage', 'Seepage face']] : []), row.water);
+            tr.appendChild(el('td', null, c.water));
+            c.number = el('input.bc-number', { type: 'number', step: '0.1',
+              value: row.number === null ? '' : String(row.number) });
+            tr.appendChild(el('td', null, c.number));
+            c.initial = el('input.bc-initial', { type: 'checkbox' });
+            c.initial.checked = row.initial;
+            tr.appendChild(el('td', null, c.initial));
+          }
+          var moreButton = el('button.btn.btn-sm', { type: 'button', text: 'More…' });
+          moreButton.addEventListener('click', function () { more(row); });
+          tr.appendChild(el('td', null, moreButton));
           c.sync = function () {
             if (c.support) {
               var choice = c.support.value;
@@ -836,26 +882,23 @@ App.BoundaryConditions = (function () {
                 if (choice === 'roller') box.checked = i === FACE_NORMALS[row.face];
               });
             }
-            var water = c.water.value;
-            c.number.disabled = water === 'none' || water === 'Phreatic_Multi_Line'
-              || water === 'seepage';
-            c.initial.disabled = water === 'none' || water === 'seepage';
+            if (c.water) {
+              var kind = c.water.value;
+              c.number.disabled = kind === 'none' || kind === 'Phreatic_Multi_Line'
+                || kind === 'seepage';
+              c.initial.disabled = kind === 'none' || kind === 'seepage';
+            }
           };
           if (c.support) c.support.addEventListener('change', c.sync);
-          c.water.addEventListener('change', c.sync);
+          if (c.water) c.water.addEventListener('change', c.sync);
           c.sync();
           controls.push(c);
           table.appendChild(tr);
         });
         body.appendChild(table);
-        body.appendChild(el('div.mesh-setting-help', { text:
-          'Level / value: the level where a hydrostatic pressure is zero [m], or a uniform '
-          + 'pressure [' + App.Units.label('stress') + '], compression negative. A new '
-          + 'hydrostatic pressure with no level takes the water level. Initial: start '
-          + 'values only, which the calculation then changes. Seepage face: water may '
-          + 'leave the soil there, in a groundwater flow calculation.' }));
+        body.appendChild(el('div.mesh-setting-help', { text: help.join(' ') }));
 
-        var rest = others(project);
+        var rest = others(project, group);
         body.appendChild(el('div.bc-heading', { text: 'On parts, lines and points' }));
         var list = el('div.bc-others');
         if (!rest.length) list.appendChild(el('div.mesh-setting-help', { text: 'None.' }));
@@ -866,7 +909,10 @@ App.BoundaryConditions = (function () {
           item.appendChild(el('span', { text: line(record)
                                         + (solidOnly ? '  (solid model only)' : '') }));
           var edit = el('button.btn.btn-sm', { type: 'button', text: 'Edit…' });
-          edit.addEventListener('click', function () { shell.close(); openRecord(record); });
+          edit.addEventListener('click', function () {
+            shell.close();
+            openRecord(record, group);
+          });
           var del = el('button.btn.btn-sm', { type: 'button', text: 'Delete' });
           del.addEventListener('click', function () { shell.close(); remove(record.id); });
           item.appendChild(edit);
@@ -882,14 +928,142 @@ App.BoundaryConditions = (function () {
     return shell;
   }
 
+  /* ── The table of the flow conditions ───────────────────────────────── */
+
+  var NO_VALUE = '—';
+
+  function plain(value) { return String(Number(value)); }
+
+  /* Where a condition acts, as a table cell: "Whole soil", "Left face", "Part soil_L1",
+     "Line (4, 6) → (22, 0)", "Point (8, -4)". */
+  function whereCell(record, project) {
+    if (record.on === 'domain') return 'Whole soil';
+    if (record.on === 'face') {
+      var face = record.face[0].toUpperCase() + record.face.slice(1) + ' face';
+      return project && project.dimension === 2 && SECTION_FACES.indexOf(record.face) < 0
+        ? face + ' (solid model only)' : face;
+    }
+    if (record.on === 'part') return 'Part ' + record.part;
+    return (record.on === 'point' ? 'Point ' : 'Line ')
+      + (record.points || []).map(xy).join(' → ');
+  }
+
+  /* One flow condition as the cells of its table row: the words a user reads, with
+     units, and a dash where a column does not apply. */
+  function flowRow(record, project) {
+    var stress = ' ' + App.Units.label('stress');
+    var row = { id: record.id, name: record.name, active: record.active !== false,
+                where: whereCell(record, project) };
+    if (record.kind === 'seepage') {
+      return Object.assign(row, { condition: 'Seepage face', type: NO_VALUE,
+                                  value: NO_VALUE, cutoff: NO_VALUE, initial: NO_VALUE });
+    }
+    var type = record.fluid_pressure_type;
+    var level = record.reference_coordinate;
+    row.condition = 'Water pressure';
+    row.type = type === 'Phreatic_Multi_Line' ? 'Phreatic line' : type;
+    if (type === 'Uniform') row.value = plain(record.value) + stress;
+    else if (type === 'Hydrostatic') {
+      row.value = level === null || level === undefined ? 'the water level'
+        : 'y = ' + plain(level) + ' m';
+    } else {
+      row.value = (record.x_coordinates || []).map(function (x, i) {
+        return xy([x, record.y_coordinates[i]]);
+      }).join(' → ');
+    }
+    row.cutoff = type === 'Uniform' ? NO_VALUE
+      : plain(record.pressure_tension_cut_off || 0) + stress;
+    row.initial = record.is_fixed === false ? 'Yes' : 'No';
+    return row;
+  }
+
+  /* The flow conditions of the model, in the order they were added, as table rows. */
+  function flowRows(project) {
+    return records(project).filter(function (record) {
+      return groupOf(record.kind) === 'flow';
+    }).map(function (record) { return flowRow(record, project); });
+  }
+
+  var FLOW_COLUMNS = [['name', 'Name'], ['condition', 'Condition'], ['where', 'Where'],
+                      ['type', 'Type'], ['value', 'Level / value'],
+                      ['cutoff', 'Tension cut-off'], ['initial', 'Initial only']];
+
+  /* The Flow boundary conditions window: one row for each water pressure and seepage
+     face of the model, with Edit… and Delete; Add condition… opens a new one. */
+  function openFlowList() {
+    if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
+    var rows = flowRows(App.PROJECT);
+    var shell = App.Dialogs.open({
+      title: GROUPS.flow.title,
+      width: 900, height: 480,
+      buttons: [
+        { label: 'Add condition…', keepOpen: true, onClick: function () {
+          shell.close();
+          openRecord(null, 'flow');
+        } },
+        { label: 'Close' }
+      ],
+      build: function (host) {
+        var body = el('div.mesh-settings-body.boundary-conditions');
+        host.appendChild(body);
+        if (!rows.length) {
+          body.appendChild(el('div.mesh-setting-help', { text: 'The model has no flow '
+            + 'conditions yet. Click Add condition… to add a water pressure or a seepage '
+            + 'face.' }));
+          return;
+        }
+        var table = el('table.bc-grid.bc-flow');
+        var head = el('tr');
+        FLOW_COLUMNS.map(function (column) { return column[1]; }).concat(['Active', ''])
+          .forEach(function (text) { head.appendChild(el('th', { text: text })); });
+        table.appendChild(head);
+        rows.forEach(function (row) {
+          var tr = el('tr');
+          FLOW_COLUMNS.forEach(function (column) {
+            tr.appendChild(el('td', { text: row[column[0]] }));
+          });
+          var active = el('input.bc-active', { type: 'checkbox' });
+          active.checked = row.active;
+          active.addEventListener('change', function () {
+            setActive([row.id], active.checked);
+          });
+          tr.appendChild(el('td', null, active));
+          var actions = el('td.bc-actions');
+          var edit = el('button.btn.btn-sm', { type: 'button', text: 'Edit…' });
+          edit.addEventListener('click', function () {
+            shell.close();
+            openRecord(find(row.id), 'flow');
+          });
+          var del = el('button.btn.btn-sm', { type: 'button', text: 'Delete' });
+          del.addEventListener('click', function () { shell.close(); remove(row.id); });
+          actions.appendChild(edit);
+          actions.appendChild(del);
+          tr.appendChild(actions);
+          table.appendChild(tr);
+        });
+        body.appendChild(table);
+        body.appendChild(el('div.mesh-setting-help', { text: 'Level / value: where a '
+          + 'hydrostatic pressure is zero, the points of a phreatic line, or a uniform '
+          + 'pressure (compression negative). Initial only: start values, which the '
+          + 'calculation then changes. Seepage face: water may leave the soil there, in a '
+          + 'groundwater flow calculation.' }));
+      }
+    });
+    return shell;
+  }
+
   /* One condition, asked in the dialog's two steps: where (Whole soil / Face / Part /
      Line / Point, then which one) and what (a support, or a water pressure with the
-     fields of its type). `null` makes a new one. */
-  function openRecord(source) {
+     fields of its type). `null` makes a new one. `group` ('mechanical' or 'flow')
+     offers only that group's kinds; a given condition keeps to its own group. */
+  function openRecord(source, group) {
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var record = source ? copy(source) : null;
     var known = !!(source && find(source.id));
+    if (source) group = groupOf(source.kind);
+    if (!GROUPS[group]) group = null;
+    var kinds = KIND_CHOICES.filter(function (choice) { return inGroup(choice[0], group); });
     var c = {};
     var message, shell;
 
@@ -963,7 +1137,7 @@ App.BoundaryConditions = (function () {
           var next = record ? copy(record) : { kind: c.kind.value };
           next.on = on;
           next.points = points.map(function (p) { return [p[0], p[1]]; });
-          openRecord(Object.assign(blank(next.kind, on), next));
+          openRecord(Object.assign(blank(next.kind, on), next), group);
         }
       });
     }
@@ -984,7 +1158,11 @@ App.BoundaryConditions = (function () {
       }
     }
 
-    if (!record) record = blank('displacement', 'face');
+    // A new flow condition opens as a water pressure on the whole soil.
+    if (!record) {
+      record = group === 'flow' ? blank('water_pressure', 'domain')
+        : blank('displacement', 'face');
+    }
 
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' boundary condition',
@@ -1016,12 +1194,16 @@ App.BoundaryConditions = (function () {
 
         c.name = el('input.mesh-setting-control', { type: 'text', value: record.name });
         row('name', 'Name', c.name, 'Shown in the Model explorer and the deck.');
-        c.kind = options(el('select.mesh-setting-control'), [['displacement', 'Support'],
-          ['water_pressure', 'Water pressure'], ['seepage', 'Seepage face']], record.kind);
-        c.kind.disabled = known;
-        row('kind', 'Condition', c.kind, 'A support holds displacements at zero. A '
-            + 'seepage face, on a face or a line along the soil\'s outer boundary, lets '
-            + 'water leave the soil in a groundwater flow calculation.');
+        c.kind = options(el('select.mesh-setting-control'), kinds, record.kind);
+        c.kind.disabled = known || kinds.length < 2;
+        var supportHelp = 'A support holds displacements at zero.';
+        var flowHelp = 'A water pressure sets the pore pressure. A seepage face, on a '
+          + 'face or a line along the soil\'s outer boundary, lets water leave the soil '
+          + 'in a groundwater flow calculation.';
+        row('kind', 'Condition', c.kind, group === 'mechanical' ? supportHelp
+            : group === 'flow' ? flowHelp
+            : supportHelp + ' A seepage face, on a face or a line along the soil\'s outer '
+              + 'boundary, lets water leave the soil in a groundwater flow calculation.');
         c.on = options(el('select.mesh-setting-control'), TARGETS, record.on);
         row('on', 'Where', c.on, 'Lines and points are drawn in the 2D section.');
         c.face = options(el('select.mesh-setting-control'), facesOf(project).map(function (f) {
@@ -1161,7 +1343,7 @@ App.BoundaryConditions = (function () {
 
   return {
     FACES: FACES, SECTION_FACES: SECTION_FACES, FACE_NORMALS: FACE_NORMALS,
-    PRESSURE_TYPES: PRESSURE_TYPES, TARGETS: TARGETS,
+    PRESSURE_TYPES: PRESSURE_TYPES, TARGETS: TARGETS, GROUPS: GROUPS, groupOf: groupOf,
     draftDisplacement: draftDisplacement, draftWaterPressure: draftWaterPressure,
     draftSeepage: draftSeepage,
     standardConditions: standardConditions, withStandard: withStandard,
@@ -1170,6 +1352,7 @@ App.BoundaryConditions = (function () {
     line: line, listedLines: listedLines, label: label,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
+    flowRows: flowRows,
     isConditionKey: isConditionKey, find: find,
     save: save, remove: remove, applyStandard: applyStandard,
     activeState: activeState, setActive: setActive,

@@ -421,8 +421,53 @@
       'select',
       '-', 'drawLine',
       '-', 'createSheetPile', 'createMember', 'createAnchor', 'interface',
-      '-', 'createLoad', 'createBoundaryCondition'
+      '-', 'createLoad', 'createBoundaryCondition', 'mechanicalConditions'
     ]);
+  });
+
+  /* The mechanical conditions are set in Structures mode, the flow ones in Flow
+     conditions mode: each mode has a button for one new condition of its group and one
+     for the window of the whole group, in its rail and its menu. */
+  test('each mode opens the boundary condition windows of its own group', function () {
+    withInstall(function () {
+      var flow = (App.RAILS.flow || []).map(function (tool) {
+        return tool === '-' ? '-' : (tool.action || tool.icon);
+      });
+      var create = flow.indexOf('createFlowCondition');
+      T.ok(create > 0, 'the Flow conditions rail has a Create flow boundary condition button');
+      T.eq(flow.slice(create, create + 3),
+           ['createFlowCondition', 'createWaterPressureLine', 'flowConditions']);
+      function actions(label) {
+        var menu = App.MENUS.filter(function (m) { return m.label === label; })[0];
+        return menu.items.map(function (item) { return item && item.action; });
+      }
+      T.ok(actions('Flow conditions').indexOf('createFlowCondition') >= 0);
+      T.ok(actions('Flow conditions').indexOf('flowConditions') >= 0);
+      T.eq(actions('Flow conditions').indexOf('boundaryConditions'), -1);
+      T.ok(actions('Structures').indexOf('createBoundaryCondition') >= 0);
+      T.ok(actions('Structures').indexOf('mechanicalConditions') >= 0);
+      T.eq(actions('Structures').indexOf('boundaryConditions'), -1);
+      var tool = App.RAILS.structures.filter(function (t) {
+        return t && t.action === 'createBoundaryCondition';
+      })[0];
+      T.eq(tool.flyout.map(function (item) { return item.action; }).indexOf('boundaryConditions'),
+           -1, 'the Structures flyout opens the mechanical window, not the window of all');
+
+      var saved = App.BoundaryConditions;
+      var calls = [];
+      App.BoundaryConditions = {
+        open: function (group) { calls.push(['open', group]); },
+        openRecord: function (record, group) { calls.push(['record', record, group]); }
+      };
+      try {
+        ['mechanicalConditions', 'flowConditions', 'boundaryConditions',
+         'createBoundaryCondition', 'createFlowCondition'].forEach(function (action) {
+          App.runAction({ action: action });
+        });
+      } finally { App.BoundaryConditions = saved; }
+      T.eq(calls, [['open', 'mechanical'], ['open', 'flow'], ['open', 'all'],
+                   ['record', null, 'mechanical'], ['record', null, 'flow']]);
+    });
   });
 
   test('the frozen node-to-node anchor tool gives way to the live anchor tool', function () {

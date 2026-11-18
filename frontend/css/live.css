@@ -503,6 +503,10 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
   font-family: var(--font-mono); font-size: var(--fs-sm); }
 .bc-other span { flex: 1 1 auto; }
+/* The table of the flow conditions: one row per condition, read-only cells. */
+.bc-flow td { vertical-align: top; border-bottom: 1px solid var(--c-border); }
+.bc-flow td.bc-actions { white-space: nowrap; }
+.bc-flow td.bc-actions .btn + .btn { margin-left: 4px; }
 .bc-axes label { margin-right: 6px; }
 
 /* ── Calculate: greyed out, and while it runs ─────────────────────────────

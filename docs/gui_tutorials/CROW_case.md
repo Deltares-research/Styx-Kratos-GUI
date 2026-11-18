@@ -157,16 +157,15 @@ The water table is at y = −1.5 m in all stages. Below the water table the pore
 hydrostatic: it is zero at the water table and grows by 10 kPa per metre of depth. Above
 the water table the pore pressure is zero.
 
-1. Click the **Structures** tab.
-2. On the tool rail, click the small arrow in the corner of **Create boundary condition**,
-   then click **Create boundary condition…**.
+1. Click the **Flow conditions** tab.
+2. On the tool rail, click **Create flow boundary condition…**.
 3. In **Name**, type `Pore pressure`.
 4. In **Condition**, select **Water pressure**.
 5. In **Where**, select **Whole soil**.
 6. In **Type**, select **Hydrostatic**, and in **Reference level**, type `-1.5`.
 7. Click **Save**.
 
-![The Create boundary condition window for the water pressure. The Create boundary condition tool is outlined.](images/crow/04_water.png)
+![The Create boundary condition window for the water pressure. The Create flow boundary condition tool is outlined.](images/crow/04_water.png)
 
 A new project already has the displacement conditions: the bottom is fixed, and the left
 and right sides are fixed in the horizontal direction only. The Model explorer now shows
@@ -196,9 +195,10 @@ pile. For that reason, the density is low: ρ · A = 298.36 × 0.4924 ≈ 147 kg
 wall, close to the mass of a steel sheet pile. The values are those of Kratos' own CROW
 test.
 
-1. On the tool rail, click **Create sheet pile…**.
-2. Type the values from the table. Scroll down to see all fields.
-3. Click **Save**.
+1. Click the **Structures** tab.
+2. On the tool rail, click **Create sheet pile…**.
+3. Type the values from the table. Scroll down to see all fields.
+4. Click **Save**.
 
 ![The Create sheet pile window. The Create sheet pile tool is outlined.](images/crow/05_wall.png)
 
