@@ -131,6 +131,8 @@ def _summary(directory: Path, match: re.Match | None) -> dict:
         started = f"{match['date']}T{match['hour']}:{match['minute']}"
         repeat = int(match["repeat"] or 1)
     return {
+        # Kratos is still working in it: the files and the log are still growing.
+        "running": calculation.is_current(directory),
         "id": directory.name,
         "deck": deck,
         "started": started,
@@ -202,6 +204,7 @@ def describe(run: Run) -> dict:
     match = RUN_NAME.match(directory.name)
     stages = stage_list(directory)
     failed = failed_at(directory)
+    running = calculation.is_current(directory)
     return {
         **_summary(directory, match),
         "stages": stages,
@@ -209,9 +212,12 @@ def describe(run: Run) -> dict:
         # "Every stage wrote its results" rather than "the log looks happy": a log
         # says what Kratos said, and the files say what is there to look at. The
         # second is the question a postprocessor is actually asking.
-        "complete": bool(stages) and all(stage["results"] for stage in stages),
+        "complete": not running and bool(stages)
+                    and all(stage["results"] for stage in stages),
         "unit_system": run_unit_system(run),
         "failed_at": failed,
+        # The user stopped it (`calculation.stop`): `failed_at` is where, not why.
+        "stopped": stopped(directory),
         "log": calculation.LOG_NAME if (directory / calculation.LOG_NAME).is_file() else None,
     }
 
@@ -224,15 +230,35 @@ def failed_at(directory: Path) -> dict | None:
     interleaved with Kratos' own C++ output. The only difference here is where the text
     comes from -- a file on disk instead of a subprocess' pipe -- which is what lets a
     run from last week still say where it stopped.
+
+    A run in progress has not failed: its log has a "begin" with no "end" only because
+    Kratos is still in that stage (`calculation.current_run`).
     """
     log = directory / calculation.LOG_NAME
-    if not log.is_file():
+    if not log.is_file() or calculation.is_current(directory):
         return None
     stage = calculation.failed_stage(log.read_text(encoding="utf-8", errors="replace"))
     if stage is None:
         return None
     index, total, name = stage
     return {"index": index, "of": total, "name": name}
+
+
+def stopped(directory: Path) -> bool:
+    """True when the user stopped this run: its log ends with `calculation.STOPPED_NOTE`.
+
+    Only the end of the log is read; the note is its last line.
+    """
+    log = directory / calculation.LOG_NAME
+    if not log.is_file() or calculation.is_current(directory):
+        return False
+    try:
+        with open(log, "rb") as handle:
+            handle.seek(max(0, log.stat().st_size - 400))
+            tail = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    return calculation.was_stopped(tail)
 
 
 def stage_list(directory: Path) -> list[dict]:

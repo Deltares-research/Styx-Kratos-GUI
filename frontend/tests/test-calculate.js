@@ -146,6 +146,50 @@ test('a second press while one is in flight is refused rather than queued', func
   });
 });
 
+test('a run the user stopped is reported as stopped, not as a failure', function () {
+  return withCalculateStubs(function (logged) {
+    App.Api = { post: function () {
+      return Promise.resolve(calculationResult({
+        ok: false, stopped: true, returncode: 1, seconds: 41.2,
+        stage: { index: 3, of: 7, name: 'Second excavation' },
+        error: 'Stopped by the user after 41.2 s, in stage 3 of 7 (Second excavation).'
+      }));
+    } };
+    return App.Calculate.run().then(function () {
+      T.ok(!logged.some(function (line) { return line[0] === 'err'; }), 'no red lines');
+      T.ok(logged.some(function (line) {
+        return line[1] === 'Calculation stopped after 41.2 s, in stage 3 of 7 ("Second '
+             + 'excavation"). The stages before it finished and keep their results. The '
+             + 'model has not changed.';
+      }), logged.map(function (line) { return line[1]; }).join(' | '));
+      T.ok(logged.some(function (line) { return line[1].indexOf('Model_2026-09-20_10-15') > 0; }),
+           'and where its files are');
+      T.eq(App.Results.remembered.length, 1, 'what it wrote can still be opened');
+    });
+  });
+});
+
+test('a stop that cannot reach the server says so and leaves the run going', function () {
+  return withCalculateStubs(function (logged) {
+    var release;
+    App.Api = { post: function (path) {
+      if (path === '/api/calculate/stop') return Promise.reject(new Error('offline'));
+      return new Promise(function (resolve) { release = resolve; });
+    } };
+    var run = App.Calculate.run();
+    return App.Calculate.stop().then(function (answer) {
+      T.eq(answer, false);
+      T.eq(App.Calculate.stopping(), false);
+      T.eq(App.Calculate.running(), true);
+      T.ok(logged.some(function (line) {
+        return line[0] === 'err' && line[1] === 'The calculation could not be stopped: offline';
+      }));
+      release(calculationResult());
+      return run;
+    });
+  });
+});
+
 test('a broken calculation listener is reported separately without failing the run', function () {
   return withCalculateStubs(function (logged) {
     var timeout = window.setTimeout, scheduled = [], armed = true;

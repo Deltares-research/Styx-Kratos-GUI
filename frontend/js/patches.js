@@ -1492,7 +1492,12 @@ App.LivePatches = (function () {
      entry's own `tip` stays the string it was, for everything else that reads it.
 
      The rail button is mounted afresh on every mode change and its tip is joined into
-     a string at mount, so it is greyed (gateRail) but keeps its plain tip. */
+     a string at mount, so it is greyed (gateRail) but keeps its plain tip.
+
+     While a run goes on, the toolbar button and the Stages menu's item are Stop: a
+     red square and "Stop", which asks and then stops Kratos (`App.Calculate.askStop`).
+     Once asked, they say "Stopping…" until the run answers. F9 and the rail do not
+     stop a run: a key pressed twice must not end an hour of work. */
 
   var CALCULATE_TIP = 'Calculate (F9): mesh the model and run it in Kratos.';
 
@@ -1510,9 +1515,24 @@ App.LivePatches = (function () {
     return !!tool && tool.action === 'calculate' && !calculateNow().ok;
   }
 
+  function stoppingNow() {
+    var calc = App.Calculate;
+    return !!(calc && typeof calc.stopping === 'function' && calc.stopping());
+  }
+
+  /* True while a run goes on and no stop has been asked: the button is Stop. */
+  function stoppable(now) {
+    return !!now.running && !stoppingNow()
+      && !!(App.Calculate && typeof App.Calculate.askStop === 'function');
+  }
+
+  /* The toolbar button is Stop while a run goes on; the rail button only spins. */
   function paintCalculating(button) {
-    var busy = !!calculateNow().running;
-    button.classList.toggle('calculating', busy);
+    var now = calculateNow();
+    var busy = !!now.running;
+    var stop = stoppable(now) && !button.classList.contains('rail-btn');
+    button.classList.toggle('calculating', busy && !stop);
+    button.classList.toggle('stop-calc', stop);
     if (busy) button.setAttribute('aria-busy', 'true');
     else button.removeAttribute('aria-busy');
   }
@@ -1520,6 +1540,7 @@ App.LivePatches = (function () {
   var calculateTip = {
     toString: function () {
       var now = calculateNow();
+      if (stoppable(now)) return App.Calculate.STOP_TIP || 'Stop the calculation.';
       return now.ok ? CALCULATE_TIP : now.reason;
     }
   };
@@ -1540,26 +1561,29 @@ App.LivePatches = (function () {
 
   function syncCalculate() {
     var now = calculateNow();
+    var stop = stoppable(now);
+    var off = !now.ok && !stop;
+    var busyLabel = stop ? 'Stop' : stoppingNow() ? 'Stopping…' : 'Calculating…';
     var entry = calculateEntry();
     // On the data as well as the button, so a remount of the toolbar keeps it.
-    if (entry) entry.disabled = !now.ok;
+    if (entry) entry.disabled = off;
 
     var button = typeof document !== 'undefined'
       && document.querySelector('#maintoolbar .tbtn[data-action="calculate"]');
     if (button) {
-      button.classList.toggle('disabled', !now.ok);
-      button.setAttribute('aria-disabled', now.ok ? 'false' : 'true');
+      button.classList.toggle('disabled', off);
+      button.setAttribute('aria-disabled', off ? 'true' : 'false');
       paintCalculating(button);
       var label = button.querySelector('span');
       if (label) {
-        label.textContent = now.running ? 'Calculating…' : ((entry && entry.wide) || 'Calculate');
+        label.textContent = now.running ? busyLabel : ((entry && entry.wide) || 'Calculate');
       }
     }
 
     menuItemsFor('calculate').forEach(function (item) {
       if (item.calculateLabel === undefined) item.calculateLabel = item.label;
-      item.disabled = !now.ok;
-      item.label = now.running ? 'Calculating…' : item.calculateLabel;
+      item.disabled = off;
+      item.label = now.running ? (stop ? 'Stop calculation' : busyLabel) : item.calculateLabel;
     });
 
     gateRail();
@@ -1618,6 +1642,9 @@ App.LivePatches = (function () {
 
     if (App.Calculate && typeof App.Calculate.onChange === 'function') {
       App.Calculate.onChange(syncCalculate);
+    }
+    if (App.Calculate && typeof App.Calculate.onStop === 'function') {
+      App.Calculate.onStop(syncCalculate);
     }
     syncCalculate();
   }
@@ -1965,6 +1992,9 @@ App.LivePatches = (function () {
     var total = ((App.PROJECT && App.PROJECT.stages) || []).length;
     if (!result) { stageRun = null; }
     else if (result.ok) { stageRun = { completed: total }; }
+    else if (result.stopped) {
+      stageRun = { completed: result.stage ? result.stage.index - 1 : 0, stopped: true };
+    }
     else if (result.stage) {
       stageRun = { completed: result.stage.index - 1, failed: true,
                    error: result.error || null };
@@ -2797,6 +2827,7 @@ App.LivePatches = (function () {
     ['script <file.py>', 'write the model as a Python file that builds it'],
     ['mesh', 'generate the finite element mesh'],
     ['calculate', 'mesh the model and run it in Kratos (F9)'],
+    ['calculate stop', 'stop the running calculation; what it wrote stays'],
     ['results', 'open what a calculation wrote (try "results runs")'],
     ['export', 'write the Kratos deck'],
     ['stages', 'the Stages overview: every stage, its time and result'],
@@ -2997,6 +3028,13 @@ App.LivePatches = (function () {
         else openResultsWindow();
         return;
       }
+      // The Results menu's and rail's "Convergence": `results convergence`, without
+      // switching to Results mode -- it is read while a run goes on, and of a run that
+      // wrote no results at all.
+      if (item && item.action === 'showConvergence') {
+        resultsCommand('results convergence');
+        return;
+      }
       // The rail's "Plot along the wall": the same `results plot` the command box runs,
       // which opens the plot window when it has something to draw.
       if (item && item.action === 'plotResults') {
@@ -3127,6 +3165,12 @@ App.LivePatches = (function () {
         return;
       }
       if (item && item.action === 'calculate') {
+        // While a run goes on, the toolbar button (`cta`) and the menu item are Stop.
+        // F9 (an action with no label) and the rail are refused below instead.
+        if ((item.cta || item.label) && stoppable(calculateNow())) {
+          App.Calculate.askStop();
+          return;
+        }
         // The button is greyed for the same reason; F9 and a menu left open are not.
         if (refuseCalculate()) return;
         if (App.Calculate) App.Calculate.run();
@@ -3566,7 +3610,8 @@ App.LivePatches = (function () {
         return frozenCalcRun(function (result) {
           rememberRun(result);
           if (done) done(result);
-          if (!result || !App.Results || !App.Results.ready) return;
+          // A run the user stopped leaves them where they were, at the model.
+          if (!result || result.stopped || !App.Results || !App.Results.ready) return;
           App.Results.ready().then(function () {
             if (App.Results.stage()) App.setMode('results');
           });
@@ -3640,6 +3685,11 @@ App.LivePatches = (function () {
           + '<circle cx="17.5" cy="12.5" r="1.3"/>';
       }
 
+      if (App.ICONS && !App.ICONS.convergence) {
+        App.ICONS.convergence = '<path d="M4 4v16h16"/>'
+          + '<path d="M7 6l3 5 3-2 3 6 3 2"/><path d="M6 17.5h14" stroke-dasharray="2 2"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
@@ -3647,7 +3697,9 @@ App.LivePatches = (function () {
         // The chooser opens with the mode; this is how it comes back once closed.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
-            + 'pressure on it, every stage', action: 'plotResults' }
+            + 'pressure on it, every stage', action: 'plotResults' },
+        { icon: 'convergence', tip: 'Convergence — how the solver converged, iteration '
+            + 'by iteration', action: 'showConvergence' }
       ];
 
       /* `App.setMode` is frozen and knows only about the stages panel (js/app.js:25).
@@ -3690,6 +3742,10 @@ App.LivePatches = (function () {
           }
         });
       }
+
+      // The Convergence window: its own file, which hears from App.Calculate and
+      // App.ConvergencePlot itself.
+      if (App.ConvergenceWindow) App.ConvergenceWindow.install();
 
       /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
          opens when a `results plot` asks for it -- typed, or from any button. */
@@ -3807,6 +3863,7 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Convergence…', icon: 'convergence', action: 'showConvergence' },
           { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
             cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
@@ -4022,7 +4079,8 @@ App.LivePatches = (function () {
         onClose: function () { saveMenu.close(); plotWindow = null; plotColumns = 0; }
       });
       handle.dialog.classList.add('dlg-plot');
-      saveMenu = plotSaveMenu(handle.dialog.querySelector('.dlg-foot .btn'));
+      saveMenu = App.Picture.saveMenu(handle.dialog.querySelector('.dlg-foot .btn'),
+                                      function (format) { resultsCommand('results plot ' + format); });
 
       var layer = document.getElementById('modal-layer');
       var scrims = layer ? layer.querySelectorAll('.scrim') : [];
@@ -4040,59 +4098,6 @@ App.LivePatches = (function () {
         new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
       }
       return handle;
-    }
-
-    /* The plot window's one Save button: a small menu of the formats `results plot`
-       saves, opened above the button when there is no room below it. A pick saves at
-       once, from its own click, so the browser still opens its save window. The page
-       closes an open menu on any press outside it -- on this button too -- so the click
-       that follows such a press must not open the menu again. */
-    var PLOT_SAVE_FORMATS = [
-      { label: 'PNG', format: 'png' },
-      { label: 'PDF', format: 'pdf' },
-      { label: 'SVG', format: 'svg' },
-      { label: 'CSV', format: 'csv' }
-    ];
-
-    function plotSaveMenu(button) {
-      var open = false, justClosed = false, pressClosed = false;
-      button.setAttribute('aria-haspopup', 'menu');
-      button.setAttribute('aria-expanded', 'false');
-      button.addEventListener('mousedown', function () { pressClosed = justClosed; });
-
-      function show() {
-        App.UI.closePopups(0);
-        var r = button.getBoundingClientRect();
-        var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
-          resultsCommand('results plot ' + it.format);
-        }), r.left, r.bottom);
-        // The menu layer lies under the dialogs' layer, so the menu goes up beside the
-        // window it belongs to. Both layers cover the page, so it keeps its place.
-        var dialogs = document.getElementById('modal-layer');
-        if (dialogs) dialogs.appendChild(menu);
-        var height = menu.getBoundingClientRect().height;
-        if (r.bottom + height > window.innerHeight - 4) {
-          menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
-        }
-        open = true;
-        button.setAttribute('aria-expanded', 'true');
-        App.UI.whenClosed(function () {
-          open = false;
-          button.setAttribute('aria-expanded', 'false');
-          justClosed = true;
-          setTimeout(function () { justClosed = false; }, 0);
-        });
-      }
-
-      return {
-        toggle: function () {
-          var closedByThisPress = pressClosed;
-          pressClosed = false;
-          if (open) App.UI.closePopups(0);
-          else if (!closedByThisPress) show();
-        },
-        close: function () { if (open) App.UI.closePopups(0); }
-      };
     }
 
     function closePlotWindow() {
@@ -4160,6 +4165,11 @@ App.LivePatches = (function () {
                                           function () { plotReloading = null; });
     }
 
+    function convergenceShown() {
+      var W = App.ConvergenceWindow;
+      return !!(W && W.state && W.state().open);
+    }
+
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -4168,11 +4178,15 @@ App.LivePatches = (function () {
       if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
       if (on) {
         mountResultsPanel();
-        // Entering the mode opens the chooser, every time. It is what the mode is
-        // for, and the dock panel alone is easy to miss down the side of the page.
-        // The rail's "Choose results" reopens it after it has been closed. It fills
-        // itself as it is built, so there is nothing to render afterwards.
-        openResultsWindow();
+        // Entering the mode opens the chooser. It is what the mode is for, and the
+        // dock panel alone is easy to miss down the side of the page. The rail's
+        // "Choose results" reopens it after it has been closed. It fills itself as it
+        // is built, so there is nothing to render afterwards.
+        //
+        // But not over an open Convergence window: at the end of a Calculate, the
+        // chooser would hide how the run ended, and after a failed run that is what
+        // the user came to read. The dock panel has the same controls meanwhile.
+        if (!convergenceShown()) openResultsWindow();
       } else {
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the
@@ -4435,6 +4449,11 @@ App.LivePatches = (function () {
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'calculate') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        // `calculate stop`: typed, so it does not ask first.
+        if ((text.trim().split(/\s+/)[1] || '').toLowerCase() === 'stop') {
+          if (App.Calculate && App.Calculate.stop) return App.Calculate.stop();
+          return;
+        }
         if (refuseCalculate()) return;
         if (App.Calculate) return App.Calculate.run();
         return;

@@ -287,7 +287,7 @@ App.Stages = (function () {
 
      `run` is `{completed, failed}`: how many stages the last run got through, and
      whether it stopped short. A failed run failed in the stage after the last one it
-     completed. */
+     completed. `{completed, stopped}` is a run the user stopped in that stage. */
   function timeUnit() {
     return (App.Units && App.Units.label('time')) || 's';
   }
@@ -319,16 +319,18 @@ App.Stages = (function () {
       var duration = rounded(durationOf(stage));
       var unit = timeUnit();
       var failedHere = !!(run && run.failed) && position === completed;
+      var stoppedHere = !!(run && run.stopped) && position === completed;
       // `heading` is the line without its id: the Stages window draws the `[id]`
       // after it in a lighter colour, so the name reads first.
       var heading = row.name + ' - ' + duration + ' ' + unit + ', T = ' + total + ' ' + unit;
       return {
         number: position + 1, id: row.id, name: row.name, kind: row.kind,
         depth: row.depth, duration: duration, total: total, unit: unit,
-        state: failedHere ? 'failed' : row.state,
+        state: failedHere ? 'failed' : stoppedHere ? 'stopped' : row.state,
         heading: heading,
         label: heading + ' [' + row.id + ']',
-        log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
+        log: position < completed ? 'OK' : failedHere ? 'Failed'
+           : stoppedHere ? 'Stopped by the user' : 'Not calculated'
       };
     });
   }

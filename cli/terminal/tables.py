@@ -2,7 +2,8 @@
 
 Both are the GUI's, so a file saved from the terminal is the file Results mode saves:
 `field_csv` is `App.ResultsRender.csv` (`results csv`), `profile_csv` is
-`App.ResultsPlot.csv` (the plot window's `results plot csv`), and every number in them is
+`App.ResultsPlot.csv` (the plot window's `results plot csv`), `convergence_csv` is
+`App.ConvergencePlot.csv` (`results convergence csv`), and every number in them is
 written the way JavaScript's `String(value)` writes it (`js_number`). `shown` is
 `App.ResultsRender.format`, what the results log prints.
 """
@@ -98,3 +99,43 @@ def profile_csv(plot: dict) -> str:
                                    str(nodes[at]) if at < len(nodes) else "",
                                    js_number(y), js_number(value)]))
     return "\n".join(lines) + "\n"
+
+
+CONVERGENCE_COLUMNS = ("iteration", "stage", "stage_name", "step", "time", "cycle",
+                       "criterion", "relative", "relative_target", "absolute",
+                       "absolute_target", "met", "events")
+
+
+def convergence_csv(data: dict, stage: int | None = None) -> str:
+    """The convergence of a run (`core.results.convergence`), a row per iteration.
+
+    `iteration` counts from 1 over the whole run, `step` from 1 in its stage.
+    `criterion` is the one that printed the row: `residual`, `displacement` or
+    `water_pressure`, so a run whose stages use different ones is read right. `met` is
+    `yes` where Kratos said the criterion was met. `events` is what happened after that
+    iteration -- `max_iterations 50`, `cut_back 0.5` -- separated by `; `. A value Kratos
+    printed as nan or inf is written as such. With `stage`, the rows of that stage only.
+    """
+    names = {entry["index"]: entry["name"] for entry in data["stages"]}
+    lines = [",".join(CONVERGENCE_COLUMNS)]
+    for number, iteration in enumerate(data["iterations"], start=1):
+        if stage is not None and iteration["stage"] != stage:
+            continue
+        events = "; ".join(f"{event['kind']} {_value(event.get('factor', event.get('limit')))}"
+                           for event in data["events"] if event["at"] == number)
+        lines.append(",".join([
+            str(number), _value(iteration["stage"]), cell(names.get(iteration["stage"])),
+            _value(iteration["step"]), _value(iteration["time"]), _value(iteration["cycle"]),
+            _value(iteration["criterion"]), _value(iteration["relative"]), _value(iteration["relative_target"]),
+            _value(iteration["absolute"]), _value(iteration["absolute_target"]),
+            "yes" if iteration["met"] else "no", cell(events)]))
+    return "\n".join(lines) + "\n"
+
+
+def _value(value) -> str:
+    """A number of the convergence data: empty for none, "nan" and "inf" as they are."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return js_number(value)

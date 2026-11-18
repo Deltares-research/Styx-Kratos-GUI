@@ -48,11 +48,12 @@ Module paths are relative to `core/`.
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
 | 6. Stages | `model/stages.py` | Makes the stage tree into the list of Kratos stages |
 | 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one Kratos stage for each stage, with GiD and JSON output) |
-| 8. Solve | `analysis/calculation.py` → `analysis/kratos_main.py` | Runs the Kratos orchestrator in a subprocess, in a new run folder (`~/KratosGUI/runs/<deck>_<time>/`) |
+| 8. Solve | `analysis/calculation.py` → `analysis/kratos_main.py` | Runs the Kratos orchestrator in a subprocess, in a new run folder (`~/KratosGUI/runs/<deck>_<time>/`). Each line of Kratos' output goes into `kratos.log` when Kratos prints it. |
 | 9. Read | `results/catalog.py` → `results/gid_reader.py`, `results/fields.py`, `results/mesh.py`, `results/parts.py` | Reads the GiD ASCII files (`.post.msh`, `.post.res`) into fields for each stage, and joins them to the parts of the deck |
 | 10. Members | `results/members.py` | Reads the `<stage>__output_<member>.json` files into curves along the wall and its interface |
+| 11. Convergence | `results/convergence.py` | Reads the residuals of each solver iteration from `kratos.log`, also while the run goes on |
 
-Steps 2 to 5 run in the Gmsh worker process. Only step 8 needs Kratos. Steps 9 and 10 only
+Steps 2 to 5 run in the Gmsh worker process. Only step 8 needs Kratos. Steps 9 to 11 only
 read files, so you can open an old run, or a run from a different computer.
 
 ## Ways into the model
@@ -80,8 +81,8 @@ is one step of the pipeline:
 | `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `solver.py` (a stage's expert solver settings: defaults, when each applies, the deck they write), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
-| `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
-| `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
+| `core/analysis/` | `calculation.py` (run folder, subprocess, the log written line by line, the run in progress, failure messages), `kratos_main.py` (runs inside the Python of Kratos, with the output buffer of the C runtime off) |
+| `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces), `convergence.py` (the residuals of each iteration, from the log; ported from the ConvergencePlotter of Deltares' FEA-Tools) |
 | `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) is outside the packages too. |
 
 ### Import rule
@@ -117,8 +118,8 @@ the HTTP parts.
 | Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
-| Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
-| Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
+| Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder); `POST /api/calculate/stop` (stop the run: Kratos is killed, the run answers `stopped`) |
+| Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive`, `/runs/{run}/convergence` (also for the run in progress) |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
 | Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`; `DELETE /api/files/folder/{folder}` hands the folder back when the save ends. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. A folder id lasts for one save, and at most 15 minutes without use. One folder window is open at a time, and it closes after 10 minutes. `GET /api/files/picture-job/{token}` says whether the page may run the picture job in its address: only on a server `kratos-cli picture` started with that token. |
@@ -139,7 +140,7 @@ the HTTP parts.
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
-| `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
+| `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate` (with `--follow`); `results` |
 | `cli/commands/picture.py`, `cli/terminal/pictures.py` | `picture`: starts the server and a headless browser as separate processes, gives the page a job in its address, and takes the files on a one-time receiver |
 | `cli/commands/interactive.py` | `shell` |
 | `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
@@ -162,7 +163,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
-| Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
+| Calculation and results | `calculate.js`, `convergence-window.js` (the Convergence window, which asks for the run's convergence once a second while Kratos runs), `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure), `convergence-plot.js` (`results convergence …`, its SVG figure and CSV) |
 
 ## Results mode
 
@@ -171,6 +172,7 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
   <deck>_<stage>.post.msh / .post.res           → results/gid_reader → results/fields, mesh, parts
   <stage>__output_wall.json, __output_interface_<face> → results/members
+  kratos.log (grows while Kratos runs)          → results/convergence
         │
         ▼  results/catalog.py (finds the files, reads each one once, caches by size and time)
   /api/results/... routes
@@ -179,7 +181,9 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
   results.js         `results open | stage | field | range | csv …`   (no DOM, tested)
   results-render.js  colours, bands, legend ticks, CSV                 (no DOM, tested)
   results-plot.js    `results plot …`, the SVG figure for each stage   (no DOM, tested)
+  convergence-plot.js `results convergence …`, figure, CSV, words      (no DOM, tested)
   results-view.js    contours and legend in the viewport               (DOM)
+  convergence-window.js the Convergence window, live during Calculate  (DOM)
   patches.js         Results panel, Choose results window, plot window  (DOM)
 ```
 
@@ -190,8 +194,15 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
   the deformed mesh, legend limits (`results range`), values at a node, and CSV export.
 - **Plot along the wall:** bending moment, shear force, normal force, displacements and
   interface tractions against the level y, one panel for each stage. It follows the Kratos
-  staged-excavation validation figure and its sign convention. The window can save SVG or
-  CSV.
+  staged-excavation validation figure and its sign convention. The window can save PNG,
+  PDF, SVG or CSV.
+- **Convergence:** the relative and the absolute residual of each iteration, in two panels
+  on a log scale, with the targets, the stages and the steps. Each iteration carries the
+  criterion that printed it, since each stage chooses its own; the plot gives each its
+  colour, and can show one stage alone. The Results menu, the
+  Results rail and `results convergence` show it for any run. The CSV is written twice,
+  in `convergence-plot.js` and in `cli/terminal/tables.py`, and
+  `tests/test_convergence_parity.py` holds the two to the same text.
 
 ## Tests
 
@@ -214,4 +225,6 @@ tests:
 | Part keys | One string is the Gmsh physical group, the `userData.key` in the view, the `obj:` of the tree, and the `OBJECT_PROPS` key |
 | Logic without DOM, thin DOM code | Logic that needs no page goes into a module without `document`, so the tests can run it without a browser. `patches.js` and `results-view.js` only connect it to the page. |
 | The pore water is the project's (`Project.fluid`) | Every soil holds the same water, so it is one record and not a copy in each soil, which could disagree. A soil that sets `DENSITY_WATER`, `BULK_MODULUS_FLUID` or `DYNAMIC_VISCOSITY` itself is refused. The export writes the water into each soil: the bulk modulus and the viscosity from `fluid` (water's at 20 °C where unset), `DENSITY_WATER` from the water level's specific weight. `migration.lift_water` moves the soils' water of an older file into `fluid`, and names each soil whose deck that changes. |
+| The live plot asks once a second; the server does not push | The rate is that of the ConvergencePlotter of FEA-Tools, and a log of 490 KB takes about 5 ms to parse. The window asks again only after the last answer came back, so slow answers cannot pile up. |
+| Kratos' output buffer is off | The C++ side of Kratos writes its output in blocks, so without this the log grows in bursts, out of order with the Python lines. `kratos_main.py` turns the C runtime's buffer off before Kratos loads. If that fails, the run continues and the plot updates in bursts. |
 | Runs are folders, results are files | A run never changes after it ends, and Styx reads it from disk. So results survive a restart of the server, and you can share a run as a ZIP file. |

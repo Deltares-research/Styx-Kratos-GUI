@@ -1,0 +1,61 @@
+[kratos-gui] stage begin 1/7 1_Initial_stage
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  1.0 
+RESIDUAL CRITERION:  :: [ Obtained ratio = 6.49953e-14; Expected ratio = 0.0001; Absolute norm = 3.2368e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 1/7 1_Initial_stage
+[kratos-gui] stage begin 2/7 2_Null_step
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  2.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.0001; Absolute norm = 0.000287288; Expected norm =  1e-09]
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 4.43614e-14; Expected ratio = 0.0001; Absolute norm = 1.27445e-17; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 2/7 2_Null_step
+[kratos-gui] stage begin 3/7 3_SheetPileWall_installation
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  3.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; Absolute norm = 0.00999302; Expected norm =  1e-09]
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 6.23019e-14; Expected ratio = 0.001; Absolute norm = 6.22585e-16; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 3/7 3_SheetPileWall_installation
+[kratos-gui] stage begin 4/7 4_First_excavation
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  4.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; Absolute norm = 0.00750641; Expected norm =  1e-09]
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 2.57119e-13; Expected ratio = 0.001; Absolute norm = 1.93004e-15; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 4/7 4_First_excavation
+[kratos-gui] stage begin 5/7 5_Strut_installation
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  5.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; Absolute norm = 1.55989e-17; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 5/7 5_Strut_installation
+[kratos-gui] stage begin 6/7 6_Second_excavation
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  6.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; Absolute norm = 0.00466015; Expected norm =  1e-09]
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1.78641e-14; Expected ratio = 0.001; Absolute norm = 8.32496e-17; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 6/7 6_Second_excavation
+[kratos-gui] stage begin 7/7 7_Third_excavation
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: TIME      :  7.0 
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1; Expected ratio = 0.001; Absolute norm = 0.00284081; Expected norm =  1e-09]
+DISPLACEMENT CRITERION:  :: [ Obtained ratio = 1.36562e-13; Expected ratio = 0.001; Absolute norm = 3.87945e-16; Expected norm =  1e-09]
+DISPLACEMENT CRITERION: Convergence is achieved
+GeoMechanics Analysis: Analysis -END-  
+[kratos-gui] stage end 7/7 7_Third_excavation

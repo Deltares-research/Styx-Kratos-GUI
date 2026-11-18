@@ -16,8 +16,17 @@
    *   it does not reuse the export's download path. A download is for taking the deck
        elsewhere; this one runs where the files are written, and the user never sees a
        save window because nothing is being saved to a place they chose.
-   *   it does not poll. The request stays open for as long as the solver runs, which is
-       what makes a progress bar possible later without changing anything here.
+   *   it does not poll. The request stays open for as long as the solver runs. The
+       progress is the Convergence window's (`convergence-window.js`): it hears from
+       `onChange` when a run starts and ends, and asks the server once a second how
+       the solver converges in between.
+
+   A run can be stopped (`stop`): while it runs, the toolbar's Calculate button is a
+   Stop button, the Convergence window has one too, and `calculate stop` in the command
+   box does the same. `askStop` asks first, because a click on the button a moment after
+   Calculate would otherwise end the run at once. The server kills Kratos, and the open
+   Calculate request then answers with `stopped`: what the run wrote stays, and the
+   model is not touched.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -25,7 +34,9 @@ var App = window.App || {};
 App.Calculate = (function () {
 
   var inFlight = false;
+  var stopping = false;     // a stop was asked, and the run has not answered yet
   var listeners = [];
+  var stopListeners = [];
 
   /* ── Can it calculate now? ────────────────────────────────────────────────
 
@@ -52,8 +63,12 @@ App.Calculate = (function () {
      its materials, its flow conditions, whether Kratos is installed -- is the
      server's to judge, after the press, with its full reason in the command log. */
 
-  var RUNNING = 'Calculating… Kratos is running this model. The command log says '
-              + 'when it finishes.';
+  var RUNNING = 'Calculating… Kratos is running this model. The Convergence window '
+              + 'shows how it goes, and the command log says when it finishes. '
+              + 'Press Stop to stop it.';
+
+  var STOP_TIP = 'Stop the calculation. The stages that finished keep their results, '
+               + 'and the model does not change.';
 
   function nothingToMesh(project) {
     var noun = project.dimension === 2 ? 'surface' : 'volume';
@@ -76,20 +91,40 @@ App.Calculate = (function () {
 
   function running() { return inFlight; }
 
-  /* Told when a run starts and when it ends, however it ends. Adding the same
-     function twice adds it once: js/patches.js installs more than once in the tests. */
+  function isStopping() { return stopping; }
+
+  /* Told when a run starts and when it ends, however it ends: `fn(running, result)`,
+     with the server's answer as `result` when a run ended with one (none when the
+     request failed). Adding the same function twice adds it once: js/patches.js
+     installs more than once in the tests. */
   function onChange(fn) {
     if (typeof fn === 'function' && listeners.indexOf(fn) < 0) listeners.push(fn);
   }
 
+  /* Told when a stop is asked and when the run has answered: `fn(stopping)`. */
+  function onStop(fn) {
+    if (typeof fn === 'function' && stopListeners.indexOf(fn) < 0) stopListeners.push(fn);
+  }
+
   /* A listener that throws must not turn a finished run into "Calculation failed":
      its error is rethrown on its own, where the page's error reporter sees it. */
-  function setInFlight(value) {
+  function tell(fns, args) {
+    fns.slice().forEach(function (fn) {
+      try { fn.apply(null, args); } catch (err) { setTimeout(function () { throw err; }, 0); }
+    });
+  }
+
+  function setInFlight(value, result) {
     if (inFlight === value) return;
     inFlight = value;
-    listeners.slice().forEach(function (fn) {
-      try { fn(inFlight); } catch (err) { setTimeout(function () { throw err; }, 0); }
-    });
+    if (!value) setStopping(false);
+    tell(listeners, [inFlight, result]);
+  }
+
+  function setStopping(value) {
+    if (stopping === value) return;
+    stopping = value;
+    tell(stopListeners, [stopping]);
   }
 
   function log(kind, line) {
@@ -119,6 +154,18 @@ App.Calculate = (function () {
     (result.notes || []).concat(result.warnings || []).forEach(function (line) {
       log('note', line);
     });
+
+    /* Stopped by the user: not a failure, so no red line and no Kratos output. */
+    if (result.stopped) {
+      var where = result.stage
+        ? ', in stage ' + result.stage.index + ' of ' + result.stage.of + ' ("'
+          + result.stage.name + '"). The stages before it finished and keep their results'
+        : '';
+      log('note', 'Calculation stopped after ' + result.seconds + ' s' + where
+                  + '. The model has not changed.');
+      log('note', 'What the run wrote is in ' + result.directory);
+      return;
+    }
 
     if (result.ok) {
       log('ok', 'Calculation finished in ' + result.seconds + ' s: '
@@ -160,7 +207,7 @@ App.Calculate = (function () {
     log('note', 'Meshing, writing the deck and running Kratos…');
 
     return App.Api.post('/api/calculate', request()).then(function (result) {
-      setInFlight(false);
+      setInFlight(false, result);
       /* The run just written becomes the one `results` opens, before anything is
          printed about it. No round trip: the response already carries the run id,
          so pressing Calculate and then typing `results files` works with nothing
@@ -185,6 +232,70 @@ App.Calculate = (function () {
     });
   }
 
+  /* Stop the run now, without asking: `calculate stop` and the confirmed Stop button.
+
+     Asked of the server even when this page started no run, so the Convergence window
+     of a page loaded during a run can stop it too. When this page's run stops, its own
+     Calculate request reports it; this only says that the stop is on its way. */
+  function stop() {
+    if (stopping) {
+      log('note', 'The calculation is being stopped.');
+      return Promise.resolve(true);
+    }
+    if (inFlight) setStopping(true);
+    return App.Api.post('/api/calculate/stop', {}).then(function (answer) {
+      var stopped = !!(answer && answer.stopped);
+      if (!stopped) {
+        setStopping(false);
+        log('note', 'No calculation is running.');
+      } else if (inFlight) {
+        log('note', 'Stopping Kratos…');
+      } else {
+        log('note', 'The calculation that was running is stopped. What it wrote stays '
+                    + 'in its run directory.');
+      }
+      return stopped;
+    }).catch(function (err) {
+      setStopping(false);
+      log('err', 'The calculation could not be stopped: ' + err.message);
+      return false;
+    });
+  }
+
+  /* Stop, after asking: the Stop button of the toolbar, the Stages menu and the
+     Convergence window. Without the page's dialog layer it stops at once. */
+  function askStop() {
+    if (stopping) return Promise.resolve(true);
+    if (!App.Dialogs || !App.Dialogs.open || typeof document === 'undefined'
+        || !document.getElementById('modal-layer')) {
+      return stop();
+    }
+    return new Promise(function (resolve) {
+      var answered = false;
+      var handle = App.Dialogs.open({
+        title: 'Stop calculation',
+        width: 440, height: 210,
+        buttons: [
+          { label: 'Stop calculation', primary: true,
+            onClick: function () { answered = true; resolve(stop()); } },
+          { label: 'Keep running' }
+        ],
+        build: function (body) {
+          var text = document.createElement('div');
+          text.className = 'dlg-simple calc-stop-text';
+          text.textContent = 'Stop Kratos now? The stages that finished keep their '
+                           + 'results, and the run directory keeps its files and log. '
+                           + 'The model does not change.';
+          body.appendChild(text);
+        },
+        onClose: function () { if (!answered) resolve(false); }
+      });
+      handle.dialog.classList.add('dlg-calc-stop');
+    });
+  }
+
   return { run: run, request: request, results: results,
-           state: state, running: running, onChange: onChange };
+           state: state, running: running, onChange: onChange,
+           stop: stop, askStop: askStop, stopping: isStopping, onStop: onStop,
+           STOP_TIP: STOP_TIP };
 })();
