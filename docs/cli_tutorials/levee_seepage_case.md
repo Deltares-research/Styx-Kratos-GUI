@@ -136,7 +136,7 @@ kratos-cli volume levee.json add polygon --label "Levee outer layer" --material 
 > <pre>added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json</pre>
 
 `volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's colour
-and keeps its label in its recipe. The model script calls the parts `levee_core` and
+and keeps its label in its recipe. The model script names the parts `levee_core` and
 `levee_outer`, draws them grey. These lines make the
 parts the script's:
 
