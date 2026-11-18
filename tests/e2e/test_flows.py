@@ -80,8 +80,7 @@ def test_the_page_boots_cleanly_with_the_live_layer_installed(app_page):
 def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     run_model(app_page)
     calculate(app_page)
-    # The Convergence window is open, so Results mode leaves the chooser closed; the
-    # rail's Choose results opens it.
+    # Results mode never opens the chooser by itself; the rail's Choose results does.
     window = app_page.locator(".dlg-results")
     assert window.count() == 0
     app_page.evaluate("App.runAction({ action: 'chooseResults' })")

@@ -3386,7 +3386,7 @@ App.LivePatches = (function () {
       // already up.
       if (item && item.action === 'chooseResults') {
         if (App.state && App.state.mode !== 'results') App.setMode('results');
-        else openResultsWindow();
+        openResultsWindow();
         return;
       }
       // The Results menu's and rail's "Convergence": `results convergence`, without
@@ -4113,8 +4113,7 @@ App.LivePatches = (function () {
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
         '-',
-        // The chooser opens the first time the mode shows a run; this is how it comes
-        // back once closed.
+        // The chooser never opens by itself; this is how the user opens it.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
             + 'pressure on it, every stage', action: 'plotResults' },
@@ -4585,11 +4584,6 @@ App.LivePatches = (function () {
                                           function () { plotReloading = null; });
     }
 
-    function convergenceShown() {
-      var W = App.ConvergenceWindow;
-      return !!(W && W.state && W.state().open);
-    }
-
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -4600,32 +4594,24 @@ App.LivePatches = (function () {
       inResults = on;
       if (on) {
         mountResultsPanel();
+        // Already in Results: a redraw of the same tab (a part switched off in the
+        // Model explorer, any edit that rebuilds the geometry). The contour and the
+        // windows are still up as the user left them; leave them alone.
+        if (resultsOn) return;
         var back = resultsLeft;
         resultsLeft = null;
-        if (back && back.run === App.Results.current() && App.Results.field()) {
-          // Back to a run the user was already looking at: the same contour, and the
-          // same windows open as when they left. The rail's "Choose results" brings
-          // the chooser back if it was closed.
-          App.Results.redraw();
-          if (back.chooser) openResultsWindow();
-          if (back.plot) openPlotWindow();
-          return;
-        }
-        // First time in for this run: open the chooser. It is what the mode is for,
-        // and the dock panel alone is easy to miss down the side of the page. It
-        // fills itself as it is built, so there is nothing to render afterwards.
-        //
-        // But not over an open Convergence window: at the end of a Calculate, the
-        // chooser would hide how the run ended, and after a failed run that is what
-        // the user came to read. The dock panel has the same controls meanwhile.
-        if (!convergenceShown()) openResultsWindow();
+        // Show the result that is open straight away: the same stage and field as
+        // last time, or the first one a new run opens on. The Choose results window
+        // never opens by itself -- asking again on every visit was in the way, and
+        // the dock panel and the rail's "Choose results" are always there.
+        if (App.Results.field()) App.Results.redraw();
+        if (back && back.run === App.Results.current() && back.plot) openPlotWindow();
       } else {
         // Remember what was on screen, so coming back shows it again. Only on the
         // way out of Results: going from one other mode to the next must not
         // overwrite it.
         if (resultsOn && App.Results.current()) {
-          resultsLeft = { run: App.Results.current(),
-                          chooser: !!resultsWindow, plot: !!plotWindow };
+          resultsLeft = { run: App.Results.current(), plot: !!plotWindow };
         }
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the

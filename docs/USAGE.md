@@ -791,9 +791,8 @@ words of the stage name such as `results convergence stage first excavation`, an
 `results convergence stage all`.
 
 When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
-the run stopped. Styx opens Results mode, but it does not open the **Choose results**
-window while the Convergence window is open, because it would cover it. Use the Results
-explorer in the dock, or click **Choose results** in the tool rail.
+the run stopped. Styx opens Results mode and shows the last stage. To choose a different
+result, use the Results explorer in the dock, or click **Choose results** in the tool rail.
 
 If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
 `solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
@@ -836,7 +835,9 @@ an earlier session:
 
 ### Show a result
 
-Use the Results explorer, or click **Choose results** in the tool rail:
+When you open Results mode, Styx shows the result at once: the last stage of the run.
+Styx does not open the **Choose results** window by itself. To change what is shown, use
+the Results explorer, or click **Choose results** in the tool rail:
 
 | Setting | What it does |
 |---|---|
@@ -859,8 +860,8 @@ was calculated from the open project, with the same stages. They stay where they
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
 
 When you go to a different tab and then back to Results, Styx shows the same result again.
-The **Choose results** window and the wall plot open again only if they were open when you
-left.
+The wall plot opens again if it was open when you left. The **Choose results** window does
+not: click **Choose results** in the tool rail to open it.
 
 ### Other results
 

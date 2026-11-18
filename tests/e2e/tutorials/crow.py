@@ -524,7 +524,7 @@ def calculate(tour: Tour) -> None:
     tour.page.locator("#modal-layer .dialog").last.wait_for()
     tour.settle()
     tour.picture("plot", mark=rail_tool("plotResults"))
-    # The plot window, then the Choose results window that Results mode opened under it.
+    # The plot window, then the Convergence window that Calculate opened under it.
     for _ in range(2):
         window(tour.page).locator(".dlg-foot").get_by_role("button", name="Close").click()
         tour.settle()

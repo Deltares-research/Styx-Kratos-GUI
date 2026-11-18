@@ -518,11 +518,7 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
-When the calculation was complete, Styx also opened the **Choose results** window. It is
-under the plot window, and it covers the model.
-
-1. Click **Close** in the Plot along the wall window, then click **Close** in the Choose
-   results window.
+1. Click **Close** in the Plot along the wall window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
    excavation**.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
