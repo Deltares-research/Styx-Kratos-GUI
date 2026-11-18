@@ -371,6 +371,7 @@ App.LivePatches = (function () {
      through its own module, which is what validates, persists and refreshes the tree
      for it already. */
   function renameObject(kind, key) {
+    if (kind === 'body') return renameBodyPart(key);
     return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
                                 help: 'Shown in the Model explorer.' })
       .then(function (name) {
@@ -415,9 +416,6 @@ App.LivePatches = (function () {
       if (!line) return;
       line.name = name;
       return App.Lines.save(line).catch(reportRenameError);
-    }
-    if (kind === 'body') {
-      return App.Lines.saveBody(key, { name: name }).catch(reportRenameError);
     }
     if (kind === 'load') {
       var load = loadByKey(key);
@@ -466,6 +464,112 @@ App.LivePatches = (function () {
     if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + layer.name + '.');
     if (App.state && App.state.selection === key) App.selectObject(null);
     return App.commitSelectionEdit(null);
+  }
+
+  /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
+     part) a line cut. Once a line cuts a layer or a surface, the explorer shows only
+     its parts, so a part's menu and panel are where the whole is deleted. */
+  function bodyOwner(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return null;
+    if (body.layer) {
+      var layer = App.layerById ? App.layerById(body.layer) : null;
+      return layer ? { kind: 'layer', noun: 'layer', key: 'soil_' + layer.id,
+                       record: layer, name: layer.name } : null;
+    }
+    var part = partByKey(body.part);
+    return part ? { kind: 'part', noun: in3D() ? 'soil volume' : 'soil surface',
+                    key: part.key, record: part, name: part.label } : null;
+  }
+
+  /* What the Model explorer calls the soil body `key`. */
+  function shownBodyName(key, body) {
+    return ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || body.name;
+  }
+
+  /* Rename part, from the explorer menu and from the part's panel alike. The window starts
+     with the name the Model explorer shows (`soil_body_labels`, such as `Sand · Part 2`),
+     not the shorter name the part was given (`Part 2`), so what you see in the row is what
+     you edit. OK on that name as it is changes nothing. A part is renamed on its own: its
+     layer is renamed in the Soil layers window, and a cut soil surface needs no name of its
+     own beside its parts'. */
+  function renameBodyPart(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return;
+    var shown = shownBodyName(key, body);
+    return App.NameDialog.ask({ title: 'Rename part', value: shown,
+                                help: 'Shown in the Model explorer.' })
+      .then(function (name) {
+        if (name === null || name === shown) return;
+        // saveBody puts a refusal in the log itself.
+        return App.Lines.saveBody(key, { name: name }).catch(function () {});
+      });
+  }
+
+  /* The other parts of the layer or soil surface `key` is a part of, still in the model. */
+  function otherParts(key) {
+    var stem = key.split('__')[0];
+    return ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other !== key && other.split('__')[0] === stem;
+    });
+  }
+
+  /* One part alone goes (`session.remove_body`): the soil there becomes a void, and the
+     rest of its layer or soil surface stays. The last part left is the whole of it. */
+  function deleteBodyPart(key) {
+    var owner = bodyOwner(key);
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!owner || !body) return;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete part',
+        'This deletes ' + shownBodyName(key, body) + ', one part of ' + owner.noun + ' ' + owner.name +
+        '. No soil is left there. The other parts of ' + owner.noun + ' ' + owner.name +
+        ' stay.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) { if (sure) return deleteBody(key); });
+  }
+
+  function deleteBody(key) {
+    var label = ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || key;
+    return deleteRequest('/api/project/bodies/' + encodeURIComponent(key), 'Delete failed')
+      .then(function (reply) {
+        if (reply && reply.project) App.Model.apply(reply.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.state && App.state.selection === key && App.selectObject) {
+          App.selectObject(null, 'tree');
+        }
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        if (App.Command && App.Command.ok) App.Command.ok('Deleted soil part ' + label + '.');
+      })
+      .catch(function (err) {
+        if (App.Command && App.Command.err) {
+          App.Command.err('Could not delete the soil part: ' + err.message);
+        }
+      });
+  }
+
+  /* The whole layer or soil surface goes, every part of it (Delete part takes one). */
+  function deleteBodyOwner(key) {
+    var owner = bodyOwner(key);
+    if (!owner) return;
+    var parts = ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other.split('__')[0] === owner.key;
+    }).length;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete ' + owner.noun,
+        'This deletes ' + owner.noun + ' ' + owner.name + ' and all its ' + parts + ' parts.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) {
+      if (!sure) return;
+      if (owner.kind === 'part') return deleteCustomPart(owner.key);
+      var error = App.deleteLayerById(owner.record.id);
+      if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
+      if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
+      if (App.selectObject) App.selectObject(null, 'tree');
+      return App.commitSelectionEdit(null);
+    });
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -967,18 +1071,31 @@ App.LivePatches = (function () {
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
+    // A soil body is a part of a layer or a soil surface: Rename part… and Delete part act
+    // on the part, and Delete layer or Delete soil surface on the whole of it. The last
+    // part left is the whole of it, so it goes with the second.
+    var owner = kind === 'body' ? bodyOwner(key) : null;
+    var edits = owner ? [
+      { label: 'Rename part…', action: 'renameObject' },
+      { label: 'Delete part', icon: 'delete', action: 'deletePart',
+        disabled: !otherParts(key).length },
+      { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
+    ] : [
+      { label: 'Rename…', action: 'renameObject' },
+      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' }
+    ];
     App.Menu.openAt([
       { label: 'Zoom to object', icon: 'zoomfit', action: 'zoomFit' },
       { label: App.Viewport.isVisible(key) ? 'Hide' : 'Show', icon: 'eye' },
-      '-',
-      { label: 'Rename…', action: 'renameObject' },
-      // A soil body goes when the line that made it goes.
-      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' },
+      '-'
+    ].concat(edits, [
       '-',
       { label: 'Properties…', icon: 'settings' }
-    ], event.clientX, event.clientY, function (it) {
+    ]), event.clientX, event.clientY, function (it) {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
+      if (it.action === 'deleteOwner') return deleteBodyOwner(key);
+      if (it.action === 'deletePart') return deleteBodyPart(key);
       if (it.action) { App.runAction(it); return; }
       if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
@@ -1650,6 +1767,26 @@ App.LivePatches = (function () {
   }
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
+
+  /* An app window with OK and Cancel. `onCancel` (optional) is called when it closes
+     without OK: by Cancel, the close button or Escape. */
+  function confirmDialog(title, text, onConfirm, onCancel) {
+    if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
+    var confirmed = false;
+    App.Dialogs.open({
+      title: title, width: 440, height: 220,
+      buttons: [{ label: 'OK', primary: true,
+                  onClick: function () { confirmed = true; return onConfirm(); } },
+                { label: 'Cancel' }],
+      onClose: function () { if (!confirmed && onCancel) onCancel(); },
+      build: function (body) {
+        body.appendChild(App.UI.el('div.dlg-simple', null, [
+          App.UI.el('h3', { text: title }),
+          App.UI.el('p', { text: text })
+        ]));
+      }
+    });
+  }
 
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
@@ -4835,6 +4972,8 @@ App.LivePatches = (function () {
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
+    renameBodyPart: renameBodyPart, deleteBodyOwner: deleteBodyOwner,
+    deleteBodyPart: deleteBodyPart, deleteBody: deleteBody,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };

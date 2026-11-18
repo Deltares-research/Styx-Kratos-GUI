@@ -262,13 +262,13 @@ selected.
 
 For each row:
 
-1. In the Model explorer, right-click the row and click **Rename…**.
+1. In the Model explorer, right-click the row and click **Rename part…**.
 2. Type the new name.
 3. Click **OK**.
 
 ![The Rename window for the first part, with the name lift 1 typed in.](images/crow/07_bodies_rename.png)
 
-After you rename all six parts, the Model explorer shows the new names:
+After you rename all six parts, the Model explorer shows each part by its new name:
 
 ![The Model explorer with the six renamed soil parts outlined.](images/crow/07_bodies_after.png)
 
@@ -437,10 +437,10 @@ Then add the null step and the five construction stages:
 |---|---|---|---|---|---|
 | 2 | `Null step` | `150` | `0.0001` | | |
 | 3 | `Wall installation` | `150` | `0.001` | SheetPileWall, Interface, Load | |
-| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | Soil_Top · lift 1 |
+| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | lift 1 |
 | 5 | `Strut installation` | `150` | `0.001` | Strut | |
-| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | Soil_Top · lift 2, WaterLoad_Stage1 |
-| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | Soil_Top · lift 3, WaterLoad_Stage2 |
+| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | lift 2, WaterLoad_Stage1 |
+| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | lift 3, WaterLoad_Stage2 |
 
 The null step changes nothing in the model. Kratos' own CROW test has the same stage after
 the K0 procedure. The excavation stages have more iterations, because the soil yields

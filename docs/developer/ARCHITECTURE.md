@@ -136,7 +136,7 @@ the HTTP parts.
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
 | `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water`, `fluid` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
-| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `volume` |
+| `cli/commands/ground.py`, `surfaces.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `surface`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |

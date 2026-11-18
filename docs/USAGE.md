@@ -97,6 +97,11 @@ Right-click an object in the Model explorer to zoom to it, rename it, delete it,
 properties. This works for every object, soil layers too. **Rename…** opens a small window:
 type the new name and click **OK**, or press <kbd>Enter</kbd>.
 
+Each soil layer and soil surface has a name of its own. If you give one a name that is
+already in use, Styx adds a number: a second *Embankment* becomes *Embankment_2*. The
+Session log says so. The Model explorer, `kratos-cli` and the Kratos input files then use
+the same name.
+
 ## Soil mode
 
 ### Soil layers
@@ -190,7 +195,13 @@ The preset values are only a start. Check them for your soil.
 
 **Create soil surface…** (in 2D) or **Create soil volume…** (in 3D) adds a body of soil that
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
-select its material.
+select its material. In a terminal, `kratos-cli surface add` makes the same soil surface.
+
+A line splits a soil surface in the same way as a layer (see below). Each part then has its
+own row in the Model explorer, for example *Embankment · Part 1*. Select a part and click
+**Edit coordinates…** to change the corners of the whole surface. A new material for the
+surface goes to all of its parts. In 3D, a line splits a soil volume only if the volume is
+a polygon extruded along z, or a box.
 
 ### Lines that split the soil
 
@@ -200,13 +211,25 @@ them there if needed, and select **Save**. The arrow in the corner of the button
 **Line by coordinates…**, which opens the same window with no drawing first. While you
 draw, you can also type `x y` in the command box to place a point.
 
-Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
-parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+Where a line crosses a soil layer or a soil surface from one edge to another, it becomes
+separate soil parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
 own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
 part off in its own stage. Select a part to rename it or to give it another material. A
 part starts with its layer's material. Change the layer's material, in the **Soil layers**
 window or in the Selection explorer, and every part of that layer takes the new material,
 also a part you gave a material of its own.
+
+A part you rename shows the new name alone, for example *Clay*. A part with the name it
+was given, such as *Part 1*, also shows its layer or soil surface.
+
+Right-click a part to rename it or delete it, or to delete its whole layer or soil surface.
+The Selection explorer of a part has the same buttons. The Rename window starts with the
+name the Model explorer shows, for example *Soil_Top · Part 1*. To rename a layer, use the
+**Soil layers** window. **Delete part** deletes that
+part alone: no soil is left there, and the other parts stay. The last part of a layer or a
+soil surface cannot be deleted alone; delete the whole layer or surface. A deleted part
+comes back when you delete the line that cut it off, or with undo. To take soil away in one
+stage only, switch the part off in that stage instead.
 
 Lines have their own group in the Model explorer. Delete a line there, and the parts join
 again, unless a stage still uses one of them. Then the deletion is refused.
@@ -218,7 +241,7 @@ An excavation is made in this way: a wall and a line at each level make the lift
 stage switches each lift off.
 
 A project saved with an excavation pit opens with lines and soil parts in its place, for
-example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+example *lift 1*, a part of the layer *Soil_Top*. A pit with one level was never dug, so it just goes. A 3D pit
 narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode
@@ -408,7 +431,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
+| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer or a soil surface that a line splits has one row for each part, named as in the Model explorer. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
 | Object mesh sizes | The element size at each structure, anchor, interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. With the layers, these rows cover every node group that the Kratos input file has. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |

@@ -5008,14 +5008,14 @@ window.STAGE_FIXTURE =
       "soil_L3__outside"
     ],
     "soil_body_labels": {
-      "soil_L1__lift1": "Soil_1 \u00b7 lift 1",
-      "soil_L1__outside": "Soil_1 \u00b7 outside the pit",
-      "soil_L1__lift2": "Soil_1 \u00b7 lift 2",
-      "soil_L1__lift3": "Soil_1 \u00b7 lift 3",
-      "soil_L2__pit": "Soil_2 \u00b7 below the pit",
-      "soil_L2__outside": "Soil_2 \u00b7 outside the pit",
-      "soil_L3__pit": "Soil_3 \u00b7 below the pit",
-      "soil_L3__outside": "Soil_3 \u00b7 outside the pit"
+      "soil_L1__lift1": "lift 1",
+      "soil_L1__outside": "outside the pit",
+      "soil_L1__lift2": "lift 2",
+      "soil_L1__lift3": "lift 3",
+      "soil_L2__pit": "below the pit",
+      "soil_L2__outside": "outside the pit",
+      "soil_L3__pit": "below the pit",
+      "soil_L3__outside": "outside the pit"
     },
     "soil_body_materials": {
       "soil_L1__lift1": "m1",
