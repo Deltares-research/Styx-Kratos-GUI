@@ -190,6 +190,17 @@ App.UNIT_TABLE =
         "kN": "m³/s/m"
       }
     },
+    "time": {
+      "dimension": [
+        0,
+        0,
+        1
+      ],
+      "labels": {
+        "SI": "s",
+        "kN": "s"
+      }
+    },
     "dimensionless": {
       "dimension": [
         0,
@@ -210,6 +221,17 @@ App.UNIT_TABLE =
       "labels": {
         "SI": "°",
         "kN": "°"
+      }
+    },
+    "angle in radians": {
+      "dimension": [
+        0,
+        0,
+        0
+      ],
+      "labels": {
+        "SI": "rad",
+        "kN": "rad"
       }
     }
   },
@@ -234,6 +256,9 @@ App.UNIT_TABLE =
     "GEO_FRICTION_ANGLE": "angle",
     "GEO_DILATANCY_ANGLE": "angle",
     "GEO_TENSILE_STRENGTH": "stress",
+    "GEO_COHESION_FUNCTION_COEFFICIENTS": "stress",
+    "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": "angle in radians",
+    "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": "angle in radians",
     "K0_NC": "dimensionless",
     "K0_MAIN_DIRECTION": "dimensionless",
     "K0_VALUE_XX": "dimensionless",

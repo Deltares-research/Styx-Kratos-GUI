@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   boundary-conditions.js — the boundary conditions and gravity.
+   boundary-conditions.js — the boundary conditions.
 
    A boundary condition is a record of `Project.boundary_conditions`
    (core/model/schemas.py), and the deck holds these and no others: a project with
@@ -16,9 +16,10 @@
 
    The drafts here are the twins of core/model/drafts.py's
    `displacement_condition`, `water_pressure_condition` and `standard_conditions`,
-   held to them by tests/test_draft_parity.py. `command` answers `boundary` and
-   `gravity` in the command box, with the words `kratos-cli boundary` and
-   `kratos-cli gravity` take. Every write is one `PATCH /api/project/conditions`.
+   held to them by tests/test_draft_parity.py. `command` answers `boundary` in the
+   command box, with the words `kratos-cli boundary` takes. Every write is one
+   `PATCH /api/project/conditions`. Gravity is not a condition: the initial stage's
+   stress initialisation decides it (`core.model.stages.gravity`).
    The logic has no DOM in it; `open` and `openRecord` are the two windows.
    ══════════════════════════════════════════════════════════════════ */
 
@@ -350,10 +351,26 @@ App.BoundaryConditions = (function () {
     return record.name + '  ·  ' + what;
   }
 
+  /* Whether the self weight acts, as `core.model.stages.gravity` says it: a mechanical
+     sequence has it when its initial stage initialises the stresses (K0 or gravity
+     loading); a flow sequence and a project with no stages have it. */
+  function selfWeight(project) {
+    var first = ((project && project.stages) || []).filter(function (stage) {
+      return stage.parent == null;
+    })[0];
+    if (!first || (first.calculation || 'mechanical') !== 'mechanical') return true;
+    return (first.stress_initialisation || 'none') !== 'none';
+  }
+
+  /* As `kratos-cli gravity` says it (`cli/commands/conditions.py` `_gravity_line`). */
   function gravityLine(project) {
-    return project && project.gravity === false
-      ? 'Gravity is off: no body has a self weight.'
-      : 'Gravity is on: every body has its self weight.';
+    var g = project && typeof project.gravity_acceleration === 'number'
+      ? project.gravity_acceleration : App.Units.gravity('SI');
+    var said = 'g = ' + g + ' m/s²';
+    return selfWeight(project)
+      ? 'The self weight acts on every body, with ' + said + '.'
+      : 'The self weight is off: the initial stage initialises no stresses (' + said
+        + ' when it acts).';
   }
 
   /* Said under a 2D list that leaves the front and back supports out
@@ -397,13 +414,21 @@ App.BoundaryConditions = (function () {
 
     if (word === 'gravity') {
       if (!arg) return { ok: true, body: null, message: gravityLine(project) };
-      if ((arg !== 'on' && arg !== 'off') || words.length > 2) {
-        return { ok: false, body: null, message: '"' + words.slice(1).join(' ')
-                 + '" is not on or off. Use `gravity on` or `gravity off`.' };
+      if (arg === 'on' || arg === 'off') {
+        return { ok: false, body: null, message: 'Gravity has no switch: the initial '
+                 + "stage's stress initialisation decides whether the self weight acts "
+                 + '(Stages window). Give a number to set g, e.g. `gravity 9.81`.' };
       }
-      var on = arg === 'on';
-      return { ok: true, body: { gravity: on },
-               message: gravityLine({ gravity: on }) };
+      var g = Number(arg);
+      if (!isFinite(g) || words.length > 2) {
+        return { ok: false, body: null, message: '"' + words.slice(1).join(' ')
+                 + '" is not a number. Use `gravity 9.81` (g in m/s²).' };
+      }
+      if (!(g > 0)) {
+        return { ok: false, body: null, message: 'g must be above 0 m/s², not ' + arg + '.' };
+      }
+      var after = Object.assign({}, project || {}, { gravity_acceleration: g });
+      return { ok: true, body: { gravity_acceleration: g }, message: gravityLine(after) };
     }
 
     if (!arg || arg === 'list') {
@@ -499,10 +524,6 @@ App.BoundaryConditions = (function () {
   function applyStandard() {
     return saveAll(withStandard(App.PROJECT),
                    'The standard supports: the bottom fixed, the sides on rollers.');
-  }
-
-  function setGravity(on) {
-    return send({ gravity: !!on }, gravityLine({ gravity: !!on }));
   }
 
   /* ── The face grid of the dialog: pure ───────────────────────────────── */
@@ -685,13 +706,13 @@ App.BoundaryConditions = (function () {
 
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
-     on parts, lines and points; and gravity. Save writes them all in one request. */
+     on parts, lines and points. Save writes them all in one request. */
   function open() {
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var rows = grid(project);
     var controls = [];
-    var message, gravity, shell;
+    var message, shell;
 
     function read() {
       return rows.map(function (row, i) {
@@ -714,9 +735,7 @@ App.BoundaryConditions = (function () {
         message.textContent = error.message;
         return null;
       }
-      var body = { boundary_conditions: list };
-      if (gravity.checked !== (App.PROJECT.gravity !== false)) body.gravity = gravity.checked;
-      return send(body, 'Saved the boundary conditions.').then(function () {
+      return send({ boundary_conditions: list }, 'Saved the boundary conditions.').then(function () {
         shell.close();
       }, function (error) { message.textContent = error.message; });
     }
@@ -856,13 +875,6 @@ App.BoundaryConditions = (function () {
         });
         body.appendChild(list);
 
-        var row = el('label.bc-gravity');
-        gravity = el('input', { type: 'checkbox' });
-        gravity.checked = project.gravity !== false;
-        row.appendChild(gravity);
-        row.appendChild(document.createTextNode(' Gravity: the self weight of every body'));
-        body.appendChild(row);
-
         message = el('div.mesh-settings-message');
         body.appendChild(message);
       }
@@ -884,6 +896,10 @@ App.BoundaryConditions = (function () {
     function submit() {
       var kind = c.kind.value;
       var on = c.on.value;
+      // A new condition opens as a support; switched to another kind, it takes that
+      // kind's id and name (waterpressure_1, "Water pressure 1"), as the command line's.
+      var draftName = record ? record.name : null;
+      if (record && !known && record.kind !== kind) record = null;
       var where = { };
       if (on === 'face') where.face = c.face.value;
       if (on === 'part') where.part = c.part.value;
@@ -929,7 +945,8 @@ App.BoundaryConditions = (function () {
           made = draftWaterPressure(project, on, opts);
         }
       } catch (error) { message.textContent = error.message; return null; }
-      made.name = c.name.value.trim() || made.name;
+      var typed = c.name.value.trim();
+      if (typed && !(record === null && typed === draftName)) made.name = typed;
       made.active = c.active.checked;
       return save(made).then(function () { shell.close(); }, function (error) {
         message.textContent = error.message;
@@ -971,7 +988,7 @@ App.BoundaryConditions = (function () {
 
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' boundary condition',
-      width: 600, height: 560,
+      width: 600, height: 620,
       buttons: [
         { label: 'Pick on model…', onClick: pick },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
@@ -1150,11 +1167,11 @@ App.BoundaryConditions = (function () {
     standardConditions: standardConditions, withStandard: withStandard,
     soilPartKeys: soilPartKeys, facesOf: facesOf, heldBySection: heldBySection,
     unusedInFlow: unusedInFlow, waterIn: waterIn,
-    line: line, listedLines: listedLines, label: label, gravityLine: gravityLine,
+    line: line, listedLines: listedLines, label: label,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
     isConditionKey: isConditionKey, find: find,
-    save: save, remove: remove, applyStandard: applyStandard, setGravity: setGravity,
+    save: save, remove: remove, applyStandard: applyStandard,
     activeState: activeState, setActive: setActive,
     open: open, openRecord: openRecord, draw: draw, edit: edit
   };

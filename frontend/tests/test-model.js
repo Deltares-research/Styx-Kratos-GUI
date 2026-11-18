@@ -321,11 +321,28 @@
     });
   });
 
+  /* A Coulomb contact against a Mohr-Coulomb sand, taking the sand's strength. */
+  function coulombProject() {
+    var p = contactedProject();
+    p.materials[0].constitutive_law = 'GeoMohrCoulombLawPlaneStrain';
+    p.interface_sections[0].constitutive_law = 'GeoInterfaceCoulombLawPlaneStrain';
+    return p;
+  }
+
+  function contactRow(label) {
+    return App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (row) {
+      return row[0] === label; })[0];
+  }
+
+  function contactLabels() {
+    return App.OBJECT_PROPS.interface_1.groups.Contact.map(function (row) { return row[0]; });
+  }
+
   test('the contact rows edit the shared library and reject a bad value', function () {
-    withProject(contactedProject(), function () {
+    withProject(coulombProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
       var reduction = rows.filter(function (row) {
-        return row[0] === 'R_inter (Coulomb law only)'; })[0];
+        return row[0] === 'R_inter'; })[0];
       T.eq(reduction[4].set(0.55), null);
       T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.55);
       T.ok(reduction[4].set(1.4), 'a contact stronger than the soil is refused');
@@ -333,13 +350,75 @@
     });
   });
 
-  test('a contact with no Rinter of its own says it takes each soil’s', function () {
-    var p = contactedProject();
+  test('a contact with no Rinter of its own says it takes each soil’s, and can be given one', function () {
+    var p = coulombProject();
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
-      var row = App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (r) {
-        return r[0] === 'R_inter (Coulomb law only)'; })[0];
-      T.eq(row.slice(0, 4), ['R_inter (Coulomb law only)', 'each soil’s own', '', true]);
+      T.eq(contactRow('R_inter').slice(0, 4), ['R_inter', 'each soil’s own', '', false]);
+      T.eq(contactRow('R_inter')[4].set(0.6), null);
+      T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.6);
+    });
+  });
+
+  test('an elastic contact lists no strength and no R_inter', function () {
+    var p = contactedProject();
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      var labels = contactLabels();
+      ['Strength', 'R_inter', 'GEO_COHESION', 'GEO_FRICTION_ANGLE'].forEach(function (name) {
+        T.ok(labels.indexOf(name) < 0, name + ' in ' + labels.join(' | '));
+      });
+    });
+  });
+
+  test('a Coulomb contact takes its soil’s strength, or is given its own', function () {
+    withProject(coulombProject(), function () {
+      T.eq(contactRow('Strength')[1], 'From the soil');
+      T.ok(contactLabels().indexOf('GEO_COHESION') < 0, 'derived: not typed');
+      T.eq(contactRow('Strength')[4].set('own'), null);
+      var given = App.INTERFACE_SECTIONS[0].variables;
+      T.near(given.GEO_COHESION, 500 * 0.67, 1e-9, 'what it took from the sand, to start');
+      T.near(given.GEO_FRICTION_ANGLE,
+             Math.atan(0.67 * Math.tan(32 * Math.PI / 180)) * 180 / Math.PI, 1e-3);
+      T.eq(contactRow('Strength')[4].set('soil'), null);
+      T.ok(!('GEO_COHESION' in App.INTERFACE_SECTIONS[0].variables), 'left to the soil again');
+    });
+  });
+
+  test('a contact set on the interface lists its strength, typed', function () {
+    var p = coulombProject();
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      T.eq(contactRow('Strength')[1], 'Set on the interface');
+      T.ok(contactLabels().indexOf('R_inter') < 0, 'nothing to reduce');
+      T.eq(contactRow('GEO_FRICTION_ANGLE')[4].set(25), null);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.GEO_FRICTION_ANGLE, 25);
+      T.ok(contactRow('GEO_FRICTION_ANGLE')[4].set(0), 'Kratos wants it above zero');
+      T.ok(contactRow('GEO_FRICTION_ANGLE')[4].set(90), 'and below 90 degrees');
+    });
+  });
+
+  test('against a linear elastic soil a Coulomb contact has to have its own strength', function () {
+    var p = coulombProject();
+    p.materials[0].constitutive_law = 'GeoLinearElasticPlaneStrain2DLaw';
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      var refused = contactRow('Strength')[4].set('soil');
+      T.ok(/linear elastic and has no strength/.test(refused), refused);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.GEO_COHESION, 3, 'and kept');
+    });
+  });
+
+  test('choosing Coulomb against a linear elastic soil gives the contact its own strength', function () {
+    var p = contactedProject();
+    p.unit_system = 'kN';
+    withProject(p, function () {
+      T.eq(contactRow('Law')[4].options().map(function (o) { return o.text; }),
+           ['Elastic', 'Coulomb']);
+      T.eq(contactRow('Law')[4].set('GeoInterfaceCoulombLawPlaneStrain'), null);
+      var given = App.INTERFACE_SECTIONS[0].variables;
+      T.near(given.GEO_COHESION, 1, 1e-12, 'the Mohr-Coulomb default, 1 kPa: not what the elastic sand carries');
+      T.eq(given.GEO_FRICTION_ANGLE, 30);
     });
   });
 
@@ -349,8 +428,10 @@
        to the same is `section set ID INTERFACE_NORMAL_STIFFNESS=...`. */
     withProject(contactedProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows.slice(0, 2).map(function (row) { return row.slice(0, 2); }),
-           [['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
+      T.eq(rows.slice(0, 3).map(function (row) { return row.slice(0, 2); }),
+           [['Law', 'GeoIncrementalLinearElasticInterfaceLaw'],
+            ['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
+      rows = rows.slice(1);
       T.eq(rows[0][3], false, 'editable while derived');
       T.ok(!rows.some(function (row) { return row[0] === 'Stiffness'; }),
            'nothing to put back while both are derived');
@@ -367,7 +448,7 @@
                                           INTERFACE_SHEAR_STIFFNESS: 2e8 };
     withProject(p, function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows[0].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
+      T.eq(rows[1].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
       var reset = rows.filter(function (row) { return row[0] === 'Stiffness'; })[0];
       var committed = App.commitSelectionEdit;
       App.commitSelectionEdit = function () {};
@@ -1018,15 +1099,15 @@
     p.custom_parts = [PART];
     withProject(p, function () {
       T.eq(topLabels(App.TREES.soil),
-           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors', 'Model conditions']);
+           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors']);
     });
   });
 
   /* A group the model has nothing in has no row: an empty "Sheet piles [0]" row reads
-     as if the model had sheet piles. Model conditions stays, for gravity. */
-  test('a model with nothing but soil lists only Soil and Model conditions', function () {
+     as if the model had sheet piles. So is an empty "Model conditions". */
+  test('a model with nothing but soil lists only Soil', function () {
     withProject(project(TWO, [], true), function () {
-      T.eq(topLabels(App.TREES.soil), ['Soil', 'Model conditions']);
+      T.eq(topLabels(App.TREES.soil), ['Soil']);
       T.ok(!nodeLabelled(App.TREES.soil, 'Boundary conditions'),
            'no "Boundary conditions [0]" row for a model without any');
     });
@@ -1078,7 +1159,8 @@
     withProject(project(TWO), function () {
       App.Model.setMeshStats({
         nodes: 146321, elements: 82809, seconds: 5.125,
-        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {}
+        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {},
+        average_size: 1.23456
       });
 
       var rows = App.OBJECT_PROPS.mesh.groups.Statistics;
@@ -1086,6 +1168,7 @@
       T.eq(value('Elements'), '82 809');
       T.eq(value('Nodes'), '146 321');
       T.eq(value('Element type'), 'Tetrahedron 10');
+      T.eq(value('Average element size'), '1.235', 'the size the server measured');
 
       var labels = [];
       (function walk(nodes) {
@@ -1137,6 +1220,53 @@
       var node = soilNode(App.TREES.soil);
       T.eq((node.children || []).map(function (c) { return c.obj; }),
            ['soil_L1', 'soil_L2']);
+    });
+  });
+
+  /* A part a line cut off offered "As its layer (Sand, loose)" as a material, which
+     a user who renamed the part may no longer connect with anything. The list is the
+     materials, the part's own chosen; the layer's is one of them. */
+  function cutProject(mat) {
+    return Object.assign(project(TWO, [], true), {
+      bodies: [{ id: 'part1', name: 'Part 1', layer: 'L1', point: [5, -4], mat: mat },
+               { id: 'part2', name: 'Part 2', layer: 'L1', point: [40, -4], mat: null }],
+      soil_body_keys: ['soil_L1__part1', 'soil_L1__part2', 'soil_L2'],
+      soil_body_labels: { soil_L1__part1: 'Soil_1 · Part 1', soil_L1__part2: 'Soil_1 · Part 2',
+                          soil_L2: 'Soil_2' },
+      soil_body_materials: { soil_L1__part1: mat || 'm2', soil_L1__part2: 'm2', soil_L2: 'm4' }
+    });
+  }
+
+  function materialRow(key) {
+    return App.OBJECT_PROPS[key].groups.General.filter(function (row) {
+      return row[0] === 'Material';
+    })[0];
+  }
+
+  test("a soil part's materials are the project's, its layer's chosen", function () {
+    withProject(cutProject(null), function () {
+      var row = materialRow('soil_L1__part1');
+      T.eq(row[4].options(), [{ value: 'm2', text: 'Sand, loose' },
+                              { value: 'm4', text: 'Clay, stiff' }]);
+      T.eq(row[4].get(), 'm2');
+      T.eq(row[1], 'Sand, loose');
+    });
+  });
+
+  test('a soil part with a material of its own shows it chosen', function () {
+    withProject(cutProject('m4'), function () {
+      T.eq(materialRow('soil_L1__part1')[4].get(), 'm4');
+    });
+  });
+
+  test("choosing the layer's material makes it the part's own", function () {
+    withProject(cutProject('m4'), function () {
+      var body = App.Lines.bodyOf('soil_L1__part1');
+      var editor = materialRow('soil_L1__part1')[4];
+      T.eq(editor.set('m2'), null);
+      T.eq(body.mat, 'm2', 'so a later change to the layer leaves the part alone');
+      T.eq(editor.set('m4'), null);
+      T.eq(body.mat, 'm4');
     });
   });
 })();

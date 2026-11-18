@@ -36,7 +36,9 @@ import shutil
 from pathlib import Path, PurePath
 
 from core.kratos import deck_files, mdpa_reader, node_parts
-from core.model.schemas import Deck, Domain, Stage, Project
+from core.kratos.parameters import CONVERGENCE_TOLERANCES
+from core.model.solver import from_deck, resolve
+from core.model.schemas import CONVERGENCE_CRITERIA, Deck, Domain, Stage, Project
 from core.model.templates import blank_project
 
 
@@ -91,12 +93,28 @@ def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_
 
 def input_files(deck: Deck) -> list[str]:
     """Every file the deck reads, by name: the parameters, the mesh, then each
-    materials file in the order the stages first ask for it."""
+    materials file in the order the stages first ask for it, then each process module
+    of the deck's own.
+
+    A process module of the deck's own is a process with a `python_module` and no
+    `kratos_module`, which Kratos imports from the directory the deck runs in. It is
+    taken along only when it is a file beside the deck. A module installed elsewhere is
+    found where it is installed. A deck this application exported has one only when it
+    needs the temporary prestress workaround
+    (`core.kratos.deck_files.PRESTRESS_WORKAROUND_NAME`)."""
     parameters = _parameters(deck)
     names = [deck.parameters]
     meshes: list[str] = []
     materials: list[str] = []
+    modules: list[str] = []
     for stage in _stages(parameters):
+        listed = (stage.get("stage_settings") or {}).get("processes")
+        for processes in listed.values() if isinstance(listed, dict) else []:
+            for process in processes if isinstance(processes, list) else []:
+                module = process.get("python_module") if isinstance(process, dict) else None
+                if isinstance(module, str) and "kratos_module" not in process \
+                        and "." not in module:
+                    modules.append(f"{module}.py")
         for modeler in (stage.get("stage_preprocess") or {}).get("modelers") or []:
             if str(modeler.get("name", "")).endswith(MDPA_MODELER):
                 meshes.append(modeler.get("Parameters", {}).get("input_filename", ""))
@@ -112,6 +130,9 @@ def input_files(deck: Deck) -> list[str]:
     for material in materials:
         if material and material not in names:
             names.append(material)
+    for module in modules:
+        if module not in names and _path(deck, module).is_file():
+            names.append(module)
     return names
 
 
@@ -150,7 +171,6 @@ builds or removes."""
 
 K0_PROCESS = "apply_k0_procedure_process"
 STAGE_NUMBER = re.compile(r"^\d+_")
-SECONDS_PER_DAY = 86400.0
 
 
 def stage_parts(stage: dict) -> list[str]:
@@ -183,9 +203,9 @@ def styx_stages(parameters: dict) -> list[Stage]:
 
     Stages resolve from "everything is there" (`core.model.stages.active_parts`), so the first
     one deactivates what its Kratos stage does not have; every later one stores only what
-    changed. The calculation type is read where the deck says it: a K0 stage runs the
-    K0 procedure process, and a null step is named as one -- the deck has no other
-    marker for it.
+    changed. The calculation is read where the deck says it: a flow stage by its
+    solution type, a K0 stage by the K0 procedure process it runs, a dynamic stage by
+    its solution type.
     """
     order = ((parameters.get("orchestrator") or {}).get("settings") or {})         .get("execution_list") or list(parameters.get("stages") or {})
     stages = parameters.get("stages") or {}
@@ -214,31 +234,58 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
     title = STAGE_NUMBER.sub("", name).replace("_", " ") or name
     fields: dict = {"id": name, "name": title, "parent": parent,
                     "activate": activate, "deactivate": deactivate,
-                    "calculation": _calculation(stage, title),
+                    **_calculation(stage),
                     "reset_displacements": bool(solver.get("reset_displacements", False))}
     if isinstance(solver.get("max_iterations"), int) and solver["max_iterations"] > 0:
         fields["max_iterations"] = solver["max_iterations"]
-    tolerance = solver.get("residual_relative_tolerance")
-    if isinstance(tolerance, (int, float)) and tolerance > 0:
-        fields["tolerated_error"] = float(tolerance)
+    # The deck's criterion when it is one a stage can have -- Kratos' default, which is
+    # the stage's, when it names none. Otherwise the stage's default, with the
+    # tolerances of the residual criterion.
+    allowed = CONVERGENCE_CRITERIA[fields["calculation"]]
+    criterion = str(solver.get("convergence_criterion", allowed[0])).lower()
+    measured = "residual"
+    if criterion in allowed:
+        fields["convergence_criterion"] = criterion
+        measured = CONVERGENCE_TOLERANCES[criterion]
+    for key, field in (("relative", "tolerated_error"), ("absolute", "absolute_tolerance")):
+        tolerance = solver.get(f"{measured}_{key}_tolerance")
+        if isinstance(tolerance, (int, float)) and tolerance > 0:
+            fields[field] = float(tolerance)
     start, end = problem.get("start_time"), problem.get("end_time")
     if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
-        # Seconds in the deck, days in a stage. The K0 and null steps span one
-        # second of pseudo-time, which is no time at all to anyone reading days.
-        fields["time_interval"] = round((end - start) / SECONDS_PER_DAY, 3)
+        # The deck's own time, which is the project's: seconds in every unit system.
+        fields["duration"] = float(end - start)
+        if parent is None:
+            fields["start_time"] = float(start)
+        step = (solver.get("time_stepping") or {}).get("time_step")
+        fields["time_step"] = (float(step) if isinstance(step, (int, float))
+                               and 0 < step <= end - start else fields["duration"])
+    # The deck's own expert settings, where it differs from a stage's defaults: shown
+    # as they are, since it is the deck that runs.
+    stated = from_deck(solver)
+    fields["solver_settings"] = {
+        row["key"]: row["value"]
+        for row in resolve(fields["calculation"], fields.get("time_integration", "static"),
+                           stated)
+        if row["overridden"] and row["value"] != row["default"]}
     return Stage(**fields)
 
 
-def _calculation(stage: dict, title: str) -> str:
+def _calculation(stage: dict) -> dict:
+    """The stage's calculation type, stress initialisation and time integration."""
     solver = (stage.get("stage_settings") or {}).get("solver_settings") or {}
-    if "groundwater_flow" in str(solver.get("solution_type", "")).lower():
-        return "Groundwater flow"
+    solution = str(solver.get("solution_type", "")).lower()
+    if "groundwater_flow" in solution:
+        return {"calculation": "flow",
+                "time_integration": "dynamic" if "transient" in solution else "static"}
+    fields = {"calculation": "mechanical",
+              "time_integration": "dynamic" if solution == "dynamic" else "static"}
     processes = (stage.get("stage_settings") or {}).get("processes") or {}
     for group in processes.values():
         for process in group if isinstance(group, list) else []:
             if K0_PROCESS in str(process.get("python_module", "")):
-                return "K0 procedure"
-    return "Null step" if "null step" in title.lower() else "Plastic"
+                fields["stress_initialisation"] = "K0"
+    return fields
 
 
 # ── Running it ──────────────────────────────────────────────────────────────
@@ -333,13 +380,15 @@ times over."""
 
 def _mesh(deck: Deck) -> mdpa_reader.MdpaModel:
     path = _path(deck, _mdpa_file(deck))
-    stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
-    if key not in _meshes:
-        _meshes.clear()
-        try:
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        if key not in _meshes:
+            _meshes.clear()
             _meshes[key] = mdpa_reader.import_mdpa(path.read_text(encoding="utf-8",
                                                                   errors="replace"))
-        except mdpa_reader.ImportError_ as failure:
-            raise DeckError(f"{path.name}: {failure}") from failure
+    except OSError as failure:
+        raise DeckError(f"{path.name} could not be read: {failure}") from failure
+    except mdpa_reader.ImportError_ as failure:
+        raise DeckError(f"{path.name}: {failure}") from failure
     return _meshes[key]

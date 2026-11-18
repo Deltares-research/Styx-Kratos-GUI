@@ -13,12 +13,23 @@ import argparse
 import sys
 
 from cli.terminal import output, style
+from core import session
 from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
-                          meshing, stages, project, results, structures, volumes)
+                          meshing, picture, stages, project, results, structures, volumes)
 
 GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stages, inspection,
-          analysis, results, interactive)
+          analysis, results, picture, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
+
+REMOVED = {
+    "excavation": "excavation is gone: split the soil with `line add`.",
+    "stages staged-excavation": "staged-excavation is gone: add each stage with `stages add`.",
+    "stages defaults": "defaults is gone: a project starts with its initial stage; add each "
+                       "further stage with `stages add`.",
+}
+"""Commands and actions that were taken out, as typed after `kratos-cli`, and what to do
+instead. They are no parser, so neither `--help`, the shell's `help` nor its completion
+offers them."""
 
 
 class Parser(argparse.ArgumentParser):
@@ -31,6 +42,12 @@ class Parser(argparse.ArgumentParser):
         sys.stderr.write(style.paint(self.format_usage().rstrip("\n"), "dim", on) + "\n")
         self.exit(2, f"{self.prog}: {style.paint('error:', 'bold red', on)} {message}\n")
 
+    def _check_value(self, action, value):
+        typed = " ".join([*self.prog.split()[1:], str(value)])
+        if isinstance(action, argparse._SubParsersAction) and typed in REMOVED:
+            raise argparse.ArgumentError(None, REMOVED[typed])
+        super()._check_value(action, value)
+
 
 def parser() -> argparse.ArgumentParser:
     top = Parser(
@@ -38,13 +55,16 @@ def parser() -> argparse.ArgumentParser:
         description="Build, mesh, stage, export, run and read a Kratos geotechnical "
                     "model in the terminal. The project file is the one the GUI saves.")
     top.add_argument("--json", action="store_true", help="answer in JSON, for a script to read")
+    top.add_argument("--version", action="store_true",
+                     help="say which version of Styx this is, as the GUI's About box does")
     # Accepted after the command as well, where it is easy to put it. Its own action,
     # not the top parser's: argparse shares an action between a parser and its parents,
     # and SUPPRESS is what keeps a command's parser from resetting the one given first.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                         help="answer in JSON, for a script to read")
-    commands = top.add_subparsers(dest="command", metavar="<command>", required=True)
+    # Not `required`: `--version` stands alone. `main` asks for a command itself.
+    commands = top.add_subparsers(dest="command", metavar="<command>")
     for group in GROUPS:
         group.register(commands, common)
     return top
@@ -63,16 +83,34 @@ def main(argv: list[str] | None = None) -> int:
             args.variables = [*args.variables, *extra]
         if args.json and getattr(args, "csv", False):
             top.error("--json and --csv: give one of them")
+        if args.command is None and not args.version:
+            top.error("the following arguments are required: <command>")
     except SystemExit as stop:
         # --help (0) and a command line argparse cannot read (2), said by argparse.
         return stop.code if isinstance(stop.code, int) else 0
+    if args.version:
+        return output.answered(version(), args.json)
+    # Read before the command runs: one that edits the file saves it in the new shape.
+    project = getattr(args, "project", None)
+    lost = session.migration_notes(project) if project else []
     try:
         answer = args.handler(args)
     except Exception as failure:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
         raise
+    answer.warnings = [*lost, *answer.warnings]
+    answer.notes = [*answer.notes, *getattr(args, "edit_notes", [])]
     return output.answered(answer, args.json, getattr(args, "csv", None))
+
+
+def version() -> output.Answer:
+    """`--version`: the text the GUI's title bar and About box show (`core.version`), so
+    a bug report names the same version whichever front end it came from."""
+    from core.version import describe
+
+    said = describe()
+    return output.Answer({"version": said}, [f"Styx {said}"])
 
 
 def refusals() -> tuple[type[Exception], ...]:

@@ -18,6 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.analysis import calculation
+from core.kratos import deck_files
 from core.results import catalog
 from backend.main import app
 
@@ -213,6 +214,24 @@ def test_a_run_that_died_names_the_stage_it_died_in(runs_root):
     assert run["failed_at"] == {"index": 2, "of": 3, "name": "2_Excavation"}
 
 
+def test_a_run_in_progress_is_running_and_not_failed(runs_root):
+    """While Kratos works, the log has a "begin" with no "end" for the stage it is in.
+    That is a run in progress, not a run that died there."""
+    directory = make_run(runs_root, "Test_model_2026-09-22_00-49", through=1,
+                         log=failed_log(at=2))
+
+    with calculation.in_progress(directory):
+        run = catalog.describe("Test_model_2026-09-22_00-49")
+        listed = catalog.runs()[0]
+
+    assert run["running"] is True and listed["running"] is True
+    assert run["failed_at"] is None
+    assert run["complete"] is False
+    after = catalog.describe("Test_model_2026-09-22_00-49")
+    assert after["running"] is False
+    assert after["failed_at"] == {"index": 2, "of": 3, "name": "2_Excavation"}
+
+
 def test_a_run_with_no_log_says_nothing_about_why_it_is_incomplete(runs_root):
     make_run(runs_root, "Test_model_2026-09-22_00-49", through=1)
 
@@ -278,6 +297,23 @@ def test_a_name_that_leaves_the_run_directory_is_refused(runs_root, name):
 
     with pytest.raises(catalog.UnsafeName):
         catalog.file_path("Test_model_2026-09-22_00-49", name)
+
+
+def test_a_symlink_to_a_file_outside_the_run_directory_is_refused(runs_root):
+    run = "Test_model_2026-09-22_00-49"
+    directory = make_run(runs_root, run)
+    outside = runs_root / "outside.txt"
+    outside.write_text("Not a run file\n", encoding="utf-8")
+    link = directory / "linked.txt"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"Cannot create symbolic links on this system: {error}")
+
+    assert link.is_file()
+    assert link.resolve().parent != directory.resolve()
+    with pytest.raises(catalog.UnsafeName, match="is not a file in this run"):
+        catalog.file_path(run, link.name)
 
 
 def test_an_unknown_run_is_refused(runs_root):
@@ -617,3 +653,108 @@ def test_a_run_id_is_never_read_as_a_path(runs_root, outside_run):
 def test_a_path_that_is_not_a_directory_is_refused(tmp_path):
     with pytest.raises(catalog.UnknownRun, match="no run directory"):
         catalog.describe(tmp_path / "nothing here")
+
+
+def test_a_deck_without_output_basenames_recovers_files_by_stage_name(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": ["1_Initial", "2_Dig"]}},
+        "stages": {},
+    }), encoding="utf-8")
+    (tmp_path / "old_1_Initial.post.res").write_text("", encoding="utf-8")
+    (tmp_path / "old_1_Initial.post.msh").write_text("", encoding="utf-8")
+
+    stages = catalog.stage_list(tmp_path)
+
+    assert [stage["name"] for stage in stages] == ["1_Initial", "2_Dig"]
+    assert stages[0]["base"] == "old_1_Initial"
+    assert stages[0]["mesh_file"] == "old_1_Initial.post.msh"
+    assert stages[0]["results_file"] == "old_1_Initial.post.res"
+    assert stages[1]["base"] is None
+    assert stages[1]["results"] is False
+
+
+def test_an_external_decks_gid_output_name_takes_priority_over_problem_name(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": ["1_Load"]}},
+        "stages": {"1_Load": {"stage_settings": {
+            "problem_data": {"problem_name": "not_the_output"},
+            "output_processes": {"gid_output": [{
+                "Parameters": {"output_name": r"C:\solver\outputs\actual"},
+            }]},
+        }}},
+    }), encoding="utf-8")
+    (tmp_path / "actual.post.res").write_text("", encoding="utf-8")
+
+    stage = catalog.stage_list(tmp_path)[0]
+
+    assert stage["base"] == "actual"
+    assert stage["results_file"] == "actual.post.res"
+
+
+def test_a_stage_declared_but_not_reached_reports_why_it_has_no_results(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": ["1_Initial"]}},
+        "stages": {},
+    }), encoding="utf-8")
+
+    with pytest.raises(catalog.UnknownRun, match="wrote no results.*stopped before"):
+        catalog.stage_results(tmp_path, 1)
+    with pytest.raises(catalog.UnknownRun, match="wrote no mesh file"):
+        catalog.stage_mesh(tmp_path, 1)
+    with pytest.raises(catalog.UnknownRun, match="has no stage 2; it has 1"):
+        catalog.stage_record(tmp_path, 2)
+
+
+@pytest.mark.parametrize("read, message", [
+    (catalog.stage_geometry, "mesh cannot be named"),
+    (catalog.stage_parts, "parts cannot be named"),
+])
+def test_output_without_the_original_mdpa_explains_the_missing_part_names(
+        tmp_path, read, message):
+    with pytest.raises(catalog.UnknownRun, match=message):
+        read(tmp_path, 1)
+
+
+def test_a_run_path_that_was_removed_reports_the_missing_directory(tmp_path):
+    missing = tmp_path / "removed-run"
+
+    with pytest.raises(catalog.UnknownRun, match="no run directory"):
+        catalog.describe(missing)
+
+
+@pytest.mark.parametrize("parameters", [
+    [],
+    {"orchestrator": {"settings": {"execution_list": "not-a-list"}}},
+])
+def test_unusable_deck_metadata_does_not_hide_existing_stage_output(tmp_path, parameters):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(
+        json.dumps(parameters), encoding="utf-8")
+    (tmp_path / "model_1_Initial.post.res").write_text("", encoding="utf-8")
+
+    stages = catalog.stage_list(tmp_path)
+
+    assert len(stages) == 1
+    assert stages[0]["name"] == "1_Initial"
+    assert stages[0]["results_file"] == "model_1_Initial.post.res"
+
+
+def test_nonstring_execution_entries_do_not_create_spurious_stages(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": [None, 42, "1_Initial"]}},
+        "stages": {},
+    }), encoding="utf-8")
+
+    assert [stage["name"] for stage in catalog.stage_list(tmp_path)] == ["1_Initial"]
+
+
+def test_member_output_without_an_mdpa_explains_why_it_cannot_be_placed(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": ["1_Initial"]}},
+        "stages": {},
+    }), encoding="utf-8")
+    (tmp_path / "1_Initial__output_wall.json").write_text(json.dumps({
+        "NODE_1": {"BENDING_MOMENT": [1000]},
+    }), encoding="utf-8")
+
+    with pytest.raises(catalog.UnknownRun, match="has no .mdpa.*members cannot be placed"):
+        catalog.member_profiles(tmp_path, "wall", "M")

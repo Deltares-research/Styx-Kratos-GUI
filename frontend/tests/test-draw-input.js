@@ -11,6 +11,8 @@
     var origViewport = App.Viewport;
     var origModel = App.Model;
     var origFetch = window.fetch;
+    var origExplorer = App.Explorer;
+    var origSelect = App.selectObject;
 
     var mockCanvas = document.createElement('canvas');
     var mockScene = { add: function () {}, remove: function () {} };
@@ -33,18 +35,27 @@
     };
 
     App.Model = { load: function () { return Promise.resolve(); } };
+    App.Explorer = { mountTree: function () {} };
+    App.selectObject = function () {};
 
     return Promise.resolve()
       .then(function () { return fn(mockCanvas, function () { return posted; }); })
       .then(
-        function (result) { restore(); return result; },
-        function (err) { restore(); throw err; }
+        function (result) { return drain().then(function () { restore(); return result; }); },
+        function (err) { return drain().then(function () { restore(); throw err; }); }
       );
 
+    function drain() {
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }
+
     function restore() {
+      App.DrawInput.cancel();
       App.Viewport = origViewport;
       App.Model = origModel;
       window.fetch = origFetch;
+      App.Explorer = origExplorer;
+      App.selectObject = origSelect;
     }
   }
 

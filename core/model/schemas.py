@@ -17,25 +17,30 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
-from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
-                      field_validator, model_serializer, model_validator)
+from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
+                      computed_field, field_validator, model_serializer, model_validator)
 
-from core.model import migration, polylines, soil_models, units
+from core.model import migration, polylines, regions, soil_models, solver, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
 PositiveSize = Annotated[float, Field(gt=0)]
 
+
+def _not_blank(name: str) -> str:
+    if not name.strip():
+        raise ValueError("a name cannot be empty")
+    return name
+
+
+RequiredName = Annotated[str, AfterValidator(_not_blank)]
+
 ATTACHMENT_TOLERANCE = 1e-6
 """Metres. How close an anchor head must be to a sheet pile to count as on it."""
-
-_LEVEL_TOLERANCE = 1e-9
-"""Metres. Below this a layer and an excavation lift merely touch rather than overlap,
-and no body lies between them -- the common case where a lift is dug exactly to a layer
-boundary (`Project.soil_bodies`)."""
 
 
 class Base(BaseModel):
@@ -151,7 +156,9 @@ class KratosPropertySet(Base):
         for name, entry in value.items():
             if not _finite(entry):
                 raise ValueError(f"variable {name} must be finite")
-        return value
+        # A drained set's drainage type as it was named before 2026-11-04, from a saved
+        # project, a script or a deck: under its name now. Written as it was.
+        return soil_models.project_drainage(value)
 
     def number(self, name: str) -> float | None:
         """A numeric variable, or None when it is absent or not a number."""
@@ -172,7 +179,7 @@ class Material(KratosPropertySet):
         """Built from the fields this had before 2026-10-10 (a script written against
         them, say): converted the way a saved project in that shape is (`core/model/migration.py`)."""
         if isinstance(value, dict) and migration.is_old_record("materials", value):
-            return migration.material(value, 2)
+            return migration.without_water(migration.material(value, 2))
         return value
 
     id: Ident
@@ -180,6 +187,21 @@ class Material(KratosPropertySet):
     color: Hex
     r_inter: float = Field(default=0.70, gt=0, le=1)
     interface_permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
+
+    @model_validator(mode="after")
+    def _the_water_is_the_project_s(self) -> Material:
+        """Every soil has the same water in its pores, so its density, bulk modulus and
+        viscosity are the project's (`Project.fluid`, `WaterLevel.specific_weight`),
+        written into every soil by the export. One a soil carried would be a second
+        water nobody sees."""
+        own = [name for name in soil_models.WATER if name in self.variables]
+        if own:
+            raise ValueError(
+                f"{', '.join(own)} belong{'s' if len(own) == 1 else ''} to the project's "
+                "water, not to a soil: set the water's specific weight on the water level, "
+                "its bulk modulus and viscosity under Water in the material window "
+                "(`kratos-cli fluid`)")
+        return self
 
 
 class SoilLayer(Base):
@@ -208,24 +230,78 @@ def validate_layer_stack(layers: list[SoilLayer]) -> None:
 
 # ── Structures ──────────────────────────────────────────────────────────────
 
+class Line(Base):
+    """A line in the 2D section: where it crosses a soil layer from one edge to another,
+    the layer becomes separate soil bodies (`Project.split_soil`, `core.model.regions`).
+    A solid model has the same line, swept across the domain's z range."""
+    id: Ident
+    name: RequiredName
+    points: list[tuple[float, float]]      # in-plane (x, y), metres
+
+    @model_validator(mode="after")
+    def _usable_polyline(self) -> Line:
+        if len(self.points) < 2:
+            raise ValueError(f"line {self.id!r} needs at least two points")
+        if not all(math.isfinite(v) for point in self.points for v in point):
+            raise ValueError(f"line {self.id!r} has a non-finite coordinate")
+        for first, second in zip(self.points, self.points[1:]):
+            if first == second:
+                raise ValueError(
+                    f"line {self.id!r} repeats the point {first}; every segment needs length"
+                )
+        return self
+
+
+class SoilBody(Base):
+    """A piece of a soil layer that lines or sheet piles cut off, with what the user calls
+    it. Its part key is `soil_<layer>__<id>`, which stages and conditions name.
+
+    `point` lies inside the piece and ties this record to it when the lines change: what
+    is cut off by a new line elsewhere leaves this piece, its key and its name alone. A
+    script may leave the records out; `Project.split_soil` makes them."""
+    id: Ident
+    name: RequiredName
+    layer: Ident
+    point: tuple[float, float]             # in-plane (x, y), metres
+    mat: Ident | None = None
+    """Its material, in every stage. A record made without one, by a script or by a line
+    that cuts a new piece off, takes its layer's then (`Project._split_the_soil`). An edit
+    that gives the layer another material gives it to every part of the layer too
+    (`session._parts_take_their_layers_material`)."""
+
+    @field_validator("id")
+    @classmethod
+    def _no_separator(cls, value: str) -> str:
+        if "__" in value:
+            raise ValueError(f"a soil body's id cannot hold '__', which ends the layer's "
+                             f"in its key: {value!r}")
+        return value
+
+
+class SoilPiece(NamedTuple):
+    """One closed piece of soil, as `Project.split_soil` finds it."""
+    key: str
+    layer: SoilLayer
+    piece: regions.Piece
+    body: SoilBody | None
+    """Its record; `None` for a layer in one piece, which is its own body."""
+
+
 class Excavation(Base):
+    """The void of the full build's demo pit, cut down to its floor. A layered model has
+    none: its soil is split with lines. A saved layered project's pit becomes lines when it
+    is opened (`Project._a_layered_model_has_no_pit`)."""
     x0: float
     x1: float
     z0: float
     z1: float
     floor_y: float
-    """The final floor: the deepest level, and the one an unstaged project digs to in
-    one go. Always `levels[-1]` -- see `_levels_are_the_truth`."""
+    """The floor. Always `levels[-1]` -- see `_levels_are_the_truth`."""
 
     levels: list[float] = Field(default_factory=list)
-    """The lifts the pit is dug in, shallowest first, each strictly below the last.
-
-    A staged excavation is not one hole that appears at once: each lift is its own body
-    in the mesh, deactivated in its own stage (`Excavated_Soil_1/2/3` in Kratos'
-    staged-excavation reference deck). One level means an unstaged pit, which is what every project
-    written before this field had, and is why it defaults to `[floor_y]` rather than to
-    empty.
-    """
+    """The levels the pit was dug to, shallowest first, each strictly below the last: what
+    a saved layered project's lines are made from. The full build takes one, its floor,
+    and a project written before this field reads as `[floor_y]`."""
 
     @model_validator(mode="before")
     @classmethod
@@ -977,8 +1053,18 @@ class Wells(Base):
     length: float = Field(gt=0)
 
 
-WATER_SPECIFIC_WEIGHT_SI = 10_000.0
+WATER_SPECIFIC_WEIGHT_SI = soil_models.WATER_SPECIFIC_WEIGHT_SI
 """N/m3, the water a project that says nothing about it has."""
+
+
+class Fluid(Base):
+    """The water in every soil's pores: one for the whole project, as every soil holds
+    the same water. The export writes it into each soil as `BULK_MODULUS_FLUID` and
+    `DYNAMIC_VISCOSITY`, with `DENSITY_WATER` from the water's specific weight
+    (`WaterLevel.specific_weight`). In the project's units; None is water's at 20 C
+    (`soil_models.water`). Edited under Water in the material window."""
+    bulk_modulus: float | None = Field(default=None, gt=0)
+    dynamic_viscosity: float | None = Field(default=None, gt=0)
 
 
 class WaterLevel(Base):
@@ -1004,6 +1090,17 @@ FACES = ("bottom", "left", "right", "front", "back", "top")
 
 Face = Literal["bottom", "left", "right", "front", "back", "top"]
 
+SECTION_FACES = ("bottom", "left", "right", "top")
+"""The faces a 2D section has: front and back are not in its plane."""
+
+
+def face_size_key(face: str) -> str:
+    """The key a mesh size on the domain face `face` is kept under in
+    `MeshSettings.body_sizes`: `face_bottom`, `face_left`, ... One key per face, whatever
+    conditions are on it, as the deck writes one node part per face (`Bottom_Fixed`,
+    `Left_Edge`, ... in `core/kratos/writer.py`), whether or not a condition is on it."""
+    return f"face_{face}"
+
 ConditionTarget = Literal["domain", "face", "part", "line", "point"]
 """What a condition acts on: the first of the two questions the GUI's condition dialog
 asks. The second -- which face, which part, where -- is the field it names (`face`,
@@ -1017,6 +1114,9 @@ PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"]
 TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
 one node, Kratos keeps the value written last, so the more specific target wins."""
+
+STAGED_CONDITIONS = ("displacement", "water_pressure", "seepage")
+"""The boundary condition kinds a stage switches on and off (`Project.stageable_keys`)."""
 
 
 class WaterPressureCondition(Base):
@@ -1254,6 +1354,46 @@ BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
+CalculationType = Literal["mechanical", "flow"]
+StressInitialisation = Literal["K0", "gravity", "none"]
+TimeIntegration = Literal["static", "dynamic"]
+ConvergenceCriterion = Literal["residual_criterion", "displacement_criterion",
+                               "water_pressure_criterion"]
+
+CONVERGENCE_CRITERIA: dict[str, tuple[str, ...]] = {
+    calculation: tuple(name for name, _ in criteria)
+    for calculation, criteria in solver.CRITERIA.items()}
+"""The convergence criteria a stage of each calculation type can be solved on, its
+default first: Kratos' names, which its `U_Pw` and `Pw` solvers read
+(`core.kratos.parameters.CONVERGENCE_TOLERANCES`). Listed, with their labels, in
+`core.model.solver.CRITERIA`, which the browser reads too.
+
+The residual one is the default of a mechanical stage: every reference deck converges
+on it. Kratos' displacement criterion measures the update of every degree of freedom,
+the water pressure too: in a coupled soil whose water pressure builds up, it does not
+converge where the residual one does. The water pressure one is the default of a flow
+stage, which solves for the water pressure alone, as Kratos' own `Pw` solver has it
+(`geomechanics_Pw_solver.py`). It can fail to settle with a seepage face, whose opening
+and closing keeps the water pressure moving (a quadratic Muskat case C); such a stage
+can be set to the residual one. A flow stage saved before the criterion could be chosen
+was solved on the residual one, and keeps it (`migration.stage_calculation`). Kratos'
+`displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4 cannot build
+it (`geomechanics_U_Pw_solver.py` hands `MixedGenericCriteria` two criteria where it
+takes variables)."""
+
+ABSOLUTE_TOLERANCES: dict[str, float] = solver.ABSOLUTE_TOLERANCES
+"""The default absolute tolerance of each convergence criterion (`Stage.absolute_tolerance`)."""
+
+
+def followed_tolerance(tolerance: float, old: str, new: str) -> float:
+    """The absolute tolerance of a stage whose criterion goes from `old` to `new`: the new
+    criterion's default if it was the old one's, otherwise the stage's own."""
+    if old in ABSOLUTE_TOLERANCES and new in ABSOLUTE_TOLERANCES \
+            and tolerance == ABSOLUTE_TOLERANCES[old]:
+        return ABSOLUTE_TOLERANCES[new]
+    return tolerance
+
+
 class Stage(Base):
     """One construction stage: what changes about the model, and how it is solved.
 
@@ -1275,9 +1415,10 @@ class Stage(Base):
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
-    The water in a stage is its water pressure conditions: their ids are stageable
-    keys (`Project.stageable_keys`), so a stage switches one on or off as it does a
-    load -- a high level, then a low one.
+    The water in a stage is its water pressure conditions and seepage faces, and its
+    supports its displacement conditions: their ids are stageable keys
+    (`Project.stageable_keys`), so a stage switches one on or off as it does a load -- a
+    high level, then a low one.
     """
     id: Ident
     name: str
@@ -1285,12 +1426,21 @@ class Stage(Base):
     """The stage this one starts from. `None` only for the first, which starts from the
     model as built."""
 
-    calculation: Literal["K0 procedure", "Plastic", "Null step",
-                         "Groundwater flow"] = "Plastic"
-    """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
-    `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
-    one for all the stages, so a project mixes it with no other type: the export refuses
-    the mix (`core.model.stages.groundwater_flow`)."""
+    calculation: CalculationType = "mechanical"
+    """What the stage solves for. "mechanical" is the deformation of the soil and the
+    water pressure in it (Kratos' `U_Pw` solver); "flow" is the flow of the water alone
+    (the `Pw` solver). A flow stage needs water pressure elements, and the mesh is one
+    for all the stages, so a project mixes it with no other type: the export refuses the
+    mix (`core.model.stages.groundwater_flow`). A new type is a new value here, and its
+    Kratos solver in `core.kratos.parameters.SOLVERS`."""
+    stress_initialisation: StressInitialisation = "none"
+    """How a mechanical stage sets up its initial stresses. "K0" derives them from the
+    self weight and each soil's K0 (Kratos' `ApplyK0ProcedureProcess`); "gravity" solves
+    for them under the self weight; "none" continues from the stage before. A flow stage
+    has no stresses, so it has none."""
+    time_integration: TimeIntegration = "static"
+    """"static" solves for equilibrium; "dynamic" integrates in time -- inertia in a
+    mechanical stage, a transient flow in a flow stage."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)
@@ -1304,13 +1454,103 @@ class Stage(Base):
     turns it on when the wall is installed, so the wall's own deflection is measured
     from the ground it was built into rather than from the undisturbed state."""
 
-    max_iterations: int = Field(default=15, gt=0)
-    tolerated_error: float = Field(default=1e-4, gt=0)
-    """Kratos' `residual_relative_tolerance`."""
+    convergence_criterion: ConvergenceCriterion = "residual_criterion"
+    """What Kratos measures to decide the stage has converged: one of
+    `CONVERGENCE_CRITERIA` for its calculation type. A stage that names none -- one
+    made without it -- has its type's default: the residual criterion for a mechanical
+    stage, the water pressure one for a flow stage. A flow stage saved before it could
+    be chosen has the residual one, which it was solved on."""
+    max_iterations: int = Field(default=int(solver.STAGE_DEFAULTS["max_iterations"]), gt=0)
+    tolerated_error: float = Field(default=solver.STAGE_DEFAULTS["tolerated_error"], gt=0)
+    """The convergence criterion's relative tolerance: Kratos'
+    `<quantity>_relative_tolerance` for each quantity it measures."""
+    absolute_tolerance: float = Field(
+        default=solver.ABSOLUTE_TOLERANCES["residual_criterion"], gt=0)
+    """Its absolute tolerance, `<quantity>_absolute_tolerance`. A stage that names none
+    has its criterion's default (`ABSOLUTE_TOLERANCES`): the reference decks' 1e-9 for
+    the residual criterion, 1e-12 for the displacement one, 1e-8 for the water pressure.
+    A stage solved in several steps can need more than 1e-9: it reaches equilibrium in
+    the first, after which every step starts from a round-off residual of 1e-9 to 1e-8
+    that 1e-9 cannot be met below, and Kratos runs out of cycles with the model already
+    at rest (an interface model, a 3D excavation, 2026-11-04)."""
 
-    time_interval: float = Field(default=0.0, ge=0)
-    """Days. Zero for the static stages this exporter writes; carried because the stage
-    panel has it and a consolidation stage would need it."""
+    start_time: float = Field(default=0.0, allow_inf_nan=False)
+    """The time the calculation starts at, in the project's unit of time: the deck's
+    `start_time` of the first stage. Read on the initial stage only -- every later
+    stage starts where the one before it ended."""
+    duration: float = Field(default=solver.STAGE_DEFAULTS["duration"], gt=0)
+    """How long the stage lasts, in the project's unit of time (`core.model.units`): its
+    deck's `end_time` minus its `start_time`. A static stage has no real clock, so the
+    default is the one second every stage was before it could be set."""
+    time_step: float = Field(default=solver.STAGE_DEFAULTS["time_step"], gt=0)
+    """The solver's `time_step`, in the same unit: the stage is solved in
+    `duration / time_step` steps. The default solves it in one."""
+
+    solver_settings: dict[str, bool | int | float | str] = Field(default_factory=dict)
+    """The expert solver settings this stage changed from their defaults, by name
+    (`core.model.solver.SETTINGS`): the strategy, the linear solver, the time step
+    control, the time scheme of a dynamic stage, the assembly. Every one it does not
+    name has the default for its calculation type and time integration, so a stage
+    that names none -- every stage saved before they could be set -- is solved as the
+    defaults are: by Newton-Raphson with Sparse LU if it is mechanical. A setting that does not apply to
+    the stage as it is now is kept, and neither shown nor written (`solver.resolve`)."""
+
+    @field_validator("solver_settings")
+    @classmethod
+    def _known_solver_settings(cls, value: dict) -> dict:
+        found = solver.problems(value)
+        if found:
+            raise ValueError("; ".join(found))
+        return solver.normalised(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_calculation(cls, value: object) -> object:
+        """A stage saved before 2026-11 names one of four calculations
+        (`migration.stage_calculation`), and has a time interval in days
+        (`migration.stage_time`) and no convergence criterion, which is then its
+        calculation type's default. A stage that names no absolute tolerance has its
+        criterion's (`ABSOLUTE_TOLERANCES`)."""
+        if not isinstance(value, dict):
+            return value
+        value = migration.stage_time(migration.stage_calculation(value))
+        if value.get("convergence_criterion") is None:
+            calculation = value.get("calculation", "mechanical")
+            if calculation in CONVERGENCE_CRITERIA:
+                value = {**value,
+                         "convergence_criterion": CONVERGENCE_CRITERIA[calculation][0]}
+        if "absolute_tolerance" not in value \
+                and value.get("convergence_criterion") in ABSOLUTE_TOLERANCES:
+            value = {**value, "absolute_tolerance":
+                     ABSOLUTE_TOLERANCES[value["convergence_criterion"]]}
+        return value
+
+    @model_validator(mode="after")
+    def _step_fits(self) -> Stage:
+        if self.time_step > self.duration:
+            raise ValueError(
+                f"stage {self.id!r} has a time step of {self.time_step:g}, longer than "
+                f"its duration of {self.duration:g}: make the step at most the duration")
+        return self
+
+    @model_validator(mode="after")
+    def _criterion_fits(self) -> Stage:
+        allowed = CONVERGENCE_CRITERIA[self.calculation]
+        if self.convergence_criterion not in allowed:
+            raise ValueError(
+                f"stage {self.id!r} is a {self.calculation} stage, which is not solved on "
+                f"the {self.convergence_criterion}: use "
+                f"{' or '.join(allowed)}")
+        return self
+
+    @model_validator(mode="after")
+    def _stresses_are_mechanical(self) -> Stage:
+        if self.calculation != "mechanical" and self.stress_initialisation != "none":
+            raise ValueError(
+                f"stage {self.id!r} is a {self.calculation} stage, which has no stresses "
+                f"to initialise: set its stress initialisation to none, or make it a "
+                "mechanical stage")
+        return self
 
     @model_validator(mode="after")
     def _one_instruction_per_part(self) -> Stage:
@@ -1340,6 +1580,14 @@ class MeshSettings(Base):
     size_min_factor: float = Field(default=0.05, gt=0, le=1)
     second_order_linear: bool = True
     body_sizes: dict[Ident, PositiveSize] = Field(default_factory=dict)
+    """A local mesh size per object, by its key (`Project.mesh_size_keys`): a layer or
+    a soil body, a structure, an anchor, a soil line, a drawn condition, a load, a face
+    of the model."""
+    size_bands: dict[Ident, Annotated[float, Field(ge=0)]] = Field(default_factory=dict)
+    """The distance, in metres, over which a size of `body_sizes` grows back to
+    `element_size` away from its object. Without one, a size keeps to its object: a
+    body's holds inside it, a line's on it, and the mesh round them grades as gmsh
+    likes. A point's holds within one element of it."""
     refinements: list[BoxRefinement | CylinderRefinement] = Field(default_factory=list)
     """Local size fields, finer than `element_size`, in the region each one covers.
 
@@ -1347,6 +1595,13 @@ class MeshSettings(Base):
     a refinement is part of what a model is: a deep excavation wants a fine mesh around
     its wall whoever opens it and whichever button they press. Left on the request, it
     had to be re-typed for every mesh and could not travel in a saved project at all."""
+
+    @model_validator(mode="after")
+    def _a_band_has_a_size(self) -> MeshSettings:
+        alone = sorted(set(self.size_bands) - set(self.body_sizes))
+        if alone:
+            raise ValueError(f"a band needs a mesh size on the same object: {', '.join(alone)}")
+        return self
 
 
 class WaterUpdate(Base):
@@ -1379,6 +1634,8 @@ class LayersUpdate(Base):
 
 class MaterialsUpdate(Base):
     materials: list[Material] = Field(min_length=1)
+    fluid: Fluid | None = None
+    """The water every soil holds, edited in the same window. None leaves it as it is."""
 
 
 class StructuresUpdate(Base):
@@ -1405,10 +1662,22 @@ class StructuresUpdate(Base):
 
 
 class ConditionsUpdate(Base):
-    """The boundary conditions, replaced as one list, and gravity
-    (`core.session.replace_conditions`). A field left out stays as it is."""
+    """The boundary conditions, replaced as one list
+    (`core.session.replace_conditions`). Left out, they stay as they are."""
     boundary_conditions: list[BoundaryCondition] | None = None
-    gravity: bool | None = None
+    gravity_acceleration: float | None = Field(default=None, gt=0)
+
+
+class LinesUpdate(Base):
+    """The lines, as one list: what the GUI's Line window sends."""
+    lines: list[Line]
+
+
+class BodyUpdate(Base):
+    """A soil body's name and its material. A field left out stays as it is; `mat: null`
+    goes back to the layer's material."""
+    name: str | None = None
+    mat: Ident | None = None
 
 
 class StagesUpdate(Base):
@@ -1566,8 +1835,12 @@ class Project(Base):
     materials: list[Material]
     layers: list[SoilLayer]
     excavation: Excavation | None = None
-    """The pit, or `None` for a model that digs none. A layered model reads it only when
-    it has two or more levels (`pit_levels`); the full build needs it always."""
+    """The demo pit of the full build, which needs it. A layered model has none."""
+    lines: list[Line] = Field(default_factory=list)
+    """The lines that split the soil, with the sheet piles (`split_soil`)."""
+    bodies: list[SoilBody] = Field(default_factory=list)
+    """The pieces those cut the layers into, with their names and materials. Kept in step
+    with the layers and the lines each time a project is validated (`_split_the_soil`)."""
     # The seeded demo's own structures, which only the full build raises
     # (`solid_model._build_solids`). `None` in a model that has none of them; the full
     # build needs all of them, and the validator says so.
@@ -1607,6 +1880,9 @@ class Project(Base):
     the level a new hydrostatic `WaterPressureCondition` or `NormalLoad` is given
     (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
     normal load saved without a level still reads it at export."""
+    fluid: Fluid = Field(default_factory=Fluid)
+    """The water in every soil's pores: its bulk modulus and viscosity. Its weight is
+    `water`'s (`water_specific_weight`)."""
     boundary_conditions: list[BoundaryCondition] = Field(
         default_factory=standard_conditions)
     """The conditions the user prescribes on the model's boundaries and soil. The deck
@@ -1615,11 +1891,12 @@ class Project(Base):
     every project saved before the conditions existed, and a new one -- it is the
     standard supports (`standard_conditions`), which are what the export always wrote;
     given, even empty, it is exactly what it lists."""
-    gravity: bool = True
-    """Whether gravity acts: the self weight of every body, in every stage. On unless the
-    user switches it off -- for a model loaded by its boundary conditions alone, say. A
-    K0 procedure derives its stresses from the self weight, so with gravity off they are
-    zero (`core.kratos.condition_checks`)."""
+    gravity_acceleration: float = Field(default=units.GRAVITY_SI, gt=0)
+    """The gravitational acceleration g, in m/s2: both unit systems measure length in
+    metres and time in seconds. The deck's self weight (`VOLUME_ACCELERATION`) is g, and
+    the water's density is its specific weight over g (`water_variables`), so the water
+    pressures stay those of `WaterLevel.specific_weight` whatever g is. Whether the self
+    weight acts at all is the initial stage's (`core.model.stages.gravity`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     stages: list[Stage] = Field(default_factory=list)
@@ -1637,16 +1914,11 @@ class Project(Base):
         A project saved before 2026-10 also calls its stages `phases`, and one saved
         before 2026-10-24 has boreholes (`migration.drop_boreholes`), and one saved
         before 2026-10-25 reads an interface's side walking its line
-        (`migration.screen_sides`)."""
-        if isinstance(value, dict):
-            value = migration.rename_phases(value)
-        if migration.is_legacy(value):
-            value = migration.migrate(value)
-        elif isinstance(value, dict):
-            value = migration.migrate_records(value)
-        if not isinstance(value, dict):
-            return value
-        return migration.screen_sides(migration.drop_boreholes(value))
+        (`migration.screen_sides`). One saved before 2026-11-02 has no `fluid`: its soils
+        carry the water themselves (`migration.lift_water`). One saved before 2026-11-03
+        switches gravity itself (`migration.drop_gravity`), and one saved before 2026-11
+        has flow stages with no absolute tolerance (`migration.flow_tolerance`)."""
+        return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -1655,7 +1927,8 @@ class Project(Base):
         so the GUI's Save and `kratos-cli save` write the same file."""
         data = handler(self)
         return {key: value for key, value in data.items()
-                if value is not None or key not in FULL_BUILD_BLOCKS}
+                if (value is not None or key not in FULL_BUILD_BLOCKS)
+                and (value or key not in ("lines", "bodies"))}
 
     @model_validator(mode="before")
     @classmethod
@@ -1668,7 +1941,8 @@ class Project(Base):
         project and PUTs it back sends the whole document, these fields included, and
         `extra: forbid` would refuse it over values the server itself produced.
         """
-        derived = ("soil_body_keys", "soil_body_labels", "stageable_parts")
+        derived = ("soil_body_keys", "soil_body_labels", "soil_body_materials",
+                   "stageable_parts", "model_strategies", "flow_strategies")
         if not isinstance(value, dict) or not any(k in value for k in derived):
             return value
         return {k: v for k, v in value.items() if k not in derived}
@@ -1791,6 +2065,93 @@ class Project(Base):
             return self.water.specific_weight
         return units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT,
                              self.unit_system)
+
+    @property
+    def water_variables(self) -> dict:
+        """The water every soil is written with: `DENSITY_WATER`, `BULK_MODULUS_FLUID`
+        and `DYNAMIC_VISCOSITY`, in the project's units (`soil_models.water`)."""
+        return soil_models.water(self.unit_system, self.water_specific_weight,
+                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity,
+                                 gravity=self.gravity_acceleration)
+
+    @model_validator(mode="after")
+    def _a_layered_model_has_no_pit(self) -> Project:
+        """A saved layered project's pit, or one a script still passes, as lines and records
+        that make the same bodies under the same keys (`migration.pit_as_lines`). A pit of
+        one level dug nothing in a layered model, so it just goes."""
+        pit = self.excavation
+        if not self.layered_soil or pit is None:
+            return self
+        self.excavation = None
+        if len(pit.levels) < 2:
+            return self
+        d = self.domain
+        if self.dimension == 3 and (pit.z0 > d.z0 or pit.z1 < d.z1):
+            raise ValueError(
+                f"this model's pit spans z {pit.z0:g} to {pit.z1:g} of the domain's {d.z0:g} to "
+                f"{d.z1:g}. Soil is split with lines now, and a line cuts across the whole "
+                "domain: draw the pit as a solid, or make it as wide as the domain.")
+        lines, bodies, outside = migration.pit_as_lines(
+            pit.model_dump(), d.model_dump(),
+            [(layer.id, layer.bottom, layer.top) for layer in self.layers])
+        self.lines = [*self.lines, *[Line(**line) for line in lines]]
+        self.bodies = [*self.bodies, *[SoilBody(**body) for body in bodies]]
+
+        def named(keys: list[str]) -> list[str]:
+            return [each for key in keys for each in outside.get(key, [key])]
+
+        self.stages = [stage.model_copy(update={"activate": named(stage.activate),
+                                                "deactivate": named(stage.deactivate)})
+                       for stage in self.stages]
+        return self
+
+    @model_validator(mode="after")
+    def _split_the_soil(self) -> Project:
+        """Keep `bodies` in step with the pieces the layers are cut into, whichever edit
+        changed them: a new piece gets a record, a piece that is gone loses its record, and
+        a stage that named a whole layer now cut names each of its pieces, which is the
+        same soil. The other collections are checked against the result."""
+        _reject_duplicates([line.id for line in self.lines], "line")
+        _reject_duplicates([f"soil_{body.layer}__{body.id}" for body in self.bodies],
+                           "soil body")
+        if self.lines and not self.layered_soil:
+            raise ValueError("a project with layered_soil false takes no lines: its soil is "
+                             "the seeded demo's")
+        pieces = self.split_soil()
+        # A part keeps the material it was cut off with when its layer's changes: a record
+        # that has none takes its layer's now, as a new piece does.
+        pieces = [piece if piece.body is None or piece.body.mat is not None
+                  else piece._replace(body=piece.body.model_copy(
+                      update={"mat": piece.layer.mat}))
+                  for piece in pieces]
+        self.bodies = [piece.body for piece in pieces if piece.body is not None]
+        _reject_same_names(pieces)
+        # The viewport keeps a line's drawing under its id, beside the parts', the
+        # conditions' and the water level's.
+        taken = sorted({line.id for line in self.lines}
+                       & {*self._staged_parts_and_loads(), "excavation", "water",
+                          *(condition.id for condition in self.boundary_conditions)})
+        if taken:
+            raise ValueError("line id collides with an existing model part key: "
+                             + ", ".join(taken))
+        known = {material.id for material in self.materials}
+        for body in self.bodies:
+            if body.mat is not None and body.mat not in known:
+                raise ValueError(f"soil body {body.id!r} references unknown material "
+                                 f"{body.mat!r}")
+        cut: dict[str, list[str]] = {}
+        for piece in pieces:
+            if piece.body is not None:
+                cut.setdefault(f"soil_{piece.layer.id}", []).append(piece.key)
+
+        def named(keys: list[str]) -> list[str]:
+            return [each for key in keys for each in cut.get(key, [key])]
+
+        if cut:
+            self.stages = [stage.model_copy(update={"activate": named(stage.activate),
+                                                    "deactivate": named(stage.deactivate)})
+                           for stage in self.stages]
+        return self
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
@@ -2018,11 +2379,10 @@ class Project(Base):
             e = self.pit()
             if not self.domain.contains_plan(e.x0, e.x1, e.z0, e.z1):
                 raise ValueError("excavation extends outside the domain in plan")
-            # Every lift, not only the last: an intermediate level above the ground or
-            # below the model is as unbuildable as a floor there, and saying so here
-            # means the geometry step never has to check.
-            if not all(self.domain.y_bottom < level < self.domain.y_top
-                       for level in e.levels):
+            if len(e.levels) > 1:
+                raise ValueError("the full build cuts one void, down to one level; split a "
+                                 "layered model's soil with lines to dig it in stages")
+            if not self.domain.y_bottom < e.floor_y < self.domain.y_top:
                 raise ValueError(
                     "every excavation level must lie inside the domain depth range")
         return self
@@ -2126,13 +2486,8 @@ class Project(Base):
     def material(self, mat_id: str) -> Material:
         return next(m for m in self.materials if m.id == mat_id)
 
-    def pit_levels(self) -> list[float]:
-        """The levels the pit is dug to, shallowest first; none without an excavation."""
-        return list(self.excavation.levels) if self.excavation is not None else []
-
     def pit(self) -> Excavation:
-        """The excavation, for code that runs only when there is one: the full build,
-        and a pit dug in lifts."""
+        """The excavation, for the full build, which has one."""
         if self.excavation is None:
             raise ValueError("the project has no excavation")
         return self.excavation
@@ -2373,7 +2728,7 @@ class Project(Base):
         """The part keys of `soil_bodies`, published with the project.
 
         Read by the viewport, which needs to know which soil bodies exist in order to
-        show them and cannot work it out for itself: deriving the lift split in the
+        show them and cannot work it out for itself: deriving the split in the
         browser would be a second implementation of `soil_bodies` to keep in step with
         this one. It is published, not accepted -- `_drop_derived` removes it on the way
         back in -- so a client that echoes the project it was given is not rejected for
@@ -2386,78 +2741,100 @@ class Project(Base):
     def soil_body_labels(self) -> dict[str, str]:
         """What to call each soil body in front of a user, keyed by part key.
 
-        The Model explorer lists bodies, and three keys differing only by a `__lift2`
-        suffix are not something to show anyone. A body that is the whole of its layer
-        is just the layer's name; one that is part of a staged layer says which part.
+        A body that is the whole of its layer is just the layer's name; one that is a piece
+        of a cut layer says which piece.
 
-        Published beside `soil_body_keys` rather than derived in the browser from the
-        key's suffix, for the same reason: the split is this class's to describe.
+        Published beside `soil_body_keys` rather than derived in the browser, for the same
+        reason: the split is this class's to describe.
         """
-        names = {f"soil_{layer.id}": layer.name for layer in self.layers}
-        labels: dict[str, str] = {}
-        for key, *_ in self.soil_bodies():
-            stem, _, suffix = key.partition("__")
-            name = names.get(stem, stem)
-            if not suffix:
-                labels[key] = name
-            elif suffix.startswith("lift"):
-                labels[key] = f"{name} · lift {suffix[len('lift'):]}"
-            else:
-                labels[key] = f"{name} · below the pit"
-        return labels
+        return {piece.key: (f"{piece.layer.name} · {piece.body.name}" if piece.body
+                            else piece.layer.name)
+                for piece in self.split_soil()}
 
-    def soil_bodies(self) -> list[tuple[str, float, float, bool]]:
-        """Every soil body the excavation splits the layers into, as
-        `(part key, y_bottom, y_top, inside the pit outline)`.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def soil_body_materials(self) -> dict[str, str]:
+        """The material of each soil body, keyed by part key: its own, or its layer's.
 
-        With one excavation level nothing is split: the pit is a void cut out of the
-        soil (`solid_model._cut_the_pit`) and each layer is one body under its own key, which
-        is what every project did before staged construction existed.
+        Published beside `soil_body_labels`, for the Model explorer's rows."""
+        return {piece.key: (piece.body.mat if piece.body and piece.body.mat
+                            else piece.layer.mat)
+                for piece in self.split_soil()}
 
-        With several, the soil inside the pit's plan outline is *kept* -- it has to be,
-        because each lift is deactivated in its own stage -- and split into the lifts it
-        is dug in. A body is the intersection of one layer with one lift, so a lift
-        deeper than the layer it starts in cannot produce a single body spanning two
-        materials. What lies below the final floor but still inside the outline is its
-        own body too: it is never dug, but it sits on the excavated side of the wall and
-        has to be nameable apart from the same layer on the retained side.
+    def _soil_cutters(self) -> tuple[regions.Polyline, ...]:
+        """What cuts the layers: the lines and the sheet piles, a pile that is switched off
+        too, so that switching it renames no soil. A wall or member of the solid model
+        does not. Nothing cuts the full build."""
+        if not self.layered_soil:
+            return ()
+        polylines = [line.points for line in self.lines]
+        polylines += [pile.points for pile in self.sheet_piles]
+        return tuple(tuple((float(x), float(y)) for x, y in points) for points in polylines)
 
-        Soil outside the outline keeps the layer's own key, so a body that was never
-        staged never changes name. Ordered outside-first, then by lift, so the key list
-        is stable for the viewport and the exporter.
+    def _pieces_with(self, cutters: tuple[regions.Polyline, ...]
+                     ) -> list[tuple[SoilLayer, tuple[regions.Piece, ...]]]:
+        d = self.domain
+        return [(layer, regions.pieces(d.x0, d.x1, layer.bottom, layer.top, cutters))
+                for layer in self.layers]
+
+    def split_soil(self) -> list[SoilPiece]:
+        """The pieces the layers are cut into, each with its key and its record.
+
+        A layer in one piece is its own body, with the plain key `soil_<layer>`. A layer in
+        several has no plain key any more: each piece is `soil_<layer>__<id>`. A record
+        holds the piece its `point` lies in, the first record of two in one piece being the
+        one that stays. A piece with no record gets a new one, `part1`, `part2`, ... in the
+        order of the pieces, so the same lines give the same keys.
         """
-        if not self.layers:
-            # Called from `part_keys`, which runs during validation and on a project
-            # that has no ground in it yet -- the site the server opens on. No layers
-            # means no bodies, and it must not be an error to ask.
-            return []
-        layers = [(f"soil_{layer.id}", layer.bottom, layer.top) for layer in self.layers]
-        outside = [(key, bottom, top, False) for key, bottom, top in layers]
-        levels = self.pit_levels()
-        if len(levels) < 2:
-            return outside
+        out: list[SoilPiece] = []
+        for layer, found in self._pieces_with(self._soil_cutters()):
+            if len(found) == 1:
+                out.append(SoilPiece(f"soil_{layer.id}", layer, found[0], None))
+                continue
+            records = [body for body in self.bodies if body.layer == layer.id]
+            held: dict[int, SoilBody] = {}
+            for body in records:
+                at = next((index for index, piece in enumerate(found)
+                           if index not in held and piece.contains(body.point)), None)
+                if at is not None:
+                    held[at] = body
+            used = {body.id for body in records}
+            taken = {_deck_word(body.name) for body in held.values()}
+            number = 0
+            for index, piece in enumerate(found):
+                if index in held:
+                    record = held[index]
+                else:
+                    number += 1
+                    # A part renamed `Part 3` keeps the next new piece from being one too.
+                    while f"part{number}" in used or _deck_word(f"Part {number}") in taken:
+                        number += 1
+                    record = SoilBody(id=f"part{number}", name=f"Part {number}", layer=layer.id,
+                                      point=piece.point, mat=layer.mat)
+                out.append(SoilPiece(f"soil_{layer.id}__{record.id}", layer, piece, record))
+        return out
 
-        # The lifts, top down, then the ground below the final floor. `None` marks that
-        # last one: it is the part of the outline that is never dug.
-        bands: list[tuple[str | None, float, float]] = []
-        ceiling = self.domain.y_top
-        for index, level in enumerate(levels, start=1):
-            bands.append((f"lift{index}", level, ceiling))
-            ceiling = level
-        bands.append((None, self.domain.y_bottom, ceiling))
+    def idle_lines(self) -> list[str]:
+        """The ids of the lines that split no soil: without one, the layers fall into as
+        many pieces as with it."""
+        def count(cutters: tuple[regions.Polyline, ...]) -> int:
+            return sum(len(found) for _, found in self._pieces_with(cutters))
 
-        inside = []
-        for key, bottom, top in layers:
-            for suffix, band_bottom, band_top in bands:
-                low, high = max(bottom, band_bottom), min(top, band_top)
-                if high - low <= _LEVEL_TOLERANCE:
-                    continue     # this layer does not reach this band
-                inside.append((f"{key}__{suffix or 'pit'}", low, high, True))
-        return outside + inside
+        cutters = self._soil_cutters()
+        return [line.id for index, line in enumerate(self.lines)
+                if count(cutters[:index] + cutters[index + 1:]) == count(cutters)]
+
+    def soil_bodies(self) -> list[tuple[str, float, float]]:
+        """Every soil body the layers are split into, as `(part key, y_bottom, y_top)`
+        (`split_soil`). Empty for a project with no ground in it yet, the site the server
+        opens on, for which `part_keys` asks during validation.
+        """
+        return [(piece.key, piece.piece.bottom, piece.piece.top)
+                for piece in self.split_soil()]
 
     def soil_part_keys(self) -> list[str]:
-        """What a condition on a soil part may name: each layer, each body dug out of a
-        staged one, and each custom part that has a material -- the soil a user can
+        """What a condition on a soil part may name: each layer, each body cut off a
+        layer, and each custom part that has a material -- the soil a user can
         pick in the explorer, the viewport or the Mesh properties dialog."""
         keys = [f"soil_{layer.id}" for layer in self.layers]
         keys += [key for key, *_ in self.soil_bodies() if key not in keys]
@@ -2466,12 +2843,11 @@ class Project(Base):
     def expand_body_keys(self, keys: list[str]) -> list[str]:
         """Turn a list that may name soil *layers* into one naming soil *bodies*.
 
-        A staged layer is several bodies -- the lifts it is dug in, plus what is left
-        below the floor -- and the parts of the app that let a user pick soil pick
-        layers, because that is what a user drew: the Mesh properties dialog lists
+        A cut layer is several bodies, and the parts of the app that let a user pick soil
+        pick layers, because that is what a user drew: the Mesh properties dialog lists
         `project.layers` (`frontend/js/mesh-settings.js`). Naming a layer therefore has to
-        mean every body dug out of it, or checking one there would mesh the retained
-        side and leave the entire excavation out of the model.
+        mean every piece of it, or checking one there would mesh some of it and leave the
+        rest out of the model.
 
         Anything that is not a soil layer passes through untouched, and a key that
         already names a body is kept as it stands, so this is safe to apply to any list
@@ -2487,12 +2863,60 @@ class Project(Base):
                     out.append(expanded)
         return out
 
+    def mesh_size_keys(self) -> list[str]:
+        """What a local mesh size can name (`MeshSettings.body_sizes`): every part, each
+        layer (all its bodies), each soil line, each condition drawn on a line or at a
+        point, each load (point, line or surface), and each face of the domain
+        (`face_size_key`). Together these are every node part the deck writes: a
+        condition on a face is on that face's part, one on a soil part is on that part,
+        and one on the whole soil is on every soil body (`mesh_size_key_of`).
+
+        Every load and every face whatever the dimension, so a size is kept when the
+        model is switched to the other dimension and back; `listed_mesh_size_keys` is
+        what this dimension shows."""
+        keys = [*self.part_keys(), *(f"soil_{layer.id}" for layer in self.layers),
+                *(line.id for line in self.lines),
+                *(c.id for c in self.boundary_conditions if c.on in ("line", "point")),
+                *(load.id for load in self.loads),
+                *(face_size_key(face) for face in FACES)]
+        return list(dict.fromkeys(keys))
+
+    def listed_mesh_size_keys(self) -> list[str]:
+        """The keys of `mesh_size_keys` this dimension lists, as the GUI's Mesh
+        properties window lists them (`frontend/js/mesh-settings.js` sizableKeys): the
+        loads this dimension builds, and the faces it has -- a 2D section has no front
+        and back."""
+        built = {load.id for load in self.loads_for(self.dimension)}
+        faces = SECTION_FACES if self.dimension == 2 else FACES
+        hidden = ({load.id for load in self.loads} - built) | {
+            face_size_key(face) for face in FACES if face not in faces}
+        return [key for key in self.mesh_size_keys() if key not in hidden]
+
+    def mesh_size_key_of(self, key: str) -> str | None:
+        """The key whose mesh size the object `key` has, or None for one that takes the
+        global element size.
+
+        Most objects have their own key. A boundary condition on a face has the face's
+        (`face_size_key`): the face is the node part, and every condition on it shares
+        it. One on a soil part has that part's. One on the whole soil has none: the
+        whole soil is meshed at the global element size. A key that names no object is
+        handed back as it is."""
+        condition = next((c for c in self.boundary_conditions if c.id == key), None)
+        if condition is None:
+            return key
+        if condition.on == "face" and condition.face is not None:
+            return face_size_key(condition.face)
+        if condition.on == "part":
+            return condition.part
+        if condition.on == "domain":
+            return None
+        return key
+
     def part_keys(self) -> list[str]:
         """The frontend's userData.key namespace, in render order."""
-        # `soil_bodies` is the authority on what soil there is: one key per layer while
-        # the pit is a void, and one per (layer, lift) once it is staged. Deriving both
-        # from it keeps the namespace and the geometry from disagreeing about how many
-        # soil bodies a project has.
+        # `soil_bodies` is the authority on what soil there is. Deriving both from it keeps
+        # the namespace and the geometry from disagreeing about how many soil bodies a
+        # project has.
         soils = [key for key, *_ in self.soil_bodies()]
         customs = [p.key for p in self.custom_parts]
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
@@ -2536,6 +2960,21 @@ class Project(Base):
         """
         return self.stageable_keys()
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model_strategies(self) -> dict[str, str]:
+        """The strategy each stage's model calls for, by stage id
+        (`core.model.stages.model_strategy`): a flow stage's default, and the only one
+        it can have with a seepage face.
+
+        Published because the stage panel shows a stage's expert settings with their
+        defaults (`frontend/js/stages.js`'s `solverRows`), and this default depends on
+        the soil in the stage and the project's conditions, which is the server's to
+        work out. Empty for a mechanical project."""
+        from core.model import stages  # stages imports this module
+        found = {stage.id: stages.model_strategy(self, stage) for stage in self.stages}
+        return {id: strategy for id, strategy in found.items() if strategy is not None}
+
     def stageable_keys(self) -> list[str]:
         """What a stage may switch on and off, which is wider than what is drawn.
 
@@ -2550,9 +2989,10 @@ class Project(Base):
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
 
-        The water pressure conditions are stageable too, last: a stage switches the
-        water on and off as it does a load -- the pit pumped dry, a level that drops.
-        The supports are not; they hold the model in every stage.
+        The boundary conditions are stageable too, last: a stage switches the water on
+        and off as it does a load -- the pit pumped dry, a level that drops -- a support
+        the same way, a prop of the model removed or added part way through, and a
+        seepage face, where water may leave the soil in some flow stages and not others.
         """
         if self.deck is not None:
             # A deck's Styx stages are its Kratos stages, and they switch the deck's own parts.
@@ -2560,7 +3000,7 @@ class Project(Base):
         keys = self._staged_parts_and_loads()
         seen = set(keys)
         for condition in self.boundary_conditions:
-            if condition.kind == "water_pressure" and condition.id not in seen:
+            if condition.kind in STAGED_CONDITIONS and condition.id not in seen:
                 seen.add(condition.id)
                 keys.append(condition.id)
         return keys
@@ -2582,3 +3022,31 @@ def _reject_duplicates(ids: list[str], what: str) -> None:
         if i in seen:
             raise ValueError(f"duplicate {what} id {i!r}")
         seen.add(i)
+
+
+def _deck_word(name: str) -> str:
+    """A soil body's name as the deck writes it (`core.kratos.writer._sanitise`), in any
+    case: two names with the same word name one sub-model part twice, as far as a user can
+    tell. A name the deck does not take, one that starts with a digit, is its own word."""
+    word = "_".join(re.findall(r"[^\W_]+", name)).casefold()
+    return name.strip().casefold() if word[:1].isdigit() or not word else word
+
+
+def _reject_same_names(pieces: list[SoilPiece]) -> None:
+    """Refuse two pieces of one layer with the same name: the explorer, the stages and the
+    deck could not tell them apart. Pieces of two layers may share one, as `Top_Pit` and
+    `Low_Pit`."""
+    seen: dict[tuple[str, str], SoilPiece] = {}
+    for piece in pieces:
+        if piece.body is None:
+            continue
+        word = (piece.layer.id, _deck_word(piece.body.name))
+        first = seen.setdefault(word, piece)
+        if first is piece:
+            continue
+        assert first.body is not None
+        names = (f"both called {piece.body.name!r}" if first.body.name == piece.body.name
+                 else f"called {first.body.name!r} and {piece.body.name!r}, which differ "
+                      f"only in case or punctuation")
+        raise ValueError(f"{first.key} and {piece.key} in layer {piece.layer.name!r} are "
+                         f"{names}: give each part of a layer a name of its own")

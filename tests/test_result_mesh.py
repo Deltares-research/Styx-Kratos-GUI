@@ -273,8 +273,8 @@ def test_the_real_stages_show_the_excavation_disappearing(real_run):
             (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
         return {s["part"] for s in mesh.stage_sections(model, gid_mesh)["sections"]}
 
-    assert "Soil_Top_lift1" in parts_drawn(1)
-    assert "Soil_Top_lift1" not in parts_drawn(4)
+    assert "Soil_Top_lift_1" in parts_drawn(1)
+    assert "Soil_Top_lift_1" not in parts_drawn(4)
     assert "SheetPileWall" not in parts_drawn(1)
     assert "SheetPileWall" in parts_drawn(4)
 
@@ -509,3 +509,38 @@ def test_a_3d_skin_offers_no_per_element_colouring():
 
     (soil,) = [s for s in sections if s["part"] == "Soil"]
     assert not soil.get("triangle_elements")
+
+
+def test_a_mixed_3d_mesh_keeps_beam_edges_without_adding_them_to_the_soil_skin():
+    model = mdpa_reader.import_mdpa(MDPA_3D + dedent("""
+    Begin Elements SmallDisplacementBeamElement3D2N
+    3 1 1 4
+    End Elements
+    Begin SubModelPart Beam
+     Begin SubModelPartNodes
+     1
+     4
+     End SubModelPartNodes
+     Begin SubModelPartElements
+     3
+     End SubModelPartElements
+    End SubModelPart
+    """))
+    stage = gid_reader.read_mesh(MESH_3D + dedent("""
+    MESH "Beam" dimension 3 ElemType Linear Nnode 2
+    Elements
+    3 1 4 1
+    End Elements
+    """))
+
+    payload = mesh.stage_sections(model, stage)
+
+    assert len(section_of(payload, "Soil")["indices"]) == 6 * 3
+    beam = section_of(payload, "Beam")
+    assert beam["indices"] == []
+    assert len(beam["edges"]) == 2 * 3
+    assert {beam["node_ids"][index] for index in beam["edge_indices"]} == {1, 4}
+
+
+def test_a_point_element_is_not_drawn_as_a_line():
+    assert mesh.edges_of([7], 1, "Point") == []

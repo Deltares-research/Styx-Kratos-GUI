@@ -7,9 +7,10 @@ route is this module plus the HTTP around it -- reading the store, writing it ba
 turning a refusal into a status code (`backend.routes.common.refusals`).
 
 Each edit takes a `Project` and returns a new one; the project it was given is never
-changed. An edit is validated as a whole project before it is returned, so a change
-that would leave the model inconsistent is refused field by field (a pydantic
-`ValidationError`) rather than made. The refusals that are not about one field are this
+changed. An edit is validated as a whole project before it is returned (`_edited`), so a
+change that would leave the model inconsistent is refused field by field (a pydantic
+`ValidationError`) rather than made, and a body the edit takes away takes its mesh size
+with it. The refusals that are not about one field are this
 module's own: `EditRefused`, and `UnknownPart` and `DeckReadOnly` under it. A stage
 sequence that cannot run is `core.model.stages.StageError`.
 
@@ -34,13 +35,14 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, soil_models, stages, units
+from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
+                                Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
-                                UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
-                                point_on_polyline)
+                                UnitsUpdate, WaterLevel, WaterUpdate, followed_tolerance,
+                                point_on_panel, point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
 
 
@@ -99,6 +101,20 @@ def load(path: str | Path) -> Project:
     # A drawn part's .brep is a path on the computer it was drawn on: built again from
     # its recipe here, so the file is the same model wherever it is opened.
     return scripting.with_solids(Project.model_validate(value), strict=False)
+
+
+def migration_notes(path: str | Path) -> list[str]:
+    """What opening the project file `path` changes in its deck (`migration.notes`):
+    said before a command reads it, as the first save writes the new shape and the old
+    values are gone. A file that is not a readable project says nothing here; `load`
+    says why."""
+    path = Path(path)
+    if path.suffix.lower() != ".json":
+        return []
+    try:
+        return migration.notes(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return []
 
 
 def save(project: Project, path: str | Path) -> Path:
@@ -177,6 +193,76 @@ def _replace(temporary: str, path: Path) -> None:
             time.sleep(REPLACE_WAIT)
 
 
+# ── Every edit ──────────────────────────────────────────────────────────────
+
+def _sizable_keys(project: Project) -> set[str]:
+    """What a mesh size can name: the bodies, a cut layer's key, which names each of
+    its pieces, and the lines and points of `Project.mesh_size_keys`."""
+    return set(project.mesh_size_keys())
+
+
+def _edited(project: Project, payload: dict) -> Project:
+    """`payload`, an edit of `project`, validated as a whole project.
+
+    The one way an edit here makes its result, so a rule every edit keeps is kept once:
+    a size belongs to its body, so an edit that takes a body away takes its size too --
+    a layer removed or split, a line removed, a structure deleted -- whichever
+    front end made the edit and however it was sent. A size for a body the model never
+    had is kept: `unknown_mesh_keys` names it as the mistake it is.
+    """
+    edited = Project.model_validate(payload)
+    sizes = edited.mesh.body_sizes
+    if not sizes:
+        return edited
+    orphans = set(sizes) - _sizable_keys(edited)
+    lost = orphans & _sizable_keys(project) if orphans else set()
+    if not lost:
+        return edited
+    kept = {key: size for key, size in sizes.items() if key not in lost}
+    bands = {key: band for key, band in edited.mesh.size_bands.items() if key not in lost}
+    return edited.model_copy(update={"mesh": edited.mesh.model_copy(
+        update={"body_sizes": kept, "size_bands": bands})})
+
+
+def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
+    """Every part of a layer the edit gives another material takes that material, a part
+    given one of its own included: what the user changes is the soil of the whole layer.
+
+    Only the edits of a layer call this. An undo or an opened file sets the layers and the
+    parts together, as they were, and each part keeps the material it was written with.
+    A layer whose material is the one it had has not been given another, which matters
+    because the soil layers window sends every layer on every change.
+    """
+    before = {layer.id: layer.mat for layer in project.layers}
+    given = {layer["id"]: layer.get("mat") for layer in payload.get("layers") or []
+             if isinstance(layer, dict) and layer.get("id") in before
+             and layer.get("mat") != before[layer["id"]]}
+    for body in payload.get("bodies") or []:
+        if isinstance(body, dict) and body.get("layer") in given:
+            body["mat"] = given[body["layer"]]
+
+
+def removed_sizes(before: Project, after: Project) -> list[str]:
+    """The note on the mesh sizes an edit took away with their bodies (`_edited`), or none.
+
+    A body can come back -- a level moved back, a layer split again -- but its size does
+    not, so the user is told which sizes went and what they were. A size the user removed
+    on purpose, or one for a body the model never had, is not named. kratos-cli prints
+    the note after its answer and the GUI shows it in its Session log.
+    """
+    gone = set(before.mesh.body_sizes) - set(after.mesh.body_sizes)
+    if gone:
+        gone &= _sizable_keys(before) - _sizable_keys(after)
+    if not gone:
+        return []
+    sizes = ", ".join(f"{key} ({before.mesh.body_sizes[key]:g})" for key in sorted(gone))
+    if len(gone) == 1:
+        return [f"Removed the mesh size of {sizes}: the edit took that body away. If it "
+                "comes back, set its size again."]
+    return [f"Removed the mesh sizes of {sizes}: the edit took those bodies away. If they "
+            "come back, set their sizes again."]
+
+
 # ── Soil, water, materials, structures ──────────────────────────────────────
 
 def replace_layers(project: Project, update: LayersUpdate) -> Project:
@@ -196,7 +282,8 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    _parts_take_their_layers_material(project, payload)
+    return _edited(project, payload)
 
 
 def set_water(project: Project, update: WaterUpdate) -> Project:
@@ -204,7 +291,7 @@ def set_water(project: Project, update: WaterUpdate) -> Project:
     `replace_layers` cannot express, since there an omitted `water` means "leave it"."""
     payload = project.model_dump()
     payload["water"] = update.water.model_dump() if update.water is not None else None
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def set_water_level(project: Project, level: float | None) -> Project:
@@ -227,12 +314,32 @@ def set_water_level(project: Project, level: float | None) -> Project:
     return set_water(project, WaterUpdate(water=water))
 
 
+def set_fluid(project: Project, *, bulk_modulus: float | None = None,
+              dynamic_viscosity: float | None = None,
+              unset: Sequence[str] = ()) -> Project:
+    """The water in every soil's pores: its bulk modulus and viscosity, in the project's
+    units. `unset` names fields to give back to water's own (`soil_models.water`)."""
+    payload = project.model_dump()
+    fluid = payload["fluid"]
+    for name in unset:
+        if name not in fluid:
+            raise EditRefused(f"the water has no {name}; it has: " + ", ".join(fluid))
+        fluid[name] = None
+    if bulk_modulus is not None:
+        fluid["bulk_modulus"] = bulk_modulus
+    if dynamic_viscosity is not None:
+        fluid["dynamic_viscosity"] = dynamic_viscosity
+    return _edited(project, payload)
+
+
 def replace_materials(project: Project, update: MaterialsUpdate) -> Project:
     """The material library. Validating the whole project is the point: it is what
     refuses a material a layer still points at."""
     payload = project.model_dump()
     payload["materials"] = [material.model_dump() for material in update.materials]
-    return Project.model_validate(payload)
+    if update.fluid is not None:
+        payload["fluid"] = update.fluid.model_dump()
+    return _edited(project, payload)
 
 
 def replace_structures(project: Project, update: StructuresUpdate) -> Project:
@@ -250,7 +357,7 @@ def replace_structures(project: Project, update: StructuresUpdate) -> Project:
         records = getattr(update, kind)
         if records is not None:
             payload[kind] = [record.model_dump() for record in records]
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 # ── Stages ──────────────────────────────────────────────────────────────────
@@ -267,26 +374,17 @@ def replace_stages(project: Project, update: StagesUpdate) -> Project:
     `linearise` is deliberately not a schema validator: a branch is a legitimate thing
     to have half-built in an editor, and refusing it in `Project` would make it
     impossible to type. It is refused here, at the edit, rather than at export, because
-    this is where whoever made it can still see what they did.
+    this is where whoever made it can still see what they did. So is a calculation type
+    or a stress initialisation chosen anywhere but in the initial stage
+    (`stages.check_settings`).
     """
     _stages_of_a_deck_are_read_only(project)
     payload = project.model_dump()
     payload["stages"] = [stage.model_dump() for stage in update.stages]
-    edited = Project.model_validate(payload)
+    edited = _edited(project, payload)
     stages.linearise(edited)
+    stages.check_settings(edited)
     return edited
-
-
-def default_stages(project: Project) -> Project:
-    """The initial stage, then the null step (`stages.default_stages` is the authority).
-
-    It replaces whatever is there rather than refusing when stages already exist: it is
-    the way back out of a sequence that has been broken.
-    """
-    _stages_of_a_deck_are_read_only(project)
-    payload = project.model_dump()
-    payload["stages"] = [stage.model_dump() for stage in stages.default_stages(project)]
-    return Project.model_validate(payload)
 
 
 def _stages_of_a_deck_are_read_only(project: Project) -> None:
@@ -329,7 +427,7 @@ def set_dimension(project: Project, update: DimensionUpdate) -> tuple[Project, l
     # across with the model, and any other is left as the user typed it, said out loud.
     payload["materials"] = materials.translate_laws(payload["materials"], update.dimension,
                                                     notes)
-    return Project.model_validate(payload), notes
+    return _edited(project, payload), notes
 
 
 def set_units(project: Project, update: UnitsUpdate) -> tuple[Project, list[str]]:
@@ -340,7 +438,7 @@ def set_units(project: Project, update: UnitsUpdate) -> tuple[Project, list[str]
     """
     payload, notes = units.convert_project(project.model_dump(mode="json"),
                                            update.unit_system)
-    return Project.model_validate(payload), notes
+    return _edited(project, payload), notes
 
 
 # ── Custom parts ────────────────────────────────────────────────────────────
@@ -471,9 +569,7 @@ def without_custom_parts(project: Project, keys: list[str]) -> Project:
                           "it out of those stages first")
     payload = project.model_dump()
     payload["custom_parts"] = [p for p in payload["custom_parts"] if p["key"] not in gone]
-    payload["mesh"]["body_sizes"] = {k: v for k, v in payload["mesh"]["body_sizes"].items()
-                                     if k not in gone}
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def without_custom_part(project: Project, key: str) -> Project:
@@ -483,13 +579,27 @@ def without_custom_part(project: Project, key: str) -> Project:
     return without_custom_parts(project, [key])
 
 
+def edit_notes(before: Project, after: Project) -> list[str]:
+    """What to tell the user about an edit besides that it was done: the mesh sizes it took
+    away (`removed_sizes`), and each line it made or moved that splits no soil. kratos-cli
+    prints these after its answer and the GUI shows them in its Session log."""
+    was = {line.id: line for line in before.lines}
+    idle = after.idle_lines()
+    return removed_sizes(before, after) + [
+        f"Line {line.name!r} splits no soil: a line has to cross a soil layer from one edge "
+        "to another."
+        for line in after.lines if line.id in idle and was.get(line.id) != line]
+
+
 # ── Meshing ─────────────────────────────────────────────────────────────────
 
 def unknown_mesh_keys(project: Project, settings: MeshRequest) -> list[str]:
     """The bodies `settings` names -- to mesh, or to size -- that this project does not
     have, sorted. Empty when every one is the project's own."""
-    named = set(settings.volume_keys or []) | set(settings.body_sizes)
-    return sorted(named - set(project.part_keys()))
+    meshed = project.expand_body_keys(list(settings.volume_keys or []))
+    sized = project.expand_body_keys(list(settings.body_sizes))
+    return sorted((set(meshed) - set(project.part_keys()))
+                  | (set(sized) - set(project.mesh_size_keys())))
 
 
 def nothing_to_mesh(project: Project) -> str | None:
@@ -598,9 +708,10 @@ def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str
         return replace_stages(project, StagesUpdate(stages=payload["stages"]))
     if tokens[0][1] == "layers":
         _domain_from_layers(payload)
+        _parts_take_their_layers_material(project, payload)
     elif tokens[0][1] == "domain":
         _layers_from_domain(payload)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def _refuse_dedicated(tokens: list[tuple[str, str]]) -> None:
@@ -686,7 +797,7 @@ def _joined(where: str, token: tuple[str, str]) -> str:
     return f"{where}.{name}" if where else name
 
 
-# ── The ground: domain, layers, materials, excavation ───────────────────────
+# ── The ground: domain, layers, materials ──────────────────────────────────
 #
 # The edits the GUI's soil layers dialog makes in the browser
 # (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
@@ -754,7 +865,7 @@ def set_domain(project: Project, *, x: tuple[float, float] | None = None,
             notes.append(f"The section at z = {offset:g} is outside the new domain, so it "
                          f"is cut through its middle, at z = "
                          f"{(domain['z0'] + domain['z1']) / 2:g}.")
-    return Project.model_validate(payload), notes
+    return _edited(project, payload), notes
 
 
 def add_layer(project: Project, id: str, material: str, *, name: str | None = None,
@@ -766,7 +877,7 @@ def add_layer(project: Project, id: str, material: str, *, name: str | None = No
     payload = project.model_dump()
     payload["layers"].append(new.model_dump())
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def update_layer(project: Project, id: str, *, material: str | None = None,
@@ -807,7 +918,8 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         if index < len(layers) - 1:
             layers[index + 1]["top"] = bottom
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    _parts_take_their_layers_material(project, payload)
+    return _edited(project, payload)
 
 
 def split_layer(project: Project, id: str, new_id: str | None = None) -> Project:
@@ -824,7 +936,7 @@ def split_layer(project: Project, id: str, new_id: str | None = None) -> Project
              "bottom": upper["bottom"]}
     upper["bottom"] = middle
     payload["layers"].insert(index + 1, lower)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def remove_layer(project: Project, id: str) -> Project:
@@ -839,7 +951,7 @@ def remove_layer(project: Project, id: str) -> Project:
     elif layers:
         layers[0]["top"] = removed["top"]
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def add_material(project: Project, material) -> Project:
@@ -847,19 +959,23 @@ def add_material(project: Project, material) -> Project:
     _refuse_taken(material.id, [m.id for m in project.materials], "material")
     payload = project.model_dump()
     payload["materials"].append(material.model_dump())
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def update_material(project: Project, id: str, *, name: str | None = None,
                     color: str | None = None, law: str | None = None,
                     model: str | None = None, variables: dict | None = None,
-                    unset: Sequence[str] = (), notes: list[str] | None = None) -> Project:
+                    unset: Sequence[str] = (), notes: list[str] | None = None,
+                    r_inter: float | None = None) -> Project:
     """The material `id` with the fields and variables given; `unset` names variables to
-    leave out, so the export derives them where it can.
+    leave out, so the export derives them where it can. `r_inter` is the factor an
+    interface puts on this soil's strength.
 
     `model` makes it that soil model (`core/model/soil_models.py`): its law in the
     project's dimension. What the soil then lists and lacks gets the model's default, as
-    the material window fills it (`soil_models.fill`), and `notes` says which."""
+    the material window fills it (`soil_models.fill_choice`), and `notes` says which: a
+    soil still being filled in by hand, as `material add` makes one, gets no number its
+    law must have."""
     if model is not None and law is not None:
         raise EditRefused("give a soil model or a law, not both")
     if model is not None:
@@ -870,21 +986,35 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     payload = project.model_dump()
     record = payload["materials"][_index(project.materials, id, "material")]
     before_law, before = record["constitutive_law"], dict(record["variables"])
-    for field, value in (("name", name), ("color", color), ("constitutive_law", law)):
+    for field, value in (("name", name), ("color", color), ("constitutive_law", law),
+                         ("r_inter", r_inter)):
         if value is not None:
             record[field] = value
+    if law is not None:
+        # As the window's Soil model list: what the model does not read is left out.
+        for variable in soil_models.unread(law, record["variables"]):
+            del record["variables"][variable]
     record["variables"].update(variables or {})
     for variable in unset:
         if variable not in record["variables"]:
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + ", ".join(record["variables"]))
         del record["variables"][variable]
-    filled = soil_models.fill(before_law, before, record["constitutive_law"],
-                              record["variables"], project.unit_system, skip=tuple(unset))
+    filled = soil_models.fill_choice(before_law, before, record["constitutive_law"],
+                                     record["variables"], project.unit_system,
+                                     flow=drafts.reads_flow(project), skip=tuple(unset))
     note = soil_models.filled_note(soil_models.model_of(record["constitutive_law"]), filled)
     if note and notes is not None:
         notes.append(note)
-    return Project.model_validate(payload)
+    undrained = soil_models.undrained_note((variables or {}).get("GEO_DRAINAGE_TYPE"))
+    if undrained and notes is not None:
+        notes.append(undrained)
+    unused = soil_models.unused_flow_note(record["constitutive_law"],
+                                          soil_models.project_drainage(record["variables"]),
+                                          variables or {}, flow=drafts.reads_flow(project))
+    if unused and notes is not None:
+        notes.append(unused)
+    return _edited(project, payload)
 
 
 def remove_material(project: Project, id: str) -> Project:
@@ -893,42 +1023,54 @@ def remove_material(project: Project, id: str) -> Project:
     at = _index(project.materials, id, "material")
     payload = project.model_dump()
     del payload["materials"][at]
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
-def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
-                   z: tuple[float, float] | None = None,
-                   levels: list[float] | None = None) -> tuple[Project, list[str]]:
-    """The pit: its plan outline (`x`, `z` as from, to) and the levels it is dug to,
-    shallowest first -- one lift per level, each its own body, deactivated in its own
-    stage. The floor is the last level.
+# ── Lines and the soil bodies they make ─────────────────────────────────────
 
-    A project without a pit gets one when `x`, `z` and `levels` are all given. A 2D
-    model is one cut through z, so its pit spans the domain's z range unless `z` says
-    otherwise."""
+def replace_lines(project: Project, update: LinesUpdate) -> Project:
+    """The lines, as one list. The project's validation works out the bodies they make,
+    and refuses an edit that takes away a body a stage or a condition still names."""
     payload = project.model_dump()
-    pit = payload.get("excavation")
-    if pit is None:
-        if z is None and project.dimension == 2:
-            z = (project.domain.z0, project.domain.z1)
-        missing = [name for name, value in (("x", x), ("z", z), ("levels", levels))
-                   if value is None]
-        if missing:
-            raise EditRefused(f"the project has no excavation yet; give "
-                              f"{', '.join(missing)} to make one")
-        pit = payload["excavation"] = {}
-    if x is not None:
-        pit["x0"], pit["x1"] = x
-    if z is not None:
-        pit["z0"], pit["z1"] = z
-    if levels is not None:
-        pit["levels"], pit["floor_y"] = list(levels), levels[-1]
-    edited = Project.model_validate(payload)
-    notes = []
-    if edited.layered_soil and len(edited.pit_levels()) < 2:
-        notes.append("With one level a layered model digs nothing: its pit is cut only "
-                     "when it is dug in two or more levels, one stage per lift.")
-    return edited, notes
+    payload["lines"] = [line.model_dump() for line in update.lines]
+    return _edited(project, payload)
+
+
+def add_line(project: Project, line: Line) -> Project:
+    _refuse_taken(line.id, [each.id for each in project.lines], "line")
+    return replace_lines(project, LinesUpdate(lines=[*project.lines, line]))
+
+
+def update_line(project: Project, id: str, **fields) -> Project:
+    """The line `id` with `fields` (`name`, `points`) changed."""
+    at = _index(project.lines, id, "line")
+    lines = list(project.lines)
+    lines[at] = Line.model_validate(lines[at].model_dump() | fields)
+    return replace_lines(project, LinesUpdate(lines=lines))
+
+
+def remove_line(project: Project, id: str) -> Project:
+    at = _index(project.lines, id, "line")
+    return replace_lines(project, LinesUpdate(lines=[
+        line for index, line in enumerate(project.lines) if index != at]))
+
+
+def update_body(project: Project, key: str, **fields) -> Project:
+    """The soil body `key` with its `name` or its `material` changed; `material=None` gives
+    it its layer's material as it is now. A body that is a whole layer is that layer's to
+    change."""
+    payload = project.model_dump()
+    for body in payload.get("bodies", []):
+        if f"soil_{body['layer']}__{body['id']}" == key:
+            if "name" in fields:
+                body["name"] = fields["name"]
+            if "material" in fields:
+                body["mat"] = fields["material"]
+            return _edited(project, payload)
+    if any(f"soil_{layer.id}" == key for layer in project.layers):
+        raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
+                          "as a layer")
+    raise UnknownPart(f"no soil body with key {key!r}")
 
 
 def assign_part_material(project: Project, key: str, material: str) -> Project:
@@ -942,7 +1084,7 @@ def assign_part_material(project: Project, key: str, material: str) -> Project:
     for part in payload["custom_parts"]:
         if part["key"] == key:
             part["mat"], part["color"] = material, project.material(material).color
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def _index(records: list, id: str, what: str) -> int:
@@ -1014,7 +1156,7 @@ def add_structure(project: Project, record, section=None) -> Project:
         _refuse_taken(section.id, [s["id"] for s in payload[field]], "section")
         payload[field].append(section.model_dump())
     payload[_collection(record)].append(record.model_dump())
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def update_structure(project: Project, id: str, **fields) -> Project:
@@ -1023,7 +1165,7 @@ def update_structure(project: Project, id: str, **fields) -> Project:
     payload = project.model_dump()
     record = next(r for r in payload[field] if r["id"] == id)
     record.update(fields)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def remove_structure(project: Project, id: str) -> Project:
@@ -1050,8 +1192,7 @@ def remove_structure(project: Project, id: str) -> Project:
     payload = project.model_dump()
     field = _collection(record)
     payload[field] = [r for r in payload[field] if r["id"] != id]
-    payload["mesh"]["body_sizes"].pop(id, None)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def _hangs_from(anchor, structure) -> bool:
@@ -1099,14 +1240,18 @@ def add_section(project: Project, kind: str, section) -> Project:
     _refuse_taken(section.id, [s.id for s in getattr(project, field)], f"{kind} section")
     payload = project.model_dump()
     payload[field].append(section.model_dump())
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def update_section(project: Project, id: str, *, kind: str | None = None,
                    variables: dict | None = None, unset: Sequence[str] = (),
-                   **fields) -> Project:
+                   notes: list[str] | None = None, **fields) -> Project:
     """The section `id` with the fields given by their schema names, the variables
-    given, and without the variables `unset` names."""
+    given, and without the variables `unset` names.
+
+    An interface section given a Coulomb law, or a linear elastic soil, that has no
+    strength to give gets one of its own, as the GUI's contact editor gives it
+    (`own_strength_if_needed`); `notes` is told so."""
     field = drafts.SECTION_FIELDS[find_section(project, id, kind)[0]]
     payload = project.model_dump()
     record = next(s for s in payload[field] if s["id"] == id)
@@ -1117,7 +1262,30 @@ def update_section(project: Project, id: str, *, kind: str | None = None,
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + (", ".join(record["variables"]) or "none"))
         del record["variables"][variable]
-    return Project.model_validate(payload)
+    project = _edited(project, payload)
+    if field == "interface_sections" and {"constitutive_law", "material"} & set(fields):
+        project = own_strength_if_needed(project, id, notes)
+    return project
+
+
+def own_strength_if_needed(project: Project, id: str,
+                           notes: list[str] | None = None) -> Project:
+    """`project` with the interface section `id` given a strength of its own when it is
+    a Coulomb contact against a linear elastic soil it names, which has none to give
+    (`materials.no_strength`) -- the GUI's `ownStrengthIfNeeded`, said in its words
+    into `notes`. Its two numbers are then the user's to set."""
+    section = next(s for s in project.interface_sections if s.id == id)
+    soil = next((m for m in project.materials if m.id == section.material), None)
+    why = materials.no_strength(section, soil)
+    if why is None:
+        return project
+    payload = project.model_dump()
+    record = next(s for s in payload["interface_sections"] if s["id"] == id)
+    record["variables"] = materials.own_strength(section, soil, project.unit_system)
+    if notes is not None:
+        notes.append(f"{why}: the contact has a strength of its own now. Set its "
+                     "GEO_COHESION and GEO_FRICTION_ANGLE.")
+    return _edited(project, payload)
 
 
 def remove_section(project: Project, id: str, kind: str | None = None) -> Project:
@@ -1131,7 +1299,7 @@ def remove_section(project: Project, id: str, kind: str | None = None) -> Projec
     payload = project.model_dump()
     field = drafts.SECTION_FIELDS[kind]
     payload[field] = [s for s in payload[field] if s["id"] != id]
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 # ── Boundary conditions ─────────────────────────────────────────────────────
@@ -1155,16 +1323,16 @@ def _refuse_staged_conditions(project: Project, kept: set[str]) -> None:
 
 
 def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
-    """The boundary conditions, as one list, and gravity: what
-    `PATCH /api/project/conditions` sends. A field the update leaves out stays."""
+    """The boundary conditions, as one list: what `PATCH /api/project/conditions`
+    sends. Left out, they stay."""
     payload = project.model_dump()
     if update.boundary_conditions is not None:
         _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
-    if update.gravity is not None:
-        payload["gravity"] = update.gravity
-    return Project.model_validate(payload)
+    if update.gravity_acceleration is not None:
+        payload["gravity_acceleration"] = update.gravity_acceleration
+    return _edited(project, payload)
 
 
 def find_condition(project: Project, id: str):
@@ -1184,7 +1352,7 @@ def add_condition(project: Project, record) -> Project:
                           "another id.")
     payload = project.model_dump()
     payload["boundary_conditions"].append(record.model_dump())
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def update_condition(project: Project, id: str, **fields) -> Project:
@@ -1198,7 +1366,7 @@ def update_condition(project: Project, id: str, **fields) -> Project:
     if "on" in fields and fields["on"] != record["on"]:
         record.update({"face": None, "part": None, "points": None})
     record.update(fields)
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 def standard_conditions(project: Project) -> Project:
@@ -1210,14 +1378,18 @@ def standard_conditions(project: Project) -> Project:
     kept = [c for c in payload["boundary_conditions"]
             if not (c["kind"] == "displacement" and c["on"] == "face")]
     payload["boundary_conditions"] = kept
-    standard = drafts.standard_conditions(Project.model_validate(payload))
+    standard = drafts.standard_conditions(_edited(project, payload))
     payload["boundary_conditions"] = [c.model_dump() for c in standard] + kept
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
-def set_gravity(project: Project, on: bool) -> Project:
-    """`project` with gravity on or off (`kratos-cli gravity`, the explorer's check box)."""
-    return Project.model_validate({**project.model_dump(), "gravity": on})
+def set_gravity_acceleration(project: Project, acceleration: float) -> Project:
+    """`project` with the gravitational acceleration `acceleration`, in m/s2 (`kratos-cli
+    gravity P 9.80665`, File > Project properties). Whether the self weight acts is the
+    initial stage's stress initialisation (`core.model.stages.gravity`)."""
+    payload = project.model_dump()
+    payload["gravity_acceleration"] = acceleration
+    return _edited(project, payload)
 
 
 def remove_condition(project: Project, id: str) -> Project:
@@ -1227,7 +1399,7 @@ def remove_condition(project: Project, id: str) -> Project:
     payload = project.model_dump()
     payload["boundary_conditions"] = [c for c in payload["boundary_conditions"]
                                       if c["id"] != id]
-    return Project.model_validate(payload)
+    return _edited(project, payload)
 
 
 # ── Stages, one at a time ───────────────────────────────────────────────────
@@ -1250,6 +1422,10 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
     for named in (before, copy_of):
         if named is not None:
             _index(project.stages, named, "stage")
+    first = stages.initial(project)
+    if before is not None and first is not None and before == first.id:
+        raise EditRefused(f"{first.name!r} is the initial stage, and nothing goes before "
+                          "it: add the stage after it instead.")
     if id is not None:
         _refuse_taken(id, [stage.id for stage in project.stages], "stage")
     if before is not None:
@@ -1263,7 +1439,8 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
     payload = [stage.model_dump() for stage in listed]
     for stage in payload:
         if stage["id"] == fresh:
-            stage.update(fields, id=id or fresh)
+            _set_stage_fields(stage, fields)
+            stage["id"] = id or fresh
         if id is not None and stage["parent"] == fresh:
             stage["parent"] = id
     edited = replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
@@ -1271,22 +1448,48 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
 
 
 def update_stage(project: Project, id: str, **fields) -> Project:
-    """The stage `id` with the fields given, by their schema names."""
+    """The stage `id` with the fields given, by their schema names.
+
+    The calculation type of the initial stage is every stage's, so it is set on all of
+    them (`stages.edited`). On a later stage, and a stress initialisation on one, it is
+    refused (`stages.check_settings`)."""
     _index(project.stages, id, "stage")
-    payload = [stage.model_dump() for stage in project.stages]
-    next(stage for stage in payload if stage["id"] == id).update(fields)
+    first = stages.initial(project)
+    listed = list(project.stages)
+    if "calculation" in fields and first is not None and id == first.id:
+        listed = stages.edited(project, id, "calculation", fields["calculation"])
+    payload = [stage.model_dump() for stage in listed]
+    _set_stage_fields(next(stage for stage in payload if stage["id"] == id), fields)
     return replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
 
 
+def _set_stage_fields(stage: dict, fields: dict) -> None:
+    """`fields` set on the dumped `stage`. A new convergence criterion takes its default
+    absolute tolerance along unless the stage, or `fields`, has its own
+    (`schemas.followed_tolerance`)."""
+    criterion = fields.get("convergence_criterion")
+    if criterion is not None and "absolute_tolerance" not in fields:
+        stage["absolute_tolerance"] = followed_tolerance(
+            stage["absolute_tolerance"], stage["convergence_criterion"], criterion)
+    stage.update(fields)
+
+
 def remove_stage(project: Project, id: str) -> Project:
-    """The project without stage `id`, its children starting from its parent."""
+    """The project without stage `id`, its children starting from its parent. The
+    initial stage is always there."""
     _index(project.stages, id, "stage")
+    first = stages.initial(project)
+    if first is not None and id == first.id:
+        raise EditRefused(f"{first.name!r} is the initial stage, which is always there: "
+                          "it chooses the calculation type and the stress initialisation "
+                          "of the whole sequence.")
     return replace_stages(project, StagesUpdate(stages=stages.removed(project, id)))
 
 
 def switch_parts(project: Project, id: str, keys: list[str], active: bool) -> Project:
-    """The parts `keys` in the model (`active`) or out of it from stage `id` on, as the
-    Model explorer's checkbox switches them in Staged construction mode."""
+    """The parts `keys` in the model (`active`) or out of it in stage `id` alone -- the
+    other stages keep what they had -- as the Model explorer's checkbox switches them in
+    Staged construction mode (`stages.set_active`)."""
     _index(project.stages, id, "stage")
     stageable = project.stageable_keys()
     for key in keys:
@@ -1319,11 +1522,3 @@ def _no_part(project: Project, word: str, stageable: list[str]) -> str:
     ids = " or ".join(named)
     return (f"there is no part {word!r} to switch: {word!r} is the name of the part with "
             f"id {ids}, and a stage switches a part by its id. Use {ids}.")
-
-
-def staged_excavation_stages(project: Project) -> Project:
-    """The whole staged-excavation sequence derived from the model -- settle, build the
-    wall, then dig and prop lift by lift (`stages.staged_excavation_stages`) -- replacing
-    whatever is there."""
-    return replace_stages(project, StagesUpdate(
-        stages=stages.staged_excavation_stages(project)))

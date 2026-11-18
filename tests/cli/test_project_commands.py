@@ -1,4 +1,4 @@
-"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`: the project file and
+"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`, `fluid`: the project file and
 the edits that have a command of their own.
 
 An edit writes the file back in place (plan D8); `--out` writes elsewhere and `--dry-run`
@@ -114,6 +114,17 @@ def test_check_refuses_a_model_with_nothing_to_mesh(cli, tmp_path):
     assert "nothing to mesh" in ran.err and "layer add" in ran.err
 
 
+def test_check_refuses_mesh_settings_for_a_part_the_model_does_not_have(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"removed_body": 1.25}
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert "mesh settings name objects this model does not have: removed_body" in ran.err
+
+
 def test_check_refuses_stages_that_branch(cli, site):
     """The schema accepts a branching tree (an editor has to be able to hold one); a
     deck cannot run it, and `check` is where that is said."""
@@ -136,22 +147,22 @@ def test_check_refuses_flow_and_deformation_stages_mixed(cli, site):
     said before meshing, in the export's words."""
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["stages"] = [
-        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
         {"id": "flow", "name": "Flow", "parent": "initial",
-         "calculation": "Groundwater flow"},
+         "calculation": "flow"},
     ]
     site.write_text(json.dumps(payload), encoding="utf-8")
 
     ran = cli("check", site)
 
     assert ran.code == 1
-    assert ("cannot mix groundwater flow stages ('Flow') with deformation stages "
+    assert ("cannot mix flow stages ('Flow') with mechanical stages "
             "('Initial stage')") in ran.err
 
 
 def test_check_refuses_a_flow_stage_with_no_fixed_head(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
-    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "flow"}]
     payload["boundary_conditions"] = []
     for material in payload["materials"]:
         material["variables"]["PERMEABILITY_XX"] = 1e-12
@@ -176,7 +187,7 @@ def test_build_writes_the_project_a_script_describes(cli, tmp_path):
     assert [layer.id for layer in session.load(tmp_path / "site.json").layers] == ["L1", "L2"]
 
 
-# ── dimension, units, water ─────────────────────────────────────────────────
+# ── dimension, units, water, fluid ──────────────────────────────────────────
 
 def test_dimension_switches_the_model_and_writes_it_back(cli, site):
     ran = cli("dimension", site, "3d")
@@ -215,6 +226,76 @@ def test_a_water_level_outside_the_model_is_refused(cli, site):
     assert ran.code == 1
     assert "between" in ran.err
     assert site.read_bytes() == before
+
+
+def test_fluid_without_a_value_says_what_every_soil_is_written_with(cli, site):
+    before = site.read_bytes()
+
+    ran = cli("--json", "fluid", site)
+
+    assert ran.code == 0, ran.err
+    assert site.read_bytes() == before
+    fluid = ran.json()["fluid"]
+    assert (fluid["bulk_modulus"], fluid["dynamic_viscosity"]) == (None, None)
+    assert fluid["written"]["BULK_MODULUS_FLUID"] == pytest.approx(2.2e9)
+    assert fluid["written"]["DYNAMIC_VISCOSITY"] == pytest.approx(1e-3)
+    assert "(water's)" in cli("fluid", site).out
+
+
+def test_fluid_sets_and_unsets_the_water(cli, site):
+    assert cli("fluid", site, "--bulk-modulus", "2e9", "--viscosity", "1.3e-3").code == 0
+    fluid = session.load(site).fluid
+    assert (fluid.bulk_modulus, fluid.dynamic_viscosity) == (2e9, 1.3e-3)
+    assert session.load(site).water_variables["DYNAMIC_VISCOSITY"] == 1.3e-3
+
+    assert cli("fluid", site, "--unset", "dynamic_viscosity").code == 0
+    fluid = session.load(site).fluid
+    assert (fluid.bulk_modulus, fluid.dynamic_viscosity) == (2e9, None)
+
+
+def test_fluid_is_in_the_project_s_units(cli, site):
+    assert cli("units", site, "kN").code == 0
+
+    written = cli("--json", "fluid", site).json()["fluid"]["written"]
+
+    assert written["BULK_MODULUS_FLUID"] == pytest.approx(2.2e6)
+    assert written["DYNAMIC_VISCOSITY"] == pytest.approx(1e-6)
+
+
+def test_a_fluid_that_is_not_positive_is_refused(cli, site):
+    before = site.read_bytes()
+
+    ran = cli("fluid", site, "--viscosity", "0")
+
+    assert ran.code == 1
+    assert "greater than 0" in ran.err
+    assert site.read_bytes() == before
+
+
+def test_a_file_whose_soils_had_their_own_water_says_what_it_lost(cli, tmp_path):
+    """Saved before 2026-11-02, each soil carried its water (`migration.lift_water`).
+    The command that opens it says which soil's deck changes -- an edit included, which
+    saves the file in the new shape and the old values with it."""
+    payload = blank_project().model_dump(mode="json")
+    del payload["fluid"]
+    payload["materials"] = [
+        {"id": "a", "name": "Peat", "color": "#000000",
+         "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+         "variables": {"YOUNG_MODULUS": 1e6, "POISSON_RATIO": 0.3, "POROSITY": 0.5,
+                       "DENSITY_SOLID": 1500.0, "DYNAMIC_VISCOSITY": 1e-3}},
+        {"id": "b", "name": "Brine sand", "color": "#ffffff",
+         "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+         "variables": {"YOUNG_MODULUS": 1e7, "POISSON_RATIO": 0.3, "POROSITY": 0.3,
+                       "DENSITY_SOLID": 2650.0, "DYNAMIC_VISCOSITY": 5e-3}}]
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("fluid", path, "--viscosity", "2e-3")
+
+    assert ran.code == 0, ran.err
+    assert "warning: Brine sand:" in ran.err
+    assert "Peat" not in ran.err
+    assert "warning" not in cli("show", path).err
 
 
 # ── Where an edit is written ───────────────────────────────────────────────
@@ -257,7 +338,7 @@ def test_an_edit_of_a_deck_s_stages_is_refused(cli, tmp_path):
         "deck": Deck(directory=str(tmp_path))}), tmp_path / "deck.json")
     before = path.read_bytes()
 
-    ran = cli("stages", path, "defaults")
+    ran = cli("stages", path, "add")
 
     assert ran.code == 1
     assert "Edit the deck" in ran.err
@@ -291,3 +372,20 @@ def test_a_fault_in_this_program_is_raised_not_dressed_up_as_a_refusal(cli, site
     monkeypatch.setattr(commands, "summary", broken)
     with pytest.raises(KeyError, match="a bug"):
         cli("show", site)
+
+
+def test_opening_an_old_file_says_what_gravity_off_no_longer_does(cli, site):
+    """Gravity was a switch of its own until 2026-11-03 (`migration.notes`): off in a
+    project with no stages, there is no initial stage to leave the self weight out, so
+    the command that opens the file says so. A file that is not there has nothing to
+    say, but the refusal."""
+    document = json.loads(site.read_text(encoding="utf-8"))
+    site.write_text(json.dumps({**document, "stages": [], "gravity": False}),
+                    encoding="utf-8")
+    ran = cli("show", site)
+    assert ran.code == 0
+    assert "switched gravity off" in ran.err
+    assert "switched gravity off" not in cli("show", site.with_name("none.json")).err
+    document["gravity"] = True
+    site.write_text(json.dumps(document), encoding="utf-8")
+    assert "gravity" not in cli("show", site).err

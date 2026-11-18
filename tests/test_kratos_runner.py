@@ -17,8 +17,9 @@ from pathlib import Path
 import pytest
 
 from core.kratos import parameters
-from core.analysis import calculation
+from core.analysis import calculation, kratos_main
 from core.analysis.kratos_main import STAGE_MARKER
+from tests import results_run
 
 STUB = Path(__file__).resolve().parent / "fakes" / "kratos_stub"
 
@@ -182,6 +183,7 @@ def test_without_kratos_the_runner_fails_the_way_calculate_explains(
         tmp_path, monkeypatch):
     """The import is the first thing `run` does, so `calculation._explain` sees the
     ModuleNotFoundError it turns into "configure the Kratos build"."""
+    results_run.require_no_kratos()
     deck(tmp_path, STAGES[:1])
 
     completed = run_runner(tmp_path, stub=False, monkeypatch=monkeypatch)
@@ -273,3 +275,47 @@ def test_main_with_no_deck_named_is_a_usage_error(capsys):
 
     assert kratos_main.main(["kratos_main.py"]) == 2
     assert "usage" in capsys.readouterr().err
+
+
+def test_kratos_main_rejects_missing_or_extra_arguments(capsys):
+    assert kratos_main.main(["kratos_main.py"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "usage: python -m core.analysis.kratos_main" in captured.err
+
+    assert kratos_main.main(["kratos_main.py", "project.json", "extra"]) == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_announcing_orchestrator_marks_each_stage_around_base_hooks(capsys):
+    class Orchestrator:
+        def __init__(self, _project):
+            self.events = []
+
+        def GetNumberOfStages(self):
+            return 2
+
+        def RunCurrentStagePreprocess(self, name, data=None):
+            self.events.append(("pre", name, data))
+
+        def RunCurrentStagePostprocess(self, name, data=None):
+            self.events.append(("post", name, data))
+
+    announced = kratos_main.announcing(Orchestrator)("project")
+    announced.RunCurrentStagePreprocess("Initial", {"id": 1})
+    announced.RunCurrentStagePostprocess("Initial", {"id": 2})
+
+    assert announced.events == [("pre", "Initial", {"id": 1}),
+                                ("post", "Initial", {"id": 2})]
+    assert capsys.readouterr().out.splitlines() == [
+        "[kratos-gui] stage begin 1/2 Initial",
+        "[kratos-gui] stage end 1/2 Initial",
+    ]
+
+
+def test_kratos_main_runs_the_requested_parameter_file(monkeypatch):
+    seen = []
+    monkeypatch.setattr(kratos_main, "run", seen.append)
+
+    assert kratos_main.main(["kratos_main.py", "project.json"]) == 0
+    assert seen == [Path("project.json")]

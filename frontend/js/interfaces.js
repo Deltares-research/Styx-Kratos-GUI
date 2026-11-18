@@ -35,12 +35,88 @@ var App = window.App || {};
 App.Interfaces = (function () {
 
   /* Steel against a medium sand: the reduction factor an engineer starts from,
-     and a virtual thickness the stiffness is derived over. The material is filled
-     in from the project when the interface is drafted, because the factor reduces
-     a particular soil's strength rather than a number in the abstract. */
+     and a virtual thickness the stiffness is derived over. The factor reduces the
+     strength of the soil each stretch runs against (`sectionsFor`). */
   function defaultSection() {
     return Object.assign({ name: 'Interface', r_inter: 0.7, virtual_thickness: 0.01,
                            permeability: 'Neutral' }, App.PropertySets.defaults('interface'));
+  }
+
+  /* The laws a contact is offered (core/kratos/materials.py): the elastic one reads the
+     two stiffnesses alone, a Coulomb one a strength too -- the soil's reduced by
+     R_inter, or the contact's own. A linear elastic soil has no strength to give, so a
+     Coulomb contact against one has to have its own; the export refuses it otherwise.
+     The second Coulomb name is the one Kratos builds before 2026-10 register. */
+  var ELASTIC_LAW = 'GeoIncrementalLinearElasticInterfaceLaw';
+  var COULOMB_LAW = 'GeoInterfaceCoulombLawPlaneStrain';
+  var COULOMB_LAWS = [COULOMB_LAW, 'GeoInterfaceCoulombWithTensionCutOff'];
+  var LAWS = [{ value: ELASTIC_LAW, text: 'Elastic' }, { value: COULOMB_LAW, text: 'Coulomb' }];
+  var STRENGTH = ['GEO_COHESION', 'GEO_FRICTION_ANGLE'];
+
+  function coulomb(section) { return COULOMB_LAWS.indexOf(section.constitutive_law) >= 0; }
+
+  function holds(section, name) {
+    return Object.prototype.hasOwnProperty.call(section.variables || {}, name);
+  }
+
+  /* Whether the contact carries a strength of its own, rather than its soil's. */
+  function ownStrength(section) {
+    return STRENGTH.some(function (name) { return holds(section, name); });
+  }
+
+  function soilOf(section) {
+    return (App.MATERIALS || []).filter(function (m) { return m.id === section.material; })[0]
+      || null;
+  }
+
+  function elastic(soil) {
+    return !!soil && App.SoilModels.modelOf(soil.constitutive_law) === 'linear_elastic';
+  }
+
+  /* Why a Coulomb contact cannot take its strength from the soil it names, in a few
+     words, or null: the first part of `strengthProblem` and of the note that it has a
+     strength of its own (core/kratos/materials.py `no_strength`). One that names none
+     takes each adjacent soil's, which only the export knows. */
+  function noStrength(section) {
+    if (!coulomb(section)) return null;
+    if (STRENGTH.every(function (name) { return holds(section, name); })) return null;
+    var soil = soilOf(section);
+    return elastic(soil) ? soil.name + ' is linear elastic and has no strength to give' : null;
+  }
+
+  /* `noStrength`, and what to do about it. */
+  function strengthProblem(section) {
+    var why = noStrength(section);
+    return why === null ? null
+      : why + ': set the contact\'s own GEO_COHESION and GEO_FRICTION_ANGLE.';
+  }
+
+  /* Give the contact a strength of its own, starting from what it took from its soil
+     -- c R and atan(R tan phi) -- or, from a soil with none, the Mohr-Coulomb
+     defaults. What it already holds is kept. */
+  function setOwnStrength(section) {
+    section.variables = section.variables || {};
+    var soil = soilOf(section);
+    var given = soil && !elastic(soil) ? soil.variables || {} : {};
+    var r = section.r_inter !== null && section.r_inter !== undefined ? section.r_inter
+      : (soil && soil.rInter) || 0.7;
+    var from = {
+      GEO_COHESION: typeof given.GEO_COHESION === 'number' ? given.GEO_COHESION * r : null,
+      GEO_FRICTION_ANGLE: typeof given.GEO_FRICTION_ANGLE === 'number'
+        ? Math.atan(Math.tan(given.GEO_FRICTION_ANGLE * Math.PI / 180) * r) * 180 / Math.PI
+        : null
+    };
+    STRENGTH.forEach(function (name) {
+      if (holds(section, name)) return;
+      section.variables[name] = from[name] !== null ? Number(from[name].toPrecision(6))
+        : App.SoilModels.defaultIn(App.SoilModels.find('mohr_coulomb', name),
+                                   App.Units.current());
+    });
+  }
+
+  /* Leave the strength out, for the export to take from the soil. */
+  function soilStrength(section) {
+    STRENGTH.forEach(function (name) { delete (section.variables || {})[name]; });
   }
 
   var SIDES = ['both', 'left', 'right', 'below', 'above'];
@@ -232,15 +308,14 @@ App.Interfaces = (function () {
   }
 
   /* The section list this interface needs saved alongside it: the project's own,
-     plus a default the first time anyone draws one. The default is bound to a soil
-     material, because r_inter reduces that soil's strength. */
+     plus a default the first time anyone draws one. The default has no material: each
+     stretch takes the soil it runs against, reduced by r_inter (`drafts.section`). */
   function sectionsFor(project, record) {
     var library = copy((project && project.interface_sections) || []);
     var known = library.some(function (s) { return s.id === record.section; });
     if (!known) {
-      var soil = ((project && project.materials) || [])[0];
       library.push(Object.assign({ id: record.section }, defaultSection(),
-                                 { material: soil ? soil.id : null }));
+                                 { material: null }));
     }
     return library;
   }
@@ -416,6 +491,15 @@ App.Interfaces = (function () {
     }
     var problem = App.PropertySets.validate('interface', section);
     if (problem) return problem;
+    // What Kratos' Coulomb contact law checks (`InterfaceCoulombLaw::Check`).
+    var phi = (section.variables || {}).GEO_FRICTION_ANGLE;
+    var psi = (section.variables || {}).GEO_DILATANCY_ANGLE;
+    if (coulomb(section) && typeof phi === 'number' && !(phi > 0 && phi < 90)) {
+      return 'GEO_FRICTION_ANGLE of a Coulomb contact must be above 0 and below 90 degrees.';
+    }
+    if (typeof phi === 'number' && typeof psi === 'number' && psi > phi) {
+      return 'GEO_DILATANCY_ANGLE cannot be larger than GEO_FRICTION_ANGLE.';
+    }
     // No material and no stiffnesses is the ordinary case, not an error: the contact
     // then derives from whatever soil each stretch runs against. The server dropped
     // the old refusal for that reason (core/model/schemas.py, InterfaceSection), and
@@ -631,7 +715,16 @@ App.Interfaces = (function () {
       form.appendChild(el('div.mesh-setting-help', { text: help || '' }));
     }
 
+    /* The form is rebuilt whole; where it was scrolled to is kept, so a choice does
+       not throw the window back to the top. */
     function render() {
+      var scrolled = form.scrollTop, outer = form.parentNode, outerScrolled = outer ? outer.scrollTop : 0;
+      fill();
+      form.scrollTop = scrolled;
+      if (outer) outer.scrollTop = outerScrolled;
+    }
+
+    function fill() {
       form.textContent = '';
       controls = {};
       controls.name = el('input.mesh-setting-control', { type: 'text', value: state.name });
@@ -755,7 +848,7 @@ App.Interfaces = (function () {
 
     shell = App.Dialogs.open({
       title: (editing ? 'Edit' : 'Create') + ' interface',
-      width: 560, height: 660,
+      width: 560, height: 680,
       buttons: [
         { label: 'Pick on model…', onClick: function () { pick(current()); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
@@ -799,6 +892,10 @@ App.Interfaces = (function () {
 
   return {
     SIDES: SIDES, STRETCH_SNAP: STRETCH_SNAP, defaultSection: defaultSection,
+    ELASTIC_LAW: ELASTIC_LAW, COULOMB_LAW: COULOMB_LAW, LAWS: LAWS, STRENGTH: STRENGTH,
+    coulomb: coulomb, ownStrength: ownStrength, noStrength: noStrength,
+    strengthProblem: strengthProblem,
+    setOwnStrength: setOwnStrength, soilStrength: soilStrength,
     nearest: nearest, between: between, faces: faces, snap: snap, stretchOn: stretchOn,
     pileOf: pileOf,
     available: available, unavailableMessage: unavailableMessage,

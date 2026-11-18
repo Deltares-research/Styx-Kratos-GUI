@@ -51,7 +51,7 @@ MDPA = dedent("""
         End SubModelPartElements
     End SubModelPart
 
-    Begin SubModelPart Soil_Top_lift1
+    Begin SubModelPart Soil_Top_lift_1
         Begin SubModelPartElements
         2
         End SubModelPartElements
@@ -100,7 +100,7 @@ def test_an_element_knows_which_part_it_belongs_to(model):
     owner = parts.element_owner(model)
 
     assert owner[1] == "Soil_Top"
-    assert owner[2] == "Soil_Top_lift1"
+    assert owner[2] == "Soil_Top_lift_1"
     assert owner[9] == "Wall_contact"
 
 
@@ -124,7 +124,7 @@ def test_a_part_whose_elements_are_in_this_stage_is_alive(model):
     by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1, 2))}
 
     assert by_name["Soil_Top"].alive is True
-    assert by_name["Soil_Top_lift1"].alive is True
+    assert by_name["Soil_Top_lift_1"].alive is True
     assert by_name["Soil_Top"].elements == [1]
 
 
@@ -135,9 +135,9 @@ def test_a_part_the_stage_deactivated_is_not_alive(model):
     by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1))}
 
     assert by_name["Soil_Top"].alive is True
-    assert by_name["Soil_Top_lift1"].alive is False
-    assert by_name["Soil_Top_lift1"].elements == []
-    assert by_name["Soil_Top_lift1"].declared == 1
+    assert by_name["Soil_Top_lift_1"].alive is False
+    assert by_name["Soil_Top_lift_1"].elements == []
+    assert by_name["Soil_Top_lift_1"].declared == 1
 
 
 def test_a_part_gid_never_writes_is_told_apart_from_one_that_was_removed(model):
@@ -149,8 +149,8 @@ def test_a_part_gid_never_writes_is_told_apart_from_one_that_was_removed(model):
     by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1),
                                                          written=written)}
 
-    assert by_name["Soil_Top_lift1"].written is True
-    assert by_name["Soil_Top_lift1"].alive is False, "removed by this stage"
+    assert by_name["Soil_Top_lift_1"].written is True
+    assert by_name["Soil_Top_lift_1"].alive is False, "removed by this stage"
     assert by_name["Wall_contact"].written is False, "never written by the GiD output"
     assert by_name["Wall_contact"].alive is False
 
@@ -191,7 +191,7 @@ def test_a_part_with_no_elements_is_not_reported_as_unwritten(model):
 def test_parts_keep_the_order_the_deck_declares_them_in(model):
     names = [p.name for p in parts.stage_parts(model, stage_mesh(1, 2))]
 
-    assert names == ["Soil_Top", "Soil_Top_lift1", "Wall_contact", "Bottom_Support"]
+    assert names == ["Soil_Top", "Soil_Top_lift_1", "Wall_contact", "Bottom_Support"]
 
 
 # ── Against the real run ────────────────────────────────────────────────────
@@ -222,9 +222,9 @@ def test_the_real_run_reads_its_construction_sequence_out_of_the_files(monkeypat
         return [{p.name: p.alive for p in parts.stage_parts(model, mesh)}[name]
                 for mesh in meshes]
 
-    assert alive("Soil_Top_lift1") == [True, True, True, False, False, False, False]
-    assert alive("Soil_Top_lift2") == [True, True, True, True, True, False, False]
-    assert alive("Soil_Top_lift3") == [True, True, True, True, True, True, False]
+    assert alive("Soil_Top_lift_1") == [True, True, True, False, False, False, False]
+    assert alive("Soil_Top_lift_2") == [True, True, True, True, True, False, False]
+    assert alive("Soil_Top_lift_3") == [True, True, True, True, True, True, False]
     assert alive("SheetPileWall") == [False, False, True, True, True, True, True]
     assert alive("Strut") == [False, False, False, False, True, True, True]
     assert alive("Soil_Bottom") == [True] * 7

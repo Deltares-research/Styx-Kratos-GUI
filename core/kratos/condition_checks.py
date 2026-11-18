@@ -3,7 +3,7 @@
 The warnings of plan/done/boundary-conditions-plan.md sec 2.3 that the project alone
 answers: a model nothing holds still, a water level nothing reads, a coupled soil with
 nothing to fix its water pressure, a condition on a face or a drawn line this dimension
-does not have, a K0 procedure with gravity off. The export (`core.kratos.writer`) adds them to its own, and
+does not have. The export (`core.kratos.writer`) adds them to its own, and
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
@@ -12,8 +12,8 @@ deformation deck leaves it out and says so.
 
 A groundwater flow project (`core.model.stages.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
-supports it leaves out silently), a soil fixed everywhere,
-gravity off -- and the refusals of `flow_refusal`, which both say before meshing too.
+supports it leaves out silently), a soil fixed everywhere -- and the refusals of
+`flow_refusal`, which both say before meshing too.
 
 The ones that need the mesh -- two conditions sharing nodes, a part with no soil in this
 dimension, a line with no mesh at it -- stay with the export.
@@ -25,11 +25,8 @@ for loading the mesher.
 from __future__ import annotations
 
 from core.model import stages
-from core.model.schemas import (DisplacementCondition, Material, Stage, Project,
-                                SeepageCondition, WaterPressureCondition)
-
-SECTION_FACES = ("bottom", "left", "right", "top")
-"""The faces a 2D section has. Front and back bound the solid model along z only."""
+from core.model.schemas import (SECTION_FACES, DisplacementCondition, Material, Stage,
+                                Project, SeepageCondition, WaterPressureCondition)
 
 
 def warnings(project: Project) -> list[str]:
@@ -43,7 +40,6 @@ def warnings(project: Project) -> list[str]:
     if _flow(project):
         out += _left_out_of_flow(project)
         out += _water_fixed_everywhere(project)
-        out += _weightless_flow(project)
         out += _unused_water_level(project)
         return out
     out += _seepage_outside_flow(project)
@@ -51,7 +47,6 @@ def warnings(project: Project) -> list[str]:
     out += _unpinned_water(project)
     out += _free_water_in_stages(project)
     out += _unused_water_level(project)
-    out += _weightless_k0(project)
     return out
 
 
@@ -117,7 +112,7 @@ def _seepage_outside_flow(project: Project) -> list[str]:
     faces = [c for c in project.boundary_conditions
              if isinstance(c, SeepageCondition) and written(project, c)]
     return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
-            "calculation, and this project's stages are not \"Groundwater flow\"."
+            "calculation, and this project's stages are not flow stages."
             for c in faces]
 
 
@@ -142,9 +137,10 @@ def _water_pressures(project: Project) -> list[WaterPressureCondition]:
 
 
 def _unpinned_water(project: Project) -> list[str]:
-    """A soil whose water pressure stays as it starts (`CONSTANT_PW_FIELD`, what
-    `core.kratos.materials` fills in) needs nothing to fix it: a dry model of such soil
-    runs, and gives the results it gave when the export still fixed zero everywhere. One
+    """A mechanical-only soil's water pressure stays as it starts (`CONSTANT_PW_FIELD`,
+    what `core.kratos.materials` fills in): it needs nothing
+    to fix it, and a dry model of such soil runs, giving the results it gave when the
+    export still fixed zero everywhere. One
     that couples it is the one to say something about: Kratos solves it, but with the
     pressure free the self weight raises one of its own -- about 1.5 MPa and 8 m of
     settlement in a 40 m block that settles 0.65 m dry
@@ -163,8 +159,8 @@ def _unpinned_water(project: Project) -> list[str]:
 
 
 def _soil_materials(project: Project) -> list[Material]:
-    """The materials the soil uses: the layers' and the custom parts'."""
-    used = ({layer.mat for layer in project.layers}
+    """The materials the soil uses: each soil body's and the custom parts'."""
+    used = ({*project.soil_body_materials.values()}
             | {part.mat for part in project.custom_parts if part.mat is not None})
     return [m for m in project.materials if m.id in used]
 
@@ -173,8 +169,7 @@ def _coupled_soils(project: Project) -> list[str]:
     """The names of the soil materials in use that couple the water pressure to the
     deformation (`GEO_DRAINAGE_TYPE` other than `CONSTANT_PW_FIELD`)."""
     return [m.name for m in _soil_materials(project)
-            if m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
-            != "CONSTANT_PW_FIELD"]
+            if m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD") != "CONSTANT_PW_FIELD"]
 
 
 def _free_water_in_stages(project: Project) -> list[str]:
@@ -230,21 +225,11 @@ def _unused_water_level(project: Project) -> list[str]:
         "if the soil should be under water."]
 
 
-def _weightless_k0(project: Project) -> list[str]:
-    """A K0 procedure derives its stresses from the self weight, which gravity off
-    leaves out: the stresses it starts the next stage with are zero."""
-    if project.gravity:
-        return []
-    return [f"stage {stage.name!r} is a K0 procedure, whose stresses come from the self "
-            "weight; with gravity off they are zero."
-            for stage in project.stages if stage.calculation == "K0 procedure"]
-
-
 # ── Groundwater flow ────────────────────────────────────────────────────────
 
 def _flow(project: Project) -> bool:
     """Whether the project is a groundwater flow calculation. A mix of flow and
-    deformation stages is not one: `flow_refusal` says why it cannot be exported."""
+    mechanical stages is not one: `flow_refusal` says why it cannot be exported."""
     try:
         return stages.groundwater_flow(project)
     except stages.StageError:
@@ -253,7 +238,7 @@ def _flow(project: Project) -> bool:
 
 def flow_refusal(project: Project) -> str | None:
     """Why the export refuses this groundwater flow project, or None. None too for a
-    project that is not one, except a mix of flow and deformation stages."""
+    project that is not one, except a mix of flow and mechanical stages."""
     try:
         if not stages.groundwater_flow(project):
             return None
@@ -324,16 +309,6 @@ def _water_fixed_everywhere(project: Project) -> list[str]:
             "can flow. Fix it on the faces or lines where the head is known instead, and "
             "give the soil a start value (not fixed) if it needs one."
             for c in _water_pressures(project) if c.is_fixed and c.on == "domain"]
-
-
-def _weightless_flow(project: Project) -> list[str]:
-    """Without gravity the water has no weight: the flow follows the pressure alone, and
-    the hydraulic head is not written (`parameters._gid_output`)."""
-    if project.gravity:
-        return []
-    return ["gravity is off, so the water has no weight: it flows from the pressure "
-            "differences alone, and the hydraulic head is not written. Turn gravity on, "
-            "unless the section is a horizontal one."]
 
 
 def _names(records: list) -> str:

@@ -54,23 +54,30 @@ domain --x 0 20 --y 0 10
 # 3. The soil: one linear elastic material, and one layer of it down to y = 0.
 #    --color is the colour the GUI draws the soil in, as #rrggbb. Colour names such
 #    as brown are refused.
-#    A new material starts with the values of the GUI's default loose sand. The lines
-#    below replace them. The variables have Kratos' own names, in the project's units
-#    (SI here). `get materials[m_soil].variables` lists the values a material has.
+#    A new material starts as the blank soil of the GUI's Create soil: drained, with a
+#    retention law and nothing else. The lines below give it the rest. The variables
+#    have Kratos' own names, in the project's units (SI here).
+#    `get materials[m_soil].variables` lists the values a material has.
 material add m_soil --name soil --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw
 #    Stiffness: E = 20 MPa
 material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
-#    Weight: 18 kN/m3 soil and 10 kN/m3 water, as densities (kg/m3)
-material set m_soil DENSITY_SOLID=1834.8623853211009 DENSITY_WATER=1019.367991845056 POROSITY=0.0
-#    Water: a fixed pore pressure field, and the soil's permeability (m2)
-material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10 BULK_MODULUS_FLUID=2.2e9 DYNAMIC_VISCOSITY=1e-3
-material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.0
-#    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
-#    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.
-material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
+#    Weight: 18 kN/m3 soil, as a density (kg/m3). The water is the project's, the
+#    same in every soil: 10 kN/m3 unless the water level says otherwise, and its bulk
+#    modulus and viscosity water's unless `fluid` sets them.
+material set m_soil DENSITY_SOLID=1834.8623853211009 POROSITY=0.0
+#    Water: a fixed pore pressure field, and the soil's intrinsic permeability (m2).
+#    1e-12 m2 conducts water at about 1e-5 m/s.
+material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10
+material set m_soil PERMEABILITY_XX=1e-12 PERMEABILITY_YY=1e-12 PERMEABILITY_XY=0.0
+#    The K0 for the initial stresses. A linear elastic soil has no strength. K0_NC can
+#    be left out: the export then writes nu / (1 - nu) for this soil, 0.43 here.
+material set m_soil K0_NC=0.5
 #    For a Mohr-Coulomb soil, add `--model mohr-coulomb` to `material add` (or run
-#    `material set m_soil --model mohr-coulomb`). The soil then also gets a dilatancy
-#    angle of 0, no tension cut-off and a retention law; `material models` lists them.
+#    `material set m_soil --model mohr-coulomb`), and give it its strength, for
+#    example c = 1 kPa and phi = 30 degrees:
+#        material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0
+#    The soil then also gets a dilatancy angle of 0 and no tension cut-off;
+#    `material models` lists them. Left out, its K0_NC is 1 - sin(phi), 0.5 here.
 layer add soil --name soil --material m_soil --bottom 0
 #    The block stands on the supports a new project has: the bottom fixed and the sides
 #    on rollers. It is dry, so it needs no water pressure condition.
@@ -108,17 +115,20 @@ mesh --size 1 --order 1
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
 #    Every part starts in the model, so the first stage switches off what is not built yet:
 #    the sheet pile and the load. The later stages switch them back on, one at a time.
-#    An option left out takes its default: --calculation plastic, --max-iterations 15,
+#    An option left out takes its default: --calculation mechanical,
+#    --stress-initialisation none, --time-integration static, --max-iterations 15,
 #    --tolerance 1e-4, and the displacements of the stage before are kept.
 #    `stages show initial` prints a stage's settings. The solver is the same for every
 #    stage; "The stages, command by command" in docs/CLI.md says what it is.
-stages add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
+stages set initial --stress-initialisation k0
+stages deactivate initial sheetpile_1 surcharge
 stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
 stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 
 # 8. Check the model, write the input files, run Kratos and read the results.
-#    `run .` prints nothing until Kratos has finished. Its run folder, with a copy of
-#    the input files, is made in your folder at the start; kratos.log is added at the end.
+#    `run .` prints nothing until Kratos has finished (`run . --follow` prints each
+#    iteration). Its run folder, with a copy of the input files, is made in your folder
+#    at the start, and Kratos writes kratos.log into it line by line.
 #    In `results show 1`, 1 is the run's number in `results runs` (1 is the newest),
 #    not a stage. The stages it lists are picked with --stage, e.g. --stage 2.
 show
@@ -145,9 +155,10 @@ exit
 > - To open the model again later, run `cli\kratos-shell.bat` on the same folder, then
 >   `open simple_dike.json`.
 
-The shell reads the results as numbers and CSV files; it draws no pictures. To see a
-field drawn on the mesh, start the GUI on the same runs folder and open the run in its
-Results mode. In PowerShell:
+The shell reads the results as numbers and CSV files. `picture result 1 --out pictures/`
+saves a field drawn on the mesh as a PNG, with Chrome or Edge; see
+[Pictures](../CLI.md#pictures). To look around the results, start the GUI on the same runs
+folder and open the run in its Results mode. In PowerShell:
 
 ```powershell
 $env:KRATOS_GUI_RUNS = "C:\Users\you\simple_dike"

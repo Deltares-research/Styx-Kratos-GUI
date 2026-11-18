@@ -1,6 +1,7 @@
 """Kratos .mdpa export: node tables, element blocks, sub-model parts and materials."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,7 +9,7 @@ from core.model import schemas
 from core.geometry import solid_model
 from core.kratos import writer
 KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
-from core.model.schemas import LineLoad, MeshRequest, PointLoad
+from core.model.schemas import LineLoad, MeshRequest, PointLoad, Stage
 from core.model.templates import seed_project
 from tests import mdpa
 
@@ -822,6 +823,25 @@ def test_the_anchor_head_node_is_the_pile_node(anchored):
     assert head in {n for nodes in beam.entries.values() for n in nodes}
 
 
+def test_an_anchor_in_both_stages_carries_its_stress_into_wall_installation(anchored):
+    """The anchor is not staged with its pile, so it is in the initial stage as well.
+    Kratos resets the displacements at the start of every stage, so its stress is
+    carried. It has a prestress, so the temporary prestress workaround comes directly
+    before the carry-over, and the deck ships the workaround's file."""
+    from core.kratos import deck_files
+    doc = json.loads(anchored["project_parameters"])
+    listed = doc["stages"]["2_Wall_installation"]["stage_settings"]["processes"][
+        "auxiliary_process_list"]
+    assert [p["python_module"] for p in listed][:2] == [
+        deck_files.PRESTRESS_WORKAROUND_MODULE,
+        "apply_final_stresses_of_previous_stage_to_initial_state"]
+    assert [p["Parameters"]["model_part_name_list"] for p in listed[:2]] == \
+        [["PorousDomain.Anchor_1"]] * 2
+    assert list(anchored["process_files"]) == [deck_files.PRESTRESS_WORKAROUND_NAME]
+    assert "auxiliary_process_list" not in \
+        doc["stages"]["1_Initial_stage"]["stage_settings"]["processes"]
+
+
 def test_the_anchor_tail_node_is_attached_to_nothing_else(anchored):
     deck = deck_of(anchored)
     tail = next(iter(truss_of(deck).entries.values()))[1]
@@ -935,7 +955,7 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
 def staged_project(dimension: int = 2):
     """A staged excavation: three layers, three lifts, pit against the left edge."""
     from core.model.schemas import Project
-    p = seed_project(simple=False).model_dump() | {"dimension": dimension}
+    p = seed_project().model_dump() | {"dimension": dimension}
     if dimension == 2:
         p["section_offset"] = 20.0
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
@@ -947,9 +967,12 @@ def staged_project(dimension: int = 2):
         {"id": "L3", "name": "Deep_Sand", "mat": p["materials"][1]["id"],
          "top": -12.0, "bottom": -60.0},
     ]
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"],
+                         "z1": p["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
+    p["stages"] = [{"id": "first", "name": "First stage"},
+                   *({"id": f"dig_{n}", "name": f"Dig {n}",
+                      "parent": f"dig_{n - 1}" if n > 1 else "first",
+                      "deactivate": [f"soil_L1__lift{n}"]} for n in (1, 2, 3))]
     return Project.model_validate(p)
 
 
@@ -970,9 +993,9 @@ def test_every_staged_body_is_its_own_sub_model_part(staged):
 
 def test_a_lift_is_named_after_the_layer_it_is_dug_out_of(staged):
     names = writer._part_names(staged_project())
-    assert names["soil_L1__lift1"] == "Upper_Sand_lift1"
-    assert names["soil_L2__pit"] == "Middle_Clay_pit"
-    assert names["soil_L1"] == "Upper_Sand"
+    assert names["soil_L1__lift1"] == "Upper_Sand_lift_1"
+    assert names["soil_L2__pit"] == "Middle_Clay_below_the_pit"
+    assert names["soil_L1__outside"] == "Upper_Sand_outside_the_pit"
 
 
 def test_every_staged_body_carries_its_layer_material(staged):
@@ -989,7 +1012,7 @@ def test_the_edge_a_lift_touches_is_segmented_per_lift(staged):
     """The reference deck's Excavated_Soil_N_Left_Edge: as a lift is dug away its own
     stretch of the domain edge goes with it, so the constraint can leave too."""
     deck = deck_of(staged)
-    for lift in ("Upper_Sand_lift1", "Upper_Sand_lift2", "Upper_Sand_lift3"):
+    for lift in ("Upper_Sand_lift_1", "Upper_Sand_lift_2", "Upper_Sand_lift_3"):
         assert f"{lift}_Left_Edge" in deck.parts, f"{lift} has no edge segment"
         assert deck.parts[f"{lift}_Left_Edge"].nodes
 
@@ -998,9 +1021,9 @@ def test_an_edge_segment_holds_only_that_lift_s_nodes(staged):
     """A segment spans its own lift and no more, or deactivating one lift would free
     the ground above or below it."""
     deck = deck_of(staged)
-    for lift, top, bottom in (("Upper_Sand_lift1", 0.0, -2.0),
-                              ("Upper_Sand_lift2", -2.0, -5.0),
-                              ("Upper_Sand_lift3", -5.0, -8.0)):
+    for lift, top, bottom in (("Upper_Sand_lift_1", 0.0, -2.0),
+                              ("Upper_Sand_lift_2", -2.0, -5.0),
+                              ("Upper_Sand_lift_3", -5.0, -8.0)):
         ys = [deck.nodes[n][1] for n in deck.parts[f"{lift}_Left_Edge"].nodes]
         assert min(ys) == pytest.approx(bottom, abs=1e-6), lift
         assert max(ys) == pytest.approx(top, abs=1e-6), lift
@@ -1030,7 +1053,7 @@ def test_each_edge_segment_is_constrained_like_the_edge_it_came_from(staged):
     fixities = {p["Parameters"]["model_part_name"].split(".")[-1]:
                 p["Parameters"]["is_fixed"] for p in constraints
                 if "is_fixed" in p["Parameters"]}
-    for name in ("Left_Edge", "Upper_Sand_lift1_Left_Edge"):
+    for name in ("Left_Edge", "Upper_Sand_lift_1_Left_Edge"):
         assert fixities[name] == [True, False, False], name
 
 
@@ -1230,3 +1253,149 @@ def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008 / 2.5)
+
+
+def test_structural_materials_refuse_missing_required_properties():
+    from core.kratos import materials
+    prop = SimpleNamespace(
+        constitutive_law=materials.BEAM_LAW,
+        variables={},
+        number=lambda _name: None,
+    )
+
+    with pytest.raises(materials.MaterialError, match="YOUNG_MODULUS.*I33"):
+        materials._check(prop, "section 'missing'")
+
+
+def test_kratos_coordinate_conversion_refuses_nodes_off_the_section_plane():
+    world = {1: (1.0, 2.0, 0.0), 2: (3.0, 4.0, 1e-3)}
+
+    with pytest.raises(ValueError, match="1 node\\(s\\).*off the z = 0 plane"):
+        writer._kratos_coordinates(world, 2)
+
+    assert writer._kratos_coordinates({1: (1.0, 2.0, 0.0)}, 2) == {
+        1: (1.0, 2.0, 0.0),
+    }
+
+
+def test_drawn_order_is_consistent_across_a_bent_polyline():
+    world = {
+        1: (2.0, 0.0, 0.0), 2: (0.0, 0.0, 0.0),
+        3: (2.0, 2.0, 0.0), 4: (2.0, 1.0, 0.0),
+    }
+
+    assert writer._drawn_order([[1, 2], [3, 4]], [(0.0, 0.0), (2.0, 0.0),
+                                                  (2.0, 2.0)], world) == [
+        [2, 1], [4, 3],
+    ]
+
+
+def test_number_conditions_uses_its_own_ids_and_deduplicates_part_nodes():
+    numbered, parts = writer._number_conditions(
+        [("load", "LineLoadCondition2D2N", [[8, 3], [3, 5]])],
+        {"load": "Load"},
+        {3: 30, 5: 50, 8: 80},
+    )
+
+    assert numbered == [("LineLoadCondition2D2N", [(1, 0, [80, 30]),
+                                                     (2, 0, [30, 50])])]
+    assert parts == [("Load", [30, 50, 80], [], [1, 2])]
+
+
+def _staged(*stages_: Stage) -> SimpleNamespace:
+    return SimpleNamespace(stages=list(stages_), stageable_keys=lambda: ["water"])
+
+
+def test_seepage_iteration_warning_counts_unique_face_nodes():
+    face = [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])]
+    warning = writer._seepage_iterations(
+        _staged(Stage(id="short", name="Short step", max_iterations=2)), face)
+
+    assert len(warning) == 1
+    assert "allows 2 iterations" in warning[0]
+    assert "faces have 3 nodes" in warning[0]
+    assert writer._seepage_iterations(
+        _staged(Stage(id="long", name="Long step", max_iterations=3)), face) == []
+    # A stage with the face switched off has no nodes to open.
+    assert writer._seepage_iterations(
+        _staged(Stage(id="dry", name="Dry step", max_iterations=2,
+                      deactivate=["water"])), face) == []
+
+
+@pytest.mark.parametrize("dimension, row, coordinates, expected", [
+    (2, [1, 3, 2],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0)}, [1, 2, 3]),
+    (2, [1, 3, 2, 6, 5, 4],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0)},
+     [1, 2, 3, 4, 5, 6]),
+    (3, [2, 1, 3, 4],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0), 4: (0, 0, 1)},
+     [1, 2, 3, 4]),
+])
+def test_writer_repairs_negative_jacobians_without_losing_midside_order(
+        dimension, row, coordinates, expected):
+    original = list(row)
+
+    fixed = writer._oriented([row], coordinates, dimension)
+
+    assert fixed == [expected]
+    assert writer._signed_measure(
+        [coordinates[tag] for tag in fixed[0][:dimension + 1]], dimension) > 0
+    assert row == original
+    assert writer._oriented(fixed, coordinates, dimension) == fixed
+
+
+@pytest.mark.parametrize("missing", ["head", "tail"])
+def test_anchor_export_refuses_a_missing_endpoint_mesh_node(session, monkeypatch, missing):
+    from tests.models.excavation import excavation_project
+
+    project = excavation_project(staged=False)
+    anchor = project.plane_anchors[0]
+    anchor = anchor.model_copy(update={"name": "Test anchor"})
+    project = project.model_copy(update={"anchors": [anchor]})
+    head = (*anchor.head, 0.0)
+    tail = (*anchor.tail, 0.0)
+    # Gmsh meshes the anchor's display line, so this missing-endpoint guard can only
+    # be reached with a stubbed, inconsistent mesh.
+    world = ({1: head} if missing == "tail"
+             else {1: (head[0], head[1] + 1.0, 0.0), 2: tail})
+    harvests = 0
+
+    def harvest(_entities, dimension, _kinds, **_kwargs):
+        nonlocal harvests
+        if dimension != 1:
+            return []
+        harvests += 1
+        return ([(project.beams[0].id, "Beam", [[1]])] if harvests == 2 else [])
+
+    monkeypatch.setattr(writer.meshing, "mesh_project",
+                        lambda *_args, **_kwargs: SimpleNamespace(log=[]))
+    monkeypatch.setattr(writer, "_world_coordinates", lambda: world)
+    monkeypatch.setattr(writer, "_harvest", harvest)
+
+    with pytest.raises(writer.ExportError, match=f"Test anchor.*no mesh node at its {missing}"):
+        writer.export_project(project, MeshRequest(element_size=6.0, order=1))
+
+
+def test_anchor_node_lookup_never_selects_a_coincident_nonstructural_node():
+    project = seed_project()
+    world = {1: (1, 2, 0), 2: (1, 2, 0)}
+
+    assert writer._node_at((1, 2), project, world, {2}) == 2
+    assert writer._node_at((1, 2), project, world, set()) is None
+
+
+def test_panel_lookup_selects_the_named_panel():
+    from core.model.schemas import Panel
+    from core.model.templates import blank_project
+
+    panel = Panel(id="panel", name="Panel", section="shell",
+                  footprint=[(0, 0), (1, 0)], y_top=0, y_toe=-2)
+    project = blank_project().model_copy(update={"beams": [panel]})
+
+    assert writer._panel_of(project, "panel") is panel
+
+
+def test_export_names_collapse_repeated_separators_and_refuse_numeric_prefixes():
+    assert writer._sanitise("  Wall / contact___A  ") == "Wall_contact_A"
+    assert writer._sanitise("123 wall") == ""

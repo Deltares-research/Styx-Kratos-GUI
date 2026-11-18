@@ -2,7 +2,7 @@
 
 Kratos' GeoMechanicsApplication test `tests/Muskat/saturated_hydrostatic`, built as a
 Styx model: a 1.62 m by 4 m column of saturated soil, the water held at a level of 3.0 m
-on the left face and 1.6 m on the right, and one "Groundwater flow" stage.
+on the left face and 1.6 m on the right, and one flow stage.
 muskat_saturated.json beside it is the same model, as the GUI saves it.
 
     python muskat_saturated.py                  write the deck into this folder
@@ -50,7 +50,7 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (BoxRefinement, Domain,  # noqa: E402
+from core.model.schemas import (Fluid, BoxRefinement, Domain,  # noqa: E402
                                 Material, MeshSettings, Project, SoilLayer, Stage,
                                 WaterPressureCondition)
 
@@ -94,20 +94,19 @@ def project() -> Project:
                         "YOUNG_MODULUS": 1.0e4,
                         "POISSON_RATIO": 0.4,
                         "DENSITY_SOLID": 2.29e3,
-                        "DENSITY_WATER": 1.01937e3,
                         "POROSITY": 0.3333,
                         "BULK_MODULUS_SOLID": 6.7e19,
-                        "BULK_MODULUS_FLUID": 1.0e20,
                         "PERMEABILITY_XX": 6.9444e-13,   # m2, intrinsic
                         "PERMEABILITY_YY": 6.9444e-13,
                         "PERMEABILITY_XY": 0.0,
-                        "DYNAMIC_VISCOSITY": 1.0e-3,
                         "BIOT_COEFFICIENT": 1.0,
                         "RETENTION_LAW": "SaturatedLaw",
                         "SATURATED_SATURATION": 0.403,
                     })
 
     return Project(
+        # The reference deck's water: incompressible, so the flow is steady at once.
+        fluid=Fluid(bulk_modulus=1.0e20),
         name="muskat_saturated",
         layered_soil=True,
         dimension=2,
@@ -123,7 +122,7 @@ def project() -> Project:
                           x_min=WIDTH - 0.12, x_max=WIDTH, y_min=0.0, y_max=HEIGHT,
                           z_min=0.0, z_max=1.0)]),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow")],
+        stages=[Stage(id="flow", name="Flow", calculation="flow")],
     )
 
 

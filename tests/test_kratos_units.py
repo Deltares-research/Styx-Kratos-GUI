@@ -43,18 +43,18 @@ def variables(exported: dict, part: str) -> dict:
 # The two soils, as the test model types them.
 
 def test_the_soil_stiffness_is_written_in_pascals(exported):
-    assert variables(exported, "Soil_Top")["YOUNG_MODULUS"] == pytest.approx(2.0e6)
+    assert variables(exported, "Soil_Top_retained")["YOUNG_MODULUS"] == pytest.approx(2.0e6)
     assert variables(exported, "Soil_Bottom")["YOUNG_MODULUS"] == pytest.approx(3.0e7)
 
 
 def test_a_lift_keeps_the_stiffness_of_the_layer_it_was_dug_from(exported):
-    assert variables(exported, "Soil_Top_lift1")["YOUNG_MODULUS"] == \
-        variables(exported, "Soil_Top")["YOUNG_MODULUS"]
+    assert variables(exported, "Soil_Top_lift_1")["YOUNG_MODULUS"] == \
+        variables(exported, "Soil_Top_retained")["YOUNG_MODULUS"]
 
 
 def test_the_solid_density_is_the_unit_weight_at_g(exported):
     """It is what pins the deck as SI: 17 and 19 kN/m3 over g, in kg/m3."""
-    assert variables(exported, "Soil_Top")["DENSITY_SOLID"] == pytest.approx(1732.93,
+    assert variables(exported, "Soil_Top_retained")["DENSITY_SOLID"] == pytest.approx(1732.93,
                                                                             rel=1e-5)
     assert variables(exported, "Soil_Bottom")["DENSITY_SOLID"] == pytest.approx(1936.80,
                                                                                rel=1e-5)
@@ -65,19 +65,19 @@ def test_the_water_density_follows_the_projects_own_specific_weight(exported):
     water processes read. It was a flat 1000.0
     before, so a project whose water was not exactly 9.81 kN/m3 described it one way in
     the materials file and another in the processes."""
-    assert variables(exported, "Soil_Top")["DENSITY_WATER"] == pytest.approx(1019.37,
+    assert variables(exported, "Soil_Top_retained")["DENSITY_WATER"] == pytest.approx(1019.37,
                                                                             rel=1e-5)
 
 
 def test_the_bulk_moduli_are_the_materials_own(exported):
-    soil = variables(exported, "Soil_Top")
+    soil = variables(exported, "Soil_Top_retained")
     assert soil["BULK_MODULUS_SOLID"] == pytest.approx(1.0e10)
     assert soil["BULK_MODULUS_FLUID"] == pytest.approx(2.2e9)
 
 
 def test_cohesion_is_written_in_pascals(exported):
     """`Material.c` is kN/m2 like `E`, and was written raw for the same reason."""
-    assert variables(exported, "Soil_Top")["GEO_COHESION"] == pytest.approx(2.0e3)
+    assert variables(exported, "Soil_Top_retained")["GEO_COHESION"] == pytest.approx(2.0e3)
 
 
 # -- The structures ----------------------------------------------------------
@@ -98,7 +98,7 @@ def test_areas_and_thicknesses_are_metres_and_are_not_scaled(exported):
     assert variables(exported, "Strut")["CROSS_AREA"] == pytest.approx(1.0e-3)
     # The section area of the wall, m2 per metre of wall.
     assert variables(exported, "SheetPileWall")["CROSS_AREA"] == pytest.approx(0.015)
-    assert variables(exported, "Soil_Top")["GEO_FRICTION_ANGLE"] == pytest.approx(25.0)
+    assert variables(exported, "Soil_Top_retained")["GEO_FRICTION_ANGLE"] == pytest.approx(25.0)
 
 
 def test_the_beam_density_is_already_si_and_is_left_alone(exported):
@@ -205,7 +205,7 @@ def test_nothing_between_the_project_and_the_deck_converts_a_unit():
 def test_each_interface_takes_the_stiffness_of_the_soil_behind_it(exported):
     """The contacts against the clay and those against the sand each take the shear
     modulus of that soil: E / 2(1 + nu) over 0.5 m."""
-    upper = variables(exported, "Interface_Soil_Top")
+    upper = variables(exported, "Interface_Soil_Top_retained")
     lower = variables(exported, "Interface_Soil_Bottom")
     assert upper["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(1.53846e6, rel=1e-4)
     assert upper["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(1.53846e7, rel=1e-4)
@@ -215,11 +215,11 @@ def test_each_interface_takes_the_stiffness_of_the_soil_behind_it(exported):
 
 def test_a_lifts_contact_takes_the_layer_it_was_dug_from(exported):
     """A lift was dug out of the clay, so its contact is the clay's."""
-    for part in ("Interface_Soil_Top_lift1", "Interface_Soil_Top_lift2",
-                 "Interface_Soil_Top_lift3", "Interface_Soil_Middle_pit"):
+    for part in ("Interface_Soil_Top_lift_1", "Interface_Soil_Top_lift_2",
+                 "Interface_Soil_Top_lift_3", "Interface_Soil_Middle_below_the_pit"):
         assert variables(exported, part)["INTERFACE_SHEAR_STIFFNESS"] == \
             pytest.approx(1.53846e6, rel=1e-4)
-    assert variables(exported, "Interface_Soil_Bottom_pit")[
+    assert variables(exported, "Interface_Soil_Bottom")[
         "INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(2.30769e7, rel=1e-4)
 
 
@@ -238,17 +238,17 @@ def test_a_typed_k0_is_written_instead_of_jaky():
         exported = writer.export_project(project, MeshRequest(element_size=8.0, order=2))
     initial = {e["model_part_name"]: e["Material"]["Variables"]
                for e in json.loads(exported["initial_materials"])["properties"]}
-    assert initial["PorousDomain.Soil_Top"]["K0_NC"] == 0.58
+    assert initial["PorousDomain.Soil_Top_retained"]["K0_NC"] == 0.58
     assert initial["PorousDomain.Soil_Bottom"]["K0_NC"] == 0.47
     later = {e["model_part_name"]: e["Material"]["Variables"]
              for e in json.loads(exported["materials"])["properties"]}
-    assert "K0_NC" not in later["PorousDomain.Soil_Top"]
+    assert "K0_NC" not in later["PorousDomain.Soil_Top_retained"]
 
 
 def test_porosity_is_the_materials_own(exported):
     """It was a fixed 0.3 for every soil in every project. The test model types 0.0 for
     both of its soils, which is a property of the ground, not of the exporter."""
-    assert variables(exported, "Soil_Top")["POROSITY"] == 0.0
+    assert variables(exported, "Soil_Top_retained")["POROSITY"] == 0.0
     assert variables(exported, "Soil_Bottom")["POROSITY"] == 0.0
 
 
@@ -259,13 +259,15 @@ def _bare(**variables) -> schemas.Material:
                                        "DENSITY_SOLID": 1800.0, **variables})
 
 
-def test_a_material_that_says_nothing_about_porosity_still_gets_a_number():
-    """Derived when empty, and said: the export lists every name it filled in."""
+def test_a_material_that_says_nothing_about_porosity_is_refused_not_given_one():
+    """Porosity is the soil's: nothing derives it, and the export names it missing."""
     project = seed_project()
     derived: list[str] = []
+    with pytest.raises(materials.MaterialError, match="has no POROSITY"):
+        materials._check(_bare(), "material 'M'")
     written = materials._variables(_bare(), 2, False, project, derived)
-    assert written["POROSITY"] == materials.DEFAULT_POROSITY
-    assert "material 'M': POROSITY" in derived
+    assert "POROSITY" not in written
+    assert "material 'M': POROSITY" not in derived
     typed = materials._variables(_bare(POROSITY=0.0), 2, False, project, [])
     assert typed["POROSITY"] == 0.0
 
@@ -283,17 +285,21 @@ def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system,
 @pytest.mark.parametrize("typed, expected", [
     ({}, "CONSTANT_PW_FIELD"),
     ({"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"}, "FULLY_COUPLED"),
+    ({"GEO_DRAINAGE_TYPE": "UNDRAINED"}, "FULLY_COUPLED"),
+    ({"GEO_DRAINAGE_TYPE": "DRAINED"}, "CONSTANT_PW_FIELD"),
     ({"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD"}, "CONSTANT_PW_FIELD"),
 ])
 def test_the_drainage_type_is_the_materials_own(typed, expected):
-    """As typed; a soil that says nothing is drained -- the pore pressure prescribed,
-    not solved for -- which is what the test model's soils are."""
+    """As typed; a soil that says nothing is CONSTANT_PW_FIELD -- the pore pressure
+    prescribed, not solved for -- which is what the test model's soils are. Kratos' own
+    DRAINED would couple the water, so the project's old DRAINED is read in as
+    CONSTANT_PW_FIELD. UNDRAINED, no longer offered, is read in as FULLY_COUPLED."""
     written = materials._variables(_bare(**typed), 2, False, seed_project(), [])
     assert written["GEO_DRAINAGE_TYPE"] == expected
 
 
 def test_the_test_models_soils_are_written_as_a_constant_pressure_field(exported):
-    assert variables(exported, "Soil_Top")["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+    assert variables(exported, "Soil_Top_retained")["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
 
 def test_a_tendon_may_be_massless(exported):

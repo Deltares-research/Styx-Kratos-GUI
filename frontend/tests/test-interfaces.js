@@ -83,13 +83,13 @@
     T.ok(error);
   });
 
-  test('the default contact is bound to a soil, because r_inter reduces one', function () {
+  test('the default contact takes the soil each stretch runs against', function () {
     var project = section();
     var record = App.Interfaces.draft(project);
     var library = App.Interfaces.sectionsFor(project, record);
     T.eq(library.length, 1);
     T.eq(library[0].id, record.section);
-    T.eq(library[0].material, 'mat_sand');
+    T.eq(library[0].material, null, 'not the first soil in the list, which may be elsewhere');
     T.ok(library[0].r_inter > 0 && library[0].r_inter <= 1);
   });
 

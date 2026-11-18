@@ -17,8 +17,8 @@ import pytest
 from core import session
 from core.geometry import solid_model
 from core.kratos import condition_checks, writer
-from core.model import drafts, script_writer
-from core.model.schemas import (DisplacementCondition, MeshRequest, Project,
+from core.model import drafts, script_writer, stages
+from core.model.schemas import (DisplacementCondition, MeshRequest, Project, Stage,
                                 standard_conditions)
 from core.model.templates import blank_project, seed_project
 from tests import mdpa
@@ -183,6 +183,21 @@ def test_a_roller_bottom_and_a_support_on_top(gmsh_session):
                                 ("Top_Surface", [True, False, False])]
 
 
+def test_a_support_a_stage_switches_off_is_written_only_in_the_stages_that_have_it(
+        gmsh_session):
+    project = section([held("bottom", face="bottom"),
+                       held("top", face="top", fixed=(True, False, False))], stages=[
+        {"id": "s1", "name": "Held", "deactivate": []},
+        {"id": "s2", "name": "Released", "parent": "s1", "deactivate": ["top"]},
+        {"id": "s3", "name": "Held again", "parent": "s2", "activate": ["top"]}])
+    assert "top" in project.stageable_keys() and "bottom" in project.stageable_keys()
+    export = writer.export_project(project, MESH)
+    names = [[name for name, _ in supports(export, stage)]
+             for stage in ("1_Held", "2_Released", "3_Held_again")]
+    assert names == [["Bottom_Fixed", "Top_Surface"], ["Bottom_Fixed"],
+                     ["Bottom_Fixed", "Top_Surface"]]
+
+
 def test_no_support_is_written_without_a_condition_and_the_export_says_so(gmsh_session):
     export = writer.export_project(section([]), MESH)
     assert supports(export) == []
@@ -263,22 +278,53 @@ def test_a_displacement_condition_record_round_trips():
 
 # ── Gravity ─────────────────────────────────────────────────────────────────
 
-def loads(export: dict, stage: str = "1_Stage") -> list[str]:
+def loads(export: dict) -> list[str]:
     doc = json.loads(export["project_parameters"])
-    processes = doc["stages"][stage]["stage_settings"]["processes"]
+    processes = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
     return [p["Parameters"].get("variable_name", "") for p in processes["loads_process_list"]]
 
 
-def test_gravity_is_on_in_a_new_project_and_in_an_old_file():
-    assert blank_project().gravity is True
+def weightless(project: Project) -> Project:
+    """`project` with an initial stage that initialises no stresses: what switches the
+    self weight off (`core.model.stages.gravity`)."""
+    return Project.model_validate({**project.model_dump(), "stages": [
+        Stage(id="initial", name="Initial stage").model_dump()]})
+
+
+def test_g_is_9_81_in_a_new_project_and_in_an_old_file():
+    assert blank_project().gravity_acceleration == 9.81
     payload = seed_project().model_dump()
-    del payload["gravity"]
-    assert Project.model_validate(payload).gravity is True
+    del payload["gravity_acceleration"]
+    assert Project.model_validate(payload).gravity_acceleration == 9.81
+    for wrong in (0.0, -9.81):
+        with pytest.raises(ValueError):
+            Project.model_validate({**payload, "gravity_acceleration": wrong})
 
 
-def test_with_gravity_off_no_stage_has_the_self_weight(gmsh_session):
+def test_the_self_weight_and_the_water_density_follow_the_projects_g(gmsh_session):
+    """g is the deck's VOLUME_ACCELERATION; the water's density is its specific weight
+    over g, so the water pressures Kratos derives stay those of the specific weight."""
+    def written(project: Project) -> tuple[list[float], float]:
+        export = writer.export_project(project, MESH)
+        doc = json.loads(export["project_parameters"])
+        processes = doc["stages"]["1_Stage"]["stage_settings"]["processes"]
+        weight = next(p["Parameters"]["value"] for p in processes["loads_process_list"]
+                      if p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION")
+        materials = json.loads(export["materials"])["properties"]
+        return weight, materials[0]["Material"]["Variables"]["DENSITY_WATER"]
+
+    project = section(None)
+    weight, density = written(project)
+    assert weight == [0.0, -9.81, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 9.81)
+    weight, density = written(session.set_gravity_acceleration(project, 10.0))
+    assert weight == [0.0, -10.0, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 10.0)
+
+
+def test_without_a_stress_initialisation_no_stage_has_the_self_weight(gmsh_session):
     on = writer.export_project(section(None), MESH)
-    off = writer.export_project(session.set_gravity(section(None), False), MESH)
+    off = writer.export_project(weightless(section(None)), MESH)
     assert "VOLUME_ACCELERATION" in loads(on)
     assert "VOLUME_ACCELERATION" not in loads(off)
 
@@ -288,34 +334,92 @@ def test_the_hydraulic_head_is_written_only_with_gravity(gmsh_session):
     every value would be 0."""
     def gauss(export: dict) -> list[str]:
         doc = json.loads(export["project_parameters"])
-        stage = doc["stages"]["1_Stage"]["stage_settings"]
+        stage = next(iter(doc["stages"].values()))["stage_settings"]
         output = stage["output_processes"]["gid_output"][0]["Parameters"]
         return output["postprocess_parameters"]["result_file_configuration"][
             "gauss_point_results"]
     assert gauss(writer.export_project(section(None), MESH)) == [
         "CAUCHY_STRESS_TENSOR", "HYDRAULIC_HEAD"]
-    assert gauss(writer.export_project(session.set_gravity(section(None), False), MESH)) == [
+    assert gauss(writer.export_project(weightless(section(None)), MESH)) == [
         "CAUCHY_STRESS_TENSOR"]
 
 
-def test_a_k0_stage_with_gravity_off_is_warned_about():
+def test_an_old_file_with_gravity_off_opens_with_an_initial_stage_without_stresses():
+    """Gravity was a switch of its own until 2026-11-03 (`migration.drop_gravity`)."""
     from tests.models.excavation import excavation_project
-    project = session.set_gravity(excavation_project(), False)
-    assert any("is a K0 procedure, whose stresses come from the self weight" in w
-               for w in condition_checks.warnings(project))
-    assert not any("K0 procedure" in w
-                   for w in condition_checks.warnings(excavation_project()))
+    payload = excavation_project().model_dump()
+    assert payload["stages"][0]["stress_initialisation"] == "K0"
+    off = Project.model_validate({**payload, "gravity": False})
+    assert [s.stress_initialisation for s in off.stages] == ["none"] * len(off.stages)
+    assert not stages.gravity(off)
+    on = Project.model_validate({**payload, "gravity": True})
+    assert on.stages == excavation_project().stages
+    # A stage saved in the four-calculation shape too: its K0 procedure goes.
+    old = {**payload["stages"][0], "calculation": "K0 procedure"}
+    del old["stress_initialisation"]
+    first = Project.model_validate({**payload, "gravity": False,
+                                    "stages": [old, *payload["stages"][1:]]}).stages[0]
+    assert (first.calculation, first.stress_initialisation) == ("mechanical", "none")
+    # An initial plastic stage, or null step, had the self weight with gravity on, and
+    # keeps it; with gravity off, it has none.
+    for calculation in ("Plastic", "Null step"):
+        plastic = {**old, "calculation": calculation}
+        listed = [plastic, *payload["stages"][1:]]
+        kept = Project.model_validate({**payload, "stages": listed})
+        assert kept.stages[0].stress_initialisation == "gravity"
+        assert stages.gravity(kept)
+        assert all(s.stress_initialisation == "none" for s in kept.stages[1:])
+        weightless = Project.model_validate({**payload, "gravity": False,
+                                             "stages": listed})
+        assert weightless.stages[0].stress_initialisation == "none"
+        assert not stages.gravity(weightless)
+    # A later plastic stage initialises nothing either way.
+    later = {**payload["stages"][1], "calculation": "Plastic"}
+    later.pop("stress_initialisation", None)
+    staged = Project.model_validate({**payload, "stages": [payload["stages"][0], later,
+                                                           *payload["stages"][2:]]})
+    assert staged.stages[1].stress_initialisation == "none"
+    # With no stages, or a flow sequence, there is nothing to switch off.
+    assert Project.model_validate({**payload, "gravity": False, "stages": []}).stages == []
 
 
-def test_the_conditions_update_changes_only_what_it_names():
+def test_the_conditions_update_replaces_the_list_or_leaves_it():
     from core.model.schemas import ConditionsUpdate
     project = section(None)
-    off = session.replace_conditions(project, ConditionsUpdate(gravity=False))
-    assert (off.gravity, off.boundary_conditions) == (False, project.boundary_conditions)
+    kept = session.replace_conditions(project, ConditionsUpdate())
+    assert kept.boundary_conditions == project.boundary_conditions
     cleared = session.replace_conditions(project, ConditionsUpdate(boundary_conditions=[]))
-    assert (cleared.gravity, cleared.boundary_conditions) == (True, [])
+    assert cleared.boundary_conditions == []
+    g = session.replace_conditions(project, ConditionsUpdate(gravity_acceleration=9.80665))
+    assert g.gravity_acceleration == 9.80665
 
 
-def test_a_model_script_writes_gravity_off_out():
-    assert "gravity=False" in script_writer.script(session.set_gravity(section(None), False))
+def test_a_model_script_says_nothing_about_gravity():
     assert "gravity=" not in script_writer.script(section(None))
+
+
+def test_a_model_script_writes_its_own_g_out():
+    script = script_writer.script(session.set_gravity_acceleration(section(None), 9.80665))
+    assert "gravity_acceleration=9.80665" in script
+    assert "gravity_acceleration=" not in script_writer.script(section(None))
+
+
+def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_session):
+    from core.model.schemas import WaterPressureCondition
+
+    condition = WaterPressureCondition(id="missing_soil_pressure", name="Missing soil pressure",
+                                      on="part",
+                                      part="soil_L2", fluid_pressure_type="Uniform")
+    project = section([condition.model_dump(mode="json")], dimension=3)
+
+    # L2 exists in the project, but only L1 is selected for meshing.
+    export = writer.export_project(
+        project, MeshRequest(element_size=8.0, order=1, volume_keys=["soil_L1"]))
+    assert export["meshed_keys"] == ["soil_L1"]
+    assert any("soil_L2" in warning and "has no soil" in warning
+               for warning in export["warnings"])
+    stages = json.loads(export["project_parameters"])["stages"].values()
+    assert not any(
+        process["Parameters"].get("variable_name") == "WATER_PRESSURE"
+        for stage in stages
+        for process in stage["stage_settings"]["processes"]["constraints_process_list"])

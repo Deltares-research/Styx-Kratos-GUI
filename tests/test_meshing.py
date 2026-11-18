@@ -153,3 +153,113 @@ def test_different_layer_sizes_keep_the_shared_surface_conformal():
         lower_count = sum(len(tags) for tags in gmsh.model.mesh.getElements(3, lower)[1])
         assert upper_count > lower_count
         assert result.meshed_keys == ["soil_L1", "soil_L2"]
+
+
+def test_meshing_geometry_helpers_preserve_caller_visible_coordinates(monkeypatch):
+    import gmsh
+
+    monkeypatch.setattr(
+        gmsh.model.mesh, "getElements",
+        lambda *_: ([1], [], [[10, 11, 12, 13, 15, 14]]),
+    )
+    monkeypatch.setattr(
+        gmsh.model.mesh, "getElementProperties",
+        lambda *_: ("Line 3", 1, 2, 3, 1, 2),
+    )
+    coordinates = {
+        10: (0.00001, 0.0, 0.0), 11: (1.00001, 0.0, 0.0), 12: (0.5, 0.1, 0.0),
+        13: (1.00001, 1.0, 0.0), 14: (0.5, 0.6, 0.0), 15: (0.00001, 1.0, 0.0),
+    }
+
+    segments = meshing._line_segments([7], coordinates)
+
+    assert segments == [((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+                        ((1.0, 1.0, 0.0), (0.0, 1.0, 0.0))]
+
+
+def test_mesh_project_rejects_invalid_size_and_order_before_building(monkeypatch):
+    monkeypatch.setattr(
+        solid_model, "build_geometry",
+        lambda *_: pytest.fail("invalid mesh settings should be rejected before geometry"),
+    )
+    project = seed_project()
+
+    with pytest.raises(ValueError, match="element_size must be greater than zero"):
+        meshing.mesh_project(project, element_size=0)
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
+        meshing.mesh_project(project, order=3)
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"volume_keys": ["not-a-part"]}, "unknown mesh body key\\(s\\): not-a-part"),
+        ({"body_sizes": {"not-a-part": 1.0}}, "unknown mesh body size key\\(s\\): not-a-part"),
+    ],
+)
+def test_mesh_project_names_unknown_body_keys_before_starting_gmsh(monkeypatch, kwargs, message):
+    monkeypatch.setattr(
+        solid_model, "build_geometry",
+        lambda *_: solid_model.BuildResult({}, {}, (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        meshing.mesh_project(seed_project(), **kwargs)
+
+
+def test_finite_element_volumes_omit_display_aliases_and_deduplicate_tags():
+    project = seed_project()
+    soil_keys = [f"soil_{layer.id}" for layer in project.layers]
+    volumes = {key: [index] for index, key in enumerate(soil_keys, start=1)}
+    first_structure_tag = len(soil_keys) + 1
+    volumes.update({
+        "wall": [first_structure_tag], "struts": [first_structure_tag + 1],
+        "anchors": [first_structure_tag + 2], "piles": [first_structure_tag + 3],
+        "wells": [first_structure_tag + 4], "excavation": [1, first_structure_tag + 5],
+        "load": [first_structure_tag + 6], "water": [first_structure_tag + 7],
+    })
+    built = solid_model.BuildResult(
+        volumes=volumes, mass={}, bbox=(0.0, 0.0, 0.0, 1.0, 1.0, 1.0),
+    )
+
+    assert meshing._finite_element_volumes(project, built) == list(
+        range(1, first_structure_tag + 5),
+    )
+
+
+def test_refinement_fields_are_restricted_to_requested_entity_dimensions():
+    import gmsh
+
+    with solid_model.session():
+        gmsh.clear()
+        gmsh.model.add("scoped-fields")
+        background = meshing._apply_refinements(
+            4.0, [], volume_sizes={31: 1.25}, dim=2, curve_sizes={42: 0.5},
+        )
+        fields = gmsh.model.mesh.field
+        assert background > 0
+        assert fields.getType(background) == "Min"
+        restrictions = fields.getNumbers(background, "FieldsList")
+        assert len(restrictions) == 2
+        restricted_dimensions = {
+            tuple(fields.getNumbers(int(tag), option))
+            for tag in restrictions for option in ("SurfacesList", "CurvesList")
+            if len(fields.getNumbers(int(tag), option))
+        }
+        assert restricted_dimensions == {(31.0,), (42.0,)}
+
+
+def test_a_surface_load_and_the_faces_of_a_solid_model_take_a_size():
+    """In a solid model a surface load is sized on the soil's faces under it, and a
+    face of the model on the soil's faces on that side -- the front and back too."""
+    project = seed_project()
+    load = project.loads[0].id
+
+    def elements(sizes):
+        with solid_model.session():
+            return meshing.mesh_project(project, element_size=8.0, order=1,
+                                        body_sizes=sizes).stats.elements
+
+    plain = elements({})
+    for key in (load, "face_bottom", "face_front", "face_back", "face_top"):
+        assert elements({key: 2.0}) > plain, key

@@ -4,6 +4,9 @@ Continuum elements keep property id 0, exactly as GiD writes them. Kratos' mater
 import process assigns their material properties by sub-model part name, and the names
 here must be the ones the mdpa writes.
 
+Every soil is written with the project's water (`Project.water_variables`): one water,
+in every soil's pores, not a soil's own.
+
 Load conditions never appear here. A line/point/surface load is not a constitutive
 material, and no real Kratos GeoMechanics deck defines LINE_LOAD, POINT_LOAD or
 SURFACE_LOAD in a MaterialParameters.json -- its magnitude is applied by a
@@ -12,13 +15,21 @@ ProjectParameters.json process against the load's sub-model part instead.
 **The project already holds what Kratos reads.** Every property set is a constitutive law
 and a `Variables` block under Kratos' names, in the project's unit system
 (`core/model/schemas.py:KratosPropertySet`, `core/model/units.py`), and this module writes it as it
-stands. It does three things on top, and no others:
+stands. It does these things on top, and no others:
 
-*   **Fills what is missing and can be derived** -- the fluid constants, the water's
-    density, the symmetric permeabilities, a beam's shear areas, an interface's
-    stiffness and strength from its soil, K0 from Jaky, and in a groundwater flow deck
-    the Biot coefficient. A value the user gave is never
-    replaced, and every filled-in name is listed in the export's warnings.
+*   **Fills what is missing and can be derived** -- a soil's what
+    `soil_models.derived` says (the grains' bulk modulus, the symmetric
+    permeabilities, a coupled soil's permeability, the minimum relative permeability of
+    a soil not saturated everywhere and a Van Genuchten soil's g_l, the Biot coefficient
+    of a groundwater flow deck -- a coupled one's Kratos derives itself
+    (`soil_models.left_to_kratos`) -- and K0), a beam's shear areas, an
+    interface's stiffness and strength from its soil. A value the user gave is never replaced, and
+    every filled-in name is listed in the export's warnings.
+*   **Writes a soil that says no drainage type as `CONSTANT_PW_FIELD`** -- the one
+    drainage type whose pore pressures stay as the water conditions set them
+    (`soil_models.DRAINAGE_TYPES`); Kratos' own default, `FULLY_COUPLED`, couples them.
+*   **Writes a hardening slope as Kratos' vector** -- the one number the project holds
+    for each of `soil_models.VECTORS`, as `[number]`.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
     a metre run of wall. Geometry, not units.
 *   **Orders** each block canonically (`_ordered`), so the same project always writes the
@@ -62,6 +73,19 @@ PANEL_LAW = "LinearElasticPlaneStress2DLaw"
 INTERFACE_LAW = "GeoIncrementalLinearElasticInterfaceLaw"
 """The law paired with the `Geo_UPwLineInterface*` elements."""
 
+COULOMB_INTERFACE_LAWS = ("GeoInterfaceCoulombLawPlaneStrain",
+                          "GeoInterfaceCoulombWithTensionCutOff")
+"""The interface laws that read a strength: `InterfaceCoulombLaw::Check` wants
+`GEO_COHESION`, `GEO_FRICTION_ANGLE` strictly between 0 and 90 degrees, and
+`GEO_DILATANCY_ANGLE` no larger than it. The second is the name Kratos builds before
+2026-10 register it under; the window offers the first (frontend/js/property-sets.js)."""
+
+INTERFACE_STRENGTH = ("GEO_COHESION", "GEO_FRICTION_ANGLE")
+
+RETENTION_VARIABLES = ("BIOT_COEFFICIENT", "RETENTION_LAW", "SATURATED_SATURATION",
+                       "RESIDUAL_SATURATION", "MINIMUM_RELATIVE_PERMEABILITY")
+"""How saturated a contact is, taken from its soil when the contact does not say."""
+
 BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
 """The law paired with `LinearTimoshenkoCurvedBeamElement2D*N`."""
 
@@ -74,14 +98,6 @@ REQUIRED = {
 property set missing one is refused at export, naming it, rather than left for Kratos to
 stop on. A soil model's law says what it needs in `core/model/soil_models.py`. A law known
 to neither is the user's own business: it is written as given."""
-
-# The constants a soil gets when it says nothing about them, in SI and expressed in the
-# project's system when used -- the one place a unit conversion remains, and it converts
-# a constant of nature, not anything the user typed.
-DEFAULT_POROSITY = 0.3
-BULK_MODULUS_SOLID_SI = 1.0e10     # Pa, the reference deck's own value
-BULK_MODULUS_FLUID_SI = 2.2e9      # Pa, water at 20 C
-DYNAMIC_VISCOSITY_SI = 1.0e-3      # Pa s, water at 20 C
 
 NORMAL_TO_SHEAR_STIFFNESS = 10.0
 """How much stiffer a contact is across the joint than along it, when neither stiffness
@@ -256,6 +272,8 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
         if section.constitutive_law == INTERFACE_LAW:
             shown.append("read only by a Coulomb law")
         parts.append(", ".join(shown))
+    if "RETENTION_LAW" in taken:
+        parts.append(f"saturation as the soil's ({variables['RETENTION_LAW']})")
     return "; ".join(parts) or None
 
 
@@ -313,34 +331,32 @@ def _fill(variables: dict, name: str, value, derived: list[str], label: str) -> 
 
 def _variables(material: Material, dim: int, k0: bool, project: Project,
                derived: list[str] | None = None, flow: bool = False) -> dict:
-    """A soil's `Variables`: as given, plus what is missing and derivable."""
+    """A soil's `Variables`: as given, plus the project's water, plus what is missing
+    and derivable (`soil_models.derived`, the values the material window shows)."""
     derived = [] if derived is None else derived
-    system = project.unit_system
     label = f"material {material.name!r}"
     given = dict(material.variables)
     k0_given = {name: given.pop(name) for name in list(given) if name.startswith("K0_")}
-    v = dict(given)
+    # The project's, one water for every soil: not derived, so not listed as such.
+    v = {**given, **project.water_variables}
 
-    _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
-    _fill(v, "DENSITY_WATER", project.water_specific_weight / units.gravity(system),
-          derived, label)
-    _fill(v, "POROSITY", DEFAULT_POROSITY, derived, label)
-    _fill(v, "BULK_MODULUS_SOLID",
-          units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system), derived, label)
-    _fill(v, "BULK_MODULUS_FLUID",
-          units.from_si(BULK_MODULUS_FLUID_SI, units.STRESS, system), derived, label)
-    _fill(v, "DYNAMIC_VISCOSITY",
-          units.from_si(DYNAMIC_VISCOSITY_SI, units.VISCOSITY, system), derived, label)
-    permeability = material.number("PERMEABILITY_XX")
-    if permeability is not None:
-        _fill(v, "PERMEABILITY_YY", permeability, derived, label)
+    found = soil_models.derived(material.constitutive_law, material.variables,
+                                project.water_variables, project.unit_system, flow)
+    k0_derived = found.pop("K0_NC", None)
+    for name, value in found.items():
+        if not soil_models.left_to_kratos(name, flow):
+            _fill(v, name, value, derived, label)
+    permeability = v.get("PERMEABILITY_XX")
+    if isinstance(permeability, (int, float)) and not isinstance(permeability, bool):
         _fill(v, "PERMEABILITY_XY", 0.0, derived, label)
         if dim == 3:
             _fill(v, "PERMEABILITY_ZZ", permeability, derived, label)
             _fill(v, "PERMEABILITY_YZ", 0.0, derived, label)
             _fill(v, "PERMEABILITY_ZX", 0.0, derived, label)
-    if flow:
-        _fill(v, "BIOT_COEFFICIENT", biot(v), derived, label)
+    for name in soil_models.VECTORS:
+        value = v.get(name)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            v[name] = [value]
     v = _ordered(v, SOIL_ORDER)
 
     if k0:
@@ -348,32 +364,21 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
         # constraint and normal-load processes write as `gravity_direction`.
         k0_v = dict(k0_given)
         _fill(k0_v, "K0_MAIN_DIRECTION", 1, derived, label)
-        _fill(k0_v, "K0_NC", jaky(material), derived, label)
+        _fill(k0_v, "K0_NC", k0_derived, derived, label)
         v.update(_ordered(k0_v, K0_ORDER))
     return v
 
 
-def biot(variables: dict) -> float:
-    """The Biot coefficient 1 - K / K_s, as Kratos' coupled elements derive it when it
-    is not given (`GeoTransportEquationUtilities::CalculateBiotCoefficient`): K the
-    drained bulk modulus of the elastic soil, E / (3 (1 - 2 nu)), and K_s the grains'.
-    1, incompressible grains, when the soil does not say enough to derive it. A steady
-    flow does not read it; a transient one does."""
-    young = variables.get("YOUNG_MODULUS")
-    poisson = variables.get("POISSON_RATIO")
-    grains = variables.get("BULK_MODULUS_SOLID")
-    if not (isinstance(young, (int, float)) and isinstance(poisson, (int, float))
-            and isinstance(grains, (int, float))) or not grains or poisson >= 0.5:
-        return 1.0
-    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
+biot = soil_models.biot
+"""The Biot coefficient Kratos' coupled elements derive (`soil_models.biot`). A steady
+flow does not read it; a transient one does."""
 
 
-def jaky(material: Material) -> float | None:
-    """Jaky's 1 - sin(phi), the standard correlation for K0 of a normally consolidated
-    soil, and the one Kratos' staged-excavation reference deck's own numbers follow. None for a material with no friction angle: there is
-    nothing to derive it from, and the K0 procedure is left to its own default."""
-    phi = material.number("GEO_FRICTION_ANGLE")
-    return None if phi is None else 1.0 - math.sin(math.radians(phi))
+def k0_nc(material: Material) -> float | None:
+    """K0 of a normally consolidated soil as the export derives it (`soil_models.k0`):
+    Jaky's 1 - sin(phi), or nu / (1 - nu) for a linear elastic soil. None when the soil
+    says neither, and the K0 procedure is left to its own default."""
+    return soil_models.k0(material.constitutive_law, material.variables)
 
 
 def _interface_variables(section: InterfaceSection, project: Project,
@@ -390,6 +395,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
     read off `MaterialParameters_for_generated_mesh.json`, whose two property sets are
     exactly `G` and `10 G` for its two soils at `t = 1`. Strength is that soil's,
     reduced by `r_inter` -- the definition of the factor.
+
+    **A Coulomb law** reads that strength, and a linear elastic soil has none to give,
+    whatever it carries: against one, the section has to be given its own
+    `GEO_COHESION` and `GEO_FRICTION_ANGLE`, and is refused without them.
 
     **Which soil.** `adjacent` is the material of the body this stretch of contact runs
     against (`core/kratos/writer.py:_interface_by_body`): the reference groups its interfaces
@@ -414,7 +423,8 @@ def _interface_variables(section: InterfaceSection, project: Project,
     # Fixed, and not inherited from the soil: Kratos defaults a material that says
     # nothing to `FULLY_COUPLED`, and a zero-thickness interface carries none of what
     # the coupling terms need, so the stage that installs the wall fails on NaN. The
-    # reference writes `CONSTANT_PW_FIELD` on its interfaces for the same reason.
+    # reference writes `CONSTANT_PW_FIELD` on its interfaces for the same reason: a
+    # drained contact.
     _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
     shear = section.number("INTERFACE_SHEAR_STIFFNESS")
     if shear is None or "INTERFACE_NORMAL_STIFFNESS" not in v:
@@ -431,7 +441,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
         _fill(v, "INTERFACE_NORMAL_STIFFNESS", NORMAL_TO_SHEAR_STIFFNESS * shear,
               derived, label)
         _fill(v, "INTERFACE_SHEAR_STIFFNESS", shear, derived, label)
-    if soil is not None:
+    coulomb = section.constitutive_law in COULOMB_INTERFACE_LAWS
+    elastic_soil = (soil is not None and soil_models.model_of(soil.constitutive_law)
+                    == soil_models.LINEAR_ELASTIC)
+    if soil is not None and not (coulomb and elastic_soil):
         # The section's own Rinter, or -- left unset -- the soil's.
         r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
         cohesion = soil.number("GEO_COHESION")
@@ -441,8 +454,104 @@ def _interface_variables(section: InterfaceSection, project: Project,
         if phi is not None:
             _fill(v, "GEO_FRICTION_ANGLE", math.degrees(
                 math.atan(math.tan(math.radians(phi)) * r_inter)), derived, label)
+    if soil is not None or coulomb:
         _fill(v, "GEO_DILATANCY_ANGLE", 0.0, derived, label)
+    if coulomb and soil is not None and not elastic_soil:
+        # A Coulomb contact opens in tension as its soil does, at the soil's tensile
+        # strength reduced like its cohesion. A linear elastic soil has none to give.
+        r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
+        cut_off = soil.variables.get("GEO_ENABLE_TENSION_CUT_OFF")
+        if isinstance(cut_off, bool):
+            _fill(v, "GEO_ENABLE_TENSION_CUT_OFF", cut_off, derived, label)
+        tensile = soil.number("GEO_TENSILE_STRENGTH")
+        if v.get("GEO_ENABLE_TENSION_CUT_OFF") is True and tensile is not None:
+            _fill(v, "GEO_TENSILE_STRENGTH", tensile * r_inter, derived, label)
+    if soil is not None:
+        # Saturated where its soil is: the reference deck gives each interface the
+        # retention law and saturations of the soil beside it.
+        for name in RETENTION_VARIABLES:
+            if name in soil.variables:
+                _fill(v, name, soil.variables[name], derived, label)
+    if coulomb:
+        _check_coulomb_strength(section, soil, elastic_soil, v)
     return _ordered(v, INTERFACE_ORDER)
+
+
+def no_strength(section: InterfaceSection, soil: Material | None) -> str | None:
+    """Why a Coulomb contact cannot take its strength from `soil`, the soil it names, in
+    a few words, or None (`App.Interfaces.noStrength`): a linear elastic soil has none
+    to give. One that names no soil takes each adjacent one's, which only the export
+    knows. The first part of `strength_problem`, and of the note that the contact has a
+    strength of its own (`core.session.own_strength_if_needed`)."""
+    if section.constitutive_law not in COULOMB_INTERFACE_LAWS:
+        return None
+    if all(name in section.variables for name in INTERFACE_STRENGTH):
+        return None
+    if soil is None or soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC:
+        return None
+    return f"{soil.name} is linear elastic and has no strength to give"
+
+
+def strength_problem(section: InterfaceSection, soil: Material | None) -> str | None:
+    """`no_strength`, and what to do about it (`App.Interfaces.strengthProblem`)."""
+    why = no_strength(section, soil)
+    return None if why is None else         f"{why}: set the contact's own GEO_COHESION and GEO_FRICTION_ANGLE."
+
+
+def own_strength(section: InterfaceSection, soil: Material | None, system: str) -> dict:
+    """`section`'s variables with a strength of its own, as the GUI gives one
+    (`App.Interfaces.setOwnStrength`): what it took from `soil`, c R and atan(R tan phi),
+    or -- from a soil with none, a linear elastic one -- the Mohr-Coulomb defaults in
+    `system`. What the section already holds is kept."""
+    variables = dict(section.variables)
+    gives = soil is not None and \
+        soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC
+    r_inter = (section.r_inter if section.r_inter is not None
+               else soil.r_inter if soil is not None else 0.7)
+    cohesion = soil.number("GEO_COHESION") if soil is not None and gives else None
+    phi = soil.number("GEO_FRICTION_ANGLE") if soil is not None and gives else None
+    taken = {
+        "GEO_COHESION": None if cohesion is None else cohesion * r_inter,
+        "GEO_FRICTION_ANGLE": None if phi is None else math.degrees(
+            math.atan(math.tan(math.radians(phi)) * r_inter)),
+    }
+    defaults = {p.name: p for p in soil_models.parameters(soil_models.MOHR_COULOMB)}
+    for name in INTERFACE_STRENGTH:
+        if name in variables:
+            continue
+        value = taken[name]
+        variables[name] = (float(f"{value:.6g}") if value is not None
+                           else soil_models.default_in(defaults[name], system))
+    return variables
+
+
+def _check_coulomb_strength(section: InterfaceSection, soil: Material | None,
+                            elastic_soil: bool, variables: dict) -> None:
+    """Refuse a Coulomb contact Kratos would stop on: for want of a strength, or with
+    one `InterfaceCoulombLaw::Check` refuses (`App.Interfaces.validateSection`)."""
+    label = f"interface section {section.name!r} ({section.constitutive_law})"
+    missing = [name for name in INTERFACE_STRENGTH
+               if not isinstance(variables.get(name), (int, float))
+               or isinstance(variables.get(name), bool)]
+    if missing:
+        if soil is None:
+            why = "it has no soil to take a strength from"
+        elif elastic_soil:
+            why = (f"it runs against {soil.name!r}, a linear elastic soil, which has no "
+                   "strength to take")
+        else:
+            why = f"{soil.name!r} has no {' or '.join(missing)} to take"
+        raise MaterialError(
+            f"{label} reads a strength, and {why}: give the section its own "
+            f"{' and '.join(missing)}.")
+    phi = variables["GEO_FRICTION_ANGLE"]
+    if not 0.0 < phi < 90.0:
+        raise MaterialError(f"{label}: GEO_FRICTION_ANGLE must be above 0 and below 90 "
+                            f"degrees, not {phi:g}.")
+    psi = variables.get("GEO_DILATANCY_ANGLE")
+    if isinstance(psi, (int, float)) and not isinstance(psi, bool) and psi > phi:
+        raise MaterialError(f"{label}: GEO_DILATANCY_ANGLE cannot be larger than "
+                            f"GEO_FRICTION_ANGLE ({phi:g} degrees).")
 
 
 def _beam_variables(section: BeamSection, dim: int = 2,
@@ -483,6 +592,16 @@ def _panel_variables(section: PanelSection) -> dict:
     return _ordered(dict(section.variables), PANEL_ORDER)
 
 
+def anchor_prestress(section: AnchorSection, prestress: float):
+    """The `TRUSS_PRESTRESS_PK2` an anchor is written with. That is the anchor's own
+    prestress, or the one its tendon's variables carry when the anchor has none.
+
+    The stage builder also reads this. A prestressed anchor needs the temporary prestress
+    workaround in every stage that carries its stress (`core.kratos.parameters._exclude_prestress`).
+    """
+    return prestress or section.variables.get("TRUSS_PRESTRESS_PK2", prestress)
+
+
 def _anchor_variables(section: AnchorSection, prestress: float, dim: int,
                       warnings: list[str]) -> dict:
     """The tendon's property set, the anchor's own prestress in it, smeared over the
@@ -506,8 +625,7 @@ def _anchor_variables(section: AnchorSection, prestress: float, dim: int,
         if warning not in warnings:
             warnings.append(warning)
     v = dict(section.variables)
-    if prestress or "TRUSS_PRESTRESS_PK2" not in v:
-        v["TRUSS_PRESTRESS_PK2"] = prestress
+    v["TRUSS_PRESTRESS_PK2"] = anchor_prestress(section, prestress)
     if dim == 2:
         per_metre = 1.0 / section.spacing
         for name in SMEARED_ANCHOR:

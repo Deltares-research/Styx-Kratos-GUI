@@ -77,6 +77,13 @@ def test_linux_gets_the_libraries_the_install_guide_tells_users_to_install(launc
         assert library in commands(job) and library in guide, library
 
 
+def test_linux_retries_transient_package_mirror_failures(launcher):
+    _, job = launcher
+    script = commands(job)
+    assert "apt-get -o Acquire::Retries=3 update" in script
+    assert "apt-get -o Acquire::Retries=3 install" in script
+
+
 # ── Lint ────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
@@ -127,8 +134,8 @@ def test_codeql_scans_pushes_pull_requests_and_a_weekly_schedule(codeql):
 def test_codeql_covers_both_languages_of_the_app(codeql):
     _, job = codeql
     assert set(job["strategy"]["matrix"]["language"]) == {"python", "javascript-typescript"}
-    assert "github/codeql-action/init@v3" in uses(job)
-    assert "github/codeql-action/analyze@v3" in uses(job)
+    assert "github/codeql-action/init@v4" in uses(job)
+    assert "github/codeql-action/analyze@v4" in uses(job)
 
 
 def test_codeql_may_write_its_findings_and_nothing_else(codeql):

@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from core.geometry.cad_import import ImportRefused
 from core.geometry import solid_model
 from core.model.schemas import Project
 from core.model.templates import seed_project
@@ -70,6 +71,14 @@ def test_health_reports_the_gmsh_version(client):
     body = client.get("/api/health").json()
     assert body["ok"] is True
     assert body["gmsh_version"].startswith("4.")
+
+
+def test_health_and_the_page_say_the_version_kratos_cli_says(client):
+    from core.version import describe
+
+    assert client.get("/api/health").json()["version"] == describe()
+    page = client.get("/").text
+    assert f'<meta name="styx-version" content="{describe()}">' in page
 
 
 # ── Project ─────────────────────────────────────────────────────────────────
@@ -161,6 +170,13 @@ def test_put_project_rejects_unknown_fields(client):
     assert client.put("/api/project", json=payload).status_code == 422
 
 
+def test_run_script_requires_a_path(client):
+    response = client.post("/api/project/script", json={})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "run needs a path to a .py file"
+
+
 # ── Geometry ────────────────────────────────────────────────────────────────
 
 def test_geometry_returns_drawable_sections_for_every_part(client):
@@ -224,6 +240,25 @@ def test_post_geometry_import_rejects_unsupported_extensions(client):
     response = client.post("/api/geometry/import", files={"file": ("test.txt", b"foo")})
     assert response.status_code == 422
     assert "extension" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(("failure", "status", "detail"), [
+    (ImportRefused("the file has no solid"), 422, "the file has no solid"),
+    (RuntimeError("worker unavailable"), 500, "worker unavailable"),
+])
+def test_post_geometry_import_reports_worker_failures(
+        client, monkeypatch, failure, status, detail):
+    from backend.routes import geometry
+
+    async def fail(*_args):
+        raise failure
+
+    monkeypatch.setattr(geometry.gmsh_worker, "run", fail)
+
+    response = client.post("/api/geometry/import", files={"file": ("broken.step", b"not CAD")})
+
+    assert response.status_code == status
+    assert response.json()["detail"] == detail
 
 
 def test_post_geometry_import_adds_custom_part_and_invalidates(client):
@@ -744,6 +779,26 @@ def test_put_project_opens_a_file_saved_with_boreholes(client):
         (0.0, -8.0), (-8.0, -25.0)]
 
 
+def test_migration_notes_name_the_soil_whose_water_is_overridden(client):
+    """A file saved before 2026-11-02, as Open sends it: the PUT takes it in the new
+    shape, and this route says which soil's own water that dropped."""
+    old = seed_project().model_dump(mode="json")
+    del old["fluid"]
+    for material in old["materials"]:
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
+    old["materials"][0]["variables"]["DYNAMIC_VISCOSITY"] = 1e-3
+    old["materials"][1]["variables"]["DYNAMIC_VISCOSITY"] = 5e-3
+
+    response = client.post("/api/project/migration-notes", json=old)
+
+    assert response.status_code == 200
+    notes = response.json()["notes"]
+    assert len(notes) == 1 and notes[0].startswith("Sand, loose:")
+    current = client.post("/api/project/migration-notes",
+                          json=seed_project().model_dump(mode="json"))
+    assert current.json() == {"notes": []}
+
+
 def test_patch_layers_refuses_boreholes(client):
     """The layer update has no boreholes to carry any more; one sent is an error, not
     something quietly dropped."""
@@ -776,6 +831,33 @@ def test_patch_layers_can_resize_the_domain(client):
     assert (saved["x1"], saved["z1"]) == (60.0, 45.0)
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_layer_delete_answers_with_the_mesh_size_it_took_away(client):
+    """The GUI's soil layers window sends the stack without the layer; the size of the
+    layer's body goes with it, and the answer says so for the Session log."""
+    from tests.models.excavation import excavation_project
+
+    project = excavation_project(staged=False).model_dump(mode="json")
+    project["mesh"]["body_sizes"] = {"soil_L_mid": 2.0}
+    layers = [dict(layer) for layer in project["layers"] if layer["id"] != "L_mid"]
+    layers[0]["bottom"] = layers[1]["top"]
+    try:
+        put = client.put("/api/project", json=project)
+        assert put.status_code == 200, put.text
+
+        response = client.patch("/api/project/layers", json={"layers": layers})
+
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["project"]["mesh"]["body_sizes"] == {}
+        assert answer["edit_notes"] == [
+            "Removed the mesh size of soil_L_mid (2): the edit took that body away. If it "
+            "comes back, set its size again."]
+        again = client.patch("/api/project/layers", json={"layers": layers})
+        assert again.json()["edit_notes"] == []
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
 
 
 # ── The water line ──────────────────────────────────────────────────────────
@@ -1085,6 +1167,28 @@ def test_the_mockup_viewport_is_not_served(client):
     assert client.get("/js/viewport.js").status_code == 404
 
 
+_BROWSER_BOX = re.compile(r"\b(?:window\.)?(prompt|alert|confirm)\s*\(")
+
+
+def test_no_browser_prompt_alert_or_confirm_opens():
+    """Every question the GUI asks is an app window. The browser's own prompt, alert
+    and confirm boxes cannot be shown in a screenshot of the page, so the scripted
+    GUI tutorial could not reach them. The live modules use none; the one frozen use,
+    the Model explorer's Rename of a soil layer, is never reached: the live tree menu
+    takes that row (frontend/js/patches.js, onTreeContextMenu)."""
+    live = Path(__file__).resolve().parents[1] / "frontend" / "js"
+    found = [f"{path.name}: {line.strip()}"
+             for path in sorted(live.glob("*.js"))
+             for line in path.read_text(encoding="utf-8").splitlines()
+             if _BROWSER_BOX.search(line) and not line.lstrip().startswith(("//", "*", "/*"))]
+    assert found == []
+    frozen = [f"{path.name}: {line.strip()}"
+              for path in sorted((BASE / "js").glob("*.js"))
+              for line in path.read_text(encoding="utf-8").splitlines()
+              if _BROWSER_BOX.search(line)]
+    assert frozen == ["explorer.js: var name = window.prompt('Layer name', layer.name);"]
+
+
 # ── The live shell ──────────────────────────────────────────────────────────
 
 def test_root_serves_the_live_shell(client):
@@ -1112,27 +1216,46 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
-    # download.js, zip.js, stages.js, results.js, results-render.js, results-view.js,
+    # download.js, zip.js, stages.js, solver-settings.js, results.js, results-render.js,
+    # results-view.js,
     # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
-    # results-plot.js, vocabulary.js.
+    # results-plot.js, vocabulary.js, structure-glyphs.js, point-list.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "vocabulary.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                             # How a sheet pile, an anchor and an interface are drawn.
+                             "structure-glyphs.js",
                              # The Modify soil layers window, in place of the frozen one in
                              # js/dialogs.js, which drew the stack once per borehole.
                              "soil-layers-dialog.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
-                             "interfaces.js", "normal-loads.js", "boundary-conditions.js",
-                             "material-library.js",
+                             "interfaces.js", "normal-loads.js", "lines.js",
+                             # The x, y point list of the Line and normal load windows.
+                             "point-list.js",
+                             # The Rename and project name window, in place of
+                             # the browser's prompt.
+                             "name-dialog.js",
+                             "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
+                             # A stage's expert solver settings, generated from
+                             # core/model/solver.py, which stages.js resolves.
+                             "solver-settings.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # The convergence figure, and the window that shows it live
+                             # during Calculate.
+                             "convergence-plot.js", "convergence-window.js",
+                             "picture-draw.js", "picture-writers.js", "picture.js",
+                             "picture-dialog.js",
+                             # The version the server writes into the page, in place of
+                             # the frozen js/data.js's own.
+                             "version.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen
                              # one's old sheet (plan/outdated/kratos-native-inputs-plan.md).
@@ -1525,15 +1648,15 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
     assert loaded.status_code == 200, loaded.text
     project = loaded.json()["project"]
     assert project["dimension"] == 2
-    assert len(project["excavation"]["levels"]) == 3
+    assert [line["id"] for line in project["lines"]] == ["floor_1", "floor_2"]
     assert project["beams"] and project["anchors"] and project["normal_loads"]
 
     geometry = client.get("/api/geometry")
     assert geometry.status_code == 200
     drawn = {section["key"] for section in geometry.json()["sections"]}
-    # Eight soil bodies, the wall and the strut. The loads are arrow glyphs the
+    # Seven soil bodies, the wall and the strut. The loads are arrow glyphs the
     # viewport draws from the project itself, so they are not in this payload.
-    assert len([k for k in drawn if k.startswith("soil_")]) == 8
+    assert len([k for k in drawn if k.startswith("soil_")]) == 7
     assert {"sheetpile", "strut"} <= drawn
 
 
@@ -1545,10 +1668,9 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
 
 def _staged_project() -> dict:
     """The seed with a pit dug in three lifts, so there is something to stage."""
-    payload = seed_project(simple=False).model_dump()
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
-                             if k != "floor_y"}
-    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    payload = seed_project().model_dump()
+    payload["excavation"] = {"x0": 8.0, "x1": 16.0, "z0": 0.0, "z1": 25.0,
+                             "levels": [-3.0, -5.0, -7.0]}
     return payload
 
 
@@ -1630,34 +1752,33 @@ def test_patch_stages_can_clear_the_sequence(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_stages_seeds_the_initial_stage_and_the_null_step(client):
-    """What "Create default stages" gives: `stages.default_stages`, the initial stage
-    and the null step, and nothing else -- even for a project with lifts to dig."""
+def test_there_is_no_default_stages_route(client):
+    """Every stage is the user's to add: there are no default stages."""
+    for route in ("/api/project/stages/defaults", "/api/project/phases/defaults"):
+        assert client.post(route).status_code in (404, 405)
+
+
+def test_a_stage_carries_its_three_choices(client):
     client.put("/api/project", json=_staged_project())
-
-    response = client.post("/api/project/stages/defaults")
+    response = client.patch("/api/project/stages", json={"stages": [
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
+        {"id": "shake", "name": "Shake", "parent": "initial",
+         "time_integration": "dynamic"}]})
     assert response.status_code == 200
-    seeded = response.json()["project"]["stages"]
-    assert [p["id"] for p in seeded] == ["initial", "null_step"]
-    assert seeded[0]["calculation"] == "K0 procedure"
-    assert seeded[0]["parent"] is None
-    assert seeded[1]["parent"] == "initial"
-
-    assert client.get("/api/project").json()["stages"] == seeded
+    got = [(s["calculation"], s["stress_initialisation"], s["time_integration"])
+           for s in response.json()["project"]["stages"]]
+    assert got == [("mechanical", "K0", "static"), ("mechanical", "none", "dynamic")]
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_stages_replaces_what_is_there(client):
-    """"Reset to defaults" is the only way back out of a sequence the user has broken,
-    so it overwrites rather than refusing because stages already exist."""
+def test_a_flow_stage_with_a_stress_initialisation_is_refused(client):
     client.put("/api/project", json=_staged_project())
-    client.patch("/api/project/stages", json={"stages": [
-        {"id": "mine", "name": "Just the one"}]})
-
-    seeded = client.post("/api/project/stages/defaults").json()["project"]["stages"]
-    assert [p["id"] for p in seeded][0] == "initial"
-    assert "mine" not in [p["id"] for p in seeded]
+    response = client.patch("/api/project/stages", json={"stages": [
+        {"id": "flow", "name": "Flow", "calculation": "flow",
+         "stress_initialisation": "K0"}]})
+    assert response.status_code == 422
+    assert "no stresses to initialise" in str(response.json()["detail"])
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -1675,16 +1796,10 @@ def test_the_old_patch_phases_route_still_answers(client):
     response = client.patch("/api/project/phases", json={"phases": [
         {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]})
     assert response.status_code == 200
-    assert [s["id"] for s in client.get("/api/project").json()["stages"]] == ["initial"]
-
-    client.put("/api/project", json=seed_project().model_dump())
-
-
-def test_the_old_default_phases_route_still_answers(client):
-    client.put("/api/project", json=_staged_project())
-    new = client.post("/api/project/stages/defaults").json()["project"]["stages"]
-    old = client.post("/api/project/phases/defaults").json()["project"]["stages"]
-    assert old == new
+    stored = client.get("/api/project").json()["stages"]
+    assert [s["id"] for s in stored] == ["initial"]
+    assert (stored[0]["calculation"], stored[0]["stress_initialisation"]) == \
+        ("mechanical", "K0")
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -1704,7 +1819,9 @@ def test_a_branch_sent_as_phases_is_refused_under_stages(client):
 
 def test_a_project_put_with_phases_is_accepted(client):
     client.put("/api/project", json=_staged_project())
-    client.post("/api/project/stages/defaults")
+    client.patch("/api/project/stages", json={"stages": [
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
+        {"id": "null_step", "name": "Null step", "parent": "initial"}]})
     doc = client.get("/api/project").json()
     doc["phases"] = doc.pop("stages")
     assert client.put("/api/project", json=doc).status_code == 200

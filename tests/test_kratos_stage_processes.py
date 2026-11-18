@@ -13,11 +13,11 @@ import json
 
 import pytest
 
-from core.kratos import writer, materials
-from core.model import stages
+from core.kratos import deck_files, writer, materials
+from core.model.schemas import Stage
 from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
-from core.model.schemas import MeshRequest
+from core.model.schemas import MeshRequest, Project
 
 
 @pytest.fixture(scope="module")
@@ -124,7 +124,7 @@ def test_the_k0_procedure_runs_in_the_k0_stage_only(doc):
 def test_the_k0_procedure_names_the_soil_and_only_the_soil(doc):
     parts = carrying(doc, "1_Initial_stage", "auxiliary_process_list",
                      "apply_k0_procedure_process")
-    assert len(parts) == 8
+    assert len(parts) == 7
     assert not [name for name in parts if "Interface" in name]
     assert "SheetPileWall" not in parts
 
@@ -150,7 +150,7 @@ def test_neighbours_are_found_in_the_stage_the_interfaces_arrive(doc):
                        "find_neighbours_of_interfaces_process") == \
         ["3_SheetPileWall_installation"]
     assert len(carrying(doc, "3_SheetPileWall_installation", "auxiliary_process_list",
-                        "find_neighbours_of_interfaces_process")) == 8
+                        "find_neighbours_of_interfaces_process")) == 7
 
 
 def test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(doc):
@@ -162,8 +162,9 @@ def test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(doc):
 
 
 def test_a_part_installed_this_stage_has_no_previous_stress_to_carry(doc):
-    """The reference leaves the anchor out of stage 5, where it arrives, and puts it
-    back in stage 6. Nothing else distinguishes those two stages."""
+    """The reference leaves the anchor out of stage 5, where it arrives. From stage 6 it
+    is carried. Kratos' own `building_pit` deck leaves it out there too, and a run shows
+    that this loses the strut's force at the start of each stage."""
     module = "apply_final_stresses_of_previous_stage_to_initial_state"
     assert "Strut" not in carrying(doc, "5_Strut_installation",
                                    "auxiliary_process_list", module)
@@ -174,15 +175,86 @@ def test_a_part_installed_this_stage_has_no_previous_stress_to_carry(doc):
 def test_a_dug_out_lifts_interface_stops_carrying_stress(doc):
     module = "apply_final_stresses_of_previous_stage_to_initial_state"
     fourth = carrying(doc, "4_First_excavation", "auxiliary_process_list", module)
-    assert not [name for name in fourth if name.endswith("lift1")]
-    assert [name for name in fourth if name.endswith("lift2")]
+    assert not [name for name in fourth if name.endswith("lift_1")]
+    assert [name for name in fourth if name.endswith("lift_2")]
+
+
+# -- The temporary prestress workaround ----------------------------------------
+#
+# Kratos carries a truss's stress into the next stage *with* its prestress, and the truss
+# adds the prestress again. A prestressed anchor therefore gets a process of the deck's
+# own directly before the carry-over, until Kratos is fixed
+# (core/kratos/prestress_workaround.py).
+
+WORKAROUND = deck_files.PRESTRESS_WORKAROUND_MODULE
+CARRY = "apply_final_stresses_of_previous_stage_to_initial_state"
+
+
+@pytest.fixture(scope="module")
+def prestressed() -> dict:
+    data = excavation.excavation_project(staged=True).model_dump()
+    data["anchors"][0]["prestress"] = 5.0e7          # Pa
+    project = Project.model_validate(data)
+    with session():
+        return writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+
+
+@pytest.fixture(scope="module")
+def prestressed_doc(prestressed) -> dict:
+    return json.loads(prestressed["project_parameters"])
+
+
+def test_a_prestressed_anchor_is_carried_through_the_workaround(prestressed_doc):
+    for stage in STAGES[5:]:
+        listed = modules(prestressed_doc, stage, "auxiliary_process_list")
+        assert listed.index(WORKAROUND) == listed.index(CARRY) - 1, \
+            f"{stage}: the workaround has to come directly before the carry-over"
+        assert carrying(prestressed_doc, stage, "auxiliary_process_list",
+                        WORKAROUND) == ["Strut"]
+        assert "Strut" in carrying(prestressed_doc, stage, "auxiliary_process_list", CARRY)
+
+
+def test_the_workaround_waits_until_the_anchor_has_a_stress_to_carry(prestressed_doc):
+    """In stage 5 the strut arrives: nothing of it is carried, so nothing is hidden."""
+    assert stages_with(prestressed_doc, "auxiliary_process_list", WORKAROUND) == STAGES[5:]
+
+
+def test_the_workaround_is_a_process_of_the_deck_s_own(prestressed, prestressed_doc):
+    """No `kratos_module`: Kratos imports it from the directory the deck runs in, so
+    the deck ships the file, copied unchanged from the one in this repository."""
+    process = next(p for p in processes(prestressed_doc, STAGES[5], "auxiliary_process_list")
+                   if p["python_module"] == WORKAROUND)
+    assert "kratos_module" not in process
+    assert prestressed["process_files"] == {
+        deck_files.PRESTRESS_WORKAROUND_NAME:
+            deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
+
+
+def test_the_workaround_file_says_it_is_temporary():
+    source = deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")
+    assert source.startswith('"""TEMPORARY WORKAROUND')
+    assert "test_kratos_still_counts_the_prestress_twice" in source
+
+
+def test_an_anchor_without_prestress_needs_no_workaround(result, doc):
+    assert result["process_files"] == {}
+    assert not stages_with(doc, "auxiliary_process_list", WORKAROUND)
+
+
+def test_an_anchor_s_prestress_is_its_own_or_else_its_tendon_s():
+    from core.model.schemas import AnchorSection
+    tendon = AnchorSection(id="t", name="t", variables={"TRUSS_PRESTRESS_PK2": 3.0e6})
+    bare = AnchorSection(id="b", name="b", variables={})
+    assert materials.anchor_prestress(tendon, 5.0e7) == 5.0e7
+    assert materials.anchor_prestress(tendon, 0.0) == 3.0e6
+    assert not materials.anchor_prestress(bare, 0.0)
 
 
 # -- C3: extrapolation and JSON output ---------------------------------------
 
-def test_results_are_extrapolated_from_the_wall_and_the_retained_interfaces(doc):
+def test_results_are_extrapolated_from_the_wall_and_the_interfaces(doc):
     """Two processes, because the reference writes one per group that shares a variable
-    list: the wall's forces and the retained side's tractions."""
+    list: the wall's forces and the contacts' tractions."""
     module = "geo_extrapolate_integration_point_values_to_nodes_process"
     written = [p for p in processes(doc, "4_First_excavation", "auxiliary_process_list")
                if p["python_module"] == module]
@@ -195,16 +267,19 @@ def test_results_are_extrapolated_from_the_wall_and_the_retained_interfaces(doc)
         ["GEO_EFFECTIVE_TRACTION_VECTOR"]
 
 
-def test_only_the_retained_side_interfaces_are_extrapolated(doc):
-    """The three against soil outside the pit -- the reference's `*_Right` ones. The
-    contacts on the dug side are excavated away and have nothing to report."""
+def test_only_the_interfaces_still_in_the_stage_are_extrapolated(doc):
+    """A contact goes with the soil it runs against, and then has nothing to report."""
     module = "geo_extrapolate_integration_point_values_to_nodes_process"
-    written = [p for p in processes(doc, "3_SheetPileWall_installation",
-                                    "auxiliary_process_list")
-               if p["python_module"] == module]
-    retained = named(written[1])
-    assert len(retained) == 3
-    assert not [name for name in retained if "lift" in name or "pit" in name]
+
+    def contacts(stage):
+        written = [p for p in processes(doc, stage, "auxiliary_process_list")
+                   if p["python_module"] == module]
+        return named(written[1])
+
+    assert len(contacts("3_SheetPileWall_installation")) == 7
+    assert [name for name in contacts("3_SheetPileWall_installation") if "lift_1" in name]
+    assert len(contacts("4_First_excavation")) == 6
+    assert not [name for name in contacts("4_First_excavation") if "lift_1" in name]
 
 
 def test_nothing_is_extrapolated_before_the_wall_exists(doc):
@@ -213,29 +288,76 @@ def test_nothing_is_extrapolated_before_the_wall_exists(doc):
 
 
 def test_each_stage_writes_its_own_json_output_files(doc):
-    """One per stage, named after it, so a seven-stage run leaves seven pairs rather
-    than seven writes into the same two files."""
+    """One per member per stage, named after it, so a seven-stage run does not write
+    seven times into the same files."""
     for stage in STAGES[2:]:
         written = processes(doc, stage, "json_output")
         assert [p["Parameters"]["output_file_name"] for p in written] == [
-            f"{stage}__output_wall.json", f"{stage}__output_interface.json"]
+            f"{stage}__output_wall.json", f"{stage}__output_interface_left.json",
+            f"{stage}__output_interface_right.json"]
     assert processes(doc, "1_Initial_stage", "json_output") == []
 
 
-def test_the_interface_output_reads_the_node_part_built_for_it(doc):
-    written = processes(doc, "7_Third_excavation", "json_output")
-    assert named(written[1]) == [writer.RIGHT_SIDE_PART]
+def test_the_interface_output_reads_the_node_part_built_for_each_face(doc):
+    written = processes(doc, "3_SheetPileWall_installation", "json_output")
+    assert named(written[1]) == ["Interface_Left_face"]
+    assert named(written[2]) == ["Interface_Right_face"]
 
 
-# -- C7: Right_Side_Of_Right_Interfaces --------------------------------------
+def face_heights(result: dict, doc: dict, stage: str, face: str) -> list[float]:
+    """The heights of the nodes a stage's curve of `face` reads, highest first."""
+    written = [p for p in processes(doc, stage, "json_output")
+               if p["Parameters"]["output_file_name"].endswith(f"interface_{face}.json")]
+    lines = result["mdpa"].splitlines()
+    start = lines.index(f"Begin SubModelPart {named(written[0])[0]}")
+    block = "\n".join(lines[start:]).partition("Begin SubModelPartNodes")[2]
+    nodes = block.partition("End SubModelPartNodes")[0].split()
+    assert nodes, "the curve reads no nodes"
+    height = {index: y for index, _, y, _ in result["nodes"]}
+    return sorted((height[int(node)] for node in nodes), reverse=True)
 
-def test_the_retained_side_node_part_is_in_the_mdpa(result):
-    assert f"Begin SubModelPart {writer.RIGHT_SIDE_PART}" in result["mdpa"]
+
+@pytest.mark.parametrize("stage, floor", [("4_First_excavation", excavation.LIFTS[0]),
+                                          ("5_Strut_installation", excavation.LIFTS[0]),
+                                          ("6_Second_excavation", excavation.LIFTS[1]),
+                                          ("7_Third_excavation", excavation.LIFTS[2])])
+def test_the_curve_of_a_dug_face_starts_at_the_pit_floor(result, doc, stage, floor):
+    """A contact that is switched off no longer updates its nodes: they would plot the
+    tractions of the stage before, against soil that is gone."""
+    assert face_heights(result, doc, stage, "left")[0] == pytest.approx(floor)
 
 
-def test_the_retained_side_node_part_holds_nodes_and_no_elements(result):
+@pytest.mark.parametrize("stage", STAGES[3:])
+def test_the_curve_of_a_retained_face_stays_whole(result, doc, stage):
+    assert face_heights(result, doc, stage, "right") == face_heights(
+        result, doc, "3_SheetPileWall_installation", "right")
+
+
+def test_a_contact_on_one_face_writes_a_curve_of_that_face_only():
+    project = excavation.excavation_project(staged=True)
+    payload = project.model_dump()
+    payload["interfaces"][0]["side"] = "right"
+    with session():
+        one_sided = writer.export_project(Project.model_validate(payload),
+                                          MeshRequest(**project.mesh.model_dump()))
+    written = processes(json.loads(one_sided["project_parameters"]), "7_Third_excavation",
+                        "json_output")
+    assert [p["Parameters"]["output_file_name"] for p in written] == [
+        "7_Third_excavation__output_wall.json",
+        "7_Third_excavation__output_interface_right.json"]
+
+
+# -- The node part of each face of the wall ------------------------------------
+
+@pytest.mark.parametrize("part", ["Interface_Left_face", "Interface_Right_face"])
+def test_a_face_s_node_part_is_in_the_mdpa(result, part):
+    assert f"Begin SubModelPart {part}" in result["mdpa"]
+
+
+@pytest.mark.parametrize("part", ["Interface_Left_face", "Interface_Right_face"])
+def test_a_face_s_node_part_holds_nodes_and_no_elements(result, part):
     block = result["mdpa"].partition(
-        f"Begin SubModelPart {writer.RIGHT_SIDE_PART}")[2].partition("End SubModelPart")[0]
+        f"Begin SubModelPart {part}")[2].partition("End SubModelPart")[0]
     assert "Begin SubModelPartNodes" in block
     assert "Begin SubModelPartElements\n" not in block
 
@@ -246,7 +368,7 @@ def test_an_unstaged_project_grows_no_part_it_never_reads():
     with session():
         plain = writer.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
-    assert writer.RIGHT_SIDE_PART not in plain["mdpa"]
+    assert "_face" not in plain["mdpa"]
 
 
 # -- C6: master/slave across the pre-installation stages ---------------------
@@ -304,15 +426,17 @@ def test_only_the_soil_carries_the_k0_variables(result):
                             if "SheetPileWall" in n or "Strut" in n or "Interface" in n]
 
 
-def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
-    """The test model types 0.58 and 0.47, which are Jaky at its two friction angles --
-    so its typed K0_NC and the fallback agree."""
-    from core.kratos.materials import jaky
+def test_k0_nc_is_the_material_s_or_else_its_model_s():
+    """The test model types 0.58 and 0.47, Jaky at its two friction angles, and they are
+    written. Left out, a linear elastic soil's is nu / (1 - nu): the elastic law has no
+    friction angle to take one from."""
+    from core.kratos.materials import k0_nc
     project = excavation.excavation_project(staged=False)
     for key, k0 in (("m_upper", 0.58), ("m_lower", 0.47)):
         material = project.material(key)
         assert material.variables["K0_NC"] == k0
-        assert round(jaky(material), 2) == k0
+        nu = material.variables["POISSON_RATIO"]
+        assert k0_nc(material) == pytest.approx(nu / (1 - nu))
 
 
 def test_an_unstaged_project_gets_no_second_materials_file():
@@ -338,15 +462,16 @@ def test_material_parameters_writes_the_k0_variables_on_request():
 
 # -- What is built from the start ----------------------------------------------
 #
-# "Create default stages" switches nothing off (`stages.default_stages`), so a wall and
-# its interfaces drawn before that are in the model from the first stage. There is no
-# stage before the first for them to carry a stress from, and the first stage is where
-# they arrive.
+# A first stage that switches nothing off has a wall and its interfaces in the model
+# from the start. There is no stage before the first for them to carry a stress from,
+# and the first stage is where they arrive.
 
 @pytest.fixture(scope="module")
 def from_the_start() -> dict:
     project = excavation.excavation_project(staged=False)
-    project = project.model_copy(update={"stages": stages.default_stages(project)})
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
+        Stage(id="null_step", name="Null step", parent="initial", max_iterations=150)]})
     with session():
         exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
     return json.loads(exported["project_parameters"])
@@ -363,5 +488,90 @@ def test_interfaces_built_from_the_start_find_their_neighbours_in_the_first_stag
         from_the_start):
     module = "find_neighbours_of_interfaces_process"
     assert len(carrying(from_the_start, "1_Initial_stage", "auxiliary_process_list",
-                        module)) == 8
+                        module)) == 7
     assert module not in modules(from_the_start, "2_Null_step", "auxiliary_process_list")
+
+
+# -- Stress initialisation and time integration ----------------------------------
+#
+# Gravity loading is an ordinary solve under the self weight: no K0 process, the
+# materials file every other stage reads. A dynamic stage is Kratos' `Dynamic` solution
+# type.
+
+@pytest.fixture(scope="module")
+def gravity_then_dynamic() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="gravity"),
+        Stage(id="null_step", name="Null step", parent="initial"),
+        Stage(id="shake", name="Shake", parent="null_step", time_integration="dynamic",
+              deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def _solver(doc: dict, stage: str) -> dict:
+    return doc["stages"][stage]["stage_settings"]["solver_settings"]
+
+
+def test_gravity_loading_runs_no_k0_procedure(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert "apply_k0_procedure_process" not in modules(
+            gravity_then_dynamic, stage, "auxiliary_process_list")
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "material_import_settings"]["materials_filename"] == deck_files.MATERIALS_NAME
+
+
+def test_gravity_loading_starts_the_clock_at_zero(gravity_then_dynamic):
+    starts = [gravity_then_dynamic["stages"][name]["stage_settings"]["problem_data"]
+              ["start_time"] for name in ("1_Initial_stage", "2_Null_step", "3_Shake")]
+    assert starts == [0.0, 1.0, 2.0]
+
+
+def test_a_static_stage_is_static_and_a_dynamic_one_dynamic(gravity_then_dynamic):
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")["solution_type"] == "static"
+    assert _solver(gravity_then_dynamic, "2_Null_step")["solution_type"] == "static"
+    # With the capital: Kratos adds the velocity and acceleration degrees of freedom only
+    # for exactly "Dynamic" (geomechanics_U_Pw_solver.py).
+    assert _solver(gravity_then_dynamic, "3_Shake")["solution_type"] == "Dynamic"
+
+
+# -- Gravity follows the initial stage's stress initialisation -----------------------
+#
+# Gravity loading (and the K0 procedure) puts the self weight on every body in every
+# stage -- the structures too, which are in the computational model part the process
+# names -- and an initial stage that initialises no stresses leaves it out altogether.
+
+GRAVITY = "apply_vector_constraint_table_process"
+
+
+def _gravity_in(doc: dict, stage: str) -> bool:
+    return any(p["python_module"] == GRAVITY
+               and p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION"
+               for p in processes(doc, stage, "loads_process_list"))
+
+
+def test_gravity_loading_weighs_every_body_in_every_stage(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert _gravity_in(gravity_then_dynamic, stage), stage
+    bodies = _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "problem_domain_sub_model_part_list"]
+    assert "SheetPileWall" in bodies, "the wall is not in the computational model part"
+
+
+@pytest.fixture(scope="module")
+def no_stresses() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="none"),
+        Stage(id="load", name="Load", parent="initial", deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def test_no_stress_initialisation_means_no_gravity_in_any_stage(no_stresses):
+    for stage in no_stresses["stages"]:
+        assert not _gravity_in(no_stresses, stage), stage
+

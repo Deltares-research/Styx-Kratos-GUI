@@ -160,7 +160,7 @@ def test_a_profile_says_each_stage_s_extremes(cli, run):
 
 
 def test_a_profile_takes_a_quantity_by_a_word_of_its_label(cli, run):
-    by_word = cli("--json", "results", "profile", run, "interface", "normal").json()
+    by_word = cli("--json", "results", "profile", run, "interface_left", "normal").json()
 
     assert by_word["quantity"] == "tn"
 
@@ -175,11 +175,27 @@ def test_a_profile_can_be_narrowed_to_one_stage(cli, run):
     assert [stage["index"] for stage in one["stages"]] == [4]
 
 
+def test_a_profile_refuses_a_stage_without_member_output(cli, run):
+    from core.results import catalog
+
+    members = catalog.stage_members(run)["members"]
+    wall = next(member for member in members if member["name"] == "wall")
+    stages = catalog.describe(run)["stages"]
+    index = next(stage["index"] for stage in stages
+                 if stage["index"] not in wall["stages"])
+
+    ran = cli("results", "profile", run, "wall", "M", "--stage", str(index))
+
+    assert ran.code == 1
+    assert "has no output in stage" in ran.err
+    assert "it has stages" in ran.err
+
+
 def test_a_member_the_run_has_no_output_for_is_refused_with_the_ones_it_has(cli, run):
     ran = cli("results", "profile", run, "strut", "N")
 
     assert ran.code == 1
-    assert "strut" in ran.err and "interface, wall" in ran.err
+    assert "strut" in ran.err and "interface_left, interface_right, wall" in ran.err
 
 
 def test_a_quantity_the_member_does_not_carry_is_refused(cli, run):
@@ -362,3 +378,55 @@ def test_csv_can_go_into_a_file_as_utf8(cli, run, tmp_path):
     assert "wall_M.csv" in ran.out
     written = (tmp_path / "wall_M.csv").read_bytes()
     assert written.decode("utf-8") == on_stdout and b"\r\n" not in written
+
+
+# ── Convergence ─────────────────────────────────────────────────────────────
+
+def test_convergence_is_the_route_s_convergence(cli, client, run):
+    ran = cli("--json", "results", "convergence", run)
+
+    assert ran.code == 0, ran.err
+    assert ran.json() == _route(client, f"{run}/convergence")
+    assert len(ran.json()["iterations"]) == 7 * 3
+
+
+def test_convergence_has_a_row_per_stage(cli, run):
+    out = cli("results", "convergence", run).out
+
+    assert f"{run}: 21 iterations in 7 stages" in out
+    assert "Third excavation" in out
+    assert out.count(" met") == 7
+    assert out.count("residual") == 7, "the criterion of each stage"
+
+
+def test_convergence_of_one_stage_has_a_row_per_iteration(cli, run):
+    out = cli("results", "convergence", run, "--stage", "first excavation").out
+
+    assert out.splitlines()[0] == ("Stage 4 (First excavation): 3 iteration(s), "
+                                   "residual criterion")
+    assert len(out.splitlines()) == 2 + 3
+    assert out.splitlines()[1].split()[:3] == ["iter.", "run", "step"]
+    first = out.splitlines()[2].split()
+    assert first[0] == "1", "counted in the stage, as the GUI's axis for one stage"
+    assert int(first[1]) > 1, "and over the run"
+
+
+def test_convergence_refuses_a_stage_it_does_not_have(cli, run):
+    ran = cli("results", "convergence", run, "--stage", "99")
+
+    assert ran.code != 0
+    assert "Third excavation" in ran.err
+
+
+def test_convergence_csv_is_the_file_the_gui_saves(cli, run, tmp_path):
+    from cli.terminal import tables
+    from core.results import convergence
+
+    target = tmp_path / "convergence.csv"
+    ran = cli("results", "convergence", run, "--csv", target)
+
+    assert ran.code == 0, ran.err
+    assert target.read_text(encoding="utf-8") == tables.convergence_csv(
+        convergence.of_run(run))
+    one = cli("results", "convergence", run, "--stage", "2", "--csv").out
+    assert len(one.splitlines()) == 1 + 3

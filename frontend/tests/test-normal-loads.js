@@ -174,7 +174,7 @@
     } finally { Object.assign(App, saved); }
   });
 
-  test('the form offers the coordinates, the magnitude and the type', function () {
+  test('the form offers the points, the magnitude and the type', function () {
     /* Built against the real App.UI, so the row helper and the controls are the ones
        the dialog actually renders rather than doubles that agree with themselves. */
     var saved = { PROJECT: App.PROJECT, NORMAL_LOADS: App.NORMAL_LOADS,
@@ -190,9 +190,10 @@
       var labels = Array.prototype.map.call(
         body.querySelectorAll('.mesh-setting-label'),
         function (node) { return node.textContent; });
-      ['x1', 'y1', 'x2', 'y2', 'Type', 'Pressure', 'Active'].forEach(function (label) {
+      ['Points', 'Type', 'Pressure', 'Active'].forEach(function (label) {
         T.ok(labels.indexOf(label) >= 0, label + ' is on the form');
       });
+      T.eq(body.querySelectorAll('.line-point').length, 2, 'one row per point');
       var type = body.querySelector('select.mesh-setting-control');
       T.eq(Array.prototype.map.call(type.options, function (o) { return o.value; }),
            ['Uniform', 'Hydrostatic']);
@@ -246,7 +247,9 @@
       ['soil_L1'], [], false, ['load_1'], [], ['normalload_1']);
     T.ok(groups.structures.indexOf('normalload_1') >= 0, 'drawn in Structures');
     T.ok(groups.staged.indexOf('normalload_1') >= 0, 'drawn in Staged construction');
-    T.eq(groups.soil.indexOf('normalload_1'), -1, 'not in Soil, like any other load');
+    T.ok(groups.soil.indexOf('normalload_1') >= 0, 'in Soil too, like any other load');
+    T.ok(App.Viewport.computeFadedKeys(['soil_L1'], [], false, ['load_1'], [], ['normalload_1'])
+           .soil.indexOf('normalload_1') >= 0, 'faded there');
   });
 
   test('a normal load is drawn with arrows along the line it loads', function () {
@@ -423,7 +426,7 @@
       App.NormalLoads.start();
       var body = document.createElement('div');
       spec.build(body);
-      var pressure = body.querySelectorAll('input[type="number"]')[4];
+      var pressure = body.querySelectorAll('input[data-number]')[4];
       T.eq(pressure.value, '', 'nothing pre-filled to accept by accident');
 
       var save = spec.buttons.filter(function (b) { return b.label === 'Save'; })[0];
@@ -455,7 +458,7 @@
     App.NormalLoads.start();
     var body = document.createElement('div');
     spec.build(body);
-    var numbers = body.querySelectorAll('input[type="number"]');
+    var numbers = body.querySelectorAll('input[data-number]');
     // x1, y1, x2, y2, then the pressure.
     [4, -1, 4, -9].forEach(function (value, i) { numbers[i].value = String(value); });
     body.querySelector('select.mesh-setting-control').value = 'Uniform';
@@ -521,12 +524,12 @@
     return ctx;
   }
 
-  test('pick: two points picked on the model open the form at those points', function () {
+  test('pick: the points picked on the model open the form at those points', function () {
     var ctx = rig(2);
     try {
       App.NormalLoads.pick();
-      T.eq(ctx.drawing.mode, 'load');
-      T.eq(ctx.drawing.options.count, 2);
+      T.eq(ctx.drawing.mode, 'line', 'as many points as the user clicks, as a line');
+      T.eq(ctx.drawing.options.count, undefined);
       ctx.drawing.options.onComplete([[4, 0, 0], [9, -3, 0]]);
       var inputs = ctx.opened[0].body.querySelectorAll('input');
       var values = Array.prototype.map.call(inputs, function (i) { return i.value; });
@@ -543,7 +546,22 @@
       var pickButton = ctx.opened[0].config.buttons.filter(function (b) {
         return /Pick on model/.test(b.label); })[0];
       pickButton.onClick();
-      T.eq(ctx.drawing && ctx.drawing.mode, 'load');
+      T.eq(ctx.drawing && ctx.drawing.mode, 'line');
+    } finally { ctx.restore(); }
+  });
+
+  test("pick: an existing load picked again keeps its name and its type", function () {
+    var ctx = rig(2);
+    try {
+      App.NormalLoads.edit('normalload_1');
+      ctx.opened[0].config.buttons.filter(function (b) {
+        return /Pick on model/.test(b.label); })[0].onClick();
+      ctx.drawing.options.onComplete([[0, -2, 0], [5, -2, 0], [5, 0, 0]]);
+      var again = ctx.opened[1];
+      T.ok(/Edit normal load/.test(again.config.title), 'still the load it was');
+      T.eq(again.body.querySelector('input[type="text"]').value, 'Face');
+      T.eq(again.body.querySelector('select').value, 'Hydrostatic');
+      T.eq(again.body.querySelectorAll('.line-point').length, 3);
     } finally { ctx.restore(); }
   });
 

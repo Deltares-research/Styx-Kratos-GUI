@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from backend import launcher as _launcher
 from backend.launcher import platform_venv_name, requirements_changed, venv_python
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,8 @@ class PlatformEnvironmentTests(unittest.TestCase):
     def test_windows_and_linux_never_share_a_virtual_environment(self):
         self.assertEqual(platform_venv_name("win32"), ".venv-windows")
         self.assertEqual(platform_venv_name("linux"), ".venv-linux")
+        self.assertEqual(platform_venv_name("darwin"), ".venv-macos")
+        self.assertEqual(platform_venv_name("custom/os"), ".venv-custom-os")
 
     def test_virtual_environment_python_uses_the_platform_layout(self):
         root = Path("environment")
@@ -67,9 +70,6 @@ if __name__ == "__main__":
 
 import pytest as _pytest
 
-from backend import launcher as _launcher
-
-
 @_pytest.fixture
 def stood_in(monkeypatch, tmp_path):
     calls = {"check": 0, "exec": None, "call": None}
@@ -77,6 +77,10 @@ def stood_in(monkeypatch, tmp_path):
     monkeypatch.setattr(_launcher, "check_environment",
                         lambda python: calls.__setitem__("check", calls["check"] + 1))
     monkeypatch.setattr(_launcher.os, "execv", lambda exe, argv: calls.__setitem__("exec", argv))
+    monkeypatch.setattr(_launcher.subprocess, "call",
+                        lambda argv: calls.__setitem__("call", argv) or 0)
+    # The tests below read the POSIX start; the Windows one has a test of its own.
+    monkeypatch.setattr(_launcher, "EXEC_REPLACES_THE_PROCESS", True)
     monkeypatch.setattr(_launcher.os, "chdir", lambda path: None)
     monkeypatch.delenv(_launcher.ALLOWED_HOSTS_ENV, raising=False)
     # Whatever this machine happens to be serving on 8000 is not these tests' business.
@@ -113,6 +117,43 @@ def test_a_failed_setup_is_one_line_and_exit_code_one(monkeypatch, capsys):
 
     assert _launcher.main([]) == 1
     assert "Launcher failed: Python 3.10" in capsys.readouterr().err
+
+
+def test_launcher_refuses_an_unsupported_python_before_setup(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(_launcher, "sys", SimpleNamespace(
+        version_info=(3, 9), version="3.9.9"))
+    create = Mock()
+    monkeypatch.setattr(_launcher.venv, "EnvBuilder", create)
+
+    with _pytest.raises(RuntimeError, match="Python 3.10 or newer.*found 3.9.9"):
+        _launcher.ensure_environment()
+    create.assert_not_called()
+
+
+def test_launcher_does_not_stamp_a_failed_dependency_install(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    environment = tmp_path / "environment"
+    environment.mkdir()
+    python = environment / "python.exe"
+    python.touch()
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("example==1\n", encoding="ascii")
+    monkeypatch.setattr(_launcher, "_ensure_supported_python", lambda: None)
+    monkeypatch.setattr(_launcher, "ROOT", tmp_path)
+    monkeypatch.setattr(_launcher, "REQUIREMENTS", requirements)
+    monkeypatch.setattr(_launcher, "platform_venv_name", lambda: "environment")
+    monkeypatch.setattr(_launcher, "venv_python", lambda _: python)
+    failure = _launcher.subprocess.CalledProcessError(1, ["pip"])
+    monkeypatch.setattr(_launcher.subprocess, "check_call", Mock(side_effect=failure))
+
+    with _pytest.raises(_launcher.subprocess.CalledProcessError):
+        _launcher.ensure_environment()
+
+    assert not (environment / ".requirements.sha256").exists()
 
 
 # ── A port that is already taken ────────────────────────────────────────────
@@ -165,3 +206,131 @@ def test_a_server_already_on_the_port_is_refused_not_opened(stood_in, monkeypatc
     assert stood_in["exec"] is None and stood_in["call"] is None and opened == []
     err = capsys.readouterr().err
     assert "8000" in err and "already" in err
+
+
+def test_opening_the_browser_preserves_the_server_exit_status(stood_in, monkeypatch):
+    from unittest.mock import Mock
+
+    timer = Mock()
+    factory = Mock(return_value=timer)
+    server = Mock(return_value=7)
+    monkeypatch.setattr(_launcher.threading, "Timer", factory)
+    monkeypatch.setattr(_launcher.subprocess, "call", server)
+
+    assert _launcher.main(["--open-browser", "--port", "9000"]) == 7
+    factory.assert_called_once_with(
+        1.0, _launcher.webbrowser.open, args=("http://127.0.0.1:9000/",))
+    timer.start.assert_called_once_with()
+    assert server.call_args.args[0][-2:] == ["--port", "9000"]
+    assert stood_in["exec"] is None
+
+
+def test_on_windows_the_server_is_a_child_process_so_a_path_with_a_space_works(
+        stood_in, monkeypatch):
+    python = Path("C:/Users/someone/OneDrive - Deltares/styx/.venv/Scripts/python.exe")
+    monkeypatch.setattr(_launcher, "ensure_environment", lambda: python)
+    monkeypatch.setattr(_launcher, "EXEC_REPLACES_THE_PROCESS", False)
+
+    assert _launcher.main([]) == 0
+
+    assert stood_in["exec"] is None
+    assert stood_in["call"][:3] == [str(python), "-m", "uvicorn"]
+
+
+# ── Started from an installed wheel ─────────────────────────────────────────
+
+def test_an_installed_wheel_runs_in_its_own_python_and_builds_no_environment(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(_launcher, "_is_installed", True)
+    create = Mock()
+    install = Mock()
+    monkeypatch.setattr(_launcher.venv, "EnvBuilder", create)
+    monkeypatch.setattr(_launcher.subprocess, "check_call", install)
+
+    assert _launcher.ensure_environment() == Path(_launcher.sys.executable)
+    create.assert_not_called()
+    install.assert_not_called()
+
+
+@_pytest.mark.parametrize("installed, moved_to", [(True, []), (False, [_launcher.ROOT])])
+def test_only_a_checkout_starts_the_server_from_its_own_folder(
+        stood_in, monkeypatch, installed, moved_to):
+    """`uvicorn backend.main:app` finds `backend` in a checkout only from its root; an
+    installed wheel has it on the path already, and stays in the user's folder."""
+    monkeypatch.setattr(_launcher, "_is_installed", installed)
+    moves = []
+    monkeypatch.setattr(_launcher.os, "chdir", moves.append)
+
+    _launcher.main([])
+
+    assert moves == moved_to
+    assert "backend.main:app" in stood_in["exec"]
+
+
+def test_a_failed_server_exec_is_reported_as_a_launcher_error(
+        stood_in, monkeypatch, capsys):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(_launcher.os, "execv",
+                        Mock(side_effect=OSError("cannot start server")))
+
+    assert _launcher.main([]) == 1
+    assert "Launcher failed: cannot start server" in capsys.readouterr().err
+
+
+@_pytest.mark.parametrize("environment_exists, python_exists", [
+    (False, False),
+    (True, False),
+    (True, True),
+])
+def test_launcher_creates_missing_environment_and_reuses_existing_one(
+        tmp_path, monkeypatch, environment_exists, python_exists):
+    from unittest.mock import Mock
+
+    environment = tmp_path / ".venv-windows"
+    python = environment / "python.exe"
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("example==1\n", encoding="ascii")
+    if environment_exists:
+        environment.mkdir()
+    if python_exists:
+        python.touch()
+    monkeypatch.setattr(_launcher, "ROOT", tmp_path)
+    monkeypatch.setattr(_launcher, "REQUIREMENTS", requirements)
+    monkeypatch.setattr(_launcher, "platform_venv_name", lambda: ".venv-windows")
+    monkeypatch.setattr(_launcher, "venv_python", lambda _: python)
+
+    def create(folder):
+        assert folder == environment
+        environment.mkdir(exist_ok=True)
+        python.touch()
+
+    builder = Mock()
+    builder.create.side_effect = create
+    factory = Mock(return_value=builder)
+    install = Mock()
+    monkeypatch.setattr(_launcher.venv, "EnvBuilder", factory)
+    monkeypatch.setattr(_launcher.subprocess, "check_call", install)
+
+    assert _launcher.ensure_environment() == python
+    if python_exists:
+        factory.assert_not_called()
+        builder.create.assert_not_called()
+    else:
+        factory.assert_called_once_with(
+            with_pip=True, clear=environment_exists)
+        builder.create.assert_called_once_with(environment)
+    install.assert_called_once_with(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check",
+         "-r", str(requirements)], cwd=tmp_path)
+    assert not _launcher.requirements_changed(
+        requirements, environment / ".requirements.sha256")
+    factory.reset_mock()
+    builder.create.reset_mock()
+    install.reset_mock()
+
+    assert _launcher.ensure_environment() == python
+    factory.assert_not_called()
+    builder.create.assert_not_called()
+    install.assert_not_called()

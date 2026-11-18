@@ -41,13 +41,17 @@ the ground surface is at 4 m.
 
 The soil is the reference deck's, value for value. The flow uses the intrinsic permeability
 (`PERMEABILITY_XX`, m²), the viscosity, the water density and the retention law. Kratos'
-flow element also checks that the other values are there. A new soil starts from the
-default sand, which has a cohesion and a friction angle. The reference soil has neither,
-so `--unset` removes them:
+flow element also checks that the other values are there. The water is the project's, the
+same in every soil: `fluid` sets its bulk modulus (the reference's water is
+incompressible), and its density follows from the water's specific weight, 10 kN/m³. A new
+soil starts from the blank soil, which is saturated below the phreatic level and has a
+residual saturation above it. The reference soil is saturated everywhere, so `--unset`
+removes the residual saturation:
 
 ```powershell
-kratos-cli material muskat.json add sand --name Sand --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.4 DENSITY_SOLID=2290 DENSITY_WATER=1019.37 POROSITY=0.3333 BULK_MODULUS_SOLID=6.7e19 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=6.9444e-13 PERMEABILITY_YY=6.9444e-13 PERMEABILITY_XY=0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1 RETENTION_LAW=SaturatedLaw SATURATED_SATURATION=0.403
-kratos-cli material muskat.json set sand --unset GEO_COHESION --unset GEO_FRICTION_ANGLE
+kratos-cli material muskat.json add sand --name Sand --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.4 DENSITY_SOLID=2290 POROSITY=0.3333 BULK_MODULUS_SOLID=6.7e19 PERMEABILITY_XX=6.9444e-13 PERMEABILITY_YY=6.9444e-13 PERMEABILITY_XY=0 BIOT_COEFFICIENT=1 RETENTION_LAW=SaturatedLaw SATURATED_SATURATION=0.403
+kratos-cli material muskat.json set sand --unset RESIDUAL_SATURATION
+kratos-cli fluid muskat.json --bulk-modulus 1e20
 kratos-cli layer muskat.json add soil --name Soil --material sand --bottom 0
 ```
 
@@ -68,11 +72,12 @@ top and the bottom have no water pressure condition, so no water flows through t
 
 ### The calculation
 
-One stage, of the type Groundwater flow, and a mesh of quadratic triangles of 0.4 m:
+One stage, of the calculation type flow, and a mesh of quadratic triangles of 0.4 m. A
+new project has its initial stage already, where the calculation type is chosen:
 
 ```text
-PS> kratos-cli stages muskat.json add flow --name Flow --calculation flow
-added stage (id flow, name Flow) after nothing: it is the first; wrote muskat.json
+PS> kratos-cli stages muskat.json set initial --name Flow --calculation flow
+changed stage initial; wrote muskat.json
 
 PS> kratos-cli set muskat.json mesh.element_size 0.4
 mesh.element_size = 0.4; wrote muskat.json
@@ -111,7 +116,7 @@ Pore pressure (Pa), stage 1 (Flow): -30000 to 24000 over 263 nodes
 PS> kratos-cli results field 1 fluxx
 q_x (m/s), stage 1 (Flow): 6.00e-6 to 6.00e-6 over 263 nodes
   min 6.00e-6 at node 1
-  max 6.00e-6 at node 2
+  max 6.00e-6 at node 1
 `--csv` writes every value.
 ```
 
@@ -145,10 +150,12 @@ PS> kratos-cli boundary muskat_vg.json add start --name "Initial phreatic line" 
 added start  Initial phreatic line  water pressure on the whole soil; phreatic line (-0.25, 3.22) -> (0.05, 3.22) -> (1.6, 0.48) -> (1.7, 0.48), initial; wrote muskat_vg.json
 ```
 
-The reference deck allows 100 iterations, with a relative tolerance of 1e-3:
+The reference deck converges on the residual rather than on the water pressure, which a
+flow stage converges on unless it says otherwise. It allows 100 iterations, with a
+relative tolerance of 1e-3 and an absolute one of 1e-15:
 
 ```powershell
-kratos-cli stages muskat_vg.json set flow --max-iterations 100 --tolerance 1e-3
+kratos-cli stages muskat_vg.json set initial --convergence residual --max-iterations 100 --tolerance 1e-3 --absolute-tolerance 1e-15
 kratos-cli set muskat_vg.json mesh.element_size 0.1
 ```
 
@@ -198,11 +205,13 @@ added seepage_face  Seepage face  seepage on line (1.62, 0.48) -> (1.62, 4); wat
 A seepage face is on the soil's outer boundary: on a face (`--face`), or on a line along
 it. The export refuses a seepage line through the soil.
 
-The calculation starts from a horizontal water level at 3.0 m, as Kratos' seepage tests do:
+The calculation starts from a horizontal water level at 3.0 m, as Kratos' seepage tests do,
+and the stage has their tolerances, 1e-4 relative and 1e-9 absolute, on the residual it
+kept from case B:
 
 ```powershell
 kratos-cli boundary muskat_seepage.json add start --name "Start values" --domain --water-pressure Hydrostatic --reference-coordinate 3 --pressure-tension-cut-off 1e5 --initial
-kratos-cli stages muskat_seepage.json set flow --tolerance 1e-4
+kratos-cli stages muskat_seepage.json set initial --tolerance 1e-4 --absolute-tolerance 1e-9
 ```
 
 Kratos' seepage strategy decides, node by node, where the face is open. It changes one

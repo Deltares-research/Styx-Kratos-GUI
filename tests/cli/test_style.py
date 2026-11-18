@@ -8,6 +8,7 @@ sees no difference.
 from __future__ import annotations
 
 import io
+from unittest.mock import call
 
 import pytest
 
@@ -26,7 +27,7 @@ ANSWER = [
     "  domain      x 0 .. 20, y 0 .. 10",
     "  layers      soil",
     "1  initial  Initial stage",
-    "     calculation: K0 procedure; deactivates sheetpile_1, load",
+    "     calculation: mechanical, K0 stresses, static; deactivates sheetpile_1, load",
     "soil  soil  of m_soil: 10 .. 0",
     "ok: simple_dike (2D section at z = 5, SI)",
     "Water level: 5.00 m (specific weight 10000). wrote C:\\work\\simple_dike.json",
@@ -39,6 +40,13 @@ ANSWER = [
 
 def test_a_pipe_or_a_file_gets_no_colour():
     assert not style.enabled(io.StringIO())
+
+
+def test_a_closed_stream_gets_no_colour():
+    stream = io.StringIO()
+    stream.close()
+
+    assert not style.enabled(stream)
 
 
 def test_force_color_gives_colour_to_a_pipe(monkeypatch):
@@ -58,6 +66,95 @@ def test_a_dumb_terminal_gets_no_colour(monkeypatch):
     monkeypatch.setenv("TERM", "dumb")
 
     assert not style.enabled(Terminal())
+
+
+def test_a_terminal_uses_the_console_capability_check(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    check = Mock(return_value=True)
+    monkeypatch.setattr(style, "_reads_escape_codes", check)
+    stream = Terminal()
+
+    assert style.enabled(stream)
+    check.assert_called_once_with(stream)
+
+
+def test_non_windows_terminals_need_no_console_mode_setup(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(style, "sys", SimpleNamespace(platform="linux"))
+
+    assert style._reads_escape_codes(Terminal())
+
+
+@pytest.fixture
+def windows_console(monkeypatch):
+    import ctypes
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    kernel = SimpleNamespace(GetConsoleMode=Mock(), SetConsoleMode=Mock(return_value=1))
+    runtime = SimpleNamespace(get_osfhandle=Mock(return_value=123))
+    stream = SimpleNamespace(fileno=Mock(return_value=7))
+    monkeypatch.setattr(style, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
+    monkeypatch.setitem(sys.modules, "msvcrt", runtime)
+    return kernel, runtime, stream
+
+
+@pytest.mark.parametrize("initial_mode, set_result, expected, set_calls", [
+    (0x0001, 1, True, [call(123, 0x0005)]),
+    (0x0001, 0, False, [call(123, 0x0005)]),
+    (0x0005, 1, True, []),
+])
+def test_windows_console_enables_virtual_terminal_processing_only_when_needed(
+        windows_console, initial_mode, set_result, expected, set_calls):
+    kernel, runtime, stream = windows_console
+
+    def get_mode(handle, mode):
+        assert handle == 123
+        mode._obj.value = initial_mode
+        return 1
+
+    kernel.GetConsoleMode.side_effect = get_mode
+    kernel.SetConsoleMode.return_value = set_result
+
+    assert style._reads_escape_codes(stream) is expected
+    stream.fileno.assert_called_once_with()
+    runtime.get_osfhandle.assert_called_once_with(7)
+    assert kernel.SetConsoleMode.call_args_list == set_calls
+
+
+def test_windows_stream_without_a_console_gets_no_escape_codes(windows_console):
+    kernel, _, stream = windows_console
+    kernel.GetConsoleMode.return_value = 0
+
+    assert not style._reads_escape_codes(stream)
+    kernel.SetConsoleMode.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_at, error", [
+    ("fileno", ValueError("closed stream")),
+    ("handle", OSError("invalid handle")),
+    ("get_mode", AttributeError("console API unavailable")),
+    ("set_mode", OSError("cannot set console mode")),
+])
+def test_windows_console_setup_failures_disable_colour(windows_console, failure_at, error):
+    kernel, runtime, stream = windows_console
+    kernel.GetConsoleMode.return_value = 1
+    operation = {
+        "fileno": stream.fileno,
+        "handle": runtime.get_osfhandle,
+        "get_mode": kernel.GetConsoleMode,
+        "set_mode": kernel.SetConsoleMode,
+    }[failure_at]
+    operation.side_effect = error
+
+    assert not style._reads_escape_codes(stream)
 
 
 # ── What colour does to the text ────────────────────────────────────────────

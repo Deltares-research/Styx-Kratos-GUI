@@ -34,9 +34,8 @@ App.Export = (function () {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
 
-  /* The mesh settings the deck is built with: the project's own, plus any local
-     refinement and any explicit body selection. `volume_keys` is left off unless
-     the user picked bodies, and the server then meshes everything. */
+  /* The mesh settings the deck is built with: the project's own, plus its refinement
+     boxes. It names no bodies (`volume_keys`), so the server meshes the whole model. */
   function meshRequest() {
     var project = App.PROJECT || {};
     var settings = Object.assign({}, project.mesh || {}, {
@@ -44,9 +43,6 @@ App.Export = (function () {
          deck is built from the mesh the user is looking at rather than a flatter one. */
       refinements: App.Viewport.meshRefinements()
     });
-    if (Array.isArray(App.MESH_BODY_SELECTION) && App.MESH_BODY_SELECTION.length) {
-      settings.volume_keys = App.MESH_BODY_SELECTION.slice();
-    }
     return settings;
   }
 
@@ -75,6 +71,13 @@ App.Export = (function () {
     if (result.project_parameters) {
       written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
     }
+    /* Python processes of the deck's own, which Kratos imports from the directory the
+       deck runs in. Today that is only the temporary prestress workaround, for a deck
+       that carries a prestressed anchor into a later stage
+       (core/kratos/prestress_workaround.py). */
+    Object.keys(result.process_files || {}).sort().forEach(function (name) {
+      written.push({ name: name, text: result.process_files[name] });
+    });
     // Which unit system every number above is in. Kratos never reads it; opened again
     // as a deck case, it is what labels the results (core/results/catalog.py).
     if (result.unit_system) {

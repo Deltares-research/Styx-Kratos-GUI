@@ -84,9 +84,13 @@
       err:  function (line) { log.push(['err', line]); },
       write: function (kind, line) { log.push([kind, line]); }
     };
-    App.Download = { anchor: function (name, text, mime) {
-      saved.push({ name: name, text: text, mime: mime });
-    } };
+    // No save window here: a test must not depend on what the browser makes of its click.
+    App.Download = Object.assign({}, App.Download, {
+      pickFile: function () { return Promise.resolve(null); },
+      anchor: function (name, text, mime) {
+        saved.push({ name: name, text: text, mime: mime });
+      }
+    });
 
     var answers = overrides || {};
     App.Api = {
@@ -148,6 +152,14 @@
 
   test('a displacement axis in metres is ticked in round millimetres', function () {
     T.eq(P.ticks(-0.0234, -0.0036, 5), [-0.02, -0.015, -0.01, -0.005]);
+  });
+
+  test('the value axis has as many ticks as its labels have room for', function () {
+    // 162 px of axis: seven labels of five digits ran into each other.
+    var large = P.fittingTicks(-2770, 58178, 5, 162);
+    T.ok(large.length >= 2 && large.length <= 4, 'room for ' + large.join(', '));
+    T.eq(P.ticks(-2770, 58178, 5).length > large.length, true);
+    T.eq(P.fittingTicks(-2.7, 56.6, 5, 162), [0, 10, 20, 30, 40, 50], 'short labels all fit');
   });
 
   test('tick labels carry the decimals of the step and no more', function () {
@@ -357,6 +369,20 @@
     });
   });
 
+  test('an unknown plot quantity lists each member and leaves the existing plot unchanged', function () {
+    setup();
+    return P.command('wall M').then(function () {
+      var before = P.state().plot, count = api.calls.length;
+      return P.command('not-a-quantity').then(function () {
+        T.ok(/Nothing in this run can be plotted/.test(text()), text());
+        T.ok(/interface: tn, ts/.test(text()), text());
+        T.ok(/wall: M, Q, N, ux/.test(text()), text());
+        T.eq(api.calls.length, count, 'a nonexistent quantity does not request plot data');
+        T.eq(P.state().plot, before);
+      });
+    });
+  });
+
   test('results plot members lists what can be plotted', function () {
     setup();
     return P.command('members').then(function () {
@@ -429,6 +455,73 @@
     return P.command('csv').then(function () {
       T.eq(saved.length, 1);
       T.eq(saved[0].name, RUN + '_wall_M.csv');
+    });
+  });
+
+  /* ── A wall with an interface on each face ───────────────────────────── */
+
+  var FACES = { members: [
+    { name: 'interface_left', stages: [3, 7], quantities: [QUANTITIES.tn, QUANTITIES.ts] },
+    { name: 'interface_right', stages: [3, 7], quantities: [QUANTITIES.tn, QUANTITIES.ts] },
+    { name: 'wall', stages: [3, 7],
+      quantities: [QUANTITIES.M, QUANTITIES.Q, QUANTITIES.N, QUANTITIES.ux] }
+  ] };
+
+  function setupFaces() {
+    var answers = {};
+    answers[BASE + '/members'] = FACES;
+    setup(answers);
+  }
+
+  test('a wall with an interface on each face offers both faces to choose from', function () {
+    setupFaces();
+    return P.command('').then(function () {
+      T.eq(P.state().members.map(function (m) { return m.name; }),
+           ['interface_left', 'interface_right', 'wall']);
+      T.eq([P.state().member, P.state().quantity], ['wall', 'M']);
+    });
+  });
+
+  test('each face is plotted when it is chosen, with the quantity on screen kept', function () {
+    setupFaces();
+    return P.command('interface_left tn').then(function () {
+      T.eq(api.calls[api.calls.length - 1], BASE + '/members/interface_left/tn');
+      // What the window's Member list sends when the other face is chosen.
+      return P.command('interface_right');
+    }).then(function () {
+      T.eq(api.calls[api.calls.length - 1], BASE + '/members/interface_right/tn');
+      T.eq([P.state().member, P.state().quantity], ['interface_right', 'tn']);
+      T.eq(P.state().plot.member, 'interface_right');
+      T.eq(errors(), []);
+    });
+  });
+
+  test('results plot interface_right tn plots that face', function () {
+    setupFaces();
+    return P.command('interface_right tn').then(function () {
+      T.eq(api.calls, [BASE + '/members', BASE + '/members/interface_right/tn']);
+      T.ok(/Normal traction \(kN\/m²\) along the interface_right/.test(text()), text());
+    });
+  });
+
+  test('a traction alone is plotted on a face, the one on screen first', function () {
+    setupFaces();
+    return P.command('tn').then(function () {
+      T.eq([P.state().member, P.state().quantity], ['interface_left', 'tn']);
+      return P.command('interface_right ts');
+    }).then(function () {
+      return P.command('tn');
+    }).then(function () {
+      T.eq([P.state().member, P.state().quantity], ['interface_right', 'tn']);
+    });
+  });
+
+  test('the one interface of an older run is not a name a run with two faces has', function () {
+    setupFaces();
+    return P.command('interface tn').then(function () {
+      T.ok(/no member called "interface"/.test(text()), text());
+      T.ok(/interface_left, interface_right, wall/.test(text()), text());
+      T.eq(api.calls, [BASE + '/members']);
     });
   });
 

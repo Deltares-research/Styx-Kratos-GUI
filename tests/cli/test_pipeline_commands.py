@@ -53,11 +53,84 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
     assert "not meshed here" in ran.err
 
 
+def test_mesh_sizes_a_body_as_the_mesh_window_does(cli, site):
+    """The Layer and Object mesh sizes of the Mesh properties window."""
+    assert cli("mesh", site, "--body-size", "soil_L1", "2").code == 0
+    assert session.load(site).mesh.body_sizes == {"soil_L1": 2.0}
+
+    assert cli("mesh", site, "--body-size", "soil_L1", "none").code == 0
+    assert session.load(site).mesh.body_sizes == {}
+
+
+def test_mesh_grows_a_size_back_over_a_band(cli, site):
+    """The Band of a local mesh size, as the Selection explorer sets it."""
+    assert cli("mesh", site, "--body-size", "soil_L1", "1", "--band", "soil_L1", "5").code == 0
+    assert session.load(site).mesh.size_bands == {"soil_L1": 5.0}
+
+    assert cli("mesh", site, "--band", "soil_L1", "none").code == 0
+    assert session.load(site).mesh.size_bands == {}
+
+    refused = cli("mesh", site, "--band", "soil_L2", "5")
+    assert refused.code == 1 and "give soil_L2 a size first" in refused.err
+
+    assert cli("mesh", site, "--band", "soil_L1", "5").code == 0
+    assert cli("mesh", site, "--body-size", "soil_L1", "none").code == 0
+    mesh = session.load(site).mesh
+    assert (mesh.body_sizes, mesh.size_bands) == ({}, {}), "the band goes with its size"
+
+
+def test_mesh_sizes_every_node_part_as_the_gui_does(cli, tmp_path):
+    """An anchor (at its head), a line load and a face of the model take a size, as in
+    the GUI's Mesh properties window. A condition on a face takes the size of the face,
+    as its Mesh group in the Selection explorer does, and one on the whole soil is
+    refused: the whole soil is meshed at the element size."""
+    from tests.models.excavation import excavation_project
+    path = session.save(excavation_project(staged=False), tmp_path / "pit.json")
+
+    ran = cli("mesh", path, "--body-size", "strut", "0.5", "--body-size", "surcharge", "1",
+              "--body-size", "fixed_bottom", "2", "--band", "fixed_bottom", "10",
+              "--body-size", "face_top", "1.5")
+
+    assert ran.code == 0, ran.err
+    mesh = session.load(path).mesh
+    assert {"strut": 0.5, "surcharge": 1.0, "face_bottom": 2.0,
+            "face_top": 1.5}.items() <= mesh.body_sizes.items()
+    assert mesh.size_bands["face_bottom"] == 10.0
+    assert "fixed_bottom" not in mesh.body_sizes
+
+    refused = cli("mesh", path, "--body-size", "pore_pressure", "1")
+    assert refused.code == 1 and "acts on the whole soil" in refused.err
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"gone": 1.0}
+    payload["mesh"]["size_bands"] = {}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    offered = cli("mesh", path).err.split("A size can be given to: ")[1].split(".")[0]
+    offered = offered.split(", ")
+    assert {"sheetpile", "strut", "surcharge", "face_bottom", "face_left", "face_right",
+            "face_top"} <= set(offered)
+    assert "face_front" not in offered, "a 2D section has no front face"
+
+
+def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"gone": 1.0}
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("mesh", site)
+
+    assert ran.code == 1
+    assert "mesh settings name objects this model does not have: gone" in ran.err
+
+
 # ── stages ──────────────────────────────────────────────────────────────────
 
-def test_stages_defaults_gives_the_initial_stage_and_the_null_step(cli, site):
-    assert cli("stages", site, "defaults").code == 0
+def test_there_are_no_default_stages(cli, site):
+    """Every stage is the user's to add."""
+    assert cli("stages", site, "defaults").code == 2
 
+    assert cli("stages", site, "add").code == 0
+    assert cli("stages", site, "add").code == 0
     stages = session.load(site).stages
     assert len(stages) == 2 and stages[1].parent == stages[0].id
     listed = cli("stages", site, "list").out
@@ -223,6 +296,75 @@ def test_calculate_exports_and_runs_in_one_step(cli, site, stand_in_kratos):
     assert run.parent == calculation.runs_root()
     assert answer["stats"]["nodes"] > 0
     assert list(run.glob("*.mdpa"))
+
+
+def test_a_stopped_calculation_says_so_and_where_its_files_are(cli, site, stand_in_kratos):
+    """Ctrl+C, or Stop in the GUI, while `calculate` runs (`calculation.stop`)."""
+    import threading
+    import time
+
+    stand_in_kratos("import time\n"
+                    "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"
+                    "for _ in range(600):\n"
+                    "    print('iterating', flush=True)\n"
+                    "    time.sleep(0.05)\n")
+
+    def stop_when_running() -> None:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            directory = calculation.current_run()
+            log = directory / calculation.LOG_NAME if directory else None
+            if log is not None and log.is_file() and "iterating" in log.read_text(
+                    encoding="utf-8", errors="replace"):
+                calculation.stop()
+                return
+            time.sleep(0.02)
+
+    watcher = threading.Thread(target=stop_when_running)
+    watcher.start()
+    ran = cli("calculate", site)
+    watcher.join()
+
+    assert ran.code == 1
+    assert "stopped by the user in stage 1 of 1 (1_Flow)" in ran.out
+    assert "Stopped by the user after" in ran.err
+
+
+SLOW_RESIDUALS = (
+    "import time\n"
+    "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"
+    "print('GeoMechanics Analysis: Analysis -START-', flush=True)\n"
+    "for n in range(3):\n"
+    "    print(f'RESIDUAL CRITERION:  :: [ Obtained ratio = {10.0 ** -n:g}; Expected ratio"
+    " = 0.01; Absolute norm = 1; Expected norm =  1e-09]', flush=True)\n"
+    "    time.sleep(0.4)\n"
+    "print('RESIDUAL CRITERION: Convergence is achieved', flush=True)\n"
+    "print('[kratos-gui] stage end 1/1 1_Flow', flush=True)\n")
+"""A stand-in that prints three residuals, 0.4 s apart, in one stage."""
+
+
+def test_follow_prints_each_iteration_on_stderr_and_keeps_stdout_the_answer(
+        cli, site, stand_in_kratos):
+    stand_in_kratos(SLOW_RESIDUALS)
+
+    ran = cli("--json", "calculate", site, "--follow")
+
+    assert ran.code == 0, ran.err
+    assert ran.json()["ok"] is True, "stdout is the JSON answer alone"
+    lines = [line.strip() for line in ran.err.splitlines()]
+    assert lines[0] == "stage 1 of 1: Flow"
+    assert [line.split(":")[0] for line in lines[1:4]] == [
+        "iteration 1", "iteration 2", "iteration 3"]
+    assert lines[3].endswith("met")
+    assert len(lines) == 4, "each line once"
+
+
+def test_without_follow_nothing_is_printed_during_the_run(cli, site, stand_in_kratos):
+    stand_in_kratos(SLOW_RESIDUALS)
+
+    ran = cli("--json", "calculate", site)
+
+    assert "iteration" not in ran.err
 
 
 # ── results ─────────────────────────────────────────────────────────────────

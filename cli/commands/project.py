@@ -1,6 +1,7 @@
-"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`: the project file, and
-the edits that have a command of their own because they carry the rest of the model
-with them (`core.session.set_dimension`, `set_units`, `set_water_level`)."""
+"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`, `fluid`: the project
+file, and the edits that have a command of their own because they carry the rest of the
+model with them (`core.session.set_dimension`, `set_units`, `set_water_level`,
+`set_fluid`)."""
 
 from __future__ import annotations
 
@@ -8,13 +9,13 @@ import argparse
 from pathlib import Path
 
 from cli.commands import conditions
-from cli.commands.meshing import nothing_to_mesh
-from cli.terminal.files import add_project, add_writing, written
+from cli.commands.meshing import mesh_settings, nothing_to_mesh
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from core import session
 from core.kratos import condition_checks
-from core.model import stages
-from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
+from core.model import stages, units
+from core.model.schemas import DimensionUpdate, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
 
 REMOVE = ("off", "none", "remove")
@@ -90,6 +91,21 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add_writing(water)
     water.set_defaults(handler=set_water)
 
+    fluid = commands.add_parser(
+        "fluid", parents=[common],
+        help="show or set the water in every soil's pores: its bulk modulus and viscosity",
+        description="The water every soil holds, one for the whole project. Its weight is "
+                    "the water level's specific weight; its bulk modulus and viscosity "
+                    "are set here, in the project's units. Unset, each is water's at 20 C.")
+    add_project(fluid)
+    fluid.add_argument("--bulk-modulus", type=float, help="BULK_MODULUS_FLUID, a stress")
+    fluid.add_argument("--viscosity", type=float, help="DYNAMIC_VISCOSITY")
+    fluid.add_argument("--unset", nargs="+", default=[], metavar="FIELD",
+                       choices=("bulk_modulus", "dynamic_viscosity"),
+                       help="give these back to water's own")
+    add_writing(fluid)
+    fluid.set_defaults(handler=set_fluid)
+
 
 # ── The project file ────────────────────────────────────────────────────────
 
@@ -111,7 +127,7 @@ def new_project(args: argparse.Namespace) -> Answer:
 
 
 def show_project(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     data = {"file": str(args.project), **summary(project)}
     return Answer(data=data, lines=described(data))
 
@@ -123,7 +139,7 @@ def check_project(args: argparse.Namespace) -> Answer:
     (`condition_checks.flow_refusal`) is refused here, in the same words. The export's
     warnings about the boundary conditions that need no mesh (`core.kratos.condition_checks`)
     are said too, as warnings: the model can still be exported."""
-    project = session.load(args.project)
+    project = read(args)
     if project.deck is None:
         empty = nothing_to_mesh(project)
         if empty:
@@ -132,10 +148,7 @@ def check_project(args: argparse.Namespace) -> Answer:
         refused = condition_checks.flow_refusal(project)
         if refused:
             raise CommandError(refused)
-        unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
-        if unknown:
-            raise CommandError("the mesh settings name bodies this model does not have: "
-                               + ", ".join(unknown))
+        mesh_settings(project)
     warnings = condition_checks.warnings(project)
     return Answer(data={"ok": True, "file": str(args.project), **summary(project),
                         "warnings": warnings},
@@ -152,7 +165,7 @@ def build_project(args: argparse.Namespace) -> Answer:
 
 
 def write_script(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.write_script(project, args.out, force=args.force, source=args.project)
     return Answer(data={"file": str(args.out), **summary(project)},
                   lines=[f"wrote {args.out}: {headline(project)}",
@@ -163,7 +176,7 @@ def write_script(args: argparse.Namespace) -> Answer:
 # ── The edits with a command of their own ───────────────────────────────────
 
 def switch_dimension(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     project, notes = session.set_dimension(project, DimensionUpdate(
         dimension=2 if args.to[0] == "2" else 3, section_offset=args.offset))
     target, where = written(args, project)
@@ -173,7 +186,7 @@ def switch_dimension(args: argparse.Namespace) -> Answer:
 
 
 def switch_units(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.system is None:
         return Answer(data={"unit_system": project.unit_system},
                       lines=[f"{project.name} is in {project.unit_system} units."])
@@ -186,7 +199,7 @@ def switch_units(args: argparse.Namespace) -> Answer:
 
 
 def set_water(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.level is None:
         return Answer(data={"water": _water(project)}, lines=[_water_line(project)])
     if args.level.lower() in REMOVE:
@@ -206,6 +219,37 @@ def set_water(args: argparse.Namespace) -> Answer:
                      "about it: kratos-cli boundary P add --domain --water-pressure "
                      "Hydrostatic")
     return Answer(data={"file": _file(target), "water": _water(project)}, lines=lines)
+
+
+def set_fluid(args: argparse.Namespace) -> Answer:
+    project = session.load(args.project)
+    if args.bulk_modulus is None and args.viscosity is None and not args.unset:
+        return Answer(data={"fluid": _fluid(project)}, lines=[_fluid_line(project)])
+    project = session.set_fluid(project, bulk_modulus=args.bulk_modulus,
+                                dynamic_viscosity=args.viscosity, unset=args.unset)
+    target, where = written(args, project)
+    return Answer(data={"file": _file(target), "fluid": _fluid(project)},
+                  lines=[f"{_fluid_line(project)} {where}"])
+
+
+def _fluid(project: Project) -> dict:
+    """The water every soil is written with, as the export writes it."""
+    return {**project.fluid.model_dump(mode="json"), "written": project.water_variables}
+
+
+def _fluid_line(project: Project) -> str:
+    written = project.water_variables
+    system = project.unit_system
+
+    def given(value: float | None) -> str:
+        return "" if value is not None else " (water's)"
+
+    return (f"Water in every soil: bulk modulus {written['BULK_MODULUS_FLUID']:g} "
+            f"{units.label(units.STRESS, system)}{given(project.fluid.bulk_modulus)}, "
+            f"viscosity {written['DYNAMIC_VISCOSITY']:g} "
+            f"{units.label(units.VISCOSITY, system)}{given(project.fluid.dynamic_viscosity)}, "
+            f"density {written['DENSITY_WATER']:g} {units.label(units.DENSITY, system)} "
+            "(the water level's specific weight over g).")
 
 
 # ── Saying what a model is ──────────────────────────────────────────────────
@@ -228,7 +272,9 @@ def summary(project: Project) -> dict:
         "custom_parts": [p.key for p in project.custom_parts],
         "water": _water(project),
         "boundary_conditions": conditions.summary(project),
-        "gravity": project.gravity,
+        # Derived: the initial stage's stress initialisation decides it.
+        "gravity": stages.gravity(project),
+        "gravity_acceleration": project.gravity_acceleration,
         "stages": [p.id for p in project.stages],
         "mesh": {"element_size": project.mesh.element_size, "order": project.mesh.order},
         "deck": project.deck.directory if project.deck is not None else None,
@@ -273,7 +319,8 @@ def described(data: dict) -> list[str]:
             f"{c['id']} ({c['kind'].replace('_', ' ')} on {c['on']}"
             + ("" if c["active"] else ", inactive") + ")"
             for c in data["boundary_conditions"]) or "none"),
-        f"  gravity     {'on' if data['gravity'] else 'off'}",
+        f"  gravity     {'on' if data['gravity'] else 'off'}, "
+        f"g = {data['gravity_acceleration']:g} m/s²",
         f"  stages      {names(data['stages'])}",
         f"  mesh        element size {data['mesh']['element_size']:g}, "
         f"order {data['mesh']['order']}",

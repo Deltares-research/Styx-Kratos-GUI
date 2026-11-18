@@ -1,6 +1,6 @@
 /* Calculate is greyed out until there is something to calculate, and while a run is
-   under way it says so and cannot be pressed again (js/calculate.js `state`,
-   js/patches.js `syncCalculate`). */
+   under way the toolbar button is Stop and cannot start a second run (js/calculate.js
+   `state`, js/patches.js `syncCalculate`). */
 
 (function () {
 
@@ -115,8 +115,10 @@
     App.Export = { meshRequest: function () { return { element_size: 1 }; } };
     App.Results = { remember: function () { return Promise.resolve(); },
                     handleCommand: function () { return false; } };
-    App.Api = { post: function () {
+    ctx.paths = [];
+    App.Api = { post: function (path) {
       ctx.posts += 1;
+      ctx.paths.push(path);
       return new Promise(function (resolve, reject) {
         ctx.pending.push({ resolve: resolve, reject: reject });
       });
@@ -127,8 +129,16 @@
       App.runAction = saved.action; App.Command = saved.command; App.PROJECT = saved.project;
       App.state = saved.state; App.Api = saved.api; App.Results = saved.results;
       App.Export = saved.exporter; App.setMode = saved.setMode;
+      if (ctx.dropLayer) ctx.dropLayer();
       App.LivePatches.resetForTests();
       App.LivePatches.syncCalculate();
+    }
+
+    /* Every request still open is answered first, so a test that failed half-way does
+       not leave a run going for the tests after it. */
+    function settled() {
+      ctx.pending.forEach(function (open) { open.resolve(finished()); });
+      return tick();
     }
 
     var outcome;
@@ -137,11 +147,15 @@
       App.Toolbars.mountMain();
       App.Toolbars.mountRail('staged');
       outcome = body(ctx);
-    } catch (err) { restore(); throw err; }
-    if (outcome && typeof outcome.then === 'function') {
-      return outcome.then(function (v) { restore(); return v; },
-                          function (e) { restore(); throw e; });
+    } catch (err) {
+      if (!ctx.pending.length) { restore(); throw err; }
+      return settled().then(function () { restore(); throw err; });
     }
+    if (outcome && typeof outcome.then === 'function') {
+      return outcome.then(function (v) { return settled().then(function () { restore(); return v; }); },
+                          function (e) { return settled().then(function () { restore(); throw e; }); });
+    }
+    if (ctx.pending.length) return settled().then(function () { restore(); return outcome; });
     restore();
     return outcome;
   }
@@ -152,6 +166,19 @@
     return button.classList.contains('disabled')
         && button.getAttribute('aria-disabled') === 'true';
   }
+
+  test('each rail button carries its action and its tip, so a script or a reader can name it', function () {
+    withButton(SOIL, function () {
+      T.eq(document.querySelector('#toolrail .rail-btn[data-action="calculate"]'), railButton());
+      T.ok(/Calculate/.test(railButton().getAttribute('aria-label')),
+           railButton().getAttribute('aria-label'));
+      var tools = (App.RAILS.staged || []).filter(function (t) { return t !== '-'; });
+      var buttons = document.querySelectorAll('#toolrail .rail-btn');
+      tools.forEach(function (tool, i) {
+        T.eq(buttons[i].getAttribute('data-tool'), tool.action || tool.icon);
+      });
+    });
+  });
 
   test('with nothing to mesh, every Calculate is greyed out and its tip says why', function () {
     withButton(BLANK, function () {
@@ -246,29 +273,45 @@
     });
   });
 
-  test('while a run is under way the button says so, spins and refuses a second press', function () {
+  /* `App.Calculate.askStop` stood in for, so a press does not open the dialog. */
+  function withoutAsking(ctx) {
+    var real = App.Calculate.askStop;
+    ctx.asked = 0;
+    App.Calculate.askStop = function () { ctx.asked += 1; return Promise.resolve(false); };
+    return function () { App.Calculate.askStop = real; };
+  }
+
+  test('while a run is under way the button is Stop, and no press starts a second run', function () {
     return withButton(SOIL, function (ctx) {
       calculateButton().click();
       T.eq(ctx.posts, 1);
       T.eq(App.Calculate.running(), true);
 
       var button = calculateButton();
-      T.ok(button.classList.contains('calculating'), 'the running look');
-      T.ok(greyed(button), 'and greyed, so it is not pressed again');
+      T.ok(button.classList.contains('stop-calc'), 'the Stop look');
+      T.ok(!button.classList.contains('calculating'));
+      T.ok(!greyed(button), 'it can be pressed, to stop');
       T.eq(button.getAttribute('aria-busy'), 'true');
-      T.eq(button.querySelector('span').textContent, 'Calculating…');
-      T.eq(menuItem().label, 'Calculating…');
-      T.eq(menuItem().disabled, true);
-      T.ok(railButton().disabled && railButton().classList.contains('calculating'));
+      T.eq(button.querySelector('span').textContent, 'Stop');
+      T.eq(String(App.LivePatches.calculateTip), App.Calculate.STOP_TIP);
+      T.eq(menuItem().label, 'Stop calculation');
+      T.eq(menuItem().disabled, false);
+      T.ok(railButton().disabled && railButton().classList.contains('calculating'),
+           'the rail only spins');
 
-      button.click();
-      App.runAction({ action: 'calculate' });
+      var back = withoutAsking(ctx);
+      try {
+        button.click();
+        App.runAction(menuItem());
+        App.runAction({ action: 'calculate' });          // F9
+      } finally { back(); }
+      T.eq(ctx.asked, 2, 'the button and the menu item ask to stop');
       T.eq(ctx.posts, 1, 'no second request');
       T.ok(ctx.notes.some(function (n) { return /^note:Calculating…/.test(n); }),
-           ctx.notes.join(' | '));
+           'F9 is refused with the reason: ' + ctx.notes.join(' | '));
 
       App.Toolbars.mountMain();
-      T.eq(calculateButton().querySelector('span').textContent, 'Calculating…',
+      T.eq(calculateButton().querySelector('span').textContent, 'Stop',
            'a remount while it runs keeps the label');
 
       ctx.pending[0].resolve(finished());
@@ -285,14 +328,119 @@
     });
   });
 
+  test('a confirmed stop is sent, the button says Stopping…, and the run reports it', function () {
+    return withButton(SOIL, function (ctx) {
+      calculateButton().click();
+      var stopped = App.Calculate.stop();
+      T.eq(ctx.paths[1], '/api/calculate/stop');
+      var button = calculateButton();
+      T.eq(button.querySelector('span').textContent, 'Stopping…');
+      T.ok(button.classList.contains('calculating') && greyed(button),
+           'once asked, it spins and is not pressed again');
+      T.eq(menuItem().label, 'Stopping…');
+      T.eq(menuItem().disabled, true);
+      ctx.pending[1].resolve({ stopped: true });
+      return stopped.then(function (answer) {
+        T.eq(answer, true);
+        T.ok(ctx.notes.indexOf('note:Stopping Kratos…') >= 0, ctx.notes.join(' | '));
+        var result = finished();
+        result.ok = false;
+        result.stopped = true;
+        result.stage = { index: 2, of: 3, name: '2_Dig' };
+        ctx.pending[0].resolve(result);
+        return tick();
+      }).then(function () {
+        T.eq(App.Calculate.running(), false);
+        T.eq(App.Calculate.stopping(), false);
+        var after = calculateButton();
+        T.ok(!after.classList.contains('stop-calc') && !after.classList.contains('calculating'));
+        T.eq(after.querySelector('span').textContent, 'Calculate');
+        T.ok(ctx.notes.some(function (n) {
+          return /^note:Calculation stopped after 3 s, in stage 2 of 3/.test(n);
+        }), ctx.notes.join(' | '));
+        T.ok(!ctx.notes.some(function (n) { return /^err:/.test(n); }), 'not a failure');
+      });
+    });
+  });
+
+  /* The Stop question is a dialog, and a dialog needs the page's layer. Made after
+     Calculate is pressed, so the Convergence window does not open and poll a server
+     these tests do not stand in for. */
+  function dialogLayer(ctx) {
+    var layer = document.getElementById('modal-layer');
+    var own = !layer;
+    if (own) {
+      layer = document.createElement('div');
+      layer.id = 'modal-layer';
+      document.body.appendChild(layer);
+    }
+    ctx.dropLayer = function () {
+      Array.prototype.forEach.call(layer.querySelectorAll('.dlg-calc-stop .dlg-x'),
+                                   function (x) { x.click(); });
+      if (own) layer.remove();
+    };
+  }
+
+  test('Stop asks first, and "Keep running" leaves the run alone', function () {
+    return withButton(SOIL, function (ctx) {
+      calculateButton().click();
+      dialogLayer(ctx);
+      calculateButton().click();
+      var dialog = document.querySelector('#modal-layer .dlg-calc-stop');
+      T.ok(dialog, 'a question, not a stop');
+      T.eq(ctx.posts, 1);
+      var keep = Array.prototype.filter.call(dialog.querySelectorAll('button'),
+                                             function (b) { return b.textContent === 'Keep running'; })[0];
+      keep.click();
+      T.ok(!document.querySelector('#modal-layer .dlg-calc-stop'), 'the question is gone');
+      T.eq(ctx.posts, 1, 'nothing was sent');
+      T.eq(App.Calculate.stopping(), false);
+      calculateButton().click();
+      var again = document.querySelector('#modal-layer .dlg-calc-stop');
+      Array.prototype.filter.call(again.querySelectorAll('button'),
+                                  function (b) { return b.textContent === 'Stop calculation'; })[0].click();
+      T.eq(ctx.paths[1], '/api/calculate/stop');
+      ctx.pending[1].resolve({ stopped: true });
+      ctx.pending[0].resolve(finished());
+      return tick();
+    });
+  });
+
+  test('calculate stop in the command box stops without asking', function () {
+    return withButton(SOIL, function (ctx) {
+      calculateButton().click();
+      var typed = App.Command.run('calculate stop');
+      T.ok(!document.querySelector('#modal-layer .dlg-calc-stop'), 'typed: no question');
+      T.eq(ctx.paths[1], '/api/calculate/stop');
+      ctx.pending[1].resolve({ stopped: true });
+      return Promise.resolve(typed).then(function () {
+        ctx.pending[0].resolve(finished());
+        return tick();
+      });
+    });
+  });
+
+  test('calculate stop with nothing running says so', function () {
+    return withButton(SOIL, function (ctx) {
+      var typed = App.Command.run('calculate stop');
+      T.eq(ctx.paths[0], '/api/calculate/stop', 'asked: a run of another tab is stopped too');
+      ctx.pending[0].resolve({ stopped: false });
+      return Promise.resolve(typed).then(function () {
+        T.ok(ctx.notes.indexOf('note:No calculation is running.') >= 0, ctx.notes.join(' | '));
+        T.eq(App.Calculate.running(), false);
+      });
+    });
+  });
+
   test('a failed run clears the running look too', function () {
     return withButton(SOIL, function (ctx) {
       calculateButton().click();
-      T.ok(calculateButton().classList.contains('calculating'));
+      T.ok(calculateButton().classList.contains('stop-calc'));
       ctx.pending[0].reject(new Error('Cannot reach the model server'));
       return tick().then(function () {
         T.eq(App.Calculate.running(), false);
         T.ok(!calculateButton().classList.contains('calculating'));
+        T.ok(!calculateButton().classList.contains('stop-calc'));
         T.ok(!greyed(calculateButton()));
         T.ok(ctx.notes.some(function (n) { return /^err:Calculation failed/.test(n); }));
       });

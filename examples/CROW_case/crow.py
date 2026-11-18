@@ -1,6 +1,6 @@
 """CROW excavation wall, as a model script.
 
-Written by kratos-cli from crow.json on 2026-10-21. Every value is the model's own,
+Written by kratos-cli from crow.json on 2026-11-09. Every value is the model's own,
 typed out; constants and loops can be put in by hand.
 
     run crow.py                   in the GUI's command box: open it there
@@ -37,9 +37,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorSection, Beam, BeamSection, BoxRefinement, DisplacementCondition,
-    Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings,
-    NormalLoad, Project, SoilLayer, Stage, WaterPressureCondition)
+    Anchor, AnchorSection, Beam, BeamSection, DisplacementCondition, Domain,
+    Interface, InterfaceSection, Line, LineLoad, Material, MeshSettings, NormalLoad,
+    Project, SoilBody, SoilLayer, Stage, WaterPressureCondition)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -51,99 +51,78 @@ DOMAIN = Domain(x0=0.0, x1=80.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-60.0)
 
 MATERIALS = [
     Material(
-        id="m_upper",
-        name="Upper ground",
-        constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
+        id="clay",
+        name="Clay",
+        constitutive_law="GeoMohrCoulombLawPlaneStrain",
         variables={
             "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 900000.0,
             "POISSON_RATIO": 0.2,
-            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_SOLID": 1834.86,
             "POROSITY": 0.0,
-            "PERMEABILITY_XX": 1.1574074074074073e-05,
-            "GEO_COHESION": 1000.0,
-            "GEO_FRICTION_ANGLE": 22.3,
-            "DENSITY_WATER": 1019.367991845056,
-            "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
-            "PERMEABILITY_YY": 1.1574074074074073e-05,
-            "PERMEABILITY_XY": 0.0,
+            "GEO_COHESION": 3000.0,
+            "GEO_FRICTION_ANGLE": 22.5,
+            "GEO_DILATANCY_ANGLE": 0.0,
+            "GEO_ENABLE_TENSION_CUT_OFF": False,
             "K0_NC": 0.62,
+            "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+            "SATURATED_SATURATION": 1.0,
+            "RESIDUAL_SATURATION": 1e-10,
         },
         color="#c4a86a",
+        r_inter=0.48021693505171,
     ),
     Material(
-        id="m_lower",
-        name="Deep sand",
-        constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
+        id="sand",
+        name="Sand",
+        constitutive_law="GeoMohrCoulombLawPlaneStrain",
         variables={
             "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 7428600.0,
             "POISSON_RATIO": 0.3,
-            "DENSITY_SOLID": 2038.735983690112,
+            "DENSITY_SOLID": 2038.74,
             "POROSITY": 0.0,
-            "PERMEABILITY_XX": 5.787037037037037e-05,
             "GEO_COHESION": 0.0,
-            "GEO_FRICTION_ANGLE": 32.7,
-            "DENSITY_WATER": 1019.367991845056,
-            "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
-            "PERMEABILITY_YY": 5.787037037037037e-05,
-            "PERMEABILITY_XY": 0.0,
+            "GEO_FRICTION_ANGLE": 32.5,
+            "GEO_DILATANCY_ANGLE": 0.0,
+            "GEO_ENABLE_TENSION_CUT_OFF": False,
             "K0_NC": 0.46,
+            "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+            "SATURATED_SATURATION": 1.0,
+            "RESIDUAL_SATURATION": 1e-10,
         },
         color="#b08a6a",
+        r_inter=0.571318827227732,
     ),
 ]
 
 LAYERS = [
-    SoilLayer(
-        id="L_top",
-        name="Soil_Top",
-        mat="m_upper",
-        top=0.0,
-        bottom=-8.0,
-    ),
-    SoilLayer(
-        id="L_mid",
-        name="Soil_Middle",
-        mat="m_upper",
-        top=-8.0,
-        bottom=-12.0,
-    ),
-    SoilLayer(
-        id="L_bot",
-        name="Soil_Bottom",
-        mat="m_lower",
-        top=-12.0,
-        bottom=-60.0,
-    ),
+    SoilLayer(id="L_top", name="Soil_Top", mat="clay", top=0.0, bottom=-8.0),
+    SoilLayer(id="L_mid", name="Soil_Middle", mat="clay", top=-8.0, bottom=-12.0),
+    SoilLayer(id="L_bot", name="Soil_Bottom", mat="sand", top=-12.0, bottom=-60.0),
 ]
 
-EXCAVATION = Excavation(
-    x0=0.0,
-    x1=5.0,
-    z0=0.0,
-    z1=10.0,
-    floor_y=-8.0,
-    levels=[-2.0, -5.0, -8.0],
-)
+# The sheet pile cuts Soil_Top and Soil_Middle at x = 5, and each line is the floor of a lift;
+# the floor of the third lift is the boundary of the layer.
+LINES = [
+    Line(id="floor_1", name="Floor of lift 1", points=[(0.0, -2.0), (5.0, -2.0)]),
+    Line(id="floor_2", name="Floor of lift 2", points=[(0.0, -5.0), (5.0, -5.0)]),
+]
 
-# The supports: the bottom fixed in x and y, the left side (the symmetry plane) and the
-# right side on rollers, held in x. The plane-strain section holds z by itself.
-# The pore pressure: hydrostatic about the phreatic level at -1.5 m, fixed on the whole
-# soil. The condition carries its own level, as each water load below does.
-BOUNDARY_CONDITIONS = [
-    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom",
-                          fixed=(True, True, True)),
-    DisplacementCondition(id="roller_left", name="Roller left", on="face", face="left",
-                          fixed=(True, False, False)),
-    DisplacementCondition(id="roller_right", name="Roller right", on="face", face="right",
-                          fixed=(True, False, False)),
-    WaterPressureCondition(id="pore_pressure", name="Pore pressure", on="domain",
-                           fluid_pressure_type="Hydrostatic", reference_coordinate=-1.5),
+# What those cut, named. A stage switches a body off by its key, soil_<layer>__<id>.
+BODIES = [
+    SoilBody(id="lift1", name="lift 1", layer="L_top", point=(2.5, -1.0), mat="clay"),
+    SoilBody(id="retained", name="retained", layer="L_top", point=(40.0, -4.0), mat="clay"),
+    SoilBody(id="lift2", name="lift 2", layer="L_top", point=(2.5, -3.5), mat="clay"),
+    SoilBody(id="lift3", name="lift 3", layer="L_top", point=(2.5, -6.5), mat="clay"),
+    SoilBody(id="pit", name="below the pit", layer="L_mid", point=(2.5, -10.0), mat="clay"),
+    SoilBody(
+        id="retained",
+        name="retained",
+        layer="L_mid",
+        point=(40.0, -10.0),
+        mat="clay",
+    ),
 ]
 
 
@@ -159,7 +138,7 @@ BEAM_SECTIONS = [
             "DENSITY": 298.36,
             "CROSS_AREA": 0.4924,
             "I33": 0.009948850085333335,
-            "AREA_EFFECTIVE_Y": 10.0,
+            "AREA_EFFECTIVE_Y": 10000.0,
         },
     ),
 ]
@@ -175,7 +154,7 @@ BEAMS = [
 
 ANCHOR_SECTIONS = [
     AnchorSection(
-        id="strand",
+        id="strut",
         name="Strut",
         variables={
             "YOUNG_MODULUS": 210000000000.0,
@@ -187,10 +166,16 @@ ANCHOR_SECTIONS = [
 ]
 
 ANCHORS = [
-    Anchor(id="strut", name="Strut", section="strand", head=(5.0, -1.5), tail=(4.0, -1.5)),
+    Anchor(id="strut", name="Strut", section="strut", head=(5.0, -1.5), tail=(4.0, -1.5)),
 ]
 
-INTERFACE_SECTIONS = [InterfaceSection(id="contact", name="Wall contact", r_inter=0.7)]
+INTERFACE_SECTIONS = [
+    InterfaceSection(
+        id="contact",
+        name="Wall contact",
+        constitutive_law="GeoInterfaceCoulombLawPlaneStrain",
+    ),
+]
 
 INTERFACES = [
     Interface(
@@ -240,24 +225,43 @@ NORMAL_LOADS = [
 ]
 
 
+# ── The boundary conditions ───────────────────────────────────────────────────────────────
+
+# The supports: the bottom fixed in x and y, the left side (the symmetry plane) and the
+# right side on rollers, held in x. The plane-strain section holds z by itself.
+# The pore pressure: hydrostatic about the phreatic level at -1.5 m, fixed on the whole
+# soil. The condition carries its own level, as each water load below does.
+BOUNDARY_CONDITIONS = [
+    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom"),
+    DisplacementCondition(
+        id="roller_left",
+        name="Roller left",
+        on="face",
+        face="left",
+        fixed=(True, False, False),
+    ),
+    DisplacementCondition(
+        id="roller_right",
+        name="Roller right",
+        on="face",
+        face="right",
+        fixed=(True, False, False),
+    ),
+    WaterPressureCondition(
+        id="pore_pressure",
+        name="Pore pressure",
+        on="domain",
+        reference_coordinate=-1.5,
+    ),
+]
+
+
 # ── The mesh ──────────────────────────────────────────────────────────────────────────────
 
 MESH = MeshSettings(
     element_size=5.0,
     body_sizes={"sheetpile": 0.5},
-    refinements=[
-        BoxRefinement(
-            kind="box",
-            size=0.75,
-            thickness=45.0,
-            x_min=-1.0,
-            x_max=8.0,
-            z_min=-1.0,
-            z_max=11.0,
-            y_min=-16.0,
-            y_max=1.0,
-        ),
-    ],
+    size_bands={"sheetpile": 30.0},
 )
 
 
@@ -267,7 +271,7 @@ STAGES = [
     Stage(
         id="initial",
         name="Initial stage",
-        calculation="K0 procedure",
+        stress_initialisation="K0",
         deactivate=[
             "sheetpile",
             "strut",
@@ -282,12 +286,11 @@ STAGES = [
         id="null_step",
         name="Null step",
         parent="initial",
-        calculation="Null step",
         max_iterations=150,
     ),
     Stage(
-        id="install_sheetpile",
-        name="SheetPileWall installation",
+        id="install_wall",
+        name="Wall installation",
         parent="null_step",
         activate=["sheetpile", "wall_contact", "surcharge"],
         reset_displacements=True,
@@ -297,10 +300,10 @@ STAGES = [
     Stage(
         id="dig_1",
         name="First excavation",
-        parent="install_sheetpile",
+        parent="install_wall",
         activate=["water_1"],
         deactivate=["soil_L_top__lift1"],
-        max_iterations=150,
+        max_iterations=500,
         tolerated_error=0.001,
     ),
     Stage(
@@ -317,7 +320,7 @@ STAGES = [
         parent="install_strut",
         activate=["water_2"],
         deactivate=["soil_L_top__lift2", "water_1"],
-        max_iterations=150,
+        max_iterations=300,
         tolerated_error=0.001,
     ),
     Stage(
@@ -326,7 +329,7 @@ STAGES = [
         parent="dig_2",
         activate=["water_3"],
         deactivate=["soil_L_top__lift3", "water_2"],
-        max_iterations=150,
+        max_iterations=300,
         tolerated_error=0.001,
     ),
 ]
@@ -341,8 +344,8 @@ def project() -> Project:
         domain=DOMAIN,
         materials=MATERIALS,
         layers=LAYERS,
-        excavation=EXCAVATION,
-        boundary_conditions=BOUNDARY_CONDITIONS,
+        lines=LINES,
+        bodies=BODIES,
         beam_sections=BEAM_SECTIONS,
         beams=BEAMS,
         anchor_sections=ANCHOR_SECTIONS,
@@ -351,6 +354,7 @@ def project() -> Project:
         interfaces=INTERFACES,
         loads=LOADS,
         normal_loads=NORMAL_LOADS,
+        boundary_conditions=BOUNDARY_CONDITIONS,
         mesh=MESH,
         stages=STAGES,
     )

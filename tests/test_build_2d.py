@@ -126,7 +126,7 @@ def staged_project() -> Project:
     the reason this module's docstring gives: gmsh's failure mode is to succeed with
     empty results.
     """
-    p = seed_project(simple=False).model_dump() | {"dimension": 2}
+    p = seed_project().model_dump() | {"dimension": 2}
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
@@ -136,9 +136,8 @@ def staged_project() -> Project:
         {"id": "L3", "name": "Soil_3", "mat": p["materials"][1]["id"],
          "top": -12.0, "bottom": -60.0},
     ]
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"],
+                         "z1": p["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
     return Project.model_validate(p)
 
 
@@ -167,31 +166,22 @@ def test_every_staged_body_occupies_the_band_and_side_it_is_named_for(staged):
     what stands in it.
     """
     project, result = staged
-    e = project.excavation
-    for key, bottom, top, inside in project.soil_bodies():
+    for key, bottom, top in project.soil_bodies():
         x0, y0, _, x1, y1, _ = solid_model.bounding_box(result.volumes[key], dim=2)
         assert (y0, y1) == pytest.approx((bottom, top), abs=1e-3), f"{key} y-extent"
-        if inside:
-            assert x0 == pytest.approx(e.x0, abs=1e-3), f"{key} should start at the pit"
-            assert x1 == pytest.approx(e.x1, abs=1e-3), f"{key} should end at the wall"
+        if key.endswith("__outside"):
+            assert x0 == pytest.approx(5.0, abs=1e-3), f"{key} should start at the wall"
         else:
-            assert x1 > e.x1, f"{key} should reach beyond the pit"
+            assert x0 == pytest.approx(0.0, abs=1e-3), f"{key} should start at the pit"
+            assert x1 == pytest.approx(5.0, abs=1e-3), f"{key} should end at the wall"
 
 
 def test_the_excavated_ground_is_still_in_the_model(staged):
-    """The whole point of staging it: soil covers more than the domain minus the pit.
-
-    Stated as an inequality rather than an area identity. Soil plus structures does not
-    add up to the domain here -- the wall ring is built outboard of the pit face
-    (`_build_solids`), and this fixture puts that face on the domain edge, a symmetry
-    plane, so part of the wall stands outside the soil
-    entirely.
-    """
+    """The whole point of staging it: the pieces fill the domain, the pit included."""
     project, result = staged
-    d, e = project.domain, project.excavation
+    d = project.domain
     soil = sum(result.mass[key] for key, *_ in project.soil_bodies())
-    assert soil > d.dx * d.dy - (e.x1 - e.x0) * d.dy, "the pit was cut away, not staged"
-    assert soil <= d.dx * d.dy + 1e-6, "soil cannot exceed the domain it fills"
+    assert soil == pytest.approx(d.dx * d.dy, rel=1e-6)
 
 
 def test_no_entity_belongs_to_two_staged_bodies(staged):
@@ -397,7 +387,9 @@ def test_the_pile_is_embedded_in_the_soil_rather_than_cutting_it_away():
 
     for key, area in without.mass.items():
         if key not in solid_model.DISPLAY_ONLY:
-            assert with_pile.mass[key] == pytest.approx(area), key
+            # A layer the pile crosses is in two pieces now, with the same area between them.
+            pieces = piled.expand_body_keys([key])
+            assert sum(with_pile.mass[piece] for piece in pieces) == pytest.approx(area), key
 
 
 def test_a_polyline_pile_keeps_every_segment():
@@ -523,3 +515,27 @@ def test_a_plane_anchor_is_built_on_the_section_plane_of_a_3d_model():
 
     assert result.ties.get("anchor_1"), "the 2D anchor vanished from the solid model"
     assert "anchor_1" in result.tie_nodes
+
+
+def test_plane_strain_verification_allows_parts_that_miss_the_section():
+    project = seed_project().model_copy(update={"dimension": 2})
+    solid_model._verify(project, {})
+
+
+def test_split_at_inserts_on_segment_heads_in_order_and_ignores_other_points():
+    points = [(0.0, 0.0), (4.0, 0.0), (4.0, 2.0)]
+    heads = [
+        (3.0, 0.0), (1.0, 0.0), (4.0, 1.0), (1.0, 0.0000005),
+        (0.0, 0.0), (4.0, 0.0), (2.0, 1.0),
+    ]
+
+    assert solid_model._split_at(points, heads) == [
+        (0.0, 0.0), (1.0, 0.0), (3.0, 0.0),
+        (4.0, 0.0), (4.0, 1.0), (4.0, 2.0),
+    ]
+
+
+def test_anchor_head_insertion_skips_a_zero_length_polyline_leg():
+    assert solid_model._split_at(
+        [(0, 0), (0, 0), (2, 0)], [(1, 0)]) == [
+            (0, 0), (0, 0), (1, 0), (2, 0)]

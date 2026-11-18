@@ -14,7 +14,7 @@ scope.
 3. In the form, give:
    - what the problem is, and what an attacker can do with it;
    - the steps or a proof of concept that make the problem occur;
-   - the release or the commit that you tested (`git rev-parse --short HEAD`).
+   - the version that you tested: **Help > About** in the GUI, or `kratos-cli --version`.
 4. Submit the report.
 
 Only you and the maintainers of the repository can read the report.

@@ -41,6 +41,7 @@ def live_server(request, tmp_path_factory):
 
     from core.analysis import calculation
     from backend.main import app
+    from backend.routes import files
     from tests.fakes import fake_kratos
 
     root = tmp_path_factory.mktemp("e2e-runs")
@@ -48,6 +49,13 @@ def live_server(request, tmp_path_factory):
     patch.setenv(calculation.RUNS_ENV, str(root))
     if not request.config.getoption("--run-kratos"):
         patch.setattr(calculation, "run", fake_kratos.fake_run)
+
+    # A real folder window would wait for a person. With this, the browser's own takes over,
+    # and a test that wants the server's replaces this answer.
+    def no_folder_window(_start):
+        raise files.NoFolderWindow("in a test")
+
+    patch.setattr(files, "choose_folder", no_folder_window)
 
     port = _free_port()
     # ws="none": the app has no websockets, and importing uvicorn's websocket protocol
@@ -83,11 +91,20 @@ def live_server(request, tmp_path_factory):
 
 @pytest.fixture
 def app_page(page, live_server):
-    """The app, loaded on a freshly reset project, with console errors collected."""
+    """The app, loaded on a freshly reset project, with console errors collected.
+
+    A browser prompt, alert or confirm box counts as an error too: every question the
+    GUI asks is an app window, which a screenshot of the page can show."""
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("console", lambda message: errors.append(message.text)
             if message.type == "error" else None)
+
+    def browser_box(dialog) -> None:
+        errors.append(f"a browser {dialog.type} box opened: {dialog.message}")
+        dialog.dismiss()
+
+    page.on("dialog", browser_box)
     page.request.post(live_server["url"] + "/api/project/reset")
     page.set_viewport_size({"width": 1600, "height": 1000})
     page.goto(live_server["url"] + "/")

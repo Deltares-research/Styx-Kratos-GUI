@@ -20,6 +20,7 @@ from core import scripting
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import materials, writer
+from core.model import soil_models
 from core.model.schemas import InterfaceSection, Material, Stage, Project
 from core.model.templates import seed_project
 from core.results import catalog, members
@@ -59,6 +60,25 @@ def test_a_water_load_on_a_wall_face_beside_dug_drawn_soil_runs():
     stage stopped before its first step ("found without any corresponding element")."""
     run(drawn_ground.project())
 
+
+
+def test_a_dug_face_plots_only_the_contact_still_there():
+    """Above the pit floor the soil is gone, and a switched-off contact keeps its last
+    values on its nodes. Below it, every node of the face still changes from stage to
+    stage."""
+    export, outcome = run(excavation.excavation_project(staged=True))
+    directory = Path(outcome["directory"])
+    height = {index: y for index, _, y, _ in export["nodes"]}
+
+    def tractions(stage: str) -> dict[int, list[float]]:
+        written = json.loads((directory / f"{stage}__output_interface_left.json").read_text())
+        return {int(name[len("NODE_"):]): value["GEO_EFFECTIVE_TRACTION_VECTOR"][-1]
+                for name, value in written.items() if name.startswith("NODE_")}
+
+    second, third = tractions("6_Second_excavation"), tractions("7_Third_excavation")
+    assert max(height[node] for node in third) == pytest.approx(excavation.LIFTS[2])
+    assert max(height[node] for node in second) == pytest.approx(excavation.LIFTS[1])
+    assert all(third[node] != second[node] for node in third)
 
 
 def test_a_pile_standing_out_of_the_ground_runs():
@@ -360,7 +380,7 @@ def test_a_contact_starts_from_the_stress_in_the_ground_beside_it(pulled):
     for element in elements:
         _, ya, yb = along(deck, element)
         in_fill = (ya + yb) / 2 > layer
-        k0 = materials.jaky(fill if in_fill else ground)
+        k0 = materials.k0_nc(fill if in_fill else ground)
         normal, shear = (element["properties"][name] for name in
                          ("INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS"))
         # Lobatto points: one end, the middle, the other end.
@@ -402,11 +422,32 @@ slips, so the iterations creep; with the stiffness derived from the soil (1e8 Pa
 they had not converged after 50."""
 
 
+STRONGER = 10.0
+"""How much more cohesion than the drawn ground's own the soils get when the contact
+takes its strength from them. At their own the Mohr-Coulomb soils yield beside the pulled
+pile, and the stage does not converge."""
+
+R_INTER = 0.5
+"""The section's: the contact derives c R and atan(R tan phi) from those stronger soils,
+weak enough to slip, while they stay elastic."""
+
+
 def slipped(variables: dict, tmp_path: Path) -> list[tuple[float, float, float, float]]:
-    """(c, phi, tn, ts) at every integration point of the contact, the pile pulled up."""
-    project = drawn_ground.pushed_pile_project(variables=SOFT | variables,
-                                               law=COULOMB_CONTACT, load=(0.0, PULL),
-                                               max_iterations=50)
+    """(c, phi, tn, ts) at every integration point of the contact, the pile pulled up.
+    A contact with no strength typed takes its soils', so they are Mohr-Coulomb: a linear
+    elastic soil has none to give. They are `STRONGER`, and the section's R is
+    `R_INTER`."""
+    derived = not ({"GEO_COHESION", "GEO_FRICTION_ANGLE"} & set(variables))
+    project = drawn_ground.pushed_pile_project(
+        variables=SOFT | variables, law=COULOMB_CONTACT, load=(0.0, PULL),
+        max_iterations=50, soil_law="GeoMohrCoulombLawPlaneStrain" if derived else None)
+    if derived:
+        soils = [soil.model_copy(update={"variables": {
+            **soil.variables, "GEO_COHESION": STRONGER * soil.variables["GEO_COHESION"]}})
+            for soil in project.materials]
+        contact = project.interface_sections[0].model_copy(update={"r_inter": R_INTER})
+        project = project.model_copy(update={"materials": soils,
+                                             "interface_sections": [contact]})
     _, elements = contacts(project, tmp_path)
     return [(e["properties"]["GEO_COHESION"], e["properties"]["GEO_FRICTION_ANGLE"], tn, ts)
             for e in elements for tn, ts, *_ in e["traction"]]
@@ -436,10 +477,10 @@ def test_a_coulomb_contact_slips_at_its_strength(typed, tmp_path):
     once with c and phi typed on the section, used as they stand."""
     typed_values = {"GEO_COHESION": 2_000.0, "GEO_FRICTION_ANGLE": 25.0}
     points = slipped(typed_values if typed else {}, tmp_path)
-    r = 0.7
+    r, c = R_INTER, STRONGER
     wanted = ({(2_000.0, 25.0)} if typed else
-              {(r * 1_000.0, math.degrees(math.atan(r * math.tan(math.radians(30.0))))),
-               (r * 1_500.0, math.degrees(math.atan(r * math.tan(math.radians(40.0)))))})
+              {(r * c * 1_000.0, math.degrees(math.atan(r * math.tan(math.radians(30.0))))),
+               (r * c * 1_500.0, math.degrees(math.atan(r * math.tan(math.radians(40.0)))))})
     got = {(c, phi) for c, phi, _, _ in points}
     assert len(got) == len(wanted)
     for c, phi in wanted:
@@ -477,7 +518,8 @@ def test_the_reference_coulomb_contacts_are_what_their_soils_derive():
                    / math.tan(math.radians(soil["Variables"]["GEO_FRICTION_ANGLE"])))
         material = Material(id=f"soil_{soil_id}", name=f"Soil {soil_id}", color="#b08a6a",
                             constitutive_law=soil["constitutive_law"]["name"],
-                            variables=dict(soil["Variables"]))
+                            variables={k: v for k, v in soil["Variables"].items()
+                                       if k not in soil_models.WATER})
         section = InterfaceSection(id="contact", name="Contact",
                                    constitutive_law=COULOMB_CONTACT, r_inter=r_inter,
                                    virtual_thickness=1.0)
@@ -510,7 +552,7 @@ print("TRACTIONS" + json.dumps([
 
 
 def test_an_interface_traction_is_normal_then_shear_and_compression_is_negative(tmp_path):
-    """What `results profile ... interface tn` and `ts` read: component 0 of
+    """What `results profile ... interface_right tn` and `ts` read: component 0 of
     GEO_EFFECTIVE_TRACTION_VECTOR is the normal traction, component 1 the shear, and a
     contact pressed shut has a negative normal traction. Kratos' own Neumann case on the
     3+3 line element, run on the build Styx runs, so a Kratos that changes either is

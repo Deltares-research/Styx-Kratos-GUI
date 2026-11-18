@@ -2,7 +2,7 @@
    ruler.js — measured edges for the 2D section.
 
    A plane-strain section is a drawing, and a drawing without a scale is a
-   picture. The grid already says "these lines are 2.5 m apart", but it never
+   picture. The grid already says "these lines are 0.5 m apart", but it never
    says *where* a line is, and reading a coordinate off it means counting cells
    from a corner nobody marked. Four rulers say it directly: the world value at
    every screen edge, in the same two axes the section is drawn in.

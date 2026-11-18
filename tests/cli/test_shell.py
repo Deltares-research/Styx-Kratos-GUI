@@ -145,6 +145,24 @@ def test_open_refuses_a_file_that_is_not_there(piped, tmp_path):
     assert ran.code == 1 and "nope.json" in ran.err
 
 
+def test_shell_refuses_a_project_that_is_not_there(cli, tmp_path):
+    ran = cli("shell", tmp_path / "missing.json")
+
+    assert ran.code == 1
+    assert "no such file" in ran.err and "missing.json" in ran.err
+    assert "`kratos-cli new " in ran.err
+
+
+def test_open_refuses_a_file_with_an_unsupported_suffix(typed, tmp_path):
+    file = tmp_path / "notes.txt"
+    file.write_text("not a project", encoding="utf-8")
+
+    code, out, err = typed([f"open {file}", "exit"])
+
+    assert code == 0
+    assert "not a project (.json) or a model script (.py)" in err
+
+
 def test_undo_and_redo_step_through_the_edits_of_the_open_project(typed, site):
     before = site.read_bytes()
 
@@ -188,6 +206,15 @@ def test_source_runs_a_file_of_lines_and_stops_at_the_first_that_fails(typed, si
 
     assert session.load(site).water.y == -2.0
     assert "line 3" in err
+
+
+def test_source_reports_a_missing_file_and_keeps_the_shell_open(typed, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    code, out, err = typed([f"source {tmp_path / 'missing.txt'}", "pwd"])
+
+    assert code == 0
+    assert "missing.txt" in err
+    assert str(tmp_path) in out
 
 
 def test_help_lists_its_own_words_and_the_commands(typed):
@@ -338,6 +365,188 @@ def test_the_first_word_completes_to_a_command_or_a_word_of_the_shell():
 def test_the_second_word_completes_to_an_action():
     assert {"add", "list"} <= set(shell.completions("layer "))
     assert "field" in shell.completions("results fi")
+
+
+def test_interrupting_input_or_a_running_command_keeps_the_shell_usable(
+        monkeypatch, capsys):
+    from unittest.mock import Mock
+
+    read = Mock(side_effect=[KeyboardInterrupt, "show", "pwd", EOFError])
+    run = Mock(side_effect=KeyboardInterrupt)
+    instance = shell.Shell(Path("site.json"), read=read, run=run, interactive=True)
+    monkeypatch.setattr(shell, "_readline", lambda _: False)
+
+    assert instance.loop() == 0
+    run.assert_called_once_with(["show", str(Path("site.json").resolve())])
+    assert read.call_count == 4
+    printed = capsys.readouterr()
+    assert "interrupted" in printed.err
+    assert str(Path.cwd()) in printed.out
+    assert "Traceback" not in printed.err
+
+
+def test_exit_in_piped_input_does_not_run_later_commands(capsys):
+    from unittest.mock import Mock
+
+    run = Mock()
+    instance = shell.Shell(run=run, interactive=False)
+
+    assert instance._read_lines(["quit", "pwd"], "commands.txt", top=True) == 0
+    assert instance.stopped is None
+    run.assert_not_called()
+    assert capsys.readouterr().out == "> quit\n"
+
+
+def test_open_without_arguments_reports_the_current_project_without_changing_history(
+        tmp_path, capsys):
+    project = tmp_path / "site.json"
+    instance = shell.Shell(project, run=lambda _: 0)
+    instance.undone.append(b"previous")
+
+    assert instance.line("open") == 0
+    assert instance.project == project.resolve()
+    assert instance.undone == [b"previous"]
+    assert "site.json" in capsys.readouterr().out
+
+
+def test_unreadable_project_has_no_undo_snapshot(tmp_path, monkeypatch):
+    project = tmp_path / "site.json"
+    instance = shell.Shell(project, run=lambda _: 0)
+
+    def unreadable(_path):
+        raise PermissionError("project cannot be read")
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+
+    assert instance._contents() is None
+    assert instance.line("show") == 0
+    assert instance.undone == []
+
+
+def test_an_unsuccessful_new_does_not_replace_the_open_project(tmp_path):
+    instance = shell.Shell(tmp_path / "original.json", run=lambda _: 1)
+    instance.undone.append(b"previous")
+
+    assert instance.line(f"new {tmp_path / 'new.json'}") == 1
+    assert instance.project == (tmp_path / "original.json").resolve()
+    assert instance.undone == [b"previous"]
+
+
+def test_cd_reports_failure_without_changing_directory(tmp_path, capsys):
+    before = Path.cwd()
+    instance = shell.Shell(run=lambda _: 0)
+
+    assert instance.line(f'cd "{tmp_path / "missing"}"') == 1
+    assert Path.cwd() == before
+    assert "missing" in capsys.readouterr().err
+
+
+def test_cd_without_arguments_uses_the_home_directory(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+
+    assert shell.Shell(run=lambda _: 0).line("cd") == 0
+    assert Path.cwd() == home
+    assert str(home) in capsys.readouterr().out
+
+
+def test_source_without_a_filename_reports_usage(capsys):
+    assert shell.Shell(run=lambda _: 0).line("source") == 2
+    assert "source needs a file of lines" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv", [
+    ["--help"],
+    ["unknown-command"],
+    ["results"],
+])
+def test_project_insertion_leaves_projectless_or_unrecognised_commands_to_the_parser(argv):
+    assert shell._with_project(argv, None) == argv
+
+
+def test_completion_of_empty_input_offers_the_commands():
+    assert {"open", "undo", "layer"} <= set(shell.completions(""))
+
+
+@pytest.mark.parametrize("before, expected", [
+    ('open "unfinished', []),
+    ("kratos-cli lay", ["layer"]),
+    ("unknown-command ", []),
+    ("layer add another-word", []),
+])
+def test_completion_handles_prefixed_malformed_and_finished_input(before, expected):
+    assert shell.completions(before) == expected
+
+
+def test_a_parser_without_subcommands_has_no_completions():
+    import argparse
+
+    assert shell._subcommands(argparse.ArgumentParser(add_help=False)) == {}
+
+
+@pytest.mark.parametrize("history_missing", [False, True])
+def test_readline_configures_completion_and_registers_bounded_history_saving(
+        tmp_path, monkeypatch, history_missing):
+    import atexit
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    history = tmp_path / ".kratos_cli_history"
+    readline = SimpleNamespace(
+        read_history_file=Mock(side_effect=OSError("no history") if history_missing else None),
+        set_completer=Mock(),
+        set_completer_delims=Mock(),
+        parse_and_bind=Mock(),
+        get_line_buffer=Mock(return_value="layer ignored-after-cursor"),
+        get_endidx=Mock(return_value=len("layer ")),
+    )
+    register = Mock()
+    monkeypatch.setitem(sys.modules, "readline", readline)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(atexit, "register", register)
+    instance = shell.Shell(run=lambda _: 0)
+
+    assert shell._readline(instance) is True
+    readline.read_history_file.assert_called_once_with(history)
+    register.assert_called_once_with(shell._save_history, readline, history)
+    readline.set_completer_delims.assert_called_once_with(" \t")
+    readline.parse_and_bind.assert_called_once_with("tab: complete")
+    complete = readline.set_completer.call_args.args[0]
+    expected = shell.completions("layer ")
+    assert expected
+    assert complete("", 0) == expected[0] + " "
+    assert complete("", len(expected)) is None
+    assert not history.exists()
+
+
+def test_readline_is_optional_on_platforms_without_it(monkeypatch):
+    monkeypatch.setitem(sys.modules, "readline", None)
+
+    assert shell._readline(shell.Shell(run=lambda _: 0)) is False
+
+
+@pytest.mark.parametrize("set_error, write_error, writes", [
+    pytest.param(None, None, 1, id="saved"),
+    pytest.param(OSError("read-only"), None, 0, id="set-fails"),
+    pytest.param(None, OSError("read-only"), 1, id="write-fails"),
+])
+def test_history_saving_is_bounded_and_tolerates_unwritable_history(
+        tmp_path, set_error, write_error, writes):
+    from types import SimpleNamespace
+    from unittest.mock import Mock, call
+
+    history = tmp_path / ".kratos_cli_history"
+    readline = SimpleNamespace(
+        set_history_length=Mock(side_effect=set_error),
+        write_history_file=Mock(side_effect=write_error),
+    )
+
+    shell._save_history(readline, history)
+
+    readline.set_history_length.assert_called_once_with(1000)
+    assert readline.write_history_file.call_args_list == [call(history)] * writes
 
 
 # ── Started as a user starts it ─────────────────────────────────────────────

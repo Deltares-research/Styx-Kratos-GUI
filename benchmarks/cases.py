@@ -64,7 +64,7 @@ def centroid_y(ctx: Context, stage: int, element: int) -> float:
 
 def k0_ratio(tolerance: float = 1e-4):
     def check(ctx: Context) -> Outcome:
-        k0_of = {e: m.number("K0_NC") or materials.jaky(m)
+        k0_of = {e: m.number("K0_NC") or materials.k0_nc(m)
                  for e, m in element_material(ctx).items()}
         worst = 0.0
         for element, points in gauss(ctx, 1).items():
@@ -471,15 +471,16 @@ CASES = [
          "Kratos test_CROW_case.py::test_staged_construction_with_linear_elastic_behavior "
          "(its expected wall results)",
          build=lambda: crow.project(crow.LINEAR_ELASTIC),
-         # Measured 2026-10-25: within 1.7 % at every level, on a mesh of its own.
+         # Measured 2026-11-09, the wall at 0.5 m with a band of 30 m: within 1.3 % at
+         # every level, on a mesh of its own.
          checks=crow_wall("linear_elastic", 0.02)),
     Case("BM-CROW-MC", "CROW sheet-pile excavation, Mohr-Coulomb clay and sand",
          "Kratos test_CROW_case.py::test_staged_construction_with_mohr_coulomb_clay_sand_"
          "using_linear_iteration (its expected wall results)",
          build=lambda: crow.project(crow.MOHR_COULOMB),
          checks=crow_wall("mohr_coulomb", 0.03),
-         # Measured 2026-10-25: M and u_x within 1.2 %, the shear force within 2.1 %
-         # (at the toe in the last stage, and below the strut after the first lift).
+         # Measured 2026-11-09, the wall at 0.5 m with a band of 30 m: within 2.3 %, the
+         # largest the shear force at the toe in the last stage.
          # Kratos' 2 % holds its run to its own earlier run on the same mesh; this run
          # is on a mesh of its own.
          deviation="the mesh is this tool's, not Kratos' model.mdpa: held to 3 %, not "

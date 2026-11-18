@@ -23,6 +23,16 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "requirements.txt"
 MINIMUM_PYTHON = (3, 10)
 
+# A development checkout has requirements.txt next to the package; an installed wheel does not.
+_is_installed = not REQUIREMENTS.is_file()
+
+EXEC_REPLACES_THE_PROCESS = sys.platform != "win32"
+"""Whether `os.execv` can start the server in place of this process. On Windows it
+cannot: it starts a second process and ends this one, so `uv run` gives the prompt back
+while the server still runs, and it does not quote its arguments, so a Python in a
+folder with a space in its name (`OneDrive - Deltares`) is cut at the space. There the
+server is a child process instead."""
+
 
 def platform_venv_name(platform: str = sys.platform) -> str:
     if platform == "win32":
@@ -62,6 +72,12 @@ def _ensure_supported_python() -> None:
 
 def ensure_environment() -> Path:
     _ensure_supported_python()
+    
+    # If installed as a wheel, dependencies are already available
+    if _is_installed:
+        return Path(sys.executable)
+    
+    # Otherwise, use the development venv approach
     environment = ROOT / platform_venv_name()
     python = venv_python(environment)
 
@@ -87,7 +103,8 @@ def check_environment(python: Path) -> None:
     probe = (
         "import fastapi, gmsh, numpy, uvicorn; "
         "from backend.main import app; "
-        "print('Environment OK: gmsh ' + gmsh.__version__)"
+        "from core.version import describe; "
+        "print('Environment OK: Styx ' + describe() + ', gmsh ' + gmsh.__version__)"
     )
     subprocess.check_call([str(python), "-c", probe], cwd=ROOT)
 
@@ -159,11 +176,16 @@ def main(argv: list[str] | None = None) -> int:
             str(python), "-m", "uvicorn", "backend.main:app",
             "--host", args.host, "--port", str(args.port),
         ]
-        os.chdir(ROOT)
+        
+        # When installed, use current directory; in development, change to ROOT
+        if not _is_installed:
+            os.chdir(ROOT)
+        
         os.environ.update(server_environment(args, dict(os.environ)))
         if args.open_browser:
             url = f"http://{args.host}:{args.port}/"
             threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+        if args.open_browser or not EXEC_REPLACES_THE_PROCESS:
             return subprocess.call(command)
         os.execv(str(python), command)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:

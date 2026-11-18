@@ -31,8 +31,22 @@ def add_writing(parser: argparse.ArgumentParser) -> None:
                         help="make and check the edit, but write nothing")
 
 
+def read(args: argparse.Namespace) -> Project:
+    """The project in PROJECT (`session.load`). It is kept on `args` as the model before
+    the edit, so `written` can say what the edit took away."""
+    project = session.load(args.project)
+    args.as_read = project
+    return project
+
+
 def written(args: argparse.Namespace, project: Project) -> tuple[Path | None, str]:
-    """Write `project` where the command line says, and the line that says where."""
+    """Write `project` where the command line says, and the line that says where.
+
+    The notes on what the edit took away or did not do (`session.edit_notes`) are left on
+    `args.edit_notes`; `kratos-cli` prints them after the answer, even with --dry-run.
+    """
+    if getattr(args, "as_read", None) is not None:
+        args.edit_notes = session.edit_notes(args.as_read, project)
     if args.dry_run:
         return None, "not written (--dry-run)"
     target = args.out or args.project

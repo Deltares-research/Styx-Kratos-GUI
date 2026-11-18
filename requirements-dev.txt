@@ -2,9 +2,9 @@
 #   pip install -r requirements-dev.txt
 # Browser tests use the installed Chrome; without it: python -m playwright install chromium
 # and set KRATOS_GUI_TEST_BROWSER_CHANNEL=bundled.
-playwright==1.63.0
+playwright==1.65.2
 pytest-playwright==0.10.0
 pytest-cov==7.1.0
-hypothesis==6.168.5
-ruff==0.17.0
-mypy==2.4.0
+hypothesis==6.170.15
+ruff==0.17.5
+mypy==2.4.1

@@ -52,32 +52,35 @@ HEADER = '''/* Generated fixture -- the one document both implementations of `ac
 window.STAGE_FIXTURE =
 '''
 
-# A hand-written sequence rather than `default_stages`, for two reasons. It has to
-# exercise re-activation and a stage that changes nothing, neither of which the default
-# sequence produces. And it must stay still: a fixture built from a function is a
+# A hand-written sequence rather than one a function builds, for two reasons. It has to
+# exercise re-activation and a stage that changes nothing. And it must stay still: a fixture built from a function is a
 # fixture that silently changes the day that function is improved, which is the
 # opposite of what a parity fixture is for.
 STAGES = [
     {"id": "initial", "name": "Initial stage", "parent": None,
-     "calculation": "K0 procedure",
-     "deactivate": ["wall", "anchors", "load", "soil_L1__lift1",
+     "stress_initialisation": "K0",
+     "deactivate": ["pile", "tie", "load", "soil_L1__lift1",
                     "soil_L1__lift2", "soil_L1__lift3"]},
-    {"id": "null_step", "name": "Null step", "parent": "initial",
-     "calculation": "Null step"},
+    {"id": "null_step", "name": "Null step", "parent": "initial"},
     {"id": "build_wall", "name": "Wall installation", "parent": "null_step",
-     "activate": ["wall", "load"], "reset_displacements": True},
+     "activate": ["pile", "load"], "reset_displacements": True},
     {"id": "dig_1", "name": "Dig to -2.0 m", "parent": "build_wall",
      "activate": ["soil_L1__lift1"], "deactivate": ["soil_L1"]},
     {"id": "prop", "name": "Strut installation", "parent": "dig_1",
-     "activate": ["anchors"]},
+     "activate": ["tie"]},
     # Re-activates a part an earlier stage switched off -- the case a "last write wins"
     # reading of the chain gets wrong.
     {"id": "dig_2", "name": "Dig to -5.0 m", "parent": "prop",
      "activate": ["soil_L1__lift2", "soil_L1"], "deactivate": ["soil_L1__lift1"]},
     # Changes nothing: `soil_L1__lift1` is already off. Stages accumulate no-ops
-    # through ordinary editing, and both sides have to shrug at them identically.
+    # through ordinary editing, and both sides have to shrug at them identically. Its
+    # own convergence criterion is one a copy carries and a flow sequence replaces.
     {"id": "settle", "name": "Consolidate", "parent": "dig_2",
-     "deactivate": ["soil_L1__lift1"]},
+     "deactivate": ["soil_L1__lift1"], "convergence_criterion": "displacement_criterion",
+     "absolute_tolerance": 1e-6,
+     # Expert settings of its own: a copy carries them, a flow sequence drops them.
+     "solver_settings": {"strategy_type": "newton_raphson",
+                         "linear_solver_type": "amgcl"}},
 ]
 
 
@@ -87,7 +90,7 @@ def _project() -> schemas.Project:
     The same shape `test_schemas._layered_pit` builds, restated rather than imported so
     that the fixture does not move when that helper is edited for a different reason.
     """
-    payload = seed_project(simple=False).model_dump()
+    payload = seed_project().model_dump()
     payload["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
     payload["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": payload["materials"][0]["id"],
@@ -97,10 +100,16 @@ def _project() -> schemas.Project:
         {"id": "L3", "name": "Soil_3", "mat": payload["materials"][1]["id"],
          "top": -12.0, "bottom": -60.0},
     ]
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
-                             if k != "floor_y"}
-    payload["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    payload["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    payload["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": payload["domain"]["z0"],
+                         "z1": payload["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
+    # Two parts for a stage to switch that are not soil.
+    payload["beam_sections"] = [schemas.BeamSection(id="s", name="S", variables={}).model_dump()]
+    payload["beams"] = [{"id": "pile", "name": "Pile", "section": "s",
+                         "points": [(5.0, 0.0), (5.0, -13.0)]}]
+    payload["anchor_sections"] = [schemas.AnchorSection(id="t", name="T",
+                                                        variables={}).model_dump()]
+    payload["anchors"] = [{"id": "tie", "name": "Tie", "section": "t",
+                           "head": (5.0, -1.0), "tail": (3.0, -1.0)}]
     payload["stages"] = STAGES
     return schemas.Project.model_validate(payload)
 
@@ -117,14 +126,32 @@ EDITS = [
     ("setActive", ["prop", ["soil_L1", "anchors"], False]),
     ("setActive", ["settle", ["soil_L1__lift1"], True]),
     ("setActive", ["build_wall", ["wall"], False]),
+    # The stage after is kept as it was: build_wall gains a "deactivate" for the lift
+    # null_step now switches on, and dig_2's "activate soil_L1" is dropped once prop
+    # already has it on.
+    ("setActive", ["null_step", ["soil_L1__lift1"], True]),
+    ("setActive", ["prop", ["soil_L1"], True]),
+    ("edited", ["initial", "calculation", "flow"]),
+    ("edited", ["dig_1", "calculation", "flow"]),
+    ("edited", ["initial", "stress_initialisation", "gravity"]),
+    ("edited", ["dig_1", "stress_initialisation", "K0"]),
+    ("edited", ["dig_1", "time_integration", "dynamic"]),
+    ("edited", ["dig_1", "convergence_criterion", "displacement_criterion"]),
+    ("edited", ["settle", "convergence_criterion", "residual_criterion"]),
+    ("edited", ["prop", "name", "Props"]),
+    ("editedSolver", ["dig_1", "strategy_type", "line_search"]),
+    ("editedSolver", ["settle", "linear_solver_type", "bicgstab"]),
+    ("editedSolver", ["settle", "strategy_type", None]),
 ]
-"""The Stages toolbar's edits and the Model explorer's checkbox, each called on the
-project by its JavaScript name with these arguments after it. The roots and the last
-stage are in it because that is where healing a chain goes wrong."""
+"""The Stages toolbar's edits, the Model explorer's checkbox and the property grid, each
+called on the project by its JavaScript name with these arguments after it. The roots
+and the last stage are in it because that is where healing a chain goes wrong, and the
+initial stage because the calculation type and the stress initialisation are its alone."""
 
 PYTHON_EDITS = {"added": stages.added, "inserted": stages.inserted,
                 "removed": stages.removed, "copied": stages.copied,
-                "setActive": stages.set_active}
+                "setActive": stages.set_active, "edited": stages.edited,
+                "editedSolver": stages.edited_solver}
 
 
 def build() -> dict:
@@ -186,7 +213,7 @@ def test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong():
     assert document["active_parts"]["dig_1"] != document["active_parts"]["dig_2"]
     # soil_L1 is off from dig_1 and back on at dig_2.
     assert "soil_L1" not in document["active_parts"]["dig_1"]
-    assert "soil_L1" in document["active_parts"]["dig_2"]
+    assert "soil_L1__outside" in document["active_parts"]["dig_2"]
     # `settle` repeats an instruction that has already taken effect.
     assert document["active_parts"]["settle"] == document["active_parts"]["dig_2"]
     # `null_step` carries neither list.

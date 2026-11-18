@@ -1,4 +1,4 @@
-"""The boundary conditions and gravity, run in Kratos
+"""The boundary conditions, and the self weight, run in Kratos
 (plan/done/boundary-conditions-plan.md, step A4). Opt-in: `pytest --run-kratos`.
 
 What running them found, 2026-10-23:
@@ -8,13 +8,18 @@ What running them found, 2026-10-23:
   (tests/models/excavation.py) runs all its stages.
 * The standard supports typed by hand are the deck a project with no conditions key
   gets, and it runs.
-* Gravity off and no load: no displacement at all.
+* No stress initialisation, so no self weight, and no load: no displacement at all.
 * No support and no anchor: Kratos does not converge, as the rigid-body warning says.
 * A dry soil that couples the water pressure (`GEO_DRAINAGE_TYPE` not
   `CONSTANT_PW_FIELD`) with no water pressure condition runs, but the free pressure rises
   to about 1.5 MPa under the self weight and the block settles 8 m instead of 0.65 m. A
   Uniform 0 condition on the whole soil gives the dry answer, which is the one a
   `CONSTANT_PW_FIELD` soil gives with no condition. The export's warning says so.
+  (2026-11-04) How far the free block settles depends on the linear solver, not only on
+  the model: nothing fixes its water pressure, so its system is singular, and Skyline LU
+  with scaling gives 8 m, Sparse LU without -- which the quasi-Newton strategy always
+  uses -- 0.83 m, and with scaling -- the default -- 0.10 m. Only that it is not the
+  dry answer is the model's.
 * Water conditions switched by stages (2026-10-23): each stage has the pressures of the
   conditions its stage has on. A stage with none on keeps the last Hydrostatic values,
   fixed (Kratos does not free them), but a Uniform condition's nodes are freed when its
@@ -118,8 +123,10 @@ def test_the_standard_supports_typed_by_hand_are_the_ones_a_project_starts_with(
         == typed_deck["project_parameters"]
 
 
-def test_with_gravity_off_and_no_load_nothing_moves():
-    _, outcome = run(block(gravity=False))
+def test_with_no_self_weight_and_no_load_nothing_moves():
+    # An initial stage that initialises no stresses leaves the self weight out.
+    _, outcome = run(block(stages=[{"id": "initial", "name": "Initial stage",
+                                    "stress_initialisation": "none"}]))
     assert outcome["ok"], (outcome["error"] or "")[-600:]
     assert settlement(outcome) == 0.0
 
@@ -144,7 +151,9 @@ def test_a_dry_coupled_soil_needs_its_uniform_zero_as_the_warning_says():
     assert water_pressure(fixed) == 0.0
     assert water_pressure(free) > 1e5
     assert settlement(fixed) == pytest.approx(settlement(drained), rel=1e-6)
-    assert settlement(free) > 5 * settlement(fixed)
+    # How far the free block settles is the linear solver's (see the module docstring):
+    # only that it is not the dry answer is the model's.
+    assert settlement(free) != pytest.approx(settlement(fixed), rel=0.1)
 
 
 # ── Water conditions per stage ──────────────────────────────────────────────
@@ -215,8 +224,13 @@ def test_a_stage_switches_the_water_and_a_hydrostatic_condition_s_values_stay(dr
 def test_a_uniform_condition_switched_off_leaves_a_coupled_soil_s_water_free():
     """Kratos frees a Uniform condition's nodes when its stage ends, so with nothing
     switched on the coupled soil's own pressure builds up -- what the export's
-    warning says (`condition_checks._free_water_in_stages`)."""
+    warning says (`condition_checks._free_water_in_stages`). How far is the linear
+    solver's, as nothing fixes the pressure any more (see the module docstring): up to
+    1.7 MPa with Skyline LU and scaling, 0.24 MPa with the quasi-Newton strategy's Sparse
+    LU, and -0.57 to -0.17 MPa with the default, Sparse LU with scaling. Only that it
+    is no longer the held -50 kPa is the model's."""
     deck, outcome = run(_switched("Uniform", "FULLY_COUPLED"))
     assert any("stage 'None'" in w and "is free there" in w for w in deck["warnings"])
     assert _pressure_range(outcome, 2) == pytest.approx((-50_000.0, -50_000.0))
-    assert _pressure_range(outcome, 3)[1] > 1e6
+    low, high = _pressure_range(outcome, 3)
+    assert high - low > 1e5

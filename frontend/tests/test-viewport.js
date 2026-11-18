@@ -24,13 +24,15 @@
     });
   });
 
-  test('in a full (non-layered_soil) project, a custom part follows the structural ' +
-       'parts -- everywhere but the soil-only mode', function () {
+  test('in a full (non-layered_soil) project, a custom part is in every mode, ' +
+       'faded in the soil-only one', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1'], ['drawn_0'], false);
-    ['structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
+    ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
       T.ok(groups[mode].indexOf('drawn_0') >= 0, mode + ' is missing the custom part');
     });
-    T.eq(groups.soil.indexOf('drawn_0'), -1, 'soil mode stays soil-only, like wall/struts');
+    var faded = App.Viewport.computeFadedKeys(['soil_L1'], ['drawn_0'], false);
+    T.ok(faded.soil.indexOf('drawn_0') >= 0, 'soil mode fades it, like wall/struts');
+    T.eq(faded.flow.indexOf('drawn_0'), -1, 'flow mode draws it solid');
   });
 
   test('with no custom parts, mode groups are unchanged from before', function () {
@@ -52,7 +54,90 @@
                mode + ' hides ' + key + (simple ? ' (layered_soil)' : ''));
         });
       });
-      T.eq(groups.soil.indexOf('beam_1'), -1, 'soil mode stays soil-only');
+    });
+  });
+
+  /* Faded rather than left out: in Soil and Flow conditions the structures are there
+     to read the soil against, and `structureOpacity` draws them half transparent. */
+  test('sheet piles, anchors and interfaces are in Soil and Flow conditions too', function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], [], layered, ['load_1'], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
+      ['soil', 'flow'].forEach(function (mode) {
+        ['beam_1', 'anchor_1', 'contact_1'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0,
+               mode + ' omits ' + key + (layered ? ' (layered soil)' : ''));
+        });
+      });
+    });
+  });
+
+  /* Every part is on screen in Soil and Flow conditions; what the tab is not about
+     is faded there, the way a sheet pile is (`structureOpacity`). */
+  test('Soil and Flow conditions draw the loads, faded', function () {
+    [true, false].forEach(function (layered) {
+      var args = [['soil_L1'], ['drawn_0'], layered, ['load_1'], ['beam_1'], ['normalload_1'],
+                  { supports: ['fixed_bottom'], water: ['pore'] }, ['contact_1'], ['line_1']];
+      var groups = App.Viewport.computeModeGroups.apply(null, args);
+      var faded = App.Viewport.computeFadedKeys.apply(null, args);
+      var tag = layered ? ' (layered soil)' : '';
+      ['soil', 'flow'].forEach(function (mode) {
+        ['load_1', 'normalload_1', 'beam_1', 'contact_1'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' omits ' + key + tag);
+          T.ok(faded[mode].indexOf(key) >= 0, mode + ' draws ' + key + ' solid' + tag);
+        });
+        T.eq(groups[mode].indexOf('mesh'), -1, mode + ' leaves the mesh to its tab' + tag);
+        ['soil_L1', 'fixed_bottom', 'pore'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' omits ' + key + tag);
+          T.eq(faded[mode].indexOf(key), -1, mode + ' fades ' + key + tag);
+        });
+        // Every faded key is one the mode draws.
+        faded[mode].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' fades undrawn ' + key + tag);
+        });
+      });
+      T.ok(groups.soil.indexOf('water') >= 0, 'soil omits the water' + tag);
+      T.ok(faded.soil.indexOf('water') >= 0, 'soil draws the water solid' + tag);
+      T.eq(faded.flow.indexOf('water'), -1, 'flow fades the water' + tag);
+    });
+  });
+
+  /* The Mesh tab draws the loads over the mesh at full strength: they are not context
+     there but what the mesh is refined around. */
+  test('the Mesh tab draws the loads, solid', function () {
+    [true, false].forEach(function (layered) {
+      var args = [['soil_L1'], [], layered, ['load_1'], [], ['normalload_1']];
+      var groups = App.Viewport.computeModeGroups.apply(null, args);
+      var faded = App.Viewport.computeFadedKeys.apply(null, args);
+      var tag = layered ? ' (layered soil)' : '';
+      ['load_1', 'normalload_1'].forEach(function (key) {
+        T.ok(groups.mesh.indexOf(key) >= 0, 'mesh omits ' + key + tag);
+      });
+      T.eq(faded.mesh, undefined, 'mesh fades nothing' + tag);
+    });
+  });
+
+  test('a structure is half transparent in Soil and Flow, half again when off', function () {
+    var opacity = App.Viewport.structureOpacity;
+    ['structures', 'mesh', 'staged'].forEach(function (mode) {
+      T.eq(opacity(mode, false), 1, mode + ' draws it solid');
+      T.eq(opacity(mode, true), 0.5, mode + ' draws a switched-off one half transparent');
+    });
+    ['soil', 'flow'].forEach(function (mode) {
+      T.eq(opacity(mode, false), 0.5, mode + ' draws it half transparent');
+      T.eq(opacity(mode, true), 0.25, mode + ' fades a switched-off one further');
+    });
+  });
+
+  test('free interfaces are listed in structural modes, separately from members', function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], [], layered, [], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
+      ['structures', 'mesh', 'staged'].forEach(function (mode) {
+        T.ok(groups[mode].indexOf('contact_1') >= 0,
+             mode + ' omits the free interface' + (layered ? ' (layered soil)' : ''));
+      });
+      T.eq(groups.results.indexOf('contact_1'), -1, 'results should not show an interface');
     });
   });
 
@@ -345,11 +430,40 @@
    at any pan or zoom -- a grid that stops mid-screen reads as the edge of the
    model. sectionGridSpec is what it has to be for the rectangle now in view. */
 (function () {
-  var CELL = 2.5;
+  var CELL = 2;
 
   function spec(center, halfW, halfH) {
     return App.Viewport.sectionGridSpec(CELL, center, halfW, halfH);
   }
+
+  function isNice(value) {
+    var mantissa = value / Math.pow(10, Math.floor(Math.log10(value) + 1e-9));
+    return [1, 2, 5, 10].some(function (m) { return Math.abs(mantissa - m) < 1e-6; });
+  }
+
+  test('the grid cell is a step the rulers also take: 1, 2 or 5 times a power of ten', function () {
+    // A 3 m wide model used to get 0.6 m cells, off every ruler tick.
+    [[3, 2], [0.4, 0.2], [12, 6], [37, 20], [250, 40], [1e-3, 1e-3]].forEach(function (size) {
+      var cell = App.Viewport.gridCell({ size: [size[0], size[1], 1] });
+      T.ok(isNice(cell), size[0] + ' m model: ' + cell);
+      T.ok(Math.max(size[0], size[1]) * 1.6 / cell >= 8, 'too few cells: ' + cell);
+    });
+    T.eq(App.Viewport.gridCell({ size: [3, 2, 1] }), 0.5);
+  });
+
+  test('zooming in and out walks the 2D cell through 1, 2, 5, 10, on the ruler ticks', function () {
+    var width = 800, seen = [];
+    // From 2 m to 400 m across the screen.
+    for (var halfW = 1; halfW <= 200; halfW *= 1.25) {
+      var cell = App.Viewport.sectionGridCell(halfW, width, 0.5);
+      var ruler = App.Ruler.plan({ center: [0, 0], halfW: halfW, halfH: halfW / 2,
+                                   width: width, height: width / 2 });
+      T.eq(cell, ruler.h.step, 'grid and ruler disagree at half-width ' + halfW);
+      if (seen[seen.length - 1] !== cell) seen.push(cell);
+    }
+    T.eq(seen.join(' '), '0.2 0.5 1 2 5 10 20 50');
+    T.eq(App.Viewport.sectionGridCell(10, 0, 0.5), 0.5, 'no size yet: the model cell');
+  });
 
   test('the grid covers the whole visible rectangle, not just the model', function () {
     var g = spec([25, -12.5], 60, 30);
@@ -371,6 +485,7 @@
     T.eq(near.cell, CELL, 'at working zoom the cell is the one the model chose');
     T.ok(far.cell > near.cell, 'a wide view has to coarsen: ' + far.cell);
     T.ok(far.cell % CELL === 0, 'and stay a multiple of it, so lines survive the change');
+    T.ok(isNice(far.cell), 'and a step the rulers also take: ' + far.cell);
     T.ok(far.divisions <= App.Viewport.MAX_GRID_DIVISIONS, 'unbounded line count: ' + far.divisions);
     T.ok(far.span / 2 >= 4000, 'still has to cover the view');
   });
@@ -479,6 +594,7 @@
     App.Viewport.setVisible('mesh', true);
     App.Viewport.select(null);
     T.eq(App.Viewport.hasMesh(), false);
+    T.eq(App.Viewport.clearMesh(), false, 'no mesh: nothing to clear');
   });
 
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's
@@ -583,52 +699,31 @@
 })();
 
 (function () {
-  /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
-     (a model script can refine its excavation and grade out to the far field), and
-     `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
-     Generate-mesh button flattened a grading the project had asked for. */
+  /* Which refinement boxes a mesh is built with. A model can carry a graded mesh of its
+     own (a model script can refine its excavation and grade out to the far field), and
+     the Generate-mesh button must not flatten a grading the project asked for. */
 
   var BOX = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
               y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
 
-  function withState(local, project, run) {
-    var saved = { refinements: App.MESH_REFINEMENTS, project: App.PROJECT };
-    App.MESH_REFINEMENTS = local;
+  function withState(project, run) {
+    var saved = App.PROJECT;
     App.PROJECT = project;
-    try { run(); } finally {
-      App.MESH_REFINEMENTS = saved.refinements;
-      App.PROJECT = saved.project;
-    }
+    try { run(); } finally { App.PROJECT = saved; }
   }
 
-  test("a model's own refinements are used when none is set this session", function () {
-    withState(undefined, { mesh: { refinements: [BOX] } }, function () {
+  test("a model's own refinements are used", function () {
+    withState({ mesh: { refinements: [BOX] } }, function () {
       T.eq(App.Viewport.meshRefinements().length, 1);
       T.eq(App.Viewport.meshRefinements()[0].thickness, 45);
     });
   });
 
-  test('a refinement set from the toolbar wins over the model\'s', function () {
-    var local = [{ kind: 'box', size: 0.2, x_min: 0, x_max: 1,
-                   y_min: 0, y_max: 1, z_min: 0, z_max: 1 }];
-    withState(local, { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements()[0].size, 0.2);
-    });
-  });
-
-  test('resetting the local refinement falls back to the model, not to none', function () {
-    /* "Reset" leaves an empty array behind, and an empty array is truthy -- so a plain
-       `||` would read it as a choice and mesh the model flat. */
-    withState([], { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements().length, 1);
-    });
-  });
-
   test('a project that asks for no refinement gets none', function () {
-    withState(undefined, { mesh: {} }, function () {
+    withState({ mesh: {} }, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
-    withState(undefined, null, function () {
+    withState(null, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
   });
@@ -705,5 +800,100 @@
       T.eq(groups.results, ['surcharge', 'water_1', 'water', 'phreatic'],
            layered ? 'layered' : 'full build');
     });
+  });
+})();
+
+/* ── A line's seam goes with the line ─────────────────────────────────────
+   Where a line splits a layer, the two pieces each draw an edge along it. Hiding the line
+   in the Model explorer hid only its dashes, so the seam stayed and nothing seemed to go.
+   The seam is drawn with the line instead; the outline of each layer stays the soil's. */
+(function () {
+  var PROJECT = {
+    dimension: 2, layered_soil: true,
+    domain: { x0: 0, x1: 10, y_top: 0, y_bottom: -12, z0: 0, z1: 0 },
+    layers: [{ id: 'top', top: 0, bottom: -4 }, { id: 'low', top: -4, bottom: -12 }],
+    lines: [{ id: 'pit_side', points: [[5, 0], [5, -4]] },
+            { id: 'on_the_layers', points: [[0, -4], [10, -4]] }]
+  };
+
+  function outline(corners) {
+    var flat = [];
+    corners.forEach(function (from, index) {
+      var to = corners[(index + 1) % corners.length];
+      flat.push(from[0], from[1], 0, to[0], to[1], 0);
+    });
+    return flat;
+  }
+
+  // The left piece's edge along the line comes in two segments, as gmsh may mesh it.
+  var SECTIONS = [
+    { key: 'soil_top__part1', color: '#c8a165',
+      edges: outline([[0, 0], [5, 0], [5, -2], [5, -4], [0, -4]]) },
+    { key: 'soil_top__part2', color: '#c8a165',
+      edges: outline([[5, 0], [10, 0], [10, -4], [5, -4]]) },
+    { key: 'soil_low', color: '#8a6d3b',
+      edges: outline([[0, -4], [10, -4], [10, -12], [0, -12]]) }
+  ];
+
+  function segments(flat) {
+    var out = [];
+    for (var i = 0; i < flat.length; i += 6) {
+      out.push(flat.slice(i, i + 6).map(function (v) { return Math.round(v * 1e6) / 1e6; }));
+    }
+    return out;
+  }
+
+  test("the edges along a line that splits a layer are the line's", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, PROJECT);
+    T.eq(cut.seams.map(function (seam) { return [seam.line, seam.section.key]; }),
+         [['pit_side', 'soil_top__part1'], ['pit_side', 'soil_top__part2']]);
+    T.eq(segments(cut.seams[0].edges), [[5, 0, 0, 5, -2, 0], [5, -2, 0, 5, -4, 0]]);
+    T.eq(segments(cut.seams[1].edges), [[5, -4, 0, 5, 0, 0]]);
+    T.eq(segments(cut.edges.soil_top__part1),
+         [[0, 0, 0, 5, 0, 0], [5, -4, 0, 0, -4, 0], [0, -4, 0, 0, 0, 0]],
+         'the left piece keeps its outline, less the seam');
+  });
+
+  test("a layer's outline stays the soil's, even where a line runs along it", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, PROJECT);
+    T.eq(segments(cut.edges.soil_low), segments(SECTIONS[2].edges));
+    T.eq(segments(cut.edges.soil_top__part2),
+         [[5, 0, 0, 10, 0, 0], [10, 0, 0, 10, -4, 0], [10, -4, 0, 5, -4, 0]]);
+  });
+
+  test('in 3D the edge across the model where the line meets the ground goes too', function () {
+    var solid = Object.assign({}, PROJECT, { dimension: 3,
+      domain: Object.assign({}, PROJECT.domain, { z0: 0, z1: 6 }) });
+    var sections = [{ key: 'soil_top__part1', color: '#c8a165',
+                      edges: [5, 0, 0, 5, 0, 6,      // across, at the line's top
+                              0, 0, 0, 0, 0, 6,      // across, at the domain's corner
+                              5, -4, 6, 5, 0, 6] }]; // along the line, at the back
+    var cut = App.Viewport.lineSeams(sections, solid);
+    T.eq(segments(cut.seams[0].edges), [[5, 0, 0, 5, 0, 6], [5, -4, 6, 5, 0, 6]]);
+    T.eq(segments(cut.edges.soil_top__part1), [[0, 0, 0, 0, 0, 6]]);
+  });
+
+  test("without lines every edge is the soil's", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, Object.assign({}, PROJECT, { lines: [] }));
+    T.eq(cut.seams, []);
+    T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
+  });
+})();
+
+/* Generate mesh meshes the whole model, as kratos-cli mesh does: no volume_keys in
+   the request, whatever is selected or hidden. This needs viewport.js, so it runs
+   in the browser suite only. */
+
+(function () {
+  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
+    var saved = { PROJECT: App.PROJECT, state: App.state };
+    try {
+      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
+      App.state = { mode: 'mesh', selection: 'soil_L1' };
+      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
+      T.eq(App.Viewport.meshSettings().element_size, 2.5);
+    } finally {
+      App.PROJECT = saved.PROJECT; App.state = saved.state;
+    }
   });
 })();

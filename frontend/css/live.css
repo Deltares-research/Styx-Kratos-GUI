@@ -1,5 +1,5 @@
 /* Live-only controls; the file:// mockup styles remain frozen. */
-.mesh-settings-body { padding: 14px 18px; overflow: auto; }
+.mesh-settings-body { padding: 14px 18px; overflow: auto; container-type: inline-size; }
 /* `.dlg-body` is a flex row, so the form would be stretched to the body's height.
    A grid with a fixed height shrinks the layer table's row (the table clips its
    overflow, so its minimum height is zero) and the rows below run over it. Keep
@@ -8,7 +8,7 @@
 .mesh-settings-form {
   align-self: flex-start;
   display: grid;
-  grid-template-columns: 165px minmax(170px, 220px) 1fr;
+  grid-template-columns: 165px minmax(170px, 300px) 1fr;
   gap: 10px 12px;
   align-items: center;
   width: 100%;
@@ -25,7 +25,28 @@
   font: inherit;
 }
 input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify-self: start; }
+/* A field the window's other choices make unused, such as a hydrostatic load's pressure. */
+.mesh-setting-control:disabled { background: var(--c-panel); color: var(--c-ink-faint); }
+.line-point { display: grid; grid-template-columns: 20px 1fr 1fr auto; gap: 6px; align-items: center; margin-bottom: 4px; }
 .mesh-setting-help { color: var(--c-ink-soft); font-size: var(--fs-sm); line-height: 1.3; }
+/* A window too narrow for a help column of its own (the Create windows, about 600 px
+   wide) puts each help text under its field. Squeezed into the third column it ran to
+   a dozen short lines per field, and the fields no longer fitted in the window. Each
+   row is a label, a control and a help div, so the help takes the control's column on
+   the next row; an empty one takes no row at all. */
+@container (max-width: 740px) {
+  .mesh-settings-form { grid-template-columns: 150px minmax(0, 1fr); row-gap: 4px; }
+  .mesh-settings-form > .mesh-setting-help { grid-column: 2; margin-bottom: 6px; }
+  .mesh-settings-form > .mesh-setting-help:empty { display: none; }
+}
+/* The Rename and Project properties windows (js/name-dialog.js): a line of text, then
+   the fields with their help, and a message under them. `.dlg-body` is a flex row. */
+.name-dialog-body { flex-direction: column; gap: 12px; padding: 14px 18px; overflow: auto; }
+.name-dialog-text { margin: 0; color: var(--c-ink-soft); line-height: 1.5; }
+.name-dialog-form { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; align-items: center; }
+/* A number field with its unit after it (Gravity, m/s²). */
+.name-dialog-with-unit { display: flex; align-items: center; gap: 6px; }
+.name-dialog-with-unit .name-dialog-input { flex: 1; min-width: 0; }
 .mesh-setting-targets { font-family: var(--font-mono); color: var(--brand-primary); }
 /* Sized to the form's control column, so its right edge lines up with the
    single-line fields below it. A min-width wider than the track's max would
@@ -42,7 +63,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .mesh-body-head,
 .mesh-body-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 74px;
+  grid-template-columns: minmax(0, 1fr) 74px 64px;
   gap: 8px;
   align-items: center;
   min-height: 30px;
@@ -59,12 +80,9 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   border-bottom: 1px solid var(--c-border);
 }
 .mesh-body-row + .mesh-body-row { border-top: 1px solid var(--c-border); }
-.mesh-body-enabled { width: 16px; height: 16px; margin: 0; }
 /* Fills its column and keeps the border/height of the fields below. */
-.mesh-body-size { width: 100%; height: 24px; }
-/* An unchecked layer is not meshed, so its target size does not apply. */
-.mesh-body-size:disabled { background: var(--c-panel); color: var(--c-ink-faint); }
-.mesh-body-row.off > span { color: var(--c-ink-faint); }
+.mesh-body-size, .mesh-body-band { width: 100%; height: 24px; }
+.mesh-structure-size, .mesh-structure-band { width: 100%; height: 24px; }
 .mesh-settings-message { color: #a12622; max-width: 280px; }
 
 /* ── Create soil volume ────────────────────────────────────────── */
@@ -404,6 +422,31 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
 .rp-host svg { display: block; width: 100%; height: auto; }
 
+/* The Convergence window (frontend/js/convergence-window.js): two status lines in words
+   and numbers, the stage slider, then the figure of frontend/js/convergence-plot.js,
+   which fills the rest and grows with the window. */
+.dlg-convergence .dlg-body { overflow: hidden; padding: 0; }
+.cv-window { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cv-status {
+  flex: 0 0 auto; padding: 6px 12px; font-size: 12px; line-height: 1.45;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-line1 { font-weight: 600; color: var(--c-ink); }
+.cv-line2 { color: var(--c-ink-soft); min-height: 1.45em; }
+.cv-stages {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+  font-size: 12px; border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-stages[hidden] { display: none; }
+.cv-stages-label { color: var(--c-ink-soft); }
+.cv-stage-slider { flex: 1 1 auto; min-width: 80px; margin: 0; }
+.cv-stage-name {
+  flex: 0 1 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink);
+}
+.cv-host { flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
+.cv-host svg { display: block; width: 100%; height: 100%; }
+
 /* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
    own colour -- outlined while off, filled while on, half filled for a group that is
    partly on. See addPartColorToggles in frontend/js/patches.js. */
@@ -447,11 +490,14 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .stages-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .stages-overview-list .phase-kind { flex: 0 0 auto; }
+.stages-overview-list .phase-id { color: var(--c-ink-faint); }
 .phase-dot.failed { background: #d64545; }
+.phase-dot.stopped { background: #d98c1f; }
 .stages-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
   border: 1px solid var(--c-line); background: var(--c-panel-2); }
 .stages-overview-box.done, .stages-overview-box.initial { color: var(--brand-green); }
 .stages-overview-box.failed { color: #d64545; }
+.stages-overview-box.stopped { color: #b36b00; }
 .stages-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
   overflow: auto; margin: 0 0 10px; }
 
@@ -468,7 +514,6 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
   font-family: var(--font-mono); font-size: var(--fs-sm); }
 .bc-other span { flex: 1 1 auto; }
-.bc-gravity { display: block; margin-top: 12px; }
 .bc-axes label { margin-right: 6px; }
 
 /* ── Calculate: greyed out, and while it runs ─────────────────────────────
@@ -496,7 +541,79 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   animation: calculate-spin 0.9s linear infinite;
 }
 .rail-btn.calculating::before { width: 15px; height: 15px; }
+
+/* While a run goes on, the toolbar's Calculate button is Stop (patches.js
+   `paintCalculating`): red, with a square in place of the play arrow. */
+#maintoolbar .tbtn-cta.stop-calc,
+#maintoolbar .tbtn-cta.stop-calc:hover {
+  background: #fdecec; border-color: #c62828; color: #b71c1c; cursor: pointer;
+}
+#maintoolbar .tbtn-cta.stop-calc:hover { background: #f9d6d6; }
+.tbtn.stop-calc svg { display: none; }
+.tbtn.stop-calc::before {
+  content: ''; width: 10px; height: 10px; border-radius: 1px; background: currentColor;
+}
+.dlg-convergence .cv-stop { color: #b71c1c; border-color: #c62828; }
+.dlg-convergence .cv-stop[hidden] { display: none; }
+.dlg-calc-stop .calc-stop-text { padding: 14px 16px; line-height: 1.45; }
 @keyframes calculate-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .tbtn.calculating::before, .rail-btn.calculating::before { animation: none; }
 }
+
+/* The stage panel's expert solver settings (patches.js `expertSettings`): a group
+   header that opens and closes them, the sub-groups inside, a changed setting's
+   marker and the button that puts it back to its default. */
+.pgrid-toggle { cursor: pointer; }
+.pgrid-toggle::before { content: '\25b8'; display: inline-block; width: 12px; }
+.pgrid-expert.open > .pgrid-toggle::before { content: '\25be'; }
+.pgrid-subgroup { padding: 3px 8px 1px 14px; font-size: var(--fs-sm); font-weight: 600;
+  color: var(--c-ink-faint); }
+.pgrid-key.changed { color: var(--c-ink); font-weight: 600; }
+.pgrid-reset { flex: 0 0 auto; margin-left: 3px; padding: 0 4px; border: 0;
+  background: none; color: var(--c-ink-faint); cursor: pointer; font-size: var(--fs-md); }
+.pgrid-reset:hover { color: var(--brand-primary); }
+
+/* ── The Save picture window ──────────────────────────────────────────── */
+.picture-body { width: 100%; padding: 14px 18px; overflow: auto; }
+.picture-form {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 10px 12px;
+  align-items: center;
+}
+.picture-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.picture-row input[data-number] { width: 70px; }
+.picture-column { display: flex; flex-direction: column; gap: 4px; }
+.picture-tick { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.picture-note { margin-top: 14px; color: var(--c-ink-soft); line-height: 1.4; }
+.picture-stop { display: block; margin: 8px auto 0; pointer-events: auto; }
+
+/* The material window (js/material-sets.js): every value row keeps a fixed slot for its
+   unit, right beside the field, so the unit is always there and the units line up. A
+   value left to the export shows what it derives as a faint placeholder; one that
+   follows from the soil's numbers is shown, not edited. The window has no padding of
+   its own, so the grid keeps its headings and rows off the window's edges. */
+.material-variables { padding: 10px 14px 12px; }
+.material-variables h4 { margin: 14px 0 4px; }
+.material-variables h4:first-child { margin-top: 0; }
+.material-variables .pgrid-val.field > .unit,
+.material-water .pgrid-val.field > .unit { flex: 0 0 48px; margin-left: 4px; white-space: nowrap; }
+.material-variables .pgrid-val.field > .remove-slot { flex: 0 0 26px; display: flex; justify-content: flex-end; }
+.material-variables .pgrid-val.field > select { flex: 1 1 auto; min-width: 0; }
+.material-variables .pgrid-val.field > input[type="checkbox"] { margin-right: auto; }
+.material-variables .pgrid-note {
+  margin-left: 46%; padding: 2px 6px 4px; color: var(--c-ink-faint); font-size: var(--fs-sm);
+  white-space: normal;
+}
+.material-variables .cell-input::placeholder,
+.material-water .cell-input::placeholder { color: var(--c-ink-faint); font-style: italic; }
+.pgrid-val.field > .computed-value {
+  flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis;
+}
+.material-sets .material-swatch { display: inline-block; width: 18px; height: 18px; vertical-align: middle; }
+.material-water { margin-top: 10px; }
+.material-water h3 { margin: 0 0 4px; }
+/* The presets, below the soils. */
+.material-library { margin-top: 10px; }
+.material-library h3 { margin: 0 0 4px; }

@@ -11,6 +11,7 @@ import json
 import sys
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -194,6 +195,43 @@ def test_staging_copies_the_deck_and_nothing_else(project, tmp_path):
                                       "materials_a.json", "materials_b.json"])
     assert sorted(path.name for path in run.iterdir()) == sorted(written)
     assert (run / "materials_b.json").read_text(encoding="utf-8") == '{"properties": [1]}'
+
+
+def with_own_process(deck_dir, module: str, ship: bool = True) -> Project:
+    """The dike deck with a process of its own in the second stage: a `python_module`
+    with no `kratos_module`, such as the temporary prestress workaround."""
+    parameters = json.loads((deck_dir / "dike.json").read_text(encoding="utf-8"))
+    parameters["stages"]["2_Load"]["stage_settings"]["processes"] = {
+        "auxiliary_process_list": [
+            {"python_module": module, "process_name": "Own",
+             "Parameters": {"model_part_name_list": ["PorousDomain.soil"]}},
+            {"python_module": "apply_final_stresses_of_previous_stage_to_initial_state",
+             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+             "Parameters": {"model_part_name_list": ["PorousDomain.soil"]}},
+        ]}
+    (deck_dir / "dike.json").write_text(json.dumps(parameters), encoding="utf-8")
+    if ship:
+        (deck_dir / f"{module}.py").write_text("def Factory(s, m): pass\n", encoding="utf-8")
+    return external_deck.deck_project(deck_dir, "dike.json", name="Dike")
+
+
+def test_a_process_module_beside_the_deck_is_staged_with_it(deck_dir, tmp_path):
+    """Kratos imports it from the directory the run happens in, so a run directory
+    without it is a deck that stops at the stage that runs it."""
+    project = with_own_process(deck_dir, "kratos_gui_prestress_workaround")
+    assert external_deck.input_files(project.deck)[-1] == \
+        "kratos_gui_prestress_workaround.py"
+    run = tmp_path / "run"
+    run.mkdir()
+    external_deck.stage(project.deck, run)
+    assert (run / "kratos_gui_prestress_workaround.py").read_text(encoding="utf-8") == \
+        "def Factory(s, m): pass\n"
+
+
+def test_a_process_module_not_beside_the_deck_is_left_where_it_is_installed(deck_dir):
+    project = with_own_process(deck_dir, "installed_elsewhere", ship=False)
+    assert external_deck.input_files(project.deck) == [
+        "dike.json", "dike.mdpa", "materials_a.json", "materials_b.json"]
 
 
 def test_staging_writes_the_output_beside_the_deck(project, tmp_path):
@@ -433,6 +471,7 @@ def staged_stage(name: str, domain: list[str], loads: tuple = (), *,
     solver = body["stage_settings"]["solver_settings"]
     solver.update({"problem_domain_sub_model_part_list": domain,
                    "reset_displacements": reset, "max_iterations": 50,
+                   "convergence_criterion": "residual_criterion",
                    "residual_relative_tolerance": 0.01})
     processes = {
         "loads_process_list": [
@@ -520,15 +559,20 @@ def test_the_resolved_stages_are_the_stages_own_part_lists(staged):
 
 def test_a_stage_carries_its_stage_settings(staged):
     by_id = {stage.id: stage for stage in staged.stages}
-    assert by_id["1_Initial_stage"].calculation == "K0 procedure"
-    assert by_id["2_Null_step"].calculation == "Null step"
-    assert by_id["3_Fill"].calculation == "Plastic"
+    assert by_id["1_Initial_stage"].stress_initialisation == "K0"
+    assert by_id["2_Null_step"].stress_initialisation == "none"
+    assert all(stage.calculation == "mechanical" for stage in staged.stages)
+    assert all(stage.time_integration == "static" for stage in staged.stages)
+    assert by_id["3_Fill"].stress_initialisation == "none"
     assert by_id["3_Fill"].reset_displacements is True
     assert by_id["4_Crane"].reset_displacements is False
     assert by_id["3_Fill"].max_iterations == 50
+    assert by_id["3_Fill"].convergence_criterion == "residual_criterion"
     assert by_id["3_Fill"].tolerated_error == 0.01
-    assert by_id["3_Fill"].time_interval == 17.0
-    assert by_id["1_Initial_stage"].time_interval == 0.0
+    # The deck's own seconds, which are the project's. Its solver names no step, so
+    # each stage is one step, as Kratos would run it.
+    assert (by_id["3_Fill"].duration, by_id["3_Fill"].time_step) == (17 * 86400.0,) * 2
+    assert (by_id["1_Initial_stage"].duration, by_id["1_Initial_stage"].time_step) == (1.0, 1.0)
 
 
 def test_a_deck_without_part_lists_has_stages_that_change_nothing(project):
@@ -546,7 +590,6 @@ def test_a_decks_stages_are_not_edited_here(client, staged):
                             json={"stages": [p.model_dump() for p in staged.stages[:2]]})
     assert response.status_code == 422
     assert "deck" in response.json()["detail"]
-    assert client.post("/api/project/stages/defaults").status_code == 422
 
 
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):
@@ -558,3 +601,52 @@ def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir
     written = external_deck.stage(project.deck, tmp_path)
     assert calculation.UNITS_NAME in written
     assert (tmp_path / calculation.UNITS_NAME).read_text(encoding="utf-8") == '{"unit_system": "kN"}'
+
+
+def test_external_deck_stages_follow_execution_order_and_keep_only_changes():
+    parameters_doc = {
+        "orchestrator": {"settings": {"execution_list": ["1_Initial", "2_Install", "missing"]}},
+        "stages": {
+            "1_Initial": {"stage_settings": {
+                "solver_settings": {"problem_domain_sub_model_part_list": ["PorousDomain.Soil"]},
+            }},
+            "2_Install": {"stage_settings": {
+                "solver_settings": {"problem_domain_sub_model_part_list":
+                                    ["PorousDomain.Soil", "PorousDomain.Wall"]},
+            }},
+        },
+    }
+
+    stages = external_deck.styx_stages(parameters_doc)
+
+    assert [stage.id for stage in stages] == ["1_Initial", "2_Install"]
+    assert stages[0].name == "Initial"
+    assert stages[0].parent is None
+    assert stages[0].activate == []
+    assert stages[0].deactivate == ["Wall"]
+    assert stages[1].parent == "1_Initial"
+    assert stages[1].activate == ["Wall"]
+    assert stages[1].deactivate == []
+
+
+def test_external_deck_parameters_fail_with_a_user_facing_missing_file_message(tmp_path):
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="missing.json")
+
+    with pytest.raises(external_deck.DeckError, match="no deck parameters"):
+        external_deck._parameters(deck)
+
+
+def test_external_deck_rejects_json_without_a_stages_object(tmp_path):
+    (tmp_path / "parameters.json").write_text('{"problem_data": {}}', encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match='no "stages" to run'):
+        external_deck._parameters(deck)
+
+
+def test_external_deck_reports_unreadable_parameter_json(tmp_path):
+    (tmp_path / "parameters.json").write_text("{", encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match="could not be read"):
+        external_deck._parameters(deck)

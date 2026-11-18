@@ -47,11 +47,8 @@ def _soil(id_, name, color, modulus, weight, cohesion, phi):
                         "YOUNG_MODULUS": modulus,
                         "POISSON_RATIO": 0.3,
                         "DENSITY_SOLID": weight / 9.81,
-                        "DENSITY_WATER": 10_000.0 / 9.81,
                         "POROSITY": 0.0,
                         "BULK_MODULUS_SOLID": 1.0e10,
-                        "BULK_MODULUS_FLUID": 2.2e9,
-                        "DYNAMIC_VISCOSITY": 1.0e-3,
                         "PERMEABILITY_XX": 1.0e-5,
                         "PERMEABILITY_YY": 1.0e-5,
                         "PERMEABILITY_XY": 0.0,
@@ -118,7 +115,7 @@ def drawn_ground_project(staged: bool = True) -> Project:
     if not staged:
         return project
     stages = [
-        Stage(id="initial", name="Initial", calculation="K0 procedure",
+        Stage(id="initial", name="Initial", stress_initialisation="K0",
               deactivate=["sheetpile", "wall_contact", "trench_water"]),
         Stage(id="install", name="Install wall", parent="initial",
               activate=["sheetpile", "wall_contact"]),
@@ -135,7 +132,7 @@ HEAD_LOAD = 10_000.0
 
 def pushed_pile_project(interface: bool = True, variables: dict | None = None,
                         law: str | None = None, load: tuple[float, float] = (HEAD_LOAD, 0.0),
-                        max_iterations: int = 15) -> Project:
+                        max_iterations: int = 15, soil_law: str | None = None) -> Project:
     """The pile pushed at its head, the ground left as it is: Kratos' own
     `tests/Interface/interface_on_beam` asked of this model.
 
@@ -143,11 +140,18 @@ def pushed_pile_project(interface: bool = True, variables: dict | None = None,
     -- and its interface, unless `interface` is False -- with the load on its head, and
     starts its displacements from nought, so they are the load's alone. `variables`
     are typed on the interface section (its stiffnesses, say), `law` replaces its law.
+    `soil_law` makes every soil that law, with no dilatancy and no tension cut-off: a
+    Mohr-Coulomb one has a strength a Coulomb contact can take, a linear elastic one has
+    none.
     """
     data = drawn_ground_project(staged=False).model_dump()
     data["normal_loads"] = []
     data["loads"] = [{"id": "head_load", "name": "Head load", "kind": "point",
                       "x": WALL_X, "y": DOMAIN_TOP_Y, "components": list(load)}]
+    if soil_law is not None:
+        for soil in data["materials"]:
+            soil["constitutive_law"] = soil_law
+            soil["variables"].update(GEO_DILATANCY_ANGLE=0.0, GEO_ENABLE_TENSION_CUT_OFF=False)
     contact = data["interface_sections"][0]
     contact["variables"] = dict(variables or {})
     if law is not None:
@@ -156,7 +160,7 @@ def pushed_pile_project(interface: bool = True, variables: dict | None = None,
         data["interfaces"] = []
     built = ["sheetpile", "head_load"] + (["wall_contact"] if interface else [])
     data["stages"] = [
-        Stage(id="initial", name="Initial", calculation="K0 procedure",
+        Stage(id="initial", name="Initial", stress_initialisation="K0",
               deactivate=built).model_dump(),
         Stage(id="push", name="Push", parent="initial", activate=built,
               reset_displacements=True, max_iterations=max_iterations).model_dump(),

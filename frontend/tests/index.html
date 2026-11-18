@@ -35,6 +35,7 @@
      same frozen data.js that the app loads. -->
 <script src="../vendor/three.min.js"></script>
 <script src="../base/js/data.js"></script>
+<script src="../js/version.js"></script>
 <script src="../js/vocabulary.js"></script>
 <script src="../js/unit-table.js"></script>
 <script src="../js/units.js"></script>
@@ -69,6 +70,7 @@
 <script src="../js/soil-layers-dialog.js"></script>
 <script src="../js/patches.js"></script>
 <script src="../js/canvas-renderer.js"></script>
+<script src="../js/structure-glyphs.js"></script>
 <script src="../js/viewport.js"></script>
 <script src="../js/mesh-settings.js"></script>
 <script src="../js/draw-input.js"></script>
@@ -76,8 +78,12 @@
 <script src="../js/beams.js"></script>
 <script src="../js/anchors.js"></script>
 <script src="../js/interfaces.js"></script>
+<script src="../js/point-list.js"></script>
+<script src="../js/name-dialog.js"></script>
 <script src="../js/normal-loads.js"></script>
+<script src="../js/lines.js"></script>
 <script src="../js/boundary-conditions.js"></script>
+<script src="../js/solver-settings.js"></script>
 <script src="../js/stages.js"></script>
 <script src="../js/import-dialog.js"></script>
 <script src="../js/mdpa-import-dialog.js"></script>
@@ -86,8 +92,14 @@
 <script src="../js/results-render.js"></script>
 <script src="../js/results.js"></script>
 <script src="../js/results-plot.js"></script>
+<script src="../js/convergence-plot.js"></script>
 <script src="../js/results-view.js"></script>
 <script src="../js/calculate.js"></script>
+<script src="../js/convergence-window.js"></script>
+<script src="../js/picture-draw.js"></script>
+<script src="../js/picture-writers.js"></script>
+<script src="../js/picture.js"></script>
+<script src="../js/picture-dialog.js"></script>
 
 <script src="harness.js"></script>
 <script src="test-api.js"></script>
@@ -118,12 +130,16 @@
 <script src="test-interfaces.js"></script>
 <script src="test-interfaces-dom.js"></script>
 <script src="test-normal-loads.js"></script>
+<script src="test-lines.js"></script>
+<script src="test-lines-dom.js"></script>
 <script src="test-boundary-conditions.js"></script>
 <script src="test-toolbar.js"></script>
 <script src="test-not-yet.js"></script>
 <script src="test-frozen-ui.js"></script>
+<script src="test-version.js"></script>
 <script src="test-vocabulary.js"></script>
 <script src="test-dock.js"></script>
+<script src="test-number-fields-dom.js"></script>
 <script src="test-export.js"></script>
 <script src="test-calculate.js"></script>
 <script src="test-calculate-button.js"></script>
@@ -132,9 +148,17 @@
 <script src="fixtures/results-field.js"></script>
 <script src="test-results-render.js"></script>
 <script src="test-results-plot.js"></script>
+<!-- Real logs the server parsed, before the suite that draws them (as in run_headless.py). -->
+<script src="fixtures/convergence-cases.js"></script>
+<script src="test-convergence-plot.js"></script>
+<script src="test-convergence-window.js"></script>
 <script src="test-results-view.js"></script>
 <script src="test-download.js"></script>
 <script src="test-zip.js"></script>
+<script src="test-picture-draw.js"></script>
+<script src="test-picture-writers.js"></script>
+<script src="test-picture-dialog.js"></script>
+<script src="test-picture-dom.js"></script>
 <script src="test-soil-layers-dialog.js"></script>
 <script src="test-material-library.js"></script>
 <script src="test-units.js"></script>
@@ -142,23 +166,30 @@
 <script src="test-property-sets.js"></script>
 <script src="fixtures/drafts.js"></script>
 <script src="test-drafts.js"></script>
+<script src="fixtures/edits.js"></script>
+<script src="test-edits.js"></script>
 <script src="test-material-sets.js"></script>
 <script src="test-shortcuts.js"></script>
 <script src="test-water.js"></script>
 <script src="test-water-command.js"></script>
 <script src="test-script-command.js"></script>
 <script src="test-part-colors.js"></script>
+<script src="test-structure-glyphs.js"></script>
 <script src="test-node-parts.js"></script>
 <script src="test-deck.js"></script>
 <!-- The generated parity fixture, before the suite that reads it. Owned by
      tests/test_stage_parity.py; see frontend/tests/run_headless.py to run
      these particular tests without a browser. -->
 <script src="fixtures/stage-cases.js"></script>
+<script src="fixtures/solver-cases.js"></script>
 <script src="test-stages.js"></script>
+<script src="test-authoring-dom.js"></script>
 <!-- Last: it boots the one viewport, whose frame then sizes load glyphs etc. -->
 <script src="fixtures/viewport-payloads.js"></script>
 <script src="test-patches-modes.js"></script>
+<script src="test-patches-editing.js"></script>
 <script src="test-viewport-live.js"></script>
+<script src="test-picture-live.js"></script>
 
 <script>
 T.run().then(function (results) {

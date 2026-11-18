@@ -1,5 +1,6 @@
 # Two scans that need nothing from GitHub's paid security features:
-#   pip-audit  known vulnerabilities in the pinned packages, the app's and the test tools'
+#   pip-audit  known vulnerabilities in the pinned packages: the app's, the test tools' and
+#              the tutorial site's
 #   gitleaks   secrets (tokens, keys, passwords) anywhere in the git history
 # The weekly run catches advisories published after the last push.
 name: security
@@ -26,18 +27,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      # pip-audit resolves both files in a throwaway environment and asks the PyPI
+      # pip-audit resolves the files in a throwaway environment and asks the PyPI
       # advisory database about every package, the dependencies' dependencies included.
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
-          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt
+          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt \
+            -r requirements-docs.txt
 
   gitleaks:
     name: gitleaks
@@ -48,7 +50,7 @@ jobs:
       # From the release's gitleaks_<version>_checksums.txt; update with the version.
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

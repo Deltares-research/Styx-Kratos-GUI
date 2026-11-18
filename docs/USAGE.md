@@ -5,6 +5,9 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 [INSTALLATION.md](INSTALLATION.md). To calculate, you also need Kratos: see
 [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
+To learn the GUI by building one model step by step, start with the
+[GUI tutorials](gui_tutorials/index.md).
+
 > [!WARNING]
 > The Styx server keeps the open project in its memory. It does not save the project to a
 > file itself. If you stop the server before you save, you lose your changes. Save often
@@ -15,7 +18,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Part | Where | What it does |
 |---|---|---|
 | Menu bar | Top | All commands, in menus |
-| Toolbar | Below the menu bar | New, open, save, the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate** |
+| Toolbar | Below the menu bar | New, open, save, **Save picture** (the camera), the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate** |
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
@@ -30,8 +33,8 @@ explorer**, below the Model explorer.
 Some menu items and tools come from the first design of the GUI and do nothing yet. They are
 grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
 says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
-**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, **Refine
-mesh**, **Coarsen mesh**, the wells, drains and flow functions, **Select multiple objects**,
+**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
+wells, drains and flow functions, **Select multiple objects**,
 **Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
 **Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
 manual** and **Tutorial manual**.
@@ -53,7 +56,12 @@ Click **Calculate** between Staged construction and Results.
 
 ## Projects
 
-- **New project:** **File** → **New project…** starts an empty site.
+- **New project:** **File** → **New project…** starts an empty site. Type the project name
+  in the window. The name shows in the title bar, and **Save** names the file after it.
+- **Project properties:** **File** → **Project properties…** changes the name of the open
+  project and the gravitational acceleration g (9.81 m/s² in a new project).
+  In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
+  the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your
@@ -86,7 +94,8 @@ Right-click in the viewport for more commands: hide the selected object, hide al
 objects, show all, show node or element labels, and visibility settings.
 
 Right-click an object in the Model explorer to zoom to it, rename it, delete it, or open its
-properties.
+properties. This works for every object, soil layers too. **Rename…** opens a small window:
+type the new name and click **OK**, or press <kbd>Enter</kbd>.
 
 ## Soil mode
 
@@ -115,31 +124,64 @@ and the bottom (**y min**) of a layer in the Selection explorer. This is the sam
 
 For a layer that is not horizontal, draw a soil surface or a soil volume (see below).
 
-### Material sets
+### Soil materials
 
-Click **Show material sets…**. Each soil material is a Kratos property set: a constitutive
+Click **Soil materials…**. Each soil material is a Kratos property set: a constitutive
 law and its parameters.
 
-- To add a soil, select a preset in **Default library** (Fill, Sand loose, Sand dense, Clay
-  soft, Clay stiff or Bedrock) and click **Add to project**. Styx adds a copy that you can
-  change.
+- To add a soil, click **Create soil**. Styx adds a linear elastic soil that is mechanical
+  only (`CONSTANT_PW_FIELD`) and saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`), and
+  opens its properties. `kratos-cli material add` makes the same soil. The other values are empty: type them. The line at the bottom of
+  the window lists the values that the soil still needs for a calculation. Until you type
+  K0, the window shows the K0 that the export calculates from the Poisson's ratio (linear
+  elastic) or the friction angle (Mohr-Coulomb).
+- To start from a preset instead, go to **Default soil material library** under the soils, select a preset
+  (Fill, Sand loose, Sand dense, Clay soft, Clay stiff or Bedrock) and click **Add to
+  project**. Styx adds a copy that you can change. The presets with a cohesion and a
+  friction angle are Mohr-Coulomb soils; Bedrock is linear elastic.
 - To change a material, click **Properties…** in its row.
 - To make a material Mohr-Coulomb, open **Properties…** and select **Mohr-Coulomb** in
   **Soil model**. Styx sets the Kratos law for the dimension of the model, keeps the values
   the material has, and fills in defaults for the others. The line at the bottom of the
-  window lists the values it filled in. The material is then ready for a calculation.
+  window lists the values it filled in. The material is then ready for a calculation. For a
+  soil that still has empty values, such as a new soil, Styx fills in no values that you
+  must type, for example the friction angle: the soil stays yours to fill in.
 - In the **Properties…** window, the parameters are in groups (Drainage, Stiffness,
-  Weight, Flow, Strength, Pore fluid, Initial stresses). A text value, such as
-  `GEO_DRAINAGE_TYPE` or `RETENTION_LAW`, is a list of the values Kratos accepts. A
-  true/false value, such as `GEO_ENABLE_TENSION_CUT_OFF`, is a check box. Some
-  parameters show only when they are used: `GEO_TENSILE_STRENGTH` when the tension
-  cut-off is on, the saturations for a retention law other than `SaturatedLaw`, and the
-  Van Genuchten parameters for `VanGenuchtenLaw`. When a choice brings in new parameters,
-  Styx fills in their defaults.
+  Weight, Saturation, Flow, Grain-water interaction, Strength, Hardening, Initial
+  stresses). Each has
+  a name, with its Kratos variable when you hover it, and its unit beside the field. A text value, such
+  as the drainage type or the retention law, is a list of the values Kratos accepts. The
+  drainage type shows them as **Mechanical only** (`CONSTANT_PW_FIELD`) and **Fully
+  coupled** (`FULLY_COUPLED`), with a line under the list that says what each solves. A
+  true/false value, such as the tension cut-off, is a check box.
+- The window shows only what the soil model and its choices use. A linear elastic soil has
+  no cohesion or friction angle. The flow parameters (the intrinsic permeabilities, the
+  minimum relative permeability) show for a `FULLY_COUPLED` soil only, or in a groundwater
+  flow project. The tensile strength shows when the tension cut-off is on, the saturations
+  for a retention law other than `SaturatedLaw`, and the Van Genuchten parameters for
+  `VanGenuchtenLaw`, and the three hardening slopes when **Hardening** is Linear (the
+  angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
+  parameters, Styx fills in their defaults. A mechanical-only soil shows no
+  permeability: its water pressures are the ones the water conditions set, and the
+  deformation does not change them. Styx has no
+  undrained drainage type. A low permeability does not make a soil undrained: a stage
+  is static, so a load does not raise the water pressure of a `FULLY_COUPLED` soil. For
+  an undrained soil, use a mechanical-only soil with undrained values (total stresses): the
+  undrained Young's modulus, a Poisson's ratio close to 0.5 (such as 0.49), and, for
+  Mohr-Coulomb, the undrained shear strength as cohesion with a friction angle of 0.
+  A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).
+- A value you leave empty shows, in grey, the value the export writes for it: the
+  permeability in y is the one in x, K0 is ν / (1 − ν) for a linear elastic soil and
+  1 − sin φ for a Mohr-Coulomb one, and so on. Type a value to replace it.
+- The window also shows what follows from the soil's values: its unit weight dry and
+  saturated, and for a coupled soil the Darcy permeability (in m/s and m/day) that its
+  intrinsic permeability gives with the project's water.
+- The water is the same in every soil. Its bulk modulus and viscosity are under **Water**
+  in the Soil materials window; its unit weight is that of the water level. Empty, each is
+  the value of water at 20 °C.
 - For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
-  the law name. Styx writes it as you type it, with the variables you give it.
-- To give a material the strength and permeability of an interface, select the material, then
-  select an interface preset and click **Apply to selected**.
+  the law name. Styx writes it as you type it, with the variables you give it: only here
+  can you add variables of your own.
 - Click **OK** to save the materials, or **Cancel** to forget your changes.
 
 The preset values are only a start. Check them for your soil.
@@ -150,11 +192,34 @@ The preset values are only a start. Check them for your soil.
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
 select its material.
 
-### Excavations
+### Lines that split the soil
 
-The GUI cannot make an excavation pit yet. To add a pit and the levels to which it is dug,
-use `kratos-cli excavation` (see [CLI.md](CLI.md)) or a Python script. The GUI then shows each
-lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
+**Structures > Create line** splits soil into parts. Click the points of the line in the
+section, then press Enter or right-click. The Line window opens with the points. Correct
+them there if needed, and select **Save**. The arrow in the corner of the button also has
+**Line by coordinates…**, which opens the same window with no drawing first. While you
+draw, you can also type `x y` in the command box to place a point.
+
+Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
+parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
+part off in its own stage. Select a part to rename it or to give it another material. A
+part starts with its layer's material. Change the layer's material, in the **Soil layers**
+window or in the Selection explorer, and every part of that layer takes the new material,
+also a part you gave a material of its own.
+
+Lines have their own group in the Model explorer. Delete a line there, and the parts join
+again, unless a stage still uses one of them. Then the deletion is refused.
+
+A part of a line that ends inside the soil splits nothing. The Session log says so when no
+part of a line splits anything.
+
+An excavation is made in this way: a wall and a line at each level make the lifts, and a
+stage switches each lift off.
+
+A project saved with an excavation pit opens with lines and soil parts in its place, for
+example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode
 
@@ -163,10 +228,10 @@ lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
 | Sheet pile (2D) | Click **Create sheet pile…**. Type the two end points and the section properties, then click **Save**. |
 | Wall panel (3D) | Click **Create wall panel…**. Type the corners of the footprint, the **Top level** and the **Toe level**. |
 | Member (3D): a bored pile, a king post or a strut | Click **Create member…**. |
-| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. |
+| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
 | Interface (2D only) | Click **Create interface…**. Select the sheet pile in **Along**, or **Own coordinates**, then click **Save**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
-| Normal load (2D only) | Click **Create normal load**. Type the two end points. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
+| Normal load (2D only) | Click **Create normal load**. Type the points of the line: **Add point** adds one after the last, and **Remove** takes one away. Or click **Pick on model…**, click the points in the viewport and press <kbd>Enter</kbd>. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. A hydrostatic load does not use a pressure. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
 | Support (2D only, along a line or at a point) | Click **Create boundary condition** and select **Line prescribed displacement** or **Point prescribed displacement**. Click the points in the viewport, then select the components to fix. See [Boundary conditions](#boundary-conditions). |
 | Point, line, surface, or box (3D only) | Click the tool, then click the points in the viewport. You can also type `x y` or `x y z` in the command box for each point. Press <kbd>Enter</kbd> to finish a line or a surface, or <kbd>Esc</kbd> to stop. |
 | Solid from a CAD file | Click **Import model…** and select a STEP, IGES, BREP, STL or OBJ file. |
@@ -174,6 +239,14 @@ lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
 To change an object, select it in the viewport or in the Model explorer, then change its
 properties in the Selection explorer. An object that is not **Active** stays in the project,
 but Styx does not send it to Kratos.
+
+In the viewport, a sheet pile is a thick dark line, an anchor is a green line with a dot at
+each end, and an interface is a dashed purple line. An interface on a sheet pile is drawn
+next to the pile, on each face that has the interface. These lines keep the same width when
+you zoom, and they are drawn over the soil and the mesh. On the **Soil** and **Flow
+conditions** tabs they are drawn half transparent. A sheet pile, anchor or interface that is
+not **Active**, or that the selected stage deactivates, is drawn half transparent too. On the
+**Soil** and **Flow conditions** tabs it is fainter still.
 
 The sheet pile section starts with values near an AZ 26-700 steel sheet pile. In 2D, the
 values are for each metre of wall, divided by the **Spacing**.
@@ -200,8 +273,16 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
    45 degrees, the faces are **Below** and **Above**. **Both sides** is only for a sheet
    pile. For a retaining wall, you usually select both.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
-   numbers in the Selection explorer: the soil whose strength `R_inter` reduces, the
-   virtual thickness, and the permeability.
+   numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
+   thickness, and the permeability. A new contact takes the soil each part of the
+   interface runs against (**From the soil it runs against**). The **Elastic** law reads
+   the stiffnesses only. The **Coulomb** law reads a strength too, and slips when the
+   shear stress reaches it: under **Strength**, select **From the soil** (the soil's,
+   reduced by **R_inter**) or **Set on the interface** (type `GEO_COHESION` and
+   `GEO_FRICTION_ANGLE`). **R_inter** is one number for the whole contact; click **Each
+   soil's own R_inter** to use the R_inter of each soil instead. A linear elastic soil has
+   no strength, so against one the contact gets its own, and you set it. The contact takes
+   the saturation of its soil, and a Coulomb contact also takes its tension cut-off.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length
@@ -268,6 +349,10 @@ it to keep the condition in the project but leave it out of the calculation. The
 of **Boundary conditions** switches all of them. In Staged construction mode, the check box
 of a water pressure condition is for the selected stage.
 
+The viewport shows every condition and the water level. Click a condition or the water level
+to select it. A click a few pixels away from the line also selects it. To hide a condition,
+right-click its row in the Model explorer and select **Hide**.
+
 The viewport does not show the conditions when a model opens. To show a condition, select it
 in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
 conditions** shows all of them. A condition that you only selected goes away when you select
@@ -286,13 +371,18 @@ seepage face (see below). **Standard conditions** sets the bottom to fixed and t
 the changes.
 
 A new project has the standard supports and no water pressure condition. For a dry model
-whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE` other than
-`CONSTANT_PW_FIELD`), add a **Uniform** water pressure of 0 on the whole soil. The export
+whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE`
+`FULLY_COUPLED`), add a **Uniform** water pressure of 0 on the whole soil. The export
 warns about it, and about a model that nothing holds.
 
-**Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
-→ **Gravity**, to remove the self weight from every stage. A K0 stage then has zero
-stresses.
+**Gravity** is not a condition. Whether the self weight acts is decided by the stress
+initialisation of the initial stage (see [Stage settings](#stage-settings)): **K0
+procedure** and **Gravity loading** put it on every body, the soil and the structures, in
+every stage; **None** leaves it out of every stage. The initial stage's **Gravity** row in
+the **Stages** window says which. A flow calculation always has it. The acceleration g is
+9.81 m/s² unless you change it in **File** → **Project properties…**. The water keeps its
+specific weight when g changes: Styx writes the water's density as the specific weight
+divided by g.
 
 A **seepage face** is a part of the soil's outer boundary where the water may leave the
 soil in a groundwater flow calculation, for example the downstream face of a dam above the
@@ -318,7 +408,8 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. Styx meshes the selected layers together, so their shared faces have common nodes. |
+| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
+| Object mesh sizes | The element size at each structure, anchor, interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. With the layers, these rows cover every node group that the Kratos input file has. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
@@ -330,6 +421,54 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+**Mesh** → **Clear mesh**, the tool under **Generate mesh** on the tool rail, or the command
+`clearmesh` removes the mesh from the view. The mesh settings and the local mesh sizes stay,
+so <kbd>F9</kbd> makes the same mesh again.
+
+### A finer mesh at one object
+
+You can give a finer mesh to a layer, a soil body, a sheet pile, an anchor, an interface,
+a normal load, a soil line, a load (point, line or surface), a boundary condition, or a face
+of the model. Select the object. The **Mesh** group of the Selection explorer then shows two
+rows:
+
+- **Mesh size**: the element size at the object. *global* means that the object has no
+  size of its own.
+- **Band**: the distance over which the size grows back to the global size. With a band of
+  0, the size applies on the object only, and the mesh next to it changes size as Gmsh
+  chooses. A point with a band of 0 gets its size within one element of it.
+
+Click **Use the global size** to remove the object's own size. **Mesh** → **Refine mesh**
+halves the size of the selected object, **Coarsen mesh** doubles it, and **Reset local
+refinement** removes it. The same tools are on the tool rail in Mesh mode. A tool keeps the
+band. If a mesh is shown in Mesh mode, the tool makes the mesh again, so you see the change
+at once, and the object stays selected, so you can click the tool again.
+
+Some objects use the size of another object:
+
+- An anchor is one element. Its size applies at its head, where it connects to the
+  structure. The tail is a fixed point outside the soil mesh.
+- A condition on a face uses the size of that face. All conditions on the same face share
+  one size, because the Kratos input file has one node group for each face. The Mesh group
+  of the condition shows **Size of** with the name of the face. The faces are also in the
+  **Mesh properties** window, also the top face, which often has no condition.
+- A condition on a soil part uses the size of that part.
+- A condition on the whole soil has no size of its own. The whole soil uses the global
+  element size.
+
+For example, select the sheet pile, type 0.5 in **Mesh size** and 45 in **Band**: the
+elements are 0.5 m along the wall and round its toe, and grow to the global size 45 m away.
+A band only makes the mesh finer: on a size that is larger than the global size, it does
+nothing.
+
+A model from an older version can have a refinement box (`mesh.refinements`). Styx still
+meshes it. To add one, use `kratos-cli add` or a model script.
+
+A mesh size belongs to its body. An edit that takes a body away also removes the body's
+size: for example, deleting a layer or a structure, or moving a layer boundary so that
+a soil part is no longer in any layer. The Session log names each size that was
+removed, and its value. If the body comes back later, for example when you move the
+boundary back, set its size again, or use undo to get the body and its size back.
 
 To see the numbers of the nodes or the elements, right-click in the viewport and select
 **Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
@@ -346,14 +485,11 @@ on (active) or off. A stage starts from the result of the stage before it.
 
 ### Make the stages
 
-If the project has no stages, the Stages explorer shows **Create default stages**. Click it.
-Styx then makes two stages: the initial stage (K0 procedure) and a null step. Add the other
-stages yourself, for example one to install the wall and one for each excavation lift.
-
-To make the full sequence from the model in one step, use
-`kratos-cli stages P staged-excavation` (see
-[Stage commands](CLI.md#stage-commands)). It installs each wall, digs lift by lift, and puts
-in each anchor after the lift that uncovers it.
+A new project has one stage, the **Initial stage**. It chooses the calculation type and
+the stress initialisation of the whole sequence, and it cannot be deleted, nor can a stage
+be inserted before it. Click **Add stage** at the top of the Stages explorer to add the
+other stages, for example one to install the wall and one for each excavation lift. A
+project saved without stages gets its initial stage from the first **Add stage**.
 
 Use the buttons at the top of the Stages explorer to change the sequence:
 
@@ -368,10 +504,14 @@ Use the buttons at the top of the Stages explorer to change the sequence:
 ### Switch parts on and off
 
 1. Select a stage in the Stages explorer.
-2. In the Model explorer, select or clear the check box of a part. You can also click the
-   part in the viewport.
+2. In the Model explorer, select or clear the check box of a part. Or right-click the part
+   in the viewport and click **Activate in** *stage* or **Deactivate in** *stage*.
 
-The stages after the selected stage keep this change until a later stage changes it again.
+A click on a part in the viewport only selects it. A part that is switched off in the
+selected stage is shown faint, so you can right-click it to switch it on again.
+
+The change is made in the selected stage only. The other stages keep what they had. A
+stage that you add later starts with the parts of the stage before it.
 
 ### Switch water conditions on and off
 
@@ -380,10 +520,13 @@ Staged construction mode, each water pressure condition under **Model conditions
 **Boundary conditions** has a check box for the selected stage, as a part has. For
 example, to lower the water from a level at -1 m to a level at -6 m in stage 3:
 
-1. Add a second hydrostatic condition with its **Reference level** at -6 m.
-2. Select the first stage, and clear the check box of the -6 m condition.
-3. Select stage 3. Select the check box of the -6 m condition, and clear the check box of
-   the -1 m condition.
+1. Add a second hydrostatic condition with its **Reference level** at -6 m. It is on in
+   every stage.
+2. Select each stage before stage 3, and clear the check box of the -6 m condition.
+3. Select stage 3 and each stage after it, and clear the check box of the -1 m condition.
+
+As for a part, a check box changes the selected stage only. A stage that you add later
+starts with the check boxes of the stage before it.
 
 The viewport shows the water conditions that the selected stage has on. A stage with no
 water condition on keeps the water pressures that the stage before it ended with, for a
@@ -397,16 +540,82 @@ clear its check boxes first. The supports are on in every stage.
 In the **Stages** window, select a stage and set:
 
 - **Name** and **Start from stage**
-- **Calculation type**: **K0 procedure** (calculates the initial stresses), **Plastic**,
-  **Null step**, or **Groundwater flow**
+- **Calculation type**: **Mechanical (U-Pw)** (the deformation of the soil, with the
+  water pressure in it) or **Flow (Pw)** (the flow of the water alone). You choose it in
+  the initial stage, and every stage has it: a later stage shows it, but cannot change it.
+- **Stress initialisation**, in the initial stage of a mechanical sequence only: **K0
+  procedure** (the initial stresses from the self weight and each soil's K0), **Gravity
+  loading** (the initial stresses calculated under the self weight, the default), or
+  **None** (no initial stresses, and no self weight in any stage). K0 and gravity loading
+  put the self weight on every body, the structures too, in every stage.
+- **Time integration**: **Static** or **Dynamic**. A dynamic mechanical stage includes
+  inertia; a dynamic flow stage is a transient flow.
+- **Damping**, for a dynamic mechanical stage on the Newmark scheme: the **Rayleigh
+  mass damping** (alpha) and **Rayleigh stiffness damping** (beta), both 0 until you set
+  them.
+- **Start time**, in the initial stage only: when the calculation starts, 0 unless you
+  set it. A later stage shows its start time, where the stage before it ends, but cannot
+  change it (`kratos-cli stages PROJECT set STAGE --start-time`, on the initial stage).
+- **Stage duration** and **Time step**: how long the stage lasts and the step Kratos
+  solves it in, both in the project's unit of time.
 - **Reset displacements to zero**
-- **Max iterations** and **Tolerated error**
+- **Convergence criterion**: what Kratos checks to decide that a stage has converged. A
+  mechanical stage converges on the **Residual** (the default) or the **Displacement**; a
+  flow stage on the **Water pressure** (the default) or the **Residual**. A flow stage
+  of a project saved before the criterion could be chosen keeps the Residual it was
+  solved on. Changing the
+  calculation type gives a stage on the other type's criterion the new type's default. The displacement criterion measures the water pressure too, so in a
+  coupled soil whose water pressure builds up it may not converge where the residual one
+  does; a flow stage with a seepage face that does not converge on the water pressure
+  may converge on the residual.
+- **Max iterations**, **Tolerated error** (the relative tolerance of the convergence
+  criterion) and **Absolute tolerance** (1e-9 for the residual criterion, 1e-12 for the
+  displacement one, 1e-8 for the water pressure; changing the criterion changes it to
+  the new one's default unless you set your own)
 
-A **Groundwater flow** stage calculates a steady-state flow of the water through the soil.
-It calculates the water pressure only, so the soil does not move:
+**Expert settings**, below these and closed until you open them, are the rest of the
+solver settings Kratos reads. Only the settings that apply to the stage are shown. Each
+has the default for the stage's calculation type and time integration until you change
+it. A changed setting is shown in bold, and ↺ beside it puts the default back.
 
-- Give every stage the type Groundwater flow. Calculate refuses a project that has both
-  flow stages and deformation stages.
+- **Strategy**: **Newton-Raphson** (the default for a mechanical stage),
+  **Quasi-Newton**, **Newton-Raphson with line search** or **Linear (one solve)**, each
+  with its own settings. A flow stage's default is the one its soil calls for: one
+  linear solve for a saturated soil, Newton-Raphson for a soil with another retention
+  law. A flow stage with a seepage face always uses Newton-Raphson with seepage, tried
+  once per step: you see it, but cannot change it. A linear stage has
+  nothing to converge, so it has no convergence criterion, iterations or tolerances.
+- **Linear solver**: **Sparse LU** (the default, scaled) or **Skyline LU** (direct),
+  **AMGCL**, **BiCGStab** or **CG** (iterative), each with its own settings. CG needs a
+  symmetric system, as a flow stage's is. The quasi-Newton strategy
+  factorises the stiffness matrix once with Sparse LU and reuses it, so with that
+  strategy you see Sparse LU, but cannot change it. Kratos does not scale it: a fully
+  coupled soil with a very low permeability then settles a few percent too little, so
+  use Newton-Raphson for such a soil.
+- **Time step control**: how much Kratos enlarges a step that converges in few
+  iterations, up to the **Largest step** (a multiple of the time step), and how it cuts
+  a step that does not converge and tries it again, if **Attempts per step** is more
+  than one (the default),
+  until a step is smaller than the **Smallest step** (a fraction of the stage's
+  duration), where the stage stops.
+- **Time integration**, for a dynamic stage only: **Newmark** (the default) or
+  **Backward Euler**, and the Newmark coefficients. A mechanical stage on Backward Euler
+  is integrated in time without inertia, Kratos' quasi-static U-Pw, which is the only
+  one Kratos has Backward Euler for; it has no Rayleigh damping.
+- **Assembly**: the block builder, reforming the degrees of freedom at each step,
+  computing the reactions, and the updated mesh of a mechanical stage.
+
+Changing the calculation type puts every stage's expert settings back to the new
+type's defaults. A copied stage has the expert settings of its original.
+
+A stage that repeats the stage before it without changes, a *null step*, is a stage that
+switches nothing on or off.
+
+A **Flow** stage calculates a flow of the water through the soil, a steady state when it
+is static. It calculates the water pressure only, so the soil does not move and it has no
+stress initialisation:
+
+- Choose Flow in the initial stage: every stage then has it.
 - Use a 2D model, and give every soil material a `PERMEABILITY_XX`.
 - In each stage, switch on at least one fixed water pressure condition on a face or a
   line, where the head is known. A boundary with no water pressure condition lets no water
@@ -435,12 +644,105 @@ Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. St
 3. runs Kratos, and
 4. opens Results mode when Kratos is done.
 
-While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*. You can run
-one calculation at a time. If a stage fails, the log shows which stage failed and why, and
-the Stages explorer shows which stages finished.
+While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*, and the
+**Convergence** window shows each iteration of the solver (see
+[Follow the solver](#follow-the-solver)). You can run one calculation at a time. If a stage
+fails, the log shows which stage failed and why, and the Stages explorer shows which stages
+finished.
+
+### Stop a calculation
+
+While Kratos runs, the **Calculate** button in the toolbar is a red **Stop** button. Click it
+and then **Stop calculation** to stop Kratos at once. The **Convergence** window has the same
+button, and the **Stages** menu has **Stop calculation**. To stop without the question, type
+`calculate stop` in the command box.
+
+When you stop a calculation:
+
+- your model does not change, and Styx stays in the mode you were in;
+- the run folder keeps the input files, the log and the results of the stages that finished,
+  so you can still open them in Results mode;
+- the log says *Calculation stopped after 41 s, in stage 3 of 7*, and the Stages window marks
+  that stage *Stopped by the user*.
+
+<kbd>F9</kbd> does not stop a calculation, so a key pressed twice cannot end a long run.
 
 Styx never overwrites or deletes a run folder. See
 [What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
+
+### Follow the solver
+
+When you click **Calculate**, the **Convergence** window opens at the bottom right. It shows
+how the solver converges while Kratos runs, so you can see early if a stage has problems.
+You can move the window, and make it bigger with its bottom-right corner: the plot grows
+with it. If you close the window, the run continues. To stop the run, click
+**Stop calculation** (see [Stop a calculation](#stop-a-calculation)).
+
+After each iteration, Kratos compares two values with their targets: a relative value and
+an absolute value. The criterion is met when one of the two is below its target. What the
+values measure depends on the stage's convergence criterion:
+
+| Criterion | What Kratos compares |
+|---|---|
+| Residual | The force that is still out of balance |
+| Displacement | The change of the displacements in the iteration |
+| Water pressure | The change of the water pressures in the iteration |
+
+Each stage has its own criterion, so one run can use more than one. The plot draws each
+criterion in its own colour, and the legend names them. When all stages use the same
+criterion, the axes name it too, for example *Relative residual*.
+
+The top of the window gives the stage that runs and the last values in words, for example
+*Iteration 57 (stage 3, step 2, iteration 5 of the step). Relative residual 3.2e-03 (target
+1.0e-04).* The first number counts the iterations of the whole run, as the horizontal axis
+of the plot does. Below it, the plot has two panels:
+
+| Item | What it shows |
+|---|---|
+| Upper panel | The relative value of each iteration, on a log scale |
+| Lower panel | The absolute value of each iteration, on a log scale |
+| Horizontal axis | The iteration number, counted over all stages (from 0 in the stage, when one stage is shown alone) |
+| Dashed line | The target |
+| Green X | An iteration where the criterion was met |
+| Red mark after an iteration | A step that reached the maximum number of iterations, or that Kratos cut back to a smaller step |
+| Red dot on the top edge | A residual that is not a number (`nan`) or infinite: the solution diverged |
+| Grey bands | The stages, with the stage name where it fits |
+| Red line and right axis | The fraction of unbalance, from 0 to 1. Kratos prints it only when the stage uses load stepping, so most runs do not show it. |
+
+Point at a dot to see its stage, step, iteration and values. Point at a stage name to see
+its criterion.
+
+With many stages, the early stages are narrow. If the run has two stages or more, use the
+**Show** slider under the status line to show one stage alone: move it to the right to go
+through the stages one by one, and back to the left end for all stages. A stage shown
+alone has its own horizontal axis: it starts at 0 and counts the iterations of that stage.
+Point at a dot to see its number in the whole run too. You can also type
+`results convergence stage 3`, or
+words of the stage name such as `results convergence stage first excavation`, and
+`results convergence stage all`.
+
+When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
+the run stopped. Styx opens Results mode, but it does not open the **Choose results**
+window while the Convergence window is open, because it would cover it. Use the Results
+explorer in the dock, or click **Choose results** in the tool rail.
+
+If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
+`solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
+`ProjectParameters.json`, and calculate again.
+
+To see the plot of a run later, also of a run that failed, do one of these:
+
+- Click **Results** → **Convergence…**.
+- In Results mode, click **Convergence** in the tool rail.
+- Type `results convergence`.
+
+Styx shows the run that Kratos works on, else the open run, else the newest run.
+
+To save the plot, click **Save ▾** in the window and choose a format. **PNG**, **PDF** or
+**SVG** saves the figure, and **CSV** saves one row for each iteration, with the criterion
+of that iteration in the `criterion` column. The file is of the run and the stages that the
+window shows. When one stage is shown alone, its number is in the file name, for example
+`Pit_A_2026-10-12_09-14_convergence_stage_3.csv`.
 
 ## Export and import Kratos files
 
@@ -492,11 +794,135 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
   (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
-  **Save SVG** saves the figure, and **Save CSV** saves the numbers.
-- **Values at a node:** click **Results** → **Value at a node…**, or type
-  `results at <node>`.
+  Each face of the wall has its own tractions. They show only where the contact is on in
+  that stage, so the face a pit is dug against starts at the pit floor.
+  Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
+  **CSV** saves the numbers. The plot of an interface is saved in the same way.
+- **Convergence of the solver:** click **Convergence** in the tool rail, or type
+  `results convergence`. See [Follow the solver](#follow-the-solver).
+- **Values at a node:** click **Results** → **Value at a node…**, type the node number in
+  the small window and click **OK**. Or type `results at <node>`. The values appear in the
+  Session log.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.
 - **Save the full run:** click **Download run**, or type `results zip`.
+
+## Save pictures
+
+A picture shows the parts that the viewport shows, on a white background, with white space on each
+side of the model. It shows the whole model, also if you zoom in or pan. To save what the screen
+shows, zoomed in on a detail or zoomed out, select **Use the zoom of the screen**. The view
+buttons, the mode label, the
+selection box and the highlight of a selected object are not in the picture. The symbols that you
+show by selecting a condition are in the picture.
+
+The other parts are outside the view, so they never cover the model:
+
+| Part | Where | When |
+|---|---|---|
+| Stage number and name | Above the view | Staged construction and Results |
+| Rulers | Left and bottom of the view | 2D |
+| Axes | Below the view, at the left | When **Axes** is selected |
+| Field name, and its maximum and minimum value with the node or element | Below the view, in the middle | Results |
+| Legend, with the unit | Right of the view, low | Results, when **Legend** is selected |
+
+### Copy a picture
+
+1. Right-click in the viewport.
+2. Click **Copy picture**.
+3. Paste the picture into your document.
+
+The picture on the clipboard is 16 cm wide at 300 dpi (1890 pixels). The clipboard does not
+keep the dpi value, so your document can show the picture at a different size. To get the
+correct size, save a PNG file.
+
+Copying works when the address of Styx is `localhost`, `127.0.0.1` or `https`. On other
+addresses **Copy picture** is grey.
+
+### Save pictures to files
+
+1. Show what you want to save: for example, open the **Mesh** tab, or select a stage in the
+   **Staged construction** tab.
+2. Click the camera in the toolbar, or click **File** → **Save picture…**, or right-click in
+   the viewport and click **Save picture…**.
+3. Set the options, then click **Save…**.
+4. In the system window, choose the location.
+
+| Option | What it does |
+|---|---|
+| Format | PNG, PDF and SVG. You can select more than one. |
+| Width | The width of the picture in cm, 16 by default, with the legend. The height follows the shape of the model in all its stages. The resolution is 300 dpi. |
+| Pictures | **This view**, or more than one picture: see [Save every stage or field](#save-every-stage-or-field) |
+| PDF files | Only when you select **PDF** and more than one picture: **One PDF file for each picture**, or **All pictures in one PDF file, one per page** |
+| Show | The legend, the rulers (2D), the axes and the grid. **Grid** can be selected only when the grid is on in the viewport. |
+| Zoom | **Use the zoom of the screen**: the picture shows what is on the screen, and leaves out what is off it. This option is off each time that you open the window. |
+| Also save | In Results mode: the values of each field as a CSV file |
+
+One file opens the browser's save window, also for one PDF file with many pages. More than one
+file opens the system folder window, and all the files go in that folder. You can select any folder that you can write to, such as
+Downloads or Desktop. If a file exists in the folder, Styx asks one time if it can overwrite the
+files.
+
+If you do not see the folder window, look behind the browser or in the taskbar. Only one folder
+window opens at a time. If you do not choose a folder in 10 minutes, the window closes and
+nothing is saved.
+
+If Styx runs on another computer, the browser's own folder window opens. Chrome and Edge can refuse
+some folders in that window, such as Downloads or Desktop themselves. If this occurs, select a
+subfolder. A browser without that window, such as Firefox, puts one zip file in the Downloads
+folder.
+
+### Save every stage or field
+
+In the **Staged construction** tab, select **Every stage**. Each picture shows the stage with
+its own active parts.
+
+To get one document, select **PDF** and **All pictures in one PDF file, one per page**. If you stop
+the save, the file has the pages that were ready.
+
+All the pictures of the stages of a model have the same size, with the model in the same place,
+also if you save them one by one. The frame is large enough for what each stage draws, so a stage
+with no load has the same frame as a stage with a load. Pictures of the other tabs, such as
+**Soil** and **Mesh**, have this frame too, with space above the view where a stage picture has its
+title. In 3D, the frame follows the direction that you look from. In Results, to find this frame,
+Styx goes through the stages before it saves or copies a picture, so the viewport changes for a
+moment.
+
+A picture in Results shows the same part of the model, but it has a different size and a smaller
+model. The legend takes 24 mm of the width, and the field name and its values go below the view. A
+deformed shape that goes past the frame makes the frame larger in Results.
+
+In Results mode, select **Every stage**, **This stage, every field** or **Every stage, every
+field**. The colour map, the bands and the other display settings stay as they are on screen.
+A stage that has no results is not saved. To stop, click **Stop** in the viewport. After the
+save, the viewport shows the same stage and field as before.
+
+### What is in each format
+
+| Format | Lines and text | Colours |
+|---|---|---|
+| PNG | Pixels at 300 dpi | Pixels at 300 dpi |
+| SVG, PDF in 2D | Vector: you can scale and edit them | Flat faces are vector. Contour colours are an image at 300 dpi. |
+| SVG, PDF in 3D | Vector | All faces are an image at 300 dpi |
+
+PDF text uses Helvetica and Symbol. A character that is not in these fonts shows as `?`, and
+the Session log says so. PNG and SVG keep all characters.
+
+### Type the command
+
+The window runs these commands, and you can type them in the command box:
+
+```text
+picture                                     opens the window
+picture copy
+picture save --format png,pdf,svg --width 12
+picture save --format svg --stage all --field all --csv
+picture save --format png --no-legend --no-rulers --no-axes --grid
+picture save --format png --screen-zoom
+picture save --format pdf --stage all --one-pdf
+```
+
+`picture save pdf` is short for `picture save --format pdf`. `kratos-cli picture` takes the
+same words and makes the same pictures in a terminal: see [CLI.md](CLI.md#pictures).
 
 ## The command box
 
@@ -509,13 +935,15 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `script <file.py>` | Writes the model as a Python script |
 | `export` | Writes the Kratos input files, as **File** → **Export model…** |
 | `mesh` | Makes the mesh |
+| `clearmesh` | Removes the mesh from the view; its settings stay |
 | `calculate` | Calculates the model, as the **Calculate** button |
+| `calculate stop` | Stops the calculation that runs, without asking first |
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
-| `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
+| `gravity`, `gravity 9.80665` | Shows whether the self weight acts, or sets g in m/s² |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
-| `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
+| `soillayers`, `materials` | Opens the **Modify soil layers** or **Soil materials** window |
 | `cleargeometry` | Removes all drawn and imported solids |
 | `colour <part>`, `colour all`, `colour off` | Shows parts of the mesh in their own colour |
 | `node <id>` | Shows the parts that contain a node of the mesh |

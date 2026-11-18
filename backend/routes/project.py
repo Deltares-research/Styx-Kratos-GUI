@@ -14,10 +14,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.exceptions import RequestValidationError
 
 from backend import store
-from backend.routes.common import refusals
+from backend.routes.common import refusals, stored
 from core import session
-from core.model import stages
-from core.model.schemas import (ConditionsUpdate, DimensionUpdate, LayersUpdate, MaterialsUpdate,
+from core.model import migration, stages
+from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
+                                LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterUpdate)
 
@@ -37,6 +38,36 @@ async def put_project(project: Project) -> Project:
     from core import scripting
 
     return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+
+
+@router.post("/api/project/open")
+async def open_project(document: dict) -> dict:
+    """Open a project file the GUI read: what `PUT /api/project` does with it, and the
+    notes on what opening it changes about its calculation (`migration.notes`), for the
+    command log. The document is taken as it is in the file, as only the old shape says
+    what the conversion loses; it is refused as `PUT` refuses it, field by field."""
+    from pydantic import ValidationError
+
+    from core import scripting
+
+    try:
+        project = Project.model_validate(document)
+    except ValidationError as failure:
+        raise RequestValidationError([
+            {**error, "loc": ("body", *error["loc"])}
+            for error in failure.errors(include_url=False, include_context=False)
+        ]) from failure
+    project = store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+    return {"project": project, "notes": migration.notes(document),
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.post("/api/project/migration-notes")
+def migration_notes(document: dict) -> dict:
+    """What opening `document`, a project file as saved, changes in its deck
+    (`migration.notes`), without opening it. The GUI's Open gets them from
+    `/api/project/open` instead, in the same request that takes the file."""
+    return {"notes": migration.notes(document)}
 
 
 @router.post("/api/project/reset")
@@ -113,8 +144,7 @@ async def new_project() -> dict:
 async def patch_layers(update: LayersUpdate) -> dict:
     with refusals():
         project = session.replace_layers(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.put("/api/project/water")
@@ -127,8 +157,7 @@ async def put_water(update: WaterUpdate) -> dict:
     """
     with refusals():
         project = session.set_water(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/materials")
@@ -136,11 +165,29 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
     """Replace the material library; a material a layer still points at is refused."""
     with refusals():
         project = session.replace_materials(store.get(), update)
-    store.put(project)
     # Soil colour comes from the assigned material (`_colors_by_volume` in
     # core/geometry/tessellation.py), so the geometry has to be re-tessellated even though
     # no shape changed.
-    return {"project": project, "invalidates": ["project", "tree", "geometry"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
+
+
+@router.patch("/api/project/lines")
+async def patch_lines(update: LinesUpdate) -> dict:
+    """Replace the lines that split the soil (`session.replace_lines`): what the GUI's Line
+    window sends."""
+    with refusals():
+        project = session.replace_lines(store.get(), update)
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.patch("/api/project/bodies/{key}")
+async def patch_body(key: str, update: BodyUpdate) -> dict:
+    """A soil body's name or material (`session.update_body`); a field left out stays."""
+    fields = {("material" if field == "mat" else field): getattr(update, field)
+              for field in update.model_fields_set}
+    with refusals():
+        project = session.update_body(store.get(), key, **fields)
+    return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
 
 
 @router.patch("/api/project/structures")
@@ -149,22 +196,19 @@ async def patch_structures(update: StructuresUpdate) -> dict:
     (`session.replace_structures`)."""
     with refusals():
         project = session.replace_structures(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/conditions")
 async def patch_conditions(update: ConditionsUpdate) -> dict:
-    """Replace the boundary conditions as one list, and set gravity
-    (`session.replace_conditions`); a field left out stays as it is. What the GUI's
-    boundary conditions dialog, its explorer rows and the `boundary` and `gravity`
-    commands send (frontend/js/boundary-conditions.js)."""
+    """Replace the boundary conditions as one list (`session.replace_conditions`).
+    What the GUI's boundary conditions dialog, its explorer rows and the `boundary`
+    command send (frontend/js/boundary-conditions.js)."""
     with refusals():
         project = session.replace_conditions(store.get(), update)
-    store.put(project)
     # A condition on a drawn line or point is embedded in the section, so the mesh
     # changes with it.
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/stages")
@@ -188,22 +232,7 @@ async def patch_stages(update: StagesUpdate) -> dict:
             "type": "value_error", "loc": ("body", "stages"), "msg": str(failure),
             "input": [stage.model_dump() for stage in update.stages],
         }]) from failure
-    store.put(project)
-    return {"project": project, "invalidates": ["project"]}
-
-
-@router.post("/api/project/stages/defaults")
-@router.post("/api/project/phases/defaults", include_in_schema=False, deprecated=True)
-async def seed_default_stages() -> dict:
-    """What "Create default stages" gives: the initial stage, then the null step.
-
-    `session.default_stages` makes it; this endpoint is only the way the GUI reaches it.
-    It replaces whatever is there: it is the way back out of a broken sequence.
-    """
-    with refusals():
-        project = session.default_stages(store.get())
-    store.put(project)
-    return {"project": project, "invalidates": ["project"]}
+    return stored(project) | {"invalidates": ["project"]}
 
 
 @router.patch("/api/project/dimension")
@@ -216,10 +245,9 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     """
     with refusals():
         project, notes = session.set_dimension(store.get(), update)
-    store.put(project)
     # `notes` is what the command log says about the loads that changed shape; the
     # frontend prints them under the mode-switch line (frontend/js/patches.js).
-    return {"project": project, "notes": notes,
+    return stored(project) | {"notes": notes,
             "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
@@ -232,5 +260,4 @@ def patch_units(update: UnitsUpdate) -> dict:
     """
     with refusals():
         project, notes = session.set_units(store.get(), update)
-    store.put(project)
-    return {"project": project, "notes": notes, "invalidates": ["project", "tree"]}
+    return stored(project) | {"notes": notes, "invalidates": ["project", "tree"]}

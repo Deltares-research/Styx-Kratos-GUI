@@ -12,7 +12,7 @@ Open an issue and pick **Bug report** or **Feature request**. For a bug, the mos
 things to include are:
 
 - the steps that reproduce it, from starting the app;
-- the commit or release you ran (`git rev-parse --short HEAD`);
+- the version you ran: **Help > About** in the GUI, or `kratos-cli --version`;
 - your operating system, your Python version, and your Kratos version if the bug is in
   Calculate or Results;
 - the error text from the terminal or from the browser's developer console.
@@ -54,9 +54,10 @@ app. Then add the test tools to that venv:
 | JavaScript lint | Needs Node: `npx eslint@10.12.0 frontend` | [lint](.github/workflows/lint.yml), `eslint` job |
 | Workflows | [actionlint](https://github.com/rhysd/actionlint), if you changed `.github/workflows/` | [lint](.github/workflows/lint.yml), `actionlint` job |
 | Types | `python -m mypy` | [lint](.github/workflows/lint.yml), `mypy` job. A new finding fails it. |
-| Launcher | `run.bat --check` or `./run.sh --check` | [launcher](.github/workflows/launcher.yml): Windows, Linux and macOS, on Python 3.10 and 3.13 |
-| Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
+| Launcher | `run.bat --check` or `./run.sh --check` | [launcher](.github/workflows/launcher.yml): Windows, Linux and macOS, on Python 3.10 and 3.15 |
+| Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt -r requirements-docs.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
 | Secrets in the history | [gitleaks](https://github.com/gitleaks/gitleaks): `gitleaks git .` | [security](.github/workflows/security.yml), `gitleaks` job |
+| GUI tutorials site | `python tools/gui_tutorial.py`, if you changed the GUI or `docs/gui_tutorials/`. See [The GUI tutorials](docs/developer/TESTING.md#the-gui-tutorials). | [docs site](.github/workflows/docs-site.yml): screenshots and site on every pull request, published from `main` |
 | Documentation links | [lychee](https://github.com/lycheeverse/lychee): `lychee --config .github/lychee.toml './**/*.md'` | [docs](.github/workflows/docs.yml), also weekly |
 | Code scanning | Not run locally | [codeql](.github/workflows/codeql.yml) and [dependency review](.github/workflows/dependency-review.yml), where GitHub offers them |
 
@@ -84,17 +85,26 @@ released under the license the project chooses.
 
 ### Releasing
 
-Tag the commit on `main` and push the tag:
+The version number is `VERSION` in [core/version.py](core/version.py). The GUI's
+**Help > About** and `kratos-cli --version` show it. To make a release:
 
-```bash
-git tag -a v1.2.0 -m "Styx 1.2.0"
-git push origin v1.2.0
-```
+1. In a pull request, set `VERSION` to the new number, for example `"1.2.0"`, and merge it.
+2. Tag the merge commit on `main` with `v` and the same number, and push the tag:
 
-[release.yml](.github/workflows/release.yml) builds `.zip` and `.tar.gz` archives from the
-tag, checks that the unpacked archive starts, and publishes a GitHub release with notes made
-from the merged pull requests. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a
-pre-release. [.gitattributes](.gitattributes) lists what the archives leave out.
+   ```bash
+   git tag -a v1.2.0 -m "Styx 1.2.0"
+   git push origin v1.2.0
+   ```
+
+[release.yml](.github/workflows/release.yml) stops if the tag is not `v` + `VERSION`. It
+builds `.zip` and `.tar.gz` archives from the tag, checks that the unpacked archive starts
+and says the version of the tag, and publishes a GitHub release with notes made from the
+merged pull requests. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a pre-release.
+[.gitattributes](.gitattributes) lists what the archives leave out.
+
+A copy that is not exactly a release adds its commit to the version. For example,
+`1.2.0+12.g2408259` is 12 commits after `v1.2.0`, at commit `2408259`. A clone with
+changes that are not committed adds `.dirty`.
 
 ### Branch protection
 

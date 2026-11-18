@@ -140,7 +140,7 @@ def test_the_domain_list_shrinks_as_the_pit_is_dug(staged_doc):
     dug = [len(domains(staged_doc, name)) for name in
            ("3_SheetPileWall_installation", "4_First_excavation",
             "6_Second_excavation", "7_Third_excavation")]
-    assert dug == [17, 15, 14, 12]
+    assert dug == [15, 13, 12, 10]
     # The three lifts and their interfaces are gone by the end; the ground under the pit
     # is not -- it is on the dug side of the wall but is never dug.
     assert not [name for name in domains(staged_doc, "7_Third_excavation")
@@ -171,19 +171,86 @@ def test_the_body_domain_list_is_the_domain_list(staged_doc):
 
 # -- C1: time ----------------------------------------------------------------
 
-def test_construction_starts_at_time_zero(staged_doc):
-    """The reference numbers from `-2.0`: the K0 stage and the null step sit at negative
-    time so that real construction starts at 0 and the result files line up. Cosmetic to
-    Kratos, and the only way to compare two runs stage by stage without arithmetic."""
+def test_the_first_stage_starts_at_time_zero(staged_doc):
+    """The K0 stage and the null step included: the clock starts at 0, not at negative
+    time as in the reference deck."""
     times = [(staged_doc["stages"][name]["stage_settings"]["problem_data"]["start_time"],
               staged_doc["stages"][name]["stage_settings"]["problem_data"]["end_time"])
              for name in stage_names(staged_doc)]
-    assert times == [(-2.0, -1.0), (-1.0, 0.0), (0.0, 1.0), (1.0, 2.0),
-                     (2.0, 3.0), (3.0, 4.0), (4.0, 5.0)]
+    assert times == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0),
+                     (4.0, 5.0), (5.0, 6.0), (6.0, 7.0)]
+
+
+@pytest.fixture(scope="module")
+def timed_doc() -> dict:
+    """The staged model with its stages given durations and time steps of their own."""
+    project = excavation.excavation_project(staged=True)
+    timing = [(10.0, 10.0), (5.0, 1.0)] + [(100.0, 25.0)] * (len(project.stages) - 2)
+    project = project.model_copy(update={"stages": [
+        stage.model_copy(update={"duration": duration, "time_step": step})
+        for stage, (duration, step) in zip(project.stages, timing)]})
+    with session():
+        result = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(result["project_parameters"])
+
+
+def test_each_stage_lasts_its_own_duration_and_starts_where_the_last_ended(timed_doc):
+    times = [(timed_doc["stages"][name]["stage_settings"]["problem_data"]["start_time"],
+              timed_doc["stages"][name]["stage_settings"]["problem_data"]["end_time"])
+             for name in stage_names(timed_doc)]
+    assert times == [(0.0, 10.0), (10.0, 15.0), (15.0, 115.0), (115.0, 215.0),
+                     (215.0, 315.0), (315.0, 415.0), (415.0, 515.0)]
+
+
+def test_the_initial_stage_sets_the_start_time_of_the_calculation():
+    """0 unless the initial stage says otherwise; the rest follow on from it."""
+    project = excavation.excavation_project(staged=True)
+    first, *rest = project.stages
+    project = project.model_copy(update={"stages": [
+        first.model_copy(update={"start_time": -2.0}), *rest]})
+    with session():
+        result = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    doc = json.loads(result["project_parameters"])
+    starts = [doc["stages"][name]["stage_settings"]["problem_data"]["start_time"]
+              for name in stage_names(doc)]
+    assert starts == [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+
+
+def test_a_stage_starts_at_zero_unless_told_otherwise():
+    assert schemas.Stage(id="s", name="S").start_time == 0.0
+
+
+def test_each_stage_is_solved_in_its_own_time_step(timed_doc):
+    steps = [solver(timed_doc, name)["time_stepping"]["time_step"]
+             for name in stage_names(timed_doc)]
+    assert steps == [10.0, 1.0] + [25.0] * 5
+
+
+def test_a_stage_writes_its_json_output_once_however_long_it_lasts(timed_doc):
+    """A shade under the stage's duration, as the reference's is a shade under its one
+    second (`parameters._json_output`)."""
+    for name in stage_names(timed_doc)[2:]:
+        for process in timed_doc["stages"][name]["stage_settings"]["processes"].get(
+                "json_output", []):
+            assert 99.9 < process["Parameters"]["time_frequency"] < 100.0
+
+
+def test_a_time_step_longer_than_its_stage_is_refused():
+    with pytest.raises(ValueError, match="time step"):
+        schemas.Stage(id="s", name="S", duration=1.0, time_step=2.0)
+
+
+def test_a_stage_saved_with_a_time_interval_in_days_lasts_it_in_seconds():
+    """Before 2026-11 a stage had a time interval in days, which no deck read. A zero
+    one -- every stage the GUI made -- is the default stage, of 1 s in one step; any
+    other one is its seconds, in one step, as it always ran."""
+    assert (schemas.Stage(id="s", name="S", time_interval=0.0).duration,
+            schemas.Stage(id="s", name="S", time_interval=0.0).time_step) == (1.0, 1.0)
+    old = schemas.Stage(id="s", name="S", time_interval=2.0)
+    assert (old.duration, old.time_step) == (2 * 86400.0, 2 * 86400.0)
 
 
 def test_an_unstaged_deck_still_starts_at_zero(unstaged_doc):
-    """Nothing to settle first, so nothing sits at negative time."""
     first = unstaged_doc["stages"]["1_Initial_stage"]["stage_settings"]["problem_data"]
     assert (first["start_time"], first["end_time"]) == (0.0, 1.0)
 
@@ -220,6 +287,29 @@ def test_a_stages_solver_settings_reach_the_deck():
             project, MeshRequest(**project.mesh.model_dump()))["project_parameters"])
     assert solver(doc, "4_First_excavation")["max_iterations"] == 321
     assert solver(doc, "4_First_excavation")["residual_relative_tolerance"] == 2e-3
+
+
+@pytest.mark.parametrize("criterion, measured", [
+    ("residual_criterion", "residual"), ("displacement_criterion", "displacement")])
+def test_a_stages_convergence_criterion_reaches_the_deck(criterion, measured):
+    """The criterion the stage chose, and its two tolerances on the quantity the
+    criterion measures -- and no tolerance of a quantity it does not."""
+    project = excavation.excavation_project(staged=True)
+    edited = [ph.model_dump() for ph in project.stages]
+    edited[3] |= {"convergence_criterion": criterion, "tolerated_error": 2e-3,
+                  "absolute_tolerance": 1e-7}
+    project = schemas.Project.model_validate(project.model_dump() | {"stages": edited})
+    with session():
+        doc = json.loads(writer.export_project(
+            project, MeshRequest(**project.mesh.model_dump()))["project_parameters"])
+    settings = solver(doc, "4_First_excavation")
+    assert settings["convergence_criterion"] == criterion
+    tolerances = {key: value for key, value in settings.items()
+                  if key.endswith(("_relative_tolerance", "_absolute_tolerance"))}
+    assert tolerances == {f"{measured}_relative_tolerance": 2e-3,
+                          f"{measured}_absolute_tolerance": 1e-7}
+    # The stages around it keep the default.
+    assert solver(doc, "1_Initial_stage")["convergence_criterion"] == "residual_criterion"
 
 
 # -- refusals ----------------------------------------------------------------
