@@ -1,7 +1,7 @@
 # Groundwater flow: seepage through a levee with `kratos-cli`
 
-A steady-state groundwater flow under and through a clay levee, built and run from
-PowerShell. The commands build the same model as
+A steady-state groundwater flow calculation fo the flow under and through a clay levee, built and run from
+the command line in PowerShell. Following the commands to build the example model will give the same results as running the python script
 [`examples/levee_seepage/levee_seepage.py`](../../examples/levee_seepage/levee_seepage.py):
 the Kratos input files they write are identical.
 
@@ -146,12 +146,12 @@ levee_core  Levee core (soil of m_clay)
 levee_outer  Levee outer layer (soil of m_clay)
 ```
 
-The key is what the stages and the deck's part names use; the colour shows in the GUI.
+The `key` is what the stages and the deck's part names use; the `color` shows in the GUI.
 
 ## Step 5. The water
 
 A new project has standard supports that block the normal movement of sides by rollers and fix the bottom motion in all directions.
-A groundwater flow calculation does not make use of them. The front and back rollers are there
+A groundwater flow calculation, like this levee case, does not make use of them. The front and back rollers are there
 for a 3D model and are not listed in 2D:
 
 ```text
@@ -178,7 +178,7 @@ river head also holds the outer slope above 5.0 m, up to the crest, where it is 
 suction.
 
 The water may leave the soil through the inner slope and the polder surface, from the
-crest's inner corner (4, 6) on:
+crest's inner corner (4, 6) on. This is specified by adding a `seepage_face`
 
 ```text
 PS> kratos-cli boundary levee.json add seepage_face --name "Seepage face" --seepage --line 4 6 22 0 54 0
@@ -243,7 +243,7 @@ ok: levee_seepage (2D section at z = 0, SI)
 
 PS> kratos-cli show levee.json
 levee_seepage  (levee.json)
-  2D plane strain, SI units, section at z = 0.5
+  2D plane strain, SI units, section at z = 0
   domain      x -36 .. 54, y -22 .. 0
   materials   m_sand, m_clay
   layers      cover, aquifer
