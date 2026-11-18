@@ -356,16 +356,17 @@ groups:
 Each mode has a window for all conditions of its group: **Mechanical boundary
 conditions…** on the Structures tool rail and in the **Structures** menu, and **Flow
 boundary conditions…** on the Flow conditions tool rail and in the **Flow conditions**
-menu.
+menu. Each window is a table with one row for each condition of the group in the model:
 
-- The **Mechanical boundary conditions** window shows one row for each face of the model,
-  and the supports on parts, lines and points below the rows. A save keeps the water
-  conditions as they are.
-- The **Flow boundary conditions** window is a table of the water pressures and seepage
-  faces of the model, one row each: name, condition, where it acts, type, level or value,
-  tension cut-off, and if it gives start values only. Clear **Active** to leave a
-  condition out of the calculation. Click **Edit…** to change a condition, or **Delete** to
-  remove it.
+- **Mechanical boundary conditions**: name, where it acts, the support (Fixed, Roller or
+  Custom), and the components it holds. A 2D section does not hold z, so the table shows x
+  and y only, and leaves out the front and back supports, which are kept for the solid
+  model. **Standard conditions** puts back the bottom fixed and the sides on rollers.
+- **Flow boundary conditions**: name, condition, where it acts, type, level or value,
+  tension cut-off, and if it gives start values only.
+
+Clear **Active** to leave a condition out of the calculation. Click **Edit…** to change a
+condition, or **Delete** to remove it. **Add condition…** adds a condition of the group.
 
 The Model explorer lists all conditions under **Model conditions** → **Boundary
 conditions**. Select one to change it in the Selection explorer.

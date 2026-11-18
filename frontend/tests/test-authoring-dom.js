@@ -940,37 +940,86 @@
     return Array.prototype.map.call(select.options, function (o) { return o.value; });
   }
 
-  test('the mechanical window shows only the supports and saves only them', function () {
-    return withEnvironment(mixedConditions(), function (ctx) {
+  function cells(tr, count) {
+    return Array.prototype.slice.call(tr.querySelectorAll('td'), 0, count)
+      .map(function (td) { return td.textContent; });
+  }
+
+  /* mixedConditions, with a roller on the left face, a support on the front face (kept
+     for the solid model) and one on a sloping line that holds y only. */
+  function supportConditions() {
+    var p = mixedConditions();
+    var BC = App.BoundaryConditions;
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'left',
+                                                                 fixed: [true, false, false] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'front',
+                                                                 fixed: [false, false, true] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'line', {
+      points: [[0, 0], [5, -5]], fixed: [false, true, false] }));
+    return p;
+  }
+
+  test('the mechanical window is a table of the supports the model has', function () {
+    return withEnvironment(supportConditions(), function (ctx) {
       var before = JSON.parse(JSON.stringify(App.PROJECT.boundary_conditions));
       App.BoundaryConditions.open('mechanical');
       var dialog = latest(ctx);
       T.eq(dialog.options.title, 'Mechanical boundary conditions');
-      T.eq(headings(dialog), ['Where', 'Support', 'x', 'y', 'z', '']);
-      T.eq(dialog.form.querySelectorAll('.bc-water').length, 0, 'no water column');
-      T.ok(dialog.form.textContent.indexOf('Whole soil') < 0, 'no whole-soil row');
-      var others = dialog.form.querySelectorAll('.bc-other');
-      T.eq(others.length, 1, 'the support line, not the seepage line');
-      T.ok(others[0].textContent.indexOf(before[2].name) >= 0);
-      T.ok(dialog.options.buttons.some(function (b) { return b.label === 'Standard conditions'; }));
-      change(dialog.form.querySelector('.bc-support'), 'roller');
-      return button(dialog, 'Save').then(function () {
-        T.ok(dialog.closed, 'saved although the water has no level: it is not touched');
+      T.eq(headings(dialog), ['Name', 'Where', 'Support', 'Fixed in', 'Active', '']);
+      T.eq(dialog.form.querySelectorAll('select').length, 0, 'no face rows to fill in');
+      var rows = dialog.form.querySelectorAll('.bc-grid tr');
+      T.eq(Array.prototype.slice.call(rows, 1).map(function (tr) { return cells(tr, 4); }), [
+        [before[0].name, 'Bottom face', 'Fixed', 'x, y'],
+        [before[2].name, 'Line (10, 0) → (10, -5)', 'Fixed', 'x, y'],
+        [before[4].name, 'Left face', 'Roller', 'x'],
+        [before[6].name, 'Line (0, 0) → (5, -5)', 'Custom', 'y']
+      ], 'no water condition, no front support; z is not held in a 2D section');
+      T.ok(dialog.form.textContent.indexOf('kept for the solid model') >= 0,
+           'a note says where the front support went');
+      T.eq(dialog.options.buttons.map(function (b) { return b.label; }),
+           ['Standard conditions', 'Add condition…', 'Close']);
+      realButton(rows[3], 'Edit…').click();
+      T.ok(dialog.closed);
+      T.eq(field(latest(ctx), 'Name').value, before[4].name);
+      App.BoundaryConditions.open('mechanical');
+      button(latest(ctx), 'Add condition…');
+      var condition = field(latest(ctx), 'Condition');
+      T.eq(values(condition), ['displacement']);
+      T.ok(condition.disabled);
+      App.BoundaryConditions.open('mechanical');
+      dialog = latest(ctx);
+      return Promise.resolve(button(dialog, 'Standard conditions')).then(function () {
+        T.ok(dialog.closed);
         var sent = ctx.requests[0].body.boundary_conditions;
-        T.eq(sent.length, 4);
-        T.eq(sent[0].fixed, [false, true, false], 'the bottom support became a roller');
-        T.eq(sent.slice(1), before.slice(1), 'the water and the lines stay as they were');
-        App.BoundaryConditions.open('mechanical');
-        dialog = latest(ctx);
-        dialog.form.querySelector('.bc-grid button').click();
-        T.eq(field(latest(ctx), 'Condition').value, 'displacement',
-             'More… opens the support of the row');
-        App.BoundaryConditions.open('mechanical');
-        button(latest(ctx), 'Add condition…');
-        var condition = field(latest(ctx), 'Condition');
-        T.eq(values(condition), ['displacement']);
-        T.ok(condition.disabled);
+        T.ok(sent.some(function (r) { return r.id === before[1].id; }), 'the water stays');
+        T.eq(latest(ctx).options.title, 'Mechanical boundary conditions',
+             'the window opens again on the standard supports');
+        T.ok(latest(ctx).form.textContent.indexOf('Roller') >= 0);
       });
+    });
+  });
+
+  test('the mechanical table names each support in 3D by the components it holds', function () {
+    var p = project(3);
+    var BC = App.BoundaryConditions;
+    p.boundary_conditions = [
+      BC.draftDisplacement(p, 'face', { face: 'bottom', fixed: [true, true, false] })];
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'front',
+                                                                 fixed: [false, false, true] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'part', { part: 'soil_L1' }));
+    T.eq(BC.mechanicalRows(p).map(function (row) { return [row.where, row.support, row.fixed]; }), [
+      ['Bottom face', 'Custom', 'x, y'],
+      ['Front face', 'Roller', 'z'],
+      ['Part soil_L1', 'Fixed', 'x, y, z']
+    ]);
+  });
+
+  test('the mechanical window of a model with no supports says how to add them', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.open('mechanical');
+      var dialog = latest(ctx);
+      T.eq(dialog.form.querySelectorAll('.bc-grid').length, 0);
+      T.ok(/no supports yet/.test(dialog.form.textContent));
     });
   });
 
