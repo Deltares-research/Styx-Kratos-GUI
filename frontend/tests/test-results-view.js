@@ -87,6 +87,29 @@
     });
   });
 
+  test('results view: the zero pressure line is drawn where the pressure sent crosses zero',
+       function () {
+    stage(function (ctx) {
+      var pressure = { field: 'pw', label: 'Pore pressure', unit: 'kPa', location: 'nodes',
+                       ids: [1, 2, 3], values: [-10, -10, 10], min: -10, max: 10 };
+      V.draw(payload({ pressure: pressure }));
+      var line = group(ctx.scene).children.filter(function (c) {
+        return c.name === 'results:Soil:zero-pressure';
+      })[0];
+      T.ok(line && line.isLineSegments, 'a line was drawn');
+      var at = line.geometry.getAttribute('position');
+      T.eq(at.count, 2, 'one segment across the one triangle');
+      T.near(at.getY(0), 1, 1e-6, 'halfway up, where -10 turns into 10');
+      T.near(at.getY(1), 1, 1e-6);
+      T.ok(ctx.host.querySelector('.vp-legend-zero'), 'the legend names the line');
+
+      V.draw(payload());
+      T.ok(!group(ctx.scene).children.some(function (c) { return /zero-pressure/.test(c.name); }),
+           'no pressure sent, no line');
+      T.ok(!ctx.host.querySelector('.vp-legend-zero'));
+    });
+  });
+
   test('results view: a structure is drawn as lines above the surface', function () {
     stage(function (ctx) {
       V.draw(payload({ mesh: { bbox: [0, 0, 0, 2, 2, 0], sections: [

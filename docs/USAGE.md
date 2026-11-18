@@ -738,6 +738,7 @@ Use the Results explorer, or click **Choose results** in the tool rail:
 | Reverse | Turns the colour map around |
 | Mesh | Shows the element edges over the colours |
 | Loads, water | Shows the loads and the water level over the colours (on by default) |
+| Zero pressure | Shows the line where the pore pressure is zero (off by default). Only for a coupled stage: after a groundwater flow stage the line is always shown. |
 | Deformed | Shows the deformed mesh: off, automatic scale, true scale, ×10 or ×100 |
 
 Compression is negative, as Kratos writes it. Each value is in the unit system of the run:
@@ -747,6 +748,11 @@ The loads and the water level are those of the open project, as they are in the 
 screen: a load that the stage switched off is not shown. They are shown only when the run
 was calculated from the open project, with the same stages. They stay where they are in the
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
+
+After a groundwater flow stage a dark line shows where the calculated pore pressure is
+zero: the phreatic surface the flow calculation found. After a coupled (mechanical) stage
+the line is hidden until you tick **Zero pressure**, or type `results zeroline on`. The
+line is drawn only when the stage wrote a pore pressure.
 
 ### Other results
 

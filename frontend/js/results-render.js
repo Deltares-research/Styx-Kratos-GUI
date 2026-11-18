@@ -331,6 +331,61 @@ App.ResultsRender = (function () {
     return wanted > 1 ? wanted : 1;
   }
 
+  /* ── Contour lines ────────────────────────────────────────────────────── */
+
+  /* Where `values` crosses `level` across a section's triangles, as line segments: a
+     Float32Array of x,y,z,x,y,z per segment, in the coordinates of `positions` (the
+     drawn, possibly deformed, buffer -- so the line sits on the shading it explains).
+
+     Marching triangles: a triangle with vertices on both sides of the level is cut
+     once, between the two points where its sides cross it, each found by linear
+     interpolation along that side. Neighbouring triangles interpolate the shared side
+     the same way, so the pieces join into one line.
+
+     "Below" is strictly less than the level and everything else is above. The zero
+     water pressure line is what this is for, and a stage's pressure is often exactly
+     zero over the dry ground (a tension cut-off, or no water at all): with the level
+     itself counted as above, the line runs along the edge of the wet region instead
+     of tracing every flat zero triangle, and a field that is zero everywhere has no
+     line. A triangle with a hole in it has no value to interpolate and is skipped. */
+  function isoline(section, values, positions, level) {
+    var at = level || 0;
+    var indices = (section && section.indices) || [];
+    var points = [];
+    var corner = [0, 0, 0], value = [0, 0, 0], below = [false, false, false];
+
+    function cross(a, b) {
+      var t = (at - value[a]) / (value[b] - value[a]);
+      for (var c = 0; c < 3; c++) {
+        var pa = positions[corner[a] * 3 + c], pb = positions[corner[b] * 3 + c];
+        points.push(pa + t * (pb - pa));
+      }
+    }
+
+    for (var i = 0; i + 2 < indices.length; i += 3) {
+      var count = 0, usable = true;
+      for (var k = 0; k < 3; k++) {
+        corner[k] = indices[i + k];
+        value[k] = values[corner[k]];
+        if (value[k] === null || value[k] === undefined || !isFinite(value[k])) {
+          usable = false;
+          break;
+        }
+        below[k] = value[k] < at;
+        if (below[k]) count++;
+      }
+      if (!usable || count === 0 || count === 3) continue;
+      // The corner on its own side of the level; the line cuts the two sides it is on.
+      var lone = below[0] !== below[1] && below[0] !== below[2] ? 0
+               : below[1] !== below[0] && below[1] !== below[2] ? 1 : 2;
+      // A lone corner exactly at the level touches it at a point: no segment.
+      if (value[lone] === at) continue;
+      cross(lone, (lone + 1) % 3);
+      cross(lone, (lone + 2) % 3);
+    }
+    return new Float32Array(points);
+  }
+
   /* ── CSV ──────────────────────────────────────────────────────────────── */
 
   /* One row per value, with the run and stage in the header so a file on someone's
@@ -358,6 +413,6 @@ App.ResultsRender = (function () {
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
     legend: legend, format: format, rangeLines: rangeLines,
-    deform: deform, autoFactor: autoFactor, csv: csv
+    deform: deform, autoFactor: autoFactor, isoline: isoline, csv: csv
   };
 })();

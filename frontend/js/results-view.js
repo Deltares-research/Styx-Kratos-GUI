@@ -97,6 +97,9 @@ App.ResultsView = (function () {
         && section.wire_indices && section.wire_indices.length
         ? wire(section, position) : null;
       if (outline) objects.push(outline);
+      // The zero water pressure line, when `App.Results` sent a pressure to trace it on.
+      var zero = payload.pressure ? zeroLine(section, payload.pressure, positions) : null;
+      if (zero) objects.push(zero);
       objects.forEach(function (object) { group.add(object); });
       drawn.push({ section: section, values: values.values, positions: positions,
                    objects: objects });
@@ -154,6 +157,27 @@ App.ResultsView = (function () {
     outline.name = section.key + ':mesh';
     outline.renderOrder = 15;
     return outline;
+  }
+
+  /* Where the water pressure is zero -- the phreatic surface the calculation found --
+     traced across the section's triangles by `ResultsRender.isoline` on the drawn
+     positions, so it deforms with the shading. Near-black, which reads against every
+     colour map but the darkest end of a few; over the mesh outlines (15) and below the
+     structural line work (20), like the outlines and for the same reason. */
+  var ZERO_LINE_COLOR = 0x111111;
+
+  function zeroLine(section, pressure, positions) {
+    if (!section.indices || !section.indices.length) return null;
+    var values = App.ResultsRender.vertexValues(section, pressure).values;
+    var points = App.ResultsRender.isoline(section, values, positions, 0);
+    if (!points.length) return null;
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
+    var material = new THREE.LineBasicMaterial({ color: ZERO_LINE_COLOR, depthTest: false });
+    var line = new THREE.LineSegments(geometry, material);
+    line.name = section.key + ':zero-pressure';
+    line.renderOrder = 18;
+    return line;
   }
 
   function lines(section, position, color) {
@@ -250,6 +274,10 @@ App.ResultsView = (function () {
       + '<i style="background:linear-gradient(to top,' + stops.join(',') + ')"></i>'
       + '<ul>' + rows + '</ul>'
       + '</div>'
+      + (payload.pressure
+         ? '<div class="vp-legend-foot vp-legend-zero">'
+           + '<i style="border-top-color:#111111"></i>p<sub>w</sub> = 0</div>'
+         : '')
       + '<div class="vp-legend-foot">stage ' + payload.stage + '</div>';
   }
 

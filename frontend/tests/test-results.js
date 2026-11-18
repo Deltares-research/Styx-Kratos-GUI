@@ -1106,6 +1106,118 @@
     });
   });
 
+  /* ── The zero water pressure line ─────────────────────────────────────── */
+
+  /* A run whose stages solved `calculation`, and a stage catalogue with a water
+     pressure in it to trace the line on. */
+  function showingWater(calculation, withPressure) {
+    var detail = JSON.parse(JSON.stringify(DETAIL));
+    detail.stages.forEach(function (s) { s.calculation = calculation; });
+    var answers = {};
+    answers['/api/results/runs/' + DETAIL.id] = detail;
+    setup(answers);
+    viewing();
+    var catalogue = JSON.parse(JSON.stringify(CATALOGUE));
+    if (withPressure !== false) {
+      catalogue.groups.push({ name: 'Groundwater', fields: [
+        { name: 'pw', label: 'Pore pressure', unit: 'kPa', locations: ['nodes'] }] });
+    }
+    var below = App.Api.get;
+    App.Api.get = function (path) {
+      if (/\/stages\/\d+\/fields$/.test(path)) {
+        api.calls.push(path);
+        return Promise.resolve(catalogue);
+      }
+      return below(path);
+    };
+    return App.Results.handleCommand('results open ' + DETAIL.id);
+  }
+
+  function pressureCalls() {
+    return api.calls.filter(function (path) { return /\/field\/pw\?/.test(path); });
+  }
+
+  test('after a flow stage the zero pressure line is drawn without being asked for',
+       function () {
+    return showingWater('flow').then(function () {
+      var last = drawn[drawn.length - 1];
+      T.eq(last.field.field, 'uy', 'the field on screen is still the default one');
+      T.ok(last.pressure, 'the water pressure travels with the payload');
+      T.eq(last.pressure.field, 'pw');
+      T.eq(pressureCalls(), ['/api/results/runs/' + DETAIL.id
+                             + '/stages/2/field/pw?location=nodes']);
+      T.eq(App.Results.options().zeroLine, false, 'the coupled setting is left alone');
+      T.eq(App.Results.state().calculation, 'flow');
+    });
+  });
+
+  test('a flow stage draws the line even with the coupled setting off', function () {
+    return showingWater('flow').then(function () {
+      return App.Results.handleCommand('results zeroline off');
+    }).then(function () {
+      T.ok(drawn[drawn.length - 1].pressure, 'still drawn');
+    });
+  });
+
+  test('after a coupled stage the zero pressure line is off until it is asked for',
+       function () {
+    return showingWater('mechanical').then(function () {
+      T.eq(drawn[drawn.length - 1].pressure, null, 'not drawn by default');
+      T.eq(pressureCalls().length, 0, 'and not fetched either');
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(App.Results.options().zeroLine, true);
+      T.eq(drawn[drawn.length - 1].pressure.field, 'pw');
+      T.ok(log.some(function (line) { return /zero pressure line on/.test(line[1]); }),
+           'the settings line says so');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.ok(drawn[drawn.length - 1].pressure, 'kept on from one stage to the next');
+      T.eq(pressureCalls().length, 2, 'fetched once per stage');
+      return App.Results.handleCommand('results zeroline');
+    }).then(function () {
+      T.eq(App.Results.options().zeroLine, false, 'a bare `results zeroline` toggles');
+      T.eq(drawn[drawn.length - 1].pressure, null);
+      App.Results.handleCommand('results zeroline on');
+      App.Results.forget();
+      T.eq(App.Results.options().zeroLine, false, 'off again for the next project');
+    });
+  });
+
+  test('the zero pressure line reuses the pore pressure when that is the field shown',
+       function () {
+    return showingWater('mechanical').then(function () {
+      return App.Results.handleCommand('results field pw');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'the field itself');
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'the line is traced on the field already here');
+      T.eq(drawn[drawn.length - 1].pressure, App.Results.field());
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'a display option fetches nothing again');
+      T.ok(drawn[drawn.length - 1].pressure);
+    });
+  });
+
+  test('a stage with no water pressure has no zero pressure line', function () {
+    return showingWater('flow', false).then(function () {
+      T.eq(drawn[drawn.length - 1].pressure, null);
+      T.eq(pressureCalls().length, 0);
+      T.eq(App.Results.state().pressure, false);
+      T.eq(App.Results.zeroLineShown(), false);
+    });
+  });
+
+  test('a run that does not say what it solved is treated as coupled', function () {
+    /* A run directory from before stages carried their calculation type. */
+    return showingWater(undefined).then(function () {
+      T.eq(App.Results.state().calculation, null);
+      T.eq(drawn[drawn.length - 1].pressure, null);
+    });
+  });
+
   test('the mesh setting is kept from one stage to the next', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results mesh on');

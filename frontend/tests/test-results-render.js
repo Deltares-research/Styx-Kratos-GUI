@@ -377,6 +377,76 @@
     T.eq(R.autoFactor(0.01, [0, 0, 0, 0, 0, 0]), 1);
   });
 
+  /* ── Contour lines ────────────────────────────────────────────────────── */
+
+  /* `section()` is a unit square split along its 1-2 diagonal: (0,0) (1,0) (0,1)
+     (1,1). A pressure falling from +1 at the top to -1 at the bottom crosses zero
+     halfway up. */
+  function points(array) {
+    var out = [];
+    for (var i = 0; i < array.length; i += 3) out.push([array[i], array[i + 1], array[i + 2]]);
+    return out;
+  }
+
+  function sorted(segments) {
+    return segments.map(function (p) {
+      return p.map(function (c) { return Math.round(c * 1e6) / 1e6; });
+    }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  }
+
+  test('the zero line runs where the values cross zero, interpolated along each side',
+       function () {
+    var s = section();
+    var cut = points(R.isoline(s, [-1, -1, 1, 1], s.positions, 0));
+    // Two triangles, one segment each: (0,.5)-(.5,.5) and (.5,.5)-(1,.5).
+    T.eq(cut.length, 4);
+    T.eq(sorted(cut), [[0, 0.5, 0], [0.5, 0.5, 0], [0.5, 0.5, 0], [1, 0.5, 0]]);
+  });
+
+  test('the zero line is not at the midpoint when the values are not symmetric',
+       function () {
+    var s = section();
+    var cut = sorted(points(R.isoline(s, [-3, -3, 1, 1], s.positions, 0)));
+    cut.forEach(function (p) { T.near(p[1], 0.75, 1e-6); });
+  });
+
+  test('the zero line follows the positions it is given, deformed or not', function () {
+    var s = section();
+    var moved = new Float32Array([0, 0, 0, 1, 0, 0, 0, 3, 0, 1, 3, 0]);
+    var cut = sorted(points(R.isoline(s, [-1, -1, 1, 1], moved, 0)));
+    cut.forEach(function (p) { T.near(p[1], 1.5, 1e-6); });
+  });
+
+  test('a field on one side of zero has no zero line', function () {
+    var s = section();
+    T.eq(R.isoline(s, [-1, -2, -3, -4], s.positions, 0).length, 0);
+    T.eq(R.isoline(s, [1, 2, 3, 4], s.positions, 0).length, 0);
+  });
+
+  test('a field that is zero everywhere has no zero line', function () {
+    /* A coupled stage with no water at all writes exactly zero at every node. */
+    var s = section();
+    T.eq(R.isoline(s, [0, 0, 0, 0], s.positions, 0).length, 0);
+  });
+
+  test('over dry ground at exactly zero the line is the edge of the wet region',
+       function () {
+    /* A tension cut-off leaves the pressure at exactly 0 above the water: the line runs
+       through the first dry nodes instead of tracing every flat triangle. */
+    var s = section();
+    var cut = sorted(points(R.isoline(s, [-1, -1, 0, 0], s.positions, 0)));
+    // One segment along the top side, and no point-sized one where the first
+    // triangle only touches zero at its corner.
+    T.eq(cut, [[0, 1, 0], [1, 1, 0]]);
+  });
+
+  test('a triangle with a hole in it has no zero line through it', function () {
+    var s = section();
+    // Vertex 3 (1,1) is in the second triangle only, so the first is still cut.
+    var cut = points(R.isoline(s, [-1, -1, 1, null], s.positions, 0));
+    T.eq(cut.length, 2);
+  });
+
   /* ── CSV ──────────────────────────────────────────────────────────────── */
 
   test('a field exports as csv with a header naming the unit', function () {

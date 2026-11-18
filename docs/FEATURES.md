@@ -231,6 +231,7 @@ and adds only the values that are missing
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
+| Zero pressure line | The line where the pore pressure is zero, over the colours: always after a groundwater flow stage; after a coupled (mechanical) stage when switched on (`results zeroline on\|off`, off by default) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |

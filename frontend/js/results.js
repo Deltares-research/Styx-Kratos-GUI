@@ -17,6 +17,7 @@
        results bands <n> | smooth | map <name> | deform <f|auto|off>
        results mesh [on|off]   the element outlines over the shading
        results loads [on|off]  the loads and the water level over the shading
+       results zeroline [on|off]  the zero water pressure line, after a coupled stage
        results range auto | <min> <max>
        results csv             the field on screen, as a file
        results files | get <file> | zip     the run directory itself
@@ -60,7 +61,7 @@ App.Results = (function () {
      redraws without going near the server, and a stage change keeps the field. */
   var view = {
     stage: null, mesh: null, catalogue: null, field: null, location: 'nodes',
-    displacement: null
+    displacement: null, pressure: null
   };
 
   /* How a result is drawn until somebody says otherwise.
@@ -71,9 +72,18 @@ App.Results = (function () {
      that the steps mean something. All three are changeable per run, and `results map
      viridis` / `results smooth` are a keystroke away. The loads and the water level
      are drawn over the shading, so a result is read against where the load is and
-     where the water stands. */
+     where the water stands.
+
+     `zeroLine` is the zero water pressure line over a *mechanical* (coupled) stage,
+     off until asked for: there the pore pressure is one result among many. After a
+     flow stage the line is the point of the calculation -- where the phreatic surface
+     ended up -- and is drawn whatever this says (`zeroLineShown`). */
   var DEFAULTS = { map: 'rainbow', bands: 32, deform: 0, reversed: false,
-                   mesh: false, loads: true, min: null, max: null };
+                   mesh: false, loads: true, zeroLine: false, min: null, max: null };
+
+  /* The field the zero pressure line is traced on: Kratos' WATER_PRESSURE, per node
+     (core/results/fields.py). */
+  var PRESSURE_FIELD = 'pw';
 
   /* The field to draw when a stage is opened and nothing has been asked for, most
      wanted first. Vertical stage displacement is what settles after an excavation
@@ -85,6 +95,7 @@ App.Results = (function () {
   var options = {
     map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
     reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
+    zeroLine: DEFAULTS.zeroLine,
     /* null means "follow the field". A typed range is kept across a change of stage
        on purpose: a range that re-fits itself every stage makes every stage look
        identical, which is the opposite of what stepping through them is for. */
@@ -188,10 +199,10 @@ App.Results = (function () {
     openRun = null;
     pending = Promise.resolve();
     view = { stage: null, mesh: null, catalogue: null, field: null,
-             location: 'nodes', displacement: null };
+             location: 'nodes', displacement: null, pressure: null };
     options = { map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
                 reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
-                min: DEFAULTS.min, max: DEFAULTS.max };
+                zeroLine: DEFAULTS.zeroLine, min: DEFAULTS.min, max: DEFAULTS.max };
     if (App.ResultsPlot) App.ResultsPlot.forget();
     changed();
   }
@@ -209,8 +220,25 @@ App.Results = (function () {
       stage: view.stage,
       catalogue: view.catalogue,
       field: view.field,
-      location: view.location
+      location: view.location,
+      calculation: stageCalculation(),
+      pressure: !!offered(PRESSURE_FIELD)
     };
+  }
+
+  /* "flow", "mechanical", or null, for the stage on screen: what the run's deck says
+     it solved (core/results/catalog.py `_calculations_from_deck`). */
+  function stageCalculation() {
+    var found = stagesOf().filter(function (s) { return s.index === view.stage; })[0];
+    return (found && found.calculation) || null;
+  }
+
+  /* Whether the zero water pressure line is on screen: always after a flow stage, after
+     any other only when `results zeroline on` asked for it -- and only when the stage
+     wrote a water pressure to trace it on. */
+  function zeroLineShown() {
+    if (!view.stage || !offered(PRESSURE_FIELD)) return false;
+    return stageCalculation() === 'flow' || !!options.zeroLine;
   }
 
   /* What the viewport implements. Replaced wholesale in the headless suite, which is
@@ -231,6 +259,8 @@ App.Results = (function () {
     if (!view.mesh || !view.field) return;
     var displacement = view.displacement && view.displacement.stage === view.stage
       ? view.displacement : null;
+    var pressure = zeroLineShown() && view.pressure && view.pressure.stage === view.stage
+      ? view.pressure.field : null;
     var range = {
       min: options.min === null ? view.field.min : options.min,
       max: options.max === null ? view.field.max : options.max
@@ -241,6 +271,7 @@ App.Results = (function () {
       mesh: view.mesh,
       field: view.field,
       displacement: displacement,
+      pressure: pressure,
       options: {
         map: options.map, bands: options.bands, deform: options.deform,
         reversed: options.reversed, mesh: options.mesh,
@@ -276,10 +307,34 @@ App.Results = (function () {
     });
   }
 
+  /* The water pressure per node the zero pressure line is traced on, fetched once per
+     stage and kept -- and not fetched at all when the line is not wanted. The field on
+     screen is used as it is when it is that very field. */
+  function withPressure() {
+    if (!zeroLineShown() || !openRun) return Promise.resolve();
+    if (view.pressure && view.pressure.stage === view.stage) return Promise.resolve();
+    var run = openRun, stage = view.stage;
+    function keep(field) {
+      if (openRun === run && view.stage === stage) {
+        view.pressure = { stage: stage, field: field };
+      }
+    }
+    if (view.field && view.field.field === PRESSURE_FIELD && view.location === 'nodes') {
+      keep(view.field);
+      return Promise.resolve();
+    }
+    var path = ROOT + '/' + encodeURIComponent(run.id) + '/stages/' + stage
+             + '/field/' + PRESSURE_FIELD + '?location=nodes';
+    return App.Api.get(path).then(keep).catch(function () {
+      // No line rather than an error: the contour itself is still worth showing.
+      keep(null);
+    });
+  }
+
   /* Fetch what is missing, then draw. Everything that changes the picture goes
      through this rather than calling `present` directly. */
   function redraw() {
-    return withDisplacement().then(present);
+    return Promise.all([withDisplacement(), withPressure()]).then(present);
   }
 
   /* The run that just finished, adopted and *read*.
@@ -357,7 +412,9 @@ App.Results = (function () {
     'results reverse         flip the colour ramp end for end',
     'results mesh [on|off]   draw the element outlines over the shading',
     'results loads [on|off]  draw the loads and the water level over the shading',
-    'results csv             the field on screen, as a file',
+    'results zeroline [on|off]   the zero water pressure line over a coupled stage',
+    '                        (always drawn after a flow stage)',
+    'results csv            the field on screen, as a file',
     'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per stage;',
     '                        `results plot members` lists them, `plot csv`/`svg` saves',
     'results files / get <file> / zip     the run directory itself'
@@ -416,7 +473,7 @@ App.Results = (function () {
       // alternative is losing a run you had in front of you to a typo.
       openRun = run;
       view = { stage: null, mesh: null, catalogue: null, field: null,
-               location: 'nodes', displacement: null };
+               location: 'nodes', displacement: null, pressure: null };
       if (!quiet) report(run);
       else log('ok', run.id + ' is open — ' + plural(run.stages.length, 'stage')
                      + '. Results mode shows it; `results fields` lists what it has.');
@@ -605,6 +662,7 @@ App.Results = (function () {
       if (mine !== ticket) return;
       view.stage = index;
       view.displacement = null;
+      view.pressure = null;
       view.mesh = both[0];
       view.catalogue = both[1];
       view.field = null;
@@ -834,6 +892,11 @@ App.Results = (function () {
       // the project, App.Viewport's `modeKeys`). Toggled and set like `mesh`.
       options.loads = token === '' ? !options.loads
                     : !(token === 'off' || token === 'no' || token === 'false');
+    } else if (verb === 'zeroline') {
+      // The zero water pressure line over a coupled stage. Toggled and set like `mesh`;
+      // a flow stage draws it regardless (`zeroLineShown`).
+      options.zeroLine = token === '' ? !options.zeroLine
+                       : !(token === 'off' || token === 'no' || token === 'false');
     } else if (verb === 'range') {
       if (token === 'auto' || token === '') { options.min = options.max = null; }
       else {
@@ -861,6 +924,7 @@ App.Results = (function () {
                                : options.deform ? '×' + options.deform : 'off')
          + ', mesh ' + (options.mesh ? 'on' : 'off')
          + ', loads ' + (options.loads ? 'on' : 'off')
+         + ', zero pressure line ' + (options.zeroLine ? 'on' : 'off')
          + ', range ' + (options.min === null ? 'auto' : options.min + ' to ' + options.max)
          + '.';
   }
@@ -1006,7 +1070,7 @@ App.Results = (function () {
     if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
         || verb === 'deform' || verb === 'range' || verb === 'mesh' || verb === 'loads'
-        || verb === 'reverse' || verb === 'reversed') {
+        || verb === 'zeroline' || verb === 'reverse' || verb === 'reversed') {
       return setOption(verb, rest);
     }
 
@@ -1025,6 +1089,7 @@ App.Results = (function () {
     draw: draw, present: present, redraw: redraw,
     options: function () { return options; },
     limitsCommand: limitsCommand, projectStage: projectStage,
+    zeroLineShown: zeroLineShown,
     size: size, when: when, runLine: runLine
   };
 })();

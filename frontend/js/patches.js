@@ -3924,6 +3924,15 @@ App.LivePatches = (function () {
           action: 'resultsRun',
           cmd: 'results loads ' + (options.loads === false ? 'on' : 'off')
         });
+        // As the panel's box: a flow stage always draws the line, so it is offered
+        // only over a coupled stage that wrote a water pressure.
+        if (state.pressure && state.calculation !== 'flow') {
+          colours.sub.push({
+            label: 'Show zero pressure line', checked: !!options.zeroLine,
+            action: 'resultsRun',
+            cmd: 'results zeroline ' + (options.zeroLine ? 'off' : 'on')
+          });
+        }
       }
     }
 
@@ -4301,6 +4310,14 @@ App.LivePatches = (function () {
                                     + (options.loads !== false ? ' checked' : '')
                                     + ' title="The loads and the water level over the'
                                     + ' colours">'));
+      /* The zero water pressure line. A flow stage always draws it, so the box is only
+         offered for a coupled one -- and only when the stage wrote a water pressure. */
+      if (state.pressure && state.calculation !== 'flow') {
+        rows.push(row('Zero pressure', '<input type="checkbox" data-res="zeroline"'
+                                  + (options.zeroLine ? ' checked' : '')
+                                  + ' title="The line where the water pressure is zero'
+                                  + ' (the phreatic surface)">'));
+      }
       rows.push(row('Deformed', select('deform', [
         { value: 'off', label: 'off', selected: !options.deform },
         { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
@@ -4344,6 +4361,12 @@ App.LivePatches = (function () {
       if (loadsBox) {
         loadsBox.addEventListener('change', function () {
           resultsCommand('results loads ' + (loadsBox.checked ? 'on' : 'off'));
+        });
+      }
+      var zeroBox = body.querySelector('[data-res="zeroline"]');
+      if (zeroBox) {
+        zeroBox.addEventListener('change', function () {
+          resultsCommand('results zeroline ' + (zeroBox.checked ? 'on' : 'off'));
         });
       }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });

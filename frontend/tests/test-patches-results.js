@@ -349,6 +349,72 @@
       }));
   });
 
+  /* A stage catalogue with a water pressure in it, and stages that solved
+     `calculation`, for as long as `body` runs. */
+  function withWater(calculation, body) {
+    var fields = ANSWERS.fields, stages = ANSWERS.run.stages;
+    ANSWERS.fields = JSON.parse(JSON.stringify(fields));
+    ANSWERS.fields.groups.push({ name: 'Groundwater', fields: [
+      { name: 'pw', label: 'Pore pressure', unit: 'kPa', locations: ['nodes'] }] });
+    ANSWERS.run.stages = stages.map(function (s) {
+      return Object.assign({}, s, { calculation: calculation });
+    });
+    function back() { ANSWERS.fields = fields; ANSWERS.run.stages = stages; }
+    return Promise.resolve().then(body).then(back, function (e) { back(); throw e; });
+  }
+
+  test('results: a coupled stage offers the zero pressure line as a box, unticked', function () {
+    return withWater('mechanical', function () {
+      var ctx = rig();
+      var box = function () {
+        return dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]');
+      };
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(box(), 'the box is there');
+        T.eq(box().checked, false, 'unticked by default');
+        box().checked = true;
+        box().dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results zeroline on') >= 0, ctx.commands.join(' | '));
+        T.eq(App.Results.options().zeroLine, true);
+        T.eq(box().checked, true, 'redrawn ticked');
+        var menu = (App.MENUS || []).filter(function (m) { return m.label === 'Results'; })[0];
+        var colours = menu.items.filter(function (i) { return i && i.label === 'Colours'; })[0];
+        var item = colours && colours.sub.filter(function (s) {
+          return s.label === 'Show zero pressure line';
+        })[0];
+        T.ok(item && item.checked, 'and the menu item is ticked with it');
+      }));
+    });
+  });
+
+  test('results: a flow stage has no zero pressure box: the line is always drawn', function () {
+    return withWater('flow', function () {
+      var ctx = rig();
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(!dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]'));
+        T.ok(App.Results.zeroLineShown(), 'the line is on screen regardless');
+      }));
+    });
+  });
+
+  test('results: a stage with no water pressure has no zero pressure box', function () {
+    var ctx = rig();
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.runAction({ action: 'chooseResults' });
+      return settle();
+    }).then(function () {
+      T.ok(!dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]'));
+    }));
+  });
+
   /* App.UI keeps the first menu layer it finds, so this one stays for the whole page. */
   function menuLayer() {
     var layer = document.getElementById('menu-layer');
