@@ -1218,6 +1218,95 @@
     });
   });
 
+  test('a pressure the server cannot send draws no line rather than an error', function () {
+    return showingWater('mechanical').then(function () {
+      var below = App.Api.get;
+      App.Api.get = function (path) {
+        if (/\/field\/pw\?/.test(path)) {
+          api.calls.push(path);
+          return Promise.reject(new Error('gone'));
+        }
+        return below(path);
+      };
+      log = [];
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'it was asked for');
+      var last = drawn[drawn.length - 1];
+      T.eq(last.pressure, null, 'no line');
+      T.eq(last.field.field, 'uy', 'the contour is still drawn');
+      T.eq(lines('err'), [], 'and nothing is reported as failed');
+    });
+  });
+
+  test('the zero line carries the phreatic lines of the open project for the stage shown',
+       function () {
+    /* The open project is the one the run was made from: same deck name, same stages. */
+    var saved = { project: App.PROJECT, stages: App.Stages, water: App.SurfaceWater };
+    var asked = [];
+    App.PROJECT = { name: 'Staged excavation', dimension: 2,
+                    stages: [{ id: 's1', name: 'Initial stage' },
+                             { id: 's2', name: 'First excavation' }] };
+    App.Stages = {
+      order: function (project) { return project.stages; },
+      hiddenKeys: function (project, stage, kind) {
+        asked.push([stage, kind]);
+        return ['excavated'];
+      }
+    };
+    App.SurfaceWater = {
+      waters: function (project, hidden) {
+        asked.push(hidden);
+        return [{ x_coordinates: [0, 10, 20], y_coordinates: [-2, -3, -3] }];
+      }
+    };
+    function restore() {
+      App.PROJECT = saved.project;
+      App.Stages = saved.stages;
+      App.SurfaceWater = saved.water;
+    }
+    return showingWater('flow').then(function () {
+      var last = drawn[drawn.length - 1];
+      T.ok(last.pressure, 'the line is on');
+      T.eq(last.phreatic, [[[0, -2], [10, -3], [20, -3]]], 'as [x, y] polylines');
+      T.eq(asked[0], ['s2', 'staged'], "the stage on screen's own id");
+      T.eq(asked[1], { excavated: true }, 'with what that stage takes away left out');
+      App.PROJECT = Object.assign({}, App.PROJECT, { name: 'Another project' });
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].phreatic, [], "another project's water says nothing");
+      restore();
+    }, function (error) {
+      restore();
+      throw error;
+    });
+  });
+
+  /* ── Saved pictures: walking the stages and fields ───────────────────── */
+
+  test('the field names are every field the stage offers, in menu order', function () {
+    return showing().then(function () {
+      T.eq(App.Results.fieldNames(), ['u', 'uy', 'p']);
+    });
+  });
+
+  test('show moves to a stage and field without a line in the log for each', function () {
+    return showing().then(function () {
+      log = [];
+      return App.Results.show(1, 'p');
+    }).then(function () {
+      T.eq(App.Results.stage(), 1);
+      T.eq(App.Results.field().field, 'p');
+      T.eq(lines('ok'), [], 'quiet');
+      return App.Results.show(1, 'p');
+    }).then(function (answer) {
+      T.eq(answer, null, 'already there: nothing to do');
+      return App.Results.show(1);
+    }).then(function (answer) {
+      T.eq(answer, null, 'no field named: the stage alone');
+    });
+  });
+
   /* ── Integration points: per element or averaged to the nodes ────────── */
 
   function fieldCalls(name) {
@@ -1397,6 +1486,27 @@
     }).then(function () {
       T.eq(App.Results.options().arrows, null, 'and off again');
       T.eq(drawn[drawn.length - 1].vectors, null);
+    });
+  });
+
+  test('vectors the server cannot send draw no arrows rather than an error', function () {
+    return showingFlow().then(function () {
+      var below = App.Api.get;
+      App.Api.get = function (path) {
+        if (/\/vectors\//.test(path)) {
+          api.calls.push(path);
+          return Promise.reject(new Error('gone'));
+        }
+        return below(path);
+      };
+      log = [];
+      return App.Results.handleCommand('results arrows flux');
+    }).then(function () {
+      T.eq(vectorCalls().length, 1, 'they were asked for');
+      var last = drawn[drawn.length - 1];
+      T.eq(last.vectors, null, 'no arrows');
+      T.ok(last.field, 'the contour is still drawn');
+      T.eq(lines('err'), [], 'and nothing is reported as failed');
     });
   });
 
