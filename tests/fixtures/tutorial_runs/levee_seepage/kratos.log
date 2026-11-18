@@ -1,0 +1,309 @@
+[kratos-gui] stage begin 1/1 1_Flow
+ |  /           |                  
+ ' /   __| _` | __|  _ \   __|    
+ . \  |   (   | |   (   |\__ \  
+_|\_\_|  \__,_|\__|\___/ ____/
+           Multi-Physics 10.4."2"-trije-7cd20d938f4-FullDebug-x86_64
+           Compiled for Windows and Python3.15 with MSVC-1944
+Serial compilation.
+Process Id: 38020 
+Importing    KratosStructuralMechanicsApplication 
+    KRATOS   ___|  |                   |                   |
+           \___ \  __|  __| |   |  __| __| |   |  __| _` | |
+                 | |   |    |   | (    |   |   | |   (   | |
+           _____/ \__|_|   \__,_|\___|\__|\__,_|_|  \__,_|_| MECHANICS
+Initializing KratosStructuralMechanicsApplication...
+Importing    KratosConstitutiveLawsApplication 
+Initializing KratosConstitutiveLawsApplication...
+Importing    KratosGeoMechanicsApplication 
+ KRATOS___                             
+     //   ) )                          
+    //         ___      ___            
+   //  ____  //___) ) //   ) )         
+  //    / / //       //   / /          
+ ((____/ / ((____   ((___/ /  MECHANICS
+ Initializing KratosGeoMechanicsApplication...
+GeoMechanics Analysis: Wed Nov 18 11:40:38 2026 
+GeoMechanics Analysis: OpenMP parallel configuration | number of threads = 1 
+[WARNING] ProcessUtilities: 'processes_sub_model_part_list' is deprecated. This list is built automatically from the model parts used in all processes.
+::[GeoMechanicalSolver]:: : Construction finished 
+geomechanics_solver: is not a restarted model 
+GeoMechanics_Pw_Solver: Construction of Solver finished. 
+::[GeoMechanicalSolver]:: : Variables ADDED 
+[WARNING] Model: Trying to create a root modelpart with name PorousDomain however a ModelPart with the same name already exists. 
+Returning the already existent ModelPart.
+SingleImportModelPart: Reading model part from file: "<run directory>\\levee_seepage".mdpa
+ModelPartIO:   [Reading Nodes    : 2628 nodes read]
+ModelPartIO:   [Reading Elements : 366 elements read] [Type: SteadyStatePwElement2D3N]
+ModelPartIO:   [Reading Elements : 4210 elements read] [Type: SteadyStatePwElement2D3N]
+ModelPartIO:   [Reading Elements : 290 elements read] [Type: SteadyStatePwElement2D3N]
+ModelPartIO:   [Reading Elements : 162 elements read] [Type: SteadyStatePwElement2D3N]
+ModelPartIO:   [Reading Conditions : 51 conditions read] [Type: GeoSeepageCondition2D2N]
+ModelPartIO:   [Total Lines Read : 16030]
+SingleImportModelPart: Finished reading model part from mdpa file.
+::[PythonSolver]::: Reading model part. 
+::[PythonSolver]::: Using already imported model part - no reading necessary. 
+ModelPart: -PorousDomain- model part
+    Buffer Size : 1
+    Number of tables : 0
+    Number of sub model parts : 11
+    Current solution step index : 0
+    DOMAIN_SIZE : 2
+    IS_RESTARTED : 0
+
+    Mesh 0 :
+        Number of Nodes       : 2628
+        Number of Properties  : 1
+        Number of Elements    : 5028
+        Number of Conditions  : 51
+        Number of Geometries  : 0
+        Number of Constraints : 0
+
+    -Aquifer- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 2216
+            Number of Properties  : 0
+            Number of Elements    : 4210
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Bottom_Fixed- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 91
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Cover- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 276
+            Number of Properties  : 0
+            Number of Elements    : 366
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Left_Edge- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 23
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Levee_core- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 179
+            Number of Properties  : 0
+            Number of Elements    : 290
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Levee_outer_layer- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 124
+            Number of Properties  : 0
+            Number of Elements    : 162
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Polder_head- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 23
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Right_Edge- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 23
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -River_head- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 60
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Seepage_face- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 52
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 51
+            Number of Geometries  : 0
+            Number of Constraints : 0
+    -Top_Surface- model part
+        Number of tables : 0
+        Number of sub model parts : 0
+
+        Mesh 0 :
+            Number of Nodes       : 91
+            Number of Properties  : 0
+            Number of Elements    : 0
+            Number of Conditions  : 0
+            Number of Geometries  : 0
+            Number of Constraints : 0
+ 
+::[PythonSolver]:: : Finished reading model part. 
+::[GeoMechanicalSolver]:: importing constitutive law: MaterialParameters.json 
+Read materials: Started
+Read materials: Finished
+::[GeoMechanicalSolver]:: : Constitutive law was successfully imported. 
+GeoMechanics_Pw_Solver: Model reading finished. 
+GeoMechanics_Pw_Solver: DOFs added correctly. 
+::[GeoMechanics_Pw_Solver]:: : Initialisation ... 
+Importing    LinearSolversApplication 
+    Kratos  _     _                       ____        _
+           | |   (_)_ __   ___  __ _ _ __/ ___|  ___ | |_   _____ _ __ ___
+           | |   | | '_ \ / _ \/ _` | '__\___ \ / _ \| \ \ / / _ \ '__/ __|
+           | |___| | | | |  __/ (_| | |   ___) | (_) | |\ V /  __/ |  \__ \
+           |_____|_|_| |_|\___|\__,_|_|  |____/ \___/|_| \_/ \___|_|  |___/
+Initializing KratosLinearSolversApplication...
+Linear-Solver-Factory: Constructing a regular (non-complex) linear-solver 
+GeoMechanics_Pw_Solver, solution_type: Steady_State_Groundwater_Flow 
+GeoMechanics_Pw_Solver, scheme: Newmark. 
+GeoMechanicsNewtonRaphsonStrategyWithSeepage::Initialize: Found 52 seepage nodes
+GeoMechanics_Pw_Solver: solver.Initialize is set successfully 
+GeoMechanics_Pw_Solver: Solver initialization finished. 
+[WARNING] DEPRECATION-Warning; AnalysisStage: ModifyAfterSolverInitialize is deprecated. Please, use ModifyBeforeSolutionLoop instead. 
+GeoMechanics Analysis: Analysis -START-  
+GeoMechanics Analysis: Up-scaling to reach end_time without small increments:  1.0 
+GeoMechanics Analysis: --------------------------------------   
+GeoMechanics Analysis: cycle:  1 
+GeoMechanics Analysis: STEP      :  1 
+GeoMechanics Analysis: DELTA_TIME:  1.0 
+GeoMechanics Analysis: TIME      :  1.0 
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0256545 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 0.0011142 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0520219 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0789521 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.302983 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.242735 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 1.31423; Expected ratio = 0.0001; Absolute norm = 1.15703e-08; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.285884 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.240169 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.039759; Expected ratio = 0.0001; Absolute norm = 3.50169e-10; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.29702 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.233501 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0281405; Expected ratio = 0.0001; Absolute norm = 2.47938e-10; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.296024 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.236215 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0100115; Expected ratio = 0.0001; Absolute norm = 8.82432e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.292643 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.237684 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0254729; Expected ratio = 0.0001; Absolute norm = 2.24612e-10; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.294865 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.242862 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0125037; Expected ratio = 0.0001; Absolute norm = 1.10297e-10; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.292467 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.238318 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0116314; Expected ratio = 0.0001; Absolute norm = 1.02643e-10; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.299842 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.232603 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00435095; Expected ratio = 0.0001; Absolute norm = 3.84106e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.300646 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.243346 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00419826; Expected ratio = 0.0001; Absolute norm = 3.70772e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.288293 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.236964 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00757522; Expected ratio = 0.0001; Absolute norm = 6.69276e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.302155 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.232904 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00652726; Expected ratio = 0.0001; Absolute norm = 5.76915e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.298562 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.23[kratos-gui] stage end 1/1 1_Flow
+7396 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00654232; Expected ratio = 0.0001; Absolute norm = 5.78474e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.287248 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.258059 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00252297; Expected ratio = 0.0001; Absolute norm = 2.2317e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.293376 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.240616 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00163681; Expected ratio = 0.0001; Absolute norm = 1.44842e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.300548 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.232148 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000586752; Expected ratio = 0.0001; Absolute norm = 5.19423e-12; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.288417 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.252704 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000585343; Expected ratio = 0.0001; Absolute norm = 5.18381e-12; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.303876 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.238445 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000328367; Expected ratio = 0.0001; Absolute norm = 2.90917e-12; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.295958 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.231868 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00689395; Expected ratio = 0.0001; Absolute norm = 6.11013e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.295667 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.239116 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00244187; Expected ratio = 0.0001; Absolute norm = 2.16509e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+ResidualBasedBlockBuilderAndSolver: Build time: 0.286746 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.242771 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00136974; Expected ratio = 0.0001; Absolute norm = 1.21496e-11; Expected norm =  1e-09]
+RESIDUAL CRITERION: Convergence is achieved
+GeoMechanicsNewtonRaphsonStrategyWithSeepage: Convergence achieved after 20 / 300 iterations
+BuilderAndSolver: Clear Function called
+GeoMechanics Analysis: Analysis -END-  
+BuilderAndSolver: Clear Function called
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 23.916  seconds. 
+GeoMechanics Analysis: Wed Nov 18 11:41:02 2026 
+BuilderAndSolver: Clear Function called
+BuilderAndSolver: Clear Function called
+Deregistering KratosMultiphysics
+Deregistering ConstitutiveLawsApplication
+Deregistering LinearSolversApplication
+Deregistering GeoMechanicsApplication
+Deregistering StructuralMechanicsApplication

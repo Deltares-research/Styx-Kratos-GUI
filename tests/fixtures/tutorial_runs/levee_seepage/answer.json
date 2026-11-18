@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "returncode": 0,
+  "stopped": false,
+  "stage": null,
+  "seconds": 25.4,
+  "inputs": [
+    "levee_seepage.mdpa",
+    "MaterialParameters.json",
+    "ProjectParameters.json",
+    "kratos_gui_units.json"
+  ],
+  "outputs": [
+    "levee_seepage_1_Flow.post.msh",
+    "levee_seepage_1_Flow.post.res",
+    "levee_seepage_2026-11-18_11-40.post.lst"
+  ],
+  "log": "kratos.log",
+  "error": null
+}
