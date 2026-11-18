@@ -1416,10 +1416,13 @@ App.Viewport = (function () {
   function modeLayout(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                       normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
-    // The boundary conditions' symbols: in every mode, each one hidden until it is
-    // shown (the explorer's Show) or selected.
-    var conditions = ((conditionKeys && conditionKeys.supports) || [])
-      .concat((conditionKeys && conditionKeys.water) || []);
+    // The boundary conditions' symbols, each in the tabs it belongs to: the supports
+    // in Soil, Structures and Mesh, the flow conditions (water pressures, seepage
+    // faces) in Flow conditions, both in Staged construction. A row's Hide in the
+    // explorer still hides one, and selecting a row still shows it in any tab.
+    var supports = (conditionKeys && conditionKeys.supports) || [];
+    var flowConditions = (conditionKeys && conditionKeys.water) || [];
+    var conditions = supports.concat(flowConditions);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
     // :112-126), so their keys need to be listed in the modes that show structures.
@@ -1449,11 +1452,11 @@ App.Viewport = (function () {
       // out of structures/mesh so those keep reading as they did.
       return {
         groups: {
-          soil: visibleKeys.concat(conditions, soilFaded),
-          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+          soil: visibleKeys.concat(supports, soilFaded),
+          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, supports),
           // The loads solid, not faded: the mesh is read against where it is loaded.
-          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, conditions),
-          flow: visibleKeys.concat(['water'], conditions, flowFaded),
+          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, supports),
+          flow: visibleKeys.concat(['water'], flowConditions, flowFaded),
           // Loads too: Staged construction is where a load is switched on and
           // off, so it has to be on screen there (`stageHidden` still hides one
           // the selected stage has switched off).
@@ -1468,12 +1471,12 @@ App.Viewport = (function () {
     flowFaded = ['struts', 'anchors', 'piles'].concat(loadKeys, memberKeys, contactKeys);
     return {
       groups: {
-        soil:       soilKeys.concat(conditions, soilFaded),
+        soil:       soilKeys.concat(supports, soilFaded),
         structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                    loadKeys, memberKeys, contactKeys, customKeys, conditions),
+                                    loadKeys, memberKeys, contactKeys, customKeys, supports),
         mesh:       ['mesh', 'wall'].concat(loadKeys, memberKeys, contactKeys, customKeys,
-                                            conditions),
-        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions,
+                                            supports),
+        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, flowConditions,
                                     flowFaded),
         staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
                       .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),

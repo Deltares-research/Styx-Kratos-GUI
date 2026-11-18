@@ -402,14 +402,12 @@ it to keep the condition in the project but leave it out of the calculation. The
 of **Boundary conditions** switches all of them. In Staged construction mode, the check box
 of a water pressure condition is for the selected stage.
 
-The viewport shows every condition and the water level. Click a condition or the water level
+Each tab shows the conditions that belong to it. **Soil**, **Structures** and **Mesh** show
+the supports. **Flow conditions** shows the water pressure conditions and the seepage faces,
+and not the supports. **Staged construction** shows both. Click a condition or the water level
 to select it. A click a few pixels away from the line also selects it. To hide a condition,
-right-click its row in the Model explorer and select **Hide**.
-
-The viewport does not show the conditions when a model opens. To show a condition, select it
-in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
-conditions** shows all of them. A condition that you only selected goes away when you select
-something else.
+right-click its row in the Model explorer and select **Hide**. When you select a condition in
+the Model explorer, the viewport shows it in every tab until you select something else.
 In 2D, a support on a face or a line is drawn from its start to its end. A support that holds
 x and y is hatched ground along the edge. A support that holds one of them (a roller) is a
 row of triangles on two wheels, from one end to the other. A support on a point is a triangle on hatched ground, or a triangle on two wheels for

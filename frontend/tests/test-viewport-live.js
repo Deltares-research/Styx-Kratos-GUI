@@ -451,10 +451,16 @@
       return App.Viewport.refresh();
     }).then(function () {
       var groups = sceneGroups();
+      // A support is shown in Soil, a flow condition in Flow conditions, not the other.
+      function tabOf(record) { return record.kind === 'displacement' ? 'soil' : 'flow'; }
+      function show(mode) { App.state.mode = mode; App.Viewport.setMode(mode); }
       App.PROJECT.boundary_conditions.forEach(function (record) {
         var group = groups[record.id];
         T.ok(group, record.name + ' has a glyph group');
         T.ok(group.children.length > 0);
+        show(tabOf(record) === 'soil' ? 'flow' : 'soil');
+        T.eq(group.visible, false, record.name + ' is not shown in the other tab');
+        show(tabOf(record));
         T.eq(group.visible, true, 'conditions start shown');
         App.Viewport.setVisible(record.id, false);
         T.eq(group.visible, false, 'its eye hides it');
@@ -469,6 +475,8 @@
     }).then(function () {
       var groups = sceneGroups();
       App.PROJECT.boundary_conditions.forEach(function (record) {
+        var mode = record.kind === 'displacement' ? 'soil' : 'flow';
+        App.state.mode = mode; App.Viewport.setMode(mode);
         T.eq(App.Viewport.isVisible(record.id), true, 'a new project shows them again');
         T.eq(groups[record.id].visible, true);
       });

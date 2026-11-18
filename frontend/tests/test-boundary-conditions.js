@@ -447,15 +447,20 @@
     T.eq(phreatic.label, undefined, 'no h = beside the phreatic line');
   });
 
-  test('the conditions may be shown in every mode; Results shows only the water',
+  test('each condition is shown in its own tabs; Results shows only the water',
        function () {
     [true, false].forEach(function (layered) {
       var groups = App.Viewport.computeModeGroups(['soil_L1'], [], layered, [], [], [],
                                                   { supports: ['fixed_bottom'], water: ['pore'] });
-      ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
-        T.ok(groups[mode].indexOf('fixed_bottom') >= 0 && groups[mode].indexOf('pore') >= 0,
-             mode);
+      var tag = layered ? ' (layered soil)' : '';
+      ['soil', 'structures', 'mesh'].forEach(function (mode) {
+        T.ok(groups[mode].indexOf('fixed_bottom') >= 0, mode + ' shows the support' + tag);
+        T.eq(groups[mode].indexOf('pore'), -1, mode + ' hides the flow condition' + tag);
       });
+      T.ok(groups.flow.indexOf('pore') >= 0, 'flow shows the flow condition' + tag);
+      T.eq(groups.flow.indexOf('fixed_bottom'), -1, 'flow hides the support' + tag);
+      T.ok(groups.staged.indexOf('fixed_bottom') >= 0 && groups.staged.indexOf('pore') >= 0,
+           'staged shows both' + tag);
       T.eq(groups.results.indexOf('fixed_bottom'), -1, 'no supports over the contour');
       T.ok(groups.results.indexOf('pore') >= 0, 'the water pressure over the contour');
     });
