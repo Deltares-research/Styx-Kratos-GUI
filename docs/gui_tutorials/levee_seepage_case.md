@@ -18,7 +18,7 @@ A 2D plane-strain section, 90 m wide, from y = −22 m up to the crest of the le
 y = 6 m. All values are in SI units: m, N, Pa and kg/m³. The y axis points up, and the
 ground surface is at y = 0.
 
-![The levee section: a sand aquifer under a clay cover, the levee with its core and outer layer, the river on the left and the polder on the right](../cli_tutorials/levee_model.svg)
+![The levee section: a sand aquifer under a clay cover, the levee with its core and outer layer, the river on the left and the polder on the right](../../examples/levee_seepage/levee_model.svg)
 
 - A sand aquifer from y = −22 to −2 m and a clay cover from −2 to 0 m, across the section.
 - A clay levee on the cover, drawn as two polygons: a core, which reaches 0.5 m into the

@@ -12,7 +12,7 @@ For the ready-made model and a comparison of its results with a reference calcul
 
 A 2D plane-strain section, 90 m wide and 28 m high, in SI units (m, N, Pa, kg/m³):
 
-![Levee section](levee_model.svg)
+![Levee section](../../examples/levee_seepage/levee_model.svg)
 
 
 - A sand aquifer from y = −22 to −2 m and a clay cover from −2 to 0 m, across the section.
