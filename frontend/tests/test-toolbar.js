@@ -519,6 +519,66 @@
     }).then(restore, function (err) { restore(); throw err; });
   });
 
+  test('a new project starts with a clean session', function () {
+    var saved = { post: App.Api.post, command: App.Command, model: App.Model,
+                  viewport: App.Viewport, select: App.selectObject,
+                  selection: App.state.selection };
+    var calls = [];
+    var boxes = ['cmd-log', 'cmd-history', 'cmd-entry'].map(function (id) {
+      var box = document.getElementById(id);
+      var made = !box;
+      if (made) {
+        box = document.createElement(id === 'cmd-entry' ? 'input' : 'div');
+        box.id = id;
+        document.body.appendChild(box);
+      }
+      return { box: box, made: made };
+    });
+    boxes[0].box.appendChild(document.createElement('div')).textContent = '> mesh';
+    boxes[1].box.appendChild(document.createElement('div')).textContent = '> mesh';
+    boxes[2].box.value = 'calculate';
+    App.Api.post = function () { return Promise.resolve({ project: { name: 'Untitled project' } }); };
+    App.Command = { note: function () {}, ok: function () {}, err: function () {},
+                    write: function () {}, run: function () {} };
+    App.Model = { apply: function (p) { return p; } };
+    App.Viewport = {
+      refresh: function () { return Promise.resolve(); },
+      setLabels: function (kind, on) { calls.push('labels ' + kind + ' ' + on); },
+      clearMesh: function () { calls.push('clear mesh'); }
+    };
+    App.state.selection = 'soil:clay';
+    App.selectObject = function (key) { calls.push('select ' + key); };
+    function restore() {
+      App.Api.post = saved.post; App.Command = saved.command; App.Model = saved.model;
+      App.Viewport = saved.viewport; App.selectObject = saved.select;
+      App.state.selection = saved.selection;
+      boxes.forEach(function (b) { if (b.made) b.box.remove(); });
+    }
+    return App.LivePatches.newProject().then(function () {
+      T.eq(boxes[0].box.textContent, '', 'the command log is empty');
+      T.eq(boxes[1].box.textContent, '', 'the Model history tab is empty');
+      T.eq(boxes[2].box.value, '', 'the command box is empty');
+      T.eq(calls, ['labels nodes false', 'labels elements false', 'clear mesh',
+                   'select null']);
+    }).then(restore, function (err) { restore(); throw err; });
+  });
+
+  test('run <file.py> keeps the commands typed in this session', function () {
+    var log = document.getElementById('cmd-log');
+    var made = !log;
+    if (made) { log = document.createElement('div'); log.id = 'cmd-log'; document.body.appendChild(log); }
+    var saved = App.Viewport;
+    App.Viewport = {};
+    log.appendChild(document.createElement('div')).textContent = '> run model.py';
+    try {
+      App.LivePatches.wipeSession(true);
+      T.ok(/run model\.py/.test(log.textContent), 'the log keeps the run: ' + log.textContent);
+    } finally {
+      App.Viewport = saved;
+      if (made) log.remove(); else log.lastChild.remove();
+    }
+  });
+
   test('a saved project is named after the project, not after the page', function () {
     T.eq(App.LivePatches.projectFileName({ name: 'Deep excavation — Rotterdam' }),
          'Deep excavation — Rotterdam.json');

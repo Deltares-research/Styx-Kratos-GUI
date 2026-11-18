@@ -1631,7 +1631,7 @@ App.LivePatches = (function () {
 
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
-  function adoptProject(project, message) {
+  function adoptProject(project, message, keepCommands) {
     App.Model.apply(project);
     App.History.reset();
     syncHistoryButtons();
@@ -1663,11 +1663,39 @@ App.LivePatches = (function () {
     // Results mode with nothing to show is a dead end, so leave it -- for the mode a
     // new project opens in anyway.
     if (App.state && App.state.mode === 'results') App.setMode('soil');
+    wipeSession(keepCommands);
 
     return Promise.resolve(App.Viewport.refresh()).then(function () {
       if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
       if (App.Command) App.Command.ok(message);
     });
+  }
+
+  /* What the session still shows of the document that was open goes with it: the
+     command log, the Model history tab, the commands the arrow keys bring back, the
+     selection, the mesh and the node and element ID labels. The next document starts
+     as clean as a fresh start of the app, without the welcome text. `run <file.py>`
+     keeps the commands: the user typed them in this session, and the arrow keys bring
+     the run back to run the edited file again. */
+  function wipeSession(keepCommands) {
+    if (!keepCommands) {
+      cmdHistory.length = 0;
+      cmdIndex = 0;
+    }
+    if (!keepCommands && typeof document !== 'undefined') {
+      ['cmd-log', 'cmd-history'].forEach(function (id) {
+        var box = document.getElementById(id);
+        if (box) box.textContent = '';
+      });
+      var entry = document.getElementById('cmd-entry');
+      if (entry) entry.value = '';
+    }
+    var viewport = App.Viewport || {};
+    if (App.MeshLabels && viewport.setLabels) {
+      App.MeshLabels.KINDS.forEach(function (kind) { viewport.setLabels(kind, false); });
+    }
+    if (viewport.clearMesh) viewport.clearMesh();
+    if (App.state && App.state.selection && App.selectObject) App.selectObject(null);
   }
 
   /* An empty site, not the seeded demo -- the server owns what "empty" means, and a
@@ -4595,11 +4623,11 @@ App.LivePatches = (function () {
             // that, rather than meshing the empty site its project carries.
             if (App.Deck && App.Deck.hasMesh(result)) {
               return adoptProject(result.project, 'Ran ' + scriptPath
-                + ' — a Kratos deck, opened with its own mesh.')
+                + ' — a Kratos deck, opened with its own mesh.', true)
                 .then(function () { showDeck(result.mesh, result.project); });
             }
             return adoptProject(result.project,
-              'Ran ' + scriptPath + ' — model built. Meshing it now.')
+              'Ran ' + scriptPath + ' — model built. Meshing it now.', true)
               .then(function () { requestMesh(true, null); });
           })
           .catch(function (error) {
@@ -4915,6 +4943,7 @@ App.LivePatches = (function () {
     dropEverythingNotYet: dropEverythingNotYet, syncCheckMarks: syncCheckMarks,
     gateViewportItems: gateViewportItems,
     newProject: newProject, openProject: openProject, saveProject: saveProject,
+    wipeSession: wipeSession,
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
