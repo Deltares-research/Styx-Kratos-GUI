@@ -281,28 +281,36 @@ A = 4.76 × 10⁻⁵ m².
 In the finite element model, the strut is a truss element: a straight bar between two
 points that carries only an axial force, in tension and in compression. In engineering, a
 strut takes compression and an anchor takes tension, but both are the same truss element.
-Styx makes this element with the **Create anchor** tool, so you make the strut as an anchor
-and then rename it.
+Styx makes this element with the **Create anchor** tool, so you make the strut as an
+anchor.
 
-1. On the tool rail, click **Create anchor…**. Styx adds an anchor on the wall, named
-   `Anchor 1`, and selects it.
-2. In the Selection explorer, type these values. Press Enter after each value.
+1. On the tool rail, click **Create anchor…**. The **Create anchor** window opens.
+2. Type these values:
 
-   | Row | Value |
+   | Field | Value |
    |---|---|
+   | **Name** | `Strut` |
+   | **Head x**, **Head y** (m) | `5`, `-1.5` |
+   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
    | **YOUNG_MODULUS** (Pa) | `210000000000` |
    | **CROSS_AREA** (m²) | `4.7619e-05` |
    | **DENSITY** (kg/m³) | `0` |
    | **Spacing** (m) | `1` |
-   | **Head x**, **Head y** (m) | `5`, `-1.5` |
-   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
 
-3. In the **Tension limit** row, click **No tension limit**. Leave **Compression limit**
-   empty. The strut then has no force limits.
-4. In the Model explorer, right-click **Anchor 1**, click **Rename…**, type `Strut` and
-   click **OK**.
+3. Leave **Head end** at **Free (attached to the mesh)**. The head is on the wall, so it
+   becomes a node of the wall.
+4. In **Tail end**, select **Fixed (held in place)**. The tail of a new anchor is
+   **Free (attached to the mesh)**: it is a node of the soil mesh. The tail of this strut
+   is in the pit, where the soil is removed, so it must be a fixed support.
 
-![The Selection explorer of the strut. The Create anchor tool and the rows with typed values are outlined.](images/crow/08_strut.png)
+   ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
+
+5. Click **Save**. Styx adds the strut and selects it.
+6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
+
+   Leave **Compression limit** empty. The strut then has no force limits.
+
+   ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
 
 The head of the strut is on the wall, so it becomes a node of the wall. The tail is a fixed
 support.

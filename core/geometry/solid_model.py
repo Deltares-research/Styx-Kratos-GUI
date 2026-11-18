@@ -65,8 +65,9 @@ class BuildResult:
     dim: int = 3
     """3 for the solid model, 2 for a plane-strain section."""
 
-    tie_nodes: dict[str, int] = field(default_factory=dict)
-    """Anchor key -> the 0D entity tag at its tail. `meshing` makes these visible so
+    tie_nodes: dict[str, list[int]] = field(default_factory=dict)
+    """Anchor key -> the 0D entity tags at its fixed ends, for an anchor with a fixed
+    head or tail (a free end is a vertex of the soil or of a structure, `_embed_beams`). `meshing` makes these visible so
     the mesh puts a node exactly there; the exporter then has both ends of the tie."""
 
     curves: dict[str, list[int]] = field(default_factory=dict)
@@ -209,8 +210,7 @@ def build_geometry(project: Project) -> BuildResult:
         _tag_physical_groups(curves, 1, clear=False)
         _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
-        _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
-                             clear=False, suffix="_Support")
+        _tag_physical_groups(tie_nodes, 0, clear=False, suffix="_Support")
         _verify(project, volumes, overlays, {**curves, **ties})
 
         return BuildResult(
@@ -290,9 +290,9 @@ def _build_layered_soil(project: Project) -> BuildResult:
         _tag_physical_groups(curves, 1, clear=False)
         _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
-        _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
-                             clear=False, suffix="_Support")
+        _tag_physical_groups(tie_nodes, 0, clear=False, suffix="_Support")
         tags = [tag for values in volumes.values() for tag in values]
+
         return BuildResult(
             volumes=volumes,
             mass={key: sum(gmsh.model.occ.getMass(dim, tag) for tag in tags)
@@ -710,14 +710,15 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     free = [i for i in project.active_interfaces if i.structure is None]
     normal_loads = project.active_normal_loads
     drawn = project.drawn_conditions
-    if not active and not free and not normal_loads and not drawn:
+    in_soil = soil_points(project, 2)
+    if not active and not free and not normal_loads and not drawn and not in_soil:
         return owners, {}, {}, {}
 
     def point(x: float, y: float) -> int:
         """A 2D record's own coordinates: the section has been moved to z = 0."""
         return gmsh.model.occ.addPoint(x, y, 0.0)
 
-    heads = [anchor.head for anchor in project.plane_anchors if anchor.active]
+    heads = structure_heads(project, 2)
     # From and To of an interface on a part of a pile are vertices of the pile too, so
     # the mesh has a node at each and the contact can stop there.
     ends: dict[str, list[tuple[float, float]]] = {}
@@ -728,7 +729,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     owner_of_tool: list[str] = []
     for beam in active:
         vertices = [point(x, y)
-                    for x, y in _split_at(beam.points, heads + ends.get(beam.id, []))]
+                    for x, y in _split_at(beam.points, [*heads, *ends.get(beam.id, [])])]
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(beam.id)
@@ -764,6 +765,14 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(condition.id)
+
+    # An anchor end joined to the soil -- a head on no pile, a free tail -- is a vertex
+    # the same fragment embeds, so the soil mesh has a node exactly there and the tie
+    # pulls on the soil. It belongs to no part: `core.kratos.writer._anchor_ties` finds
+    # its node among the soil's by place.
+    for x, y, _ in in_soil:
+        tools.append((0, point(x, y)))
+        owner_of_tool.append(SOIL_POINT)
 
     inputs = [(dim, tag) for tag in owners]
 
@@ -804,6 +813,8 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # every one of them still belongs to the beam it was drawn for.
     pieces_of: dict[str, list[int]] = {}
     for key, pieces in zip(owner_of_tool, mapping[len(inputs):]):
+        if key == SOIL_POINT:
+            continue
         pieces_of.setdefault(key, []).extend(
             tag for piece_dim, tag in pieces if piece_dim == 1)
     # A pile keeps the pieces that stand out of the soil, above the ground or over an
@@ -826,6 +837,8 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # survives the fragment as a free vertex, and has no soil node to fix.
     points: dict[str, list[int]] = {}
     for key, pieces in zip(owner_of_tool, mapping[len(inputs):]):
+        if key == SOIL_POINT:
+            continue
         for piece_dim, tag in pieces:
             if piece_dim == 0 and any(
                     gmsh.model.isInside(2, surface,
@@ -920,18 +933,15 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     # of an empty box. Interfaces ride along for the imprint alone -- see `_section_
     # sweeps`.
     section_lines = _section_sweeps(project, log)
-    if not owners or not (panels or members or section_lines):
+    in_soil = soil_points(project, 3)
+    if not owners or not (panels or members or section_lines or in_soil):
         return owners, {}, {}
 
     # An anchor drawn in the section hangs off a wall the section drew too, and after
     # the switch that wall is a panel. Its head is `(x, y)`, so it is placed on the cut
     # to be imprinted alongside the space anchors' -- the surface counterpart of the
     # vertex `_split_at` gives it in 2D.
-    def at_cut(x: float, y: float) -> tuple[float, float, float]:
-        return (x, y, project.cut_at())
-
-    heads = [anchor.head for anchor in project.space_anchors if anchor.active]
-    heads += [at_cut(*anchor.head) for anchor in project.plane_anchors if anchor.active]
+    heads = structure_heads(project, 3)
     tools: list[tuple[int, int]] = []
     owner_of_tool: list[str] = []
 
@@ -975,11 +985,11 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
             if piece[0] == tool[0]:
                 kept.append(piece)
                 kept_owners.append(key)
-    if not kept:
-        if log is not None:
-            for structure in panels + members:
-                log.append(f"Info    : {structure.id} lies outside the soil and is not "
-                           "part of the model")
+    if not kept and log is not None:
+        for structure in panels + members:
+            log.append(f"Info    : {structure.id} lies outside the soil and is not "
+                       "part of the model")
+    if not kept and not in_soil:
         return owners, {}, {}
 
     # An anchor head on a wall has to be a node of the wall's own mesh, and a vertex
@@ -990,6 +1000,12 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     for head in heads:
         kept.append((0, gmsh.model.occ.addPoint(*head)))
         kept_owners.append(None)
+    # An anchor end joined to the soil -- a head on no structure, a free tail -- is
+    # imprinted by the same boolean, for the same reason: the soil mesh needs a node
+    # exactly there for the tie to pull on.
+    for where in in_soil:
+        kept.append((0, gmsh.model.occ.addPoint(*where)))
+        kept_owners.append(SOIL_POINT)
 
     _, mapping = gmsh.model.occ.fragment(inputs, kept, removeTool=False)
 
@@ -1002,7 +1018,11 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     # faces, a member is curves, and the fragment may have cut either into several.
     faces: dict[str, list[int]] = {}
     curves: dict[str, list[int]] = {}
+    anchor_points: list[int] = []
     for owner, pieces in zip(kept_owners, mapping[len(inputs):]):
+        if owner == SOIL_POINT:
+            anchor_points.extend(tag for piece_dim, tag in pieces if piece_dim == 0)
+            continue
         if owner is None:      # an imprinted anchor head belongs to no structure
             continue
         for piece_dim, tag in pieces:
@@ -1013,7 +1033,34 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     curves = {key: sorted(set(tags)) for key, tags in curves.items()}
     faces = {key: sorted(set(tags)) for key, tags in faces.items()}
     _embed_curves_in_volumes(curves, list(rebuilt), log)
+    _embed_points_in_volumes(anchor_points, list(rebuilt))
     return rebuilt, curves, faces
+
+
+def _embed_points_in_volumes(points: list[int], volumes: list[int]) -> None:
+    """Force each anchor end joined to the soil that lies inside a soil volume into
+    that volume's mesh.
+
+    The point counterpart of `_embed_curves_in_volumes`. A point on a face or an edge of
+    the soil is part of the model's topology after the fragment and is meshed with it;
+    one inside a volume bounds nothing, so it is named to the mesher here. A point in no
+    volume is left alone: the export then finds no soil node there and says so.
+    """
+    if not points:
+        return
+    gmsh.model.occ.synchronize()
+    for tag in points:
+        if gmsh.model.getAdjacencies(0, tag)[0].size:
+            continue
+        where = list(gmsh.model.getValue(0, tag, []))
+        host = next((volume for volume in volumes
+                     if gmsh.model.isInside(3, volume, where)), None)
+        if host is None:
+            continue
+        try:
+            gmsh.model.mesh.embed(0, [tag], 3, host)
+        except Exception:   # gmsh raises a bare Exception; the export reports a miss
+            pass
 
 
 def _embed_curves_in_volumes(curves: dict[str, list[int]], volumes: list[int],
@@ -1059,17 +1106,19 @@ def _embed_curves_in_volumes(curves: dict[str, list[int]], volumes: list[int],
 
 
 def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
-                    ) -> tuple[dict[str, list[int]], dict[str, int]]:
-    """Draw each anchor and give its tail a node, without touching the model topology.
+                    ) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+    """Draw each anchor and give a fixed end a node, without touching the model topology.
 
-    Deliberately *not* fragmented into anything. The tail is a node that belongs to no
-    element at all, held by its own node group: the grouted body is idealised as a fixed point, so embedding the
-    tie in the soil would model a fully bonded bar instead. The head needs no fragment
-    either -- `_split_at` has already made it a vertex of the beam, which is where the
-    shared node comes from.
+    Deliberately *not* fragmented into anything: embedding the tie in the soil would
+    model a fully bonded bar. A fixed end is a node that belongs to no element at all,
+    held by its own node group: the grouted body is idealised as a fixed point. A free
+    tail, and a free head on no structure, need nothing here -- `_embed_beams` has
+    already made them vertices of the soil, which is where their nodes come from. Nor
+    does a free head on a structure: `_split_at` has already made it a vertex of the
+    beam, which is where the shared node comes from.
 
-    Returns the anchor key -> display curve tags, and the anchor key -> tail point tag
-    that `meshing` makes visible so a node lands exactly on it.
+    Returns the anchor key -> display curve tags, and the anchor key -> fixed end point
+    tags (head first) that `meshing` makes visible so a node lands exactly on each.
     """
     # Each dimension draws its own kind and says so about the other's: an anchor drawn
     # in a section has no place in the solid model, and one drawn in space has none in
@@ -1105,12 +1154,56 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
         return {}, {}
 
     curves: dict[str, list[int]] = {}
-    tails: dict[str, int] = {}
+    fixed: dict[str, list[int]] = {}
     for anchor, point in active:
         head, tail = point(*anchor.head), point(*anchor.tail)
         curves[anchor.id] = [gmsh.model.occ.addLine(head, tail)]
-        tails[anchor.id] = tail
-    return curves, tails
+        held = ([head] if anchor.head_end == "fixed" else []) + (
+            [tail] if anchor.tail_end == "fixed" else [])
+        if held:
+            fixed[anchor.id] = held
+    return curves, fixed
+
+
+SOIL_POINT = "\0anchor-soil-point"
+"""The owner of an anchor end joined to the soil among a fragment's tools; no part key
+can be it."""
+
+
+def soil_points(project: Project, dim: int) -> list[tuple[float, float, float]]:
+    """Where every end of an active anchor that is a node of the soil mesh is -- a free
+    head on no structure, a free tail (`Project.anchor_soil_ends`) -- in world coordinates:
+    a section's own `(x, y)` on z = 0, and in the solid model a plane anchor's on the cut
+    it was drawn on, as `_attach_anchors` places them."""
+    cut = 0.0 if dim == 2 else project.cut_at()
+    anchors: list[Anchor | SpaceAnchor] = list(project.plane_anchors)
+    if dim == 3:
+        anchors += project.space_anchors
+    out: list[tuple[float, float, float]] = []
+    for anchor in anchors:
+        if not anchor.active:
+            continue
+        for _, point in project.anchor_soil_ends(anchor):
+            out.append((point[0], point[1], cut) if len(point) == 2
+                       else (point[0], point[1], point[2]))
+    return out
+
+
+def structure_heads(project: Project, dim: int) -> list[tuple[float, ...]]:
+    """The head of every active anchor that is on a structure -- a free head
+    (`Project.anchor_on_structure`) -- which the structure's
+    mesh needs a node at: a section's own `(x, y)`, and in the solid model a plane
+    anchor's on the cut it was drawn on."""
+    plane = [a for a in project.plane_anchors
+             if a.active and project.anchor_on_structure(a)]
+    heads: list[tuple[float, ...]] = []
+    if dim == 2:
+        heads.extend(a.head for a in plane)
+        return heads
+    heads.extend(a.head for a in project.space_anchors
+                 if a.active and project.anchor_on_structure(a))
+    heads.extend((a.head[0], a.head[1], project.cut_at()) for a in plane)
+    return heads
 
 
 # ── The plane-strain section ────────────────────────────────────────────────

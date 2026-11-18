@@ -1264,6 +1264,44 @@ App.Model = (function () {
     return rows;
   }
 
+  /* Head end and Tail end: free (attached to the mesh) or fixed (held in place), as in
+     the anchor's window. A record that does not say has a free head and a fixed tail
+     (core/model/schemas.py). */
+  var ANCHOR_END_DEFAULTS = { head_end: 'free', tail_end: 'fixed' };
+
+  function anchorEndKindEditor(anchor, key) {
+    return {
+      kind: 'select',
+      options: function () {
+        var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+        return ['free', 'fixed'].map(function (value) {
+          return { value: value, text: labels[value] || value };
+        });
+      },
+      get: function () { return anchor[key] || ANCHOR_END_DEFAULTS[key]; },
+      set: function (value) {
+        var was = anchor[key];
+        anchor[key] = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor[key] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function anchorEndKindRow(anchor, key) {
+    var value = anchor[key] || ANCHOR_END_DEFAULTS[key];
+    var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+    return [key === 'head_end' ? 'Head end' : 'Tail end', labels[value] || value, '', false,
+            anchorEndKindEditor(anchor, key)];
+  }
+
+
+  function anchorEditRow(anchor) {
+    return ['Edit', '', '', false, { kind: 'button', text: 'Edit anchor…',
+      run: function () { if (App.Anchors) App.Anchors.edit(anchor.id); } }];
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1286,10 +1324,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
@@ -1315,10 +1356,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,

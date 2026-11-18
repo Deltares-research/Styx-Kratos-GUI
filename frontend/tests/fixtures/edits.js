@@ -270,6 +270,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -828,6 +830,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -1442,6 +1446,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -2525,6 +2531,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],

@@ -256,9 +256,10 @@ interface's is the first free `interfacesection_<n>`."""
 SNAP_DISTANCE = 1.0
 """How far, in metres, an anchor head may be off the structure it is snapped onto."""
 
-ANCHOR_LENGTH = 10.0
-ANCHOR_RAKE = 35.0
-"""A new anchor: 10 m, raking back and down at 35 degrees -- the usual ground anchor."""
+ANCHOR_RUN = 8.0
+ANCHOR_DROP = 6.0
+"""A new anchor: 8 m back and 6 m down from its head, 10 m long at about 37 degrees --
+the usual ground anchor -- with its tail on whole metres."""
 
 LOAD_SI = 20000.0
 """A new load: 20 kN down -- per point, per metre or per square metre -- in SI."""
@@ -500,31 +501,34 @@ def _round(value: float) -> float:
     return math.floor(value * 1e6 + 0.5) / 1e6
 
 
-def anchor_head(project: Project, point) -> tuple[float, ...]:
-    """`point` snapped onto the nearest structure an anchor may hang from, refused when
-    that is more than `SNAP_DISTANCE` away: the head becomes a node of that structure."""
-    snapped = nearest_on_pile(project, point)
+def anchor_head(project: Project, point, head_end: str = "free") -> tuple[float, ...]:
+    """`point` snapped onto the nearest structure an anchor may hang from when that is
+    no more than `SNAP_DISTANCE` away, so the head becomes a node of that structure.
+    Further away it stays where it is, and the head is a node of the soil mesh: an
+    anchor needs no structure. A fixed head is held in place, so it is never snapped."""
+    snapped = None if head_end == "fixed" else nearest_on_pile(project, point)
     if snapped is None or snapped[1] > SNAP_DISTANCE:
-        raise DraftError("The anchor head must be placed on a wall or a member."
-                         if project.dimension != 2
-                         else "The anchor head must be placed on a sheet pile.")
+        return tuple(_round(value) for value in point)
     return tuple(_round(value) for value in snapped[0])
 
 
-def _no_pile(project: Project) -> str:
-    if project.dimension != 2:
-        return "An anchor hangs from a wall or a member; create one first."
-    return "An anchor hangs from a sheet pile; create one first."
+def _inside(project: Project, point) -> bool:
+    """Whether an anchor end may be here: inside the model's extent, with a section's
+    top open (`Project`'s check): a strut from the part of a pile above the ground ends
+    at a fixed point in the air."""
+    span = project.extent()
+    return (span.x0 <= point[0] <= span.x1 and span.y_bottom <= point[1]
+            and (len(point) == 2
+                 or (point[1] <= span.y_top and span.z0 <= point[2] <= span.z1)))
 
 
 def _raked(project: Project, head) -> list[float]:
     """The tail of a new anchor from `head`: back and down into the longer side of the
-    domain, kept inside it."""
+    domain, on whole metres, kept inside it."""
     d = project.domain
-    radians = ANCHOR_RAKE * math.pi / 180
     into = 1 if (d.x1 - head[0]) >= (head[0] - d.x0) else -1
-    tail = [head[0] + into * ANCHOR_LENGTH * math.cos(radians),
-            head[1] - ANCHOR_LENGTH * math.sin(radians), *head[2:]]
+    tail = [math.floor(head[0] + into * ANCHOR_RUN + 0.5),
+            math.floor(head[1] - ANCHOR_DROP + 0.5), *head[2:]]
     tail[0] = max(d.x0, min(d.x1, tail[0]))
     tail[1] = max(d.y_bottom, min(d.y_top, tail[1]))
     return tail
@@ -532,7 +536,12 @@ def _raked(project: Project, head) -> list[float]:
 
 def _default_head(project: Project) -> list[float]:
     """A quarter of the way down the first structure an anchor may hang from -- halfway
-    along a wall's footprint."""
+    along a wall's footprint. With no structure, 2 m below the top of the soil in the
+    middle of the domain."""
+    if not live_piles(project):
+        d = project.domain
+        middle = [(d.x0 + d.x1) / 2, max(d.y_bottom, d.y_top - 2.0)]
+        return middle if project.dimension == 2 else [*middle, (d.z0 + d.z1) / 2]
     pile = live_piles(project)[0]
     if isinstance(pile, Panel):
         first, last = pile.footprint[0], pile.footprint[-1]
@@ -544,28 +553,31 @@ def _default_head(project: Project) -> list[float]:
 
 def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
            name: str | None = None, section: str | None = None,
-           prestress: float = 0.0):
-    """A new anchor from `head`, snapped onto the nearest structure, to `tail`
-    (`App.Anchors.draft`, `draftFromPoints`). Without a head it hangs a quarter of the way
-    down the first structure; without a tail it rakes back and down from its head."""
-    if not live_piles(project):
-        raise DraftError(_no_pile(project))
+           prestress: float = 0.0, head_end: str = "free", tail_end: str = "free"):
+    """A new anchor from `head` to `tail` (`App.Anchors.draft`, `draftFromPoints`). A
+    head near a structure is snapped onto it; one further away is a node of the soil
+    mesh. Without a head it hangs a quarter of the way down the first structure, or sits
+    in the middle of the soil when there is none; without a tail it rakes back and down
+    from its head. Both ends are free -- attached to the mesh -- unless `head_end` or
+    `tail_end` is "fixed": then that end is held in place, and a fixed head is not
+    snapped."""
     width = 2 if project.dimension == 2 else 3
     head = _default_head(project) if head is None else list(head)
     tail = _raked(project, head) if tail is None else list(tail)
     if len(head) != width or len(tail) != width:
         raise DraftError(f"An anchor's head and tail are {width} coordinates each here.")
     _finite([head, tail], "Every anchor coordinate must be a number.")
-    snapped = anchor_head(project, head)
-    span = project.extent()
-    # In a section the top is free (`Project`'s check): a strut from the part of a pile
-    # above the ground ends at a fixed point in the air.
-    inside = (span.x0 <= tail[0] <= span.x1 and span.y_bottom <= tail[1]
-              and (width == 2 or (tail[1] <= span.y_top and span.z0 <= tail[2] <= span.z1)))
-    if not inside:
+    snapped = anchor_head(project, head, head_end)
+    if not (_inside(project, snapped) and _inside(project, tail)):
         raise DraftError("The anchor must stay inside the model domain.")
+    problem = head_problem(project, snapped, head_end)
+    if problem:
+        raise DraftError(problem)
     if all(value == tail[axis] for axis, value in enumerate(snapped)):
         raise DraftError("An anchor must have a non-zero length.")
+    problem = tail_end_problem(project, tail_end, tail)
+    if problem:
+        raise DraftError(problem)
     id, default_name = _named(id, [a.id for a in project.anchors], "anchor_", "Anchor")
     # Any: the one call below builds either, so its kind and coordinates are the
     # width's own -- which mypy cannot follow through the conditional.
@@ -574,7 +586,46 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
                   kind="anchor3d" if width == 3 else "anchor",
                   section=section or _first_section(project, "anchor"),
                   head=snapped, tail=tuple(_round(value) for value in tail),
-                  prestress=prestress, active=True)
+                  prestress=prestress, head_end=head_end, tail_end=tail_end,
+                  active=True)
+
+
+ANCHOR_ENDS = ("free", "fixed")
+"""What an anchor end is joined to (`schemas.AnchorEnd`)."""
+
+
+def head_problem(project: Project, head, head_end: str = "free") -> str | None:
+    """Why an anchor cannot start at `head`, or None (`App.Anchors.headProblem`). A free
+    head on no structure is a node of the soil mesh, so it has to be where soil can be,
+    as a free tail does (`tail_end_problem`). A fixed head is held in place and may be
+    anywhere in the model."""
+    if head_end not in ANCHOR_ENDS:
+        return "The head end is free or fixed."
+    if head_end == "fixed":
+        return None
+    on = nearest_on_pile(project, head)
+    if on is not None and on[1] <= 1e-6:
+        return None
+    if head[1] > project.extent().y_top:
+        return ("An anchor head on no structure must be in the soil. Move the head "
+                "down, onto a structure, or make the head end fixed.")
+    return None
+
+
+def tail_end_problem(project: Project, tail_end: str, tail) -> str | None:
+    """Why `tail_end` cannot be used with this tail, or None (`App.Anchors.validate`).
+
+    A free tail is a node of the soil mesh, so it has to be where soil can be: in a
+    section the model's top is otherwise open, for a fixed strut end in the air above
+    the pit. Whether there really is soil at the tail is only known once the model is
+    built; the export says so if there is not (`core.kratos.writer._anchor_ties`)."""
+    if tail_end not in ANCHOR_ENDS:
+
+        return "The tail end is free or fixed."
+    if tail_end == "free" and tail[1] > project.extent().y_top:
+        return ("A free anchor tail must be in the soil. Move the tail down, "
+                "or make the tail end fixed.")
+    return None
 
 
 # Interfaces and normal loads -- plane strain only

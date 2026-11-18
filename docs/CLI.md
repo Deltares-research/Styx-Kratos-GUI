@@ -81,7 +81,7 @@ Genuchten soil.
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
 | `wall P list\|add\|set\|remove ...` | Walls, in 3D: `add [ID] [--footprint x z ...] [--top Y] [--toe Y]` |
 | `member P list\|add\|set\|remove ...` | Piles, king posts and struts in 3D: `add [ID] [--points x y z ...]` |
-| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
+| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--head-end free\|fixed] [--tail-end free\|fixed] [--prestress S]`, a free head snapped onto a structure within 1 m, else in the soil |
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
@@ -301,7 +301,7 @@ kratos-cli line pit.json add floor_2 --points 0 -4.5 6 -4.5
 kratos-cli body pit.json list                                 # the pieces, and their keys
 kratos-cli body pit.json set soil_top__part3 --name "lift 1"
 kratos-cli body pit.json set soil_top__part4 --name "lift 3" --material sand
-kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
+kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1 --tail-end fixed
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet --side right
 kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
@@ -313,7 +313,7 @@ kratos-cli mesh pit.json --body-size sheet 0.5
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
   puts a new one: a sheet pile down the middle of the section to half its depth, a wall
   across the middle of the site, an anchor a quarter of the way down the first pile and
-  raking back 10 m at 35 degrees, an interface on the first pile, a 20 kN load.
+  raking back 8 m across and 6 m down, with the tail on whole metres, an interface on the first pile, a 20 kN load.
 - **Ids and names.** Other commands and the stages refer to a record by its id. `--name`
   is what the GUI shows and what the Kratos files call it. With no id typed, the name is
   the id too: `load add line --name Heavy` makes a load whose id is `Heavy`. This holds
@@ -354,9 +354,14 @@ kratos-cli mesh pit.json --body-size sheet 0.5
   `below` and `above`. `both` is for a pile only. Two interfaces may hold the two faces
   of one pile, or two parts of one face, but not the same face over the same length.
   An interface on its own points may not run along a sheet pile: put it on the pile.
-- **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
-  because it becomes one of its nodes; a head further away is refused. With no `--tail`,
-  the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
+- **Anchors.** An anchor needs no structure. A head within a metre of a pile, wall or
+  member is snapped onto it, because it becomes one of its nodes; a head further away is
+  a node of the soil mesh, and one above the soil is refused. `--head-end fixed` holds
+  the head in place: it is joined to nothing, is not snapped, and may be in the air.
+  With no `--tail`, the anchor rakes back from its head, 8 m across and 6 m down, with
+  the tail on whole metres. The tail is free, a node of the soil mesh, unless
+  `--tail-end fixed` makes it a pinned support. A strut is an anchor with a fixed tail end.
+  A free tail must be in the soil; one in the air is refused.
 - **Removing.** A structure a stage names, or a pile an anchor or an interface depends
   on, is not removed; the refusal names what still uses it. A section in use is not
   removed either.
