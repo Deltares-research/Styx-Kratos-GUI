@@ -2,7 +2,7 @@
 
 The GUI's dialogs fill in a new layer, soil, soil volume or structure before the user
 types anything: the soil dialog's Add puts a 5 m layer under the stack, a new soil is a loose drained sand, the material library
-offers thirteen presets, a 2D soil volume is an outline swept across the model, and a new
+offers twelve presets, a 2D soil volume is an outline swept across the model, and a new
 sheet pile, wall, member, anchor, interface or load is put where the Structure mode's
 tools put one, with the section they give it. The
 command line adds the same records without those dialogs, so the same starting points

@@ -298,6 +298,9 @@ def _parameter_line(p: soil_models.Parameter, system: str) -> str:
 
 
 def list_presets(args: argparse.Namespace) -> Answer:
+    if args.preset is None and args.model is not None:
+        # The list shows each soil as its own model, so --model would change nothing.
+        raise CommandError("--model needs a preset ID: `material P presets ID --model M`")
     if args.preset is not None:
         return _show_preset(args)
     return Answer(data=drafts.LIBRARY, lines=[

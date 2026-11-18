@@ -111,7 +111,7 @@ def test_every_library_soil_can_carry_a_model_and_has_what_it_needs():
         assert variables["POISSON_RATIO"] == drafts.LIBRARY_POISSON_RATIO
         assert variables["DENSITY_SOLID"] * 9.81 >= 11_000 - 1e-9, entry["name"]
         if entry["model"] == soil_models.MOHR_COULOMB:
-            coupled = variables["PERMEABILITY_XX"] <= 0.1 * drafts.PER_M_PER_DAY * (1 + 1e-12)
+            coupled = variables["PERMEABILITY_XX"] <= drafts.COUPLED_UP_TO * drafts.PER_M_PER_DAY * (1 + 1e-12)
             assert variables["GEO_DRAINAGE_TYPE"] == (
                 "FULLY_COUPLED" if coupled else "CONSTANT_PW_FIELD"), entry["name"]
             assert entry["interface_permeability"] == (

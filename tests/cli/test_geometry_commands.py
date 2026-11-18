@@ -100,6 +100,14 @@ def test_material_presets_shows_one_preset_without_adding_it(cli, site):
     assert cli("material", site, "presets", "nothing").code == 1
 
 
+def test_material_presets_refuses_a_model_without_a_preset(cli, site):
+    """The list shows each soil as its own model: --model there would be ignored."""
+    ran = cli("material", site, "presets", "--model", "linear-elastic")
+
+    assert ran.code == 1
+    assert "--model needs a preset ID" in ran.err
+
+
 def test_material_add_from_a_preset_with_variables_of_its_own(cli, site):
     ran = cli("material", site, "add", "clay", "--preset", "clay_shallow", "YOUNG_MODULUS=5e6",
               "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD")
