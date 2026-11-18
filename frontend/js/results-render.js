@@ -386,6 +386,90 @@ App.ResultsRender = (function () {
     return new Float32Array(points);
   }
 
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  /* How long the longest arrow is, as a fraction of the model's largest span, and how
+     far apart arrows are kept: one per square of that size. Long enough to read a
+     direction off, and spaced so that no arrow runs into the next one's head. */
+  var ARROW_FRACTION = 0.04;
+  var ARROW_HEAD = 0.3;          // the head's length, as a fraction of the arrow's
+  var ARROW_HEAD_ANGLE = 25 * Math.PI / 180;
+  var ARROW_SMALLEST = 1e-3;     // shorter than this fraction of the longest: no arrow
+
+  /* A vector field as arrows: line segments, x,y,z,x,y,z per segment, three per arrow
+     (the shaft and the two sides of its head).
+
+     `vectors` is the server's `{ids, values, max}`, one vector per node id. `placed` is
+     where each node is drawn -- `[{node_ids, positions}]`, the sections with the drawn
+     (possibly deformed) positions -- so an arrow starts at its node on the shading.
+     Each arrow is to the same scale: the longest is `ARROW_FRACTION` of the model's
+     largest span (`bbox`), and the others in proportion, so a length can be compared.
+
+     Thinned to one arrow per square of that length, the node nearest the square's
+     middle: a refined mesh has many nodes to an arrow's length, and an arrow on every
+     one of them is a black smear. The heads lie in the plane of the section, the xy
+     plane, which is the one this program draws. */
+  function arrows(vectors, placed, bbox) {
+    var ids = (vectors && vectors.ids) || [];
+    var values = (vectors && vectors.values) || [];
+    var largest = 0, i;
+    for (i = 0; i < values.length; i++) largest = Math.max(largest, size(values[i]));
+    if (!(largest > 0) || !bbox) return new Float32Array(0);
+    var span = Math.max(bbox[3] - bbox[0], bbox[4] - bbox[1], bbox[5] - bbox[2]);
+    if (!(span > 0)) return new Float32Array(0);
+    var length = ARROW_FRACTION * span;
+    var scale = length / largest;
+
+    // Where each node is drawn: the first section that has it.
+    var where = {};
+    (placed || []).forEach(function (entry) {
+      var nodes = entry.node_ids || [];
+      for (var k = 0; k < nodes.length; k++) {
+        if (where[nodes[k]] === undefined) {
+          where[nodes[k]] = [entry.positions[k * 3], entry.positions[k * 3 + 1],
+                             entry.positions[k * 3 + 2]];
+        }
+      }
+    });
+
+    // One node per square: the one nearest its middle.
+    var cells = {};
+    for (i = 0; i < ids.length; i++) {
+      var at = where[ids[i]];
+      if (!at || size(values[i]) < ARROW_SMALLEST * largest) continue;
+      var cx = Math.floor((at[0] - bbox[0]) / length);
+      var cy = Math.floor((at[1] - bbox[1]) / length);
+      var dx = at[0] - (bbox[0] + (cx + 0.5) * length);
+      var dy = at[1] - (bbox[1] + (cy + 0.5) * length);
+      var off = dx * dx + dy * dy;
+      var key = cx + ',' + cy;
+      if (!cells[key] || off < cells[key].off) cells[key] = { off: off, at: at, v: values[i] };
+    }
+
+    var points = [];
+    Object.keys(cells).sort().forEach(function (key) {
+      var cell = cells[key], p = cell.at, v = cell.v;
+      var tip = [p[0] + v[0] * scale, p[1] + v[1] * scale, p[2] + (v[2] || 0) * scale];
+      points.push(p[0], p[1], p[2], tip[0], tip[1], tip[2]);
+      // The head, back from the tip in the plane of the section.
+      var bx = -v[0], by = -v[1], back = Math.sqrt(bx * bx + by * by);
+      if (!(back > 0)) return;
+      var head = ARROW_HEAD * size(v) * scale;
+      bx /= back; by /= back;
+      [ARROW_HEAD_ANGLE, -ARROW_HEAD_ANGLE].forEach(function (angle) {
+        var c = Math.cos(angle), s = Math.sin(angle);
+        points.push(tip[0], tip[1], tip[2],
+                    tip[0] + head * (c * bx - s * by), tip[1] + head * (s * bx + c * by),
+                    tip[2]);
+      });
+    });
+    return new Float32Array(points);
+  }
+
+  function size(v) {
+    return Math.sqrt(v[0] * v[0] + v[1] * v[1] + (v[2] || 0) * (v[2] || 0));
+  }
+
   /* ── CSV ──────────────────────────────────────────────────────────────── */
 
   /* One row per value, with the run and stage in the header so a file on someone's
@@ -409,10 +493,10 @@ App.ResultsRender = (function () {
 
   return {
     MAPS: MAPS, MAP_LABELS: MAP_LABELS, ABSENT: ABSENT, DEFAULT_MAP: DEFAULT_MAP,
-    AUTO_FRACTION: AUTO_FRACTION,
+    AUTO_FRACTION: AUTO_FRACTION, ARROW_FRACTION: ARROW_FRACTION,
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
     legend: legend, format: format, rangeLines: rangeLines,
-    deform: deform, autoFactor: autoFactor, isoline: isoline, csv: csv
+    deform: deform, autoFactor: autoFactor, isoline: isoline, arrows: arrows, csv: csv
   };
 })();

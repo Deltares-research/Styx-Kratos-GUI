@@ -105,6 +105,13 @@ App.ResultsView = (function () {
                    objects: objects });
     });
 
+    // The arrows, when `App.Results` sent a vector field: over every section at once,
+    // from the drawn positions, so they start where the deformed shading puts a node.
+    if (payload.vectors) {
+      var arrows = arrowLines(payload.vectors, payload.mesh.bbox);
+      if (arrows) group.add(arrows);
+    }
+
     host.add(group);
     syncVisibility();
     showLegend(payload);
@@ -178,6 +185,25 @@ App.ResultsView = (function () {
     line.name = section.key + ':zero-pressure';
     line.renderOrder = 18;
     return line;
+  }
+
+  /* A vector field as arrows (`ResultsRender.arrows`). Near-black like the zero line,
+     which they are read beside, and over the shading and the mesh for the same
+     reason. */
+  var ARROW_COLOR = 0x111111;
+
+  function arrowLines(vectors, bbox) {
+    var points = App.ResultsRender.arrows(vectors, drawn.map(function (entry) {
+      return { node_ids: entry.section.node_ids, positions: entry.positions };
+    }), bbox);
+    if (!points.length) return null;
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
+    var material = new THREE.LineBasicMaterial({ color: ARROW_COLOR, depthTest: false });
+    var segments = new THREE.LineSegments(geometry, material);
+    segments.name = 'results:arrows';
+    segments.renderOrder = 19;
+    return segments;
   }
 
   function lines(section, position, color) {
@@ -277,6 +303,11 @@ App.ResultsView = (function () {
       + (payload.pressure
          ? '<div class="vp-legend-foot vp-legend-zero">'
            + '<i style="border-top-color:#111111"></i>p<sub>w</sub> = 0</div>'
+         : '')
+      + (payload.vectors
+         ? '<div class="vp-legend-foot">→ ' + escape(payload.vectors.label) + ' up to '
+           + escape(App.ResultsRender.format(payload.vectors.max)) + ' '
+           + escape(payload.vectors.unit) + '</div>'
          : '')
       + '<div class="vp-legend-foot">stage ' + payload.stage + '</div>';
   }

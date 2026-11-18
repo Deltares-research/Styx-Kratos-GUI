@@ -152,8 +152,8 @@ and adds only the values that are missing
 
 | Output | Variables | Status |
 |---|---|---|
-| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not without the self weight) at the Gauss points | Tested |
-| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points), and `NODAL_WATER_FLOW_RATE` with a seepage face; `HYDRAULIC_HEAD` at the Gauss points | Tested |
+| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`, and `REACTION` when the stage computes reactions (the default); `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not without the self weight) at the Gauss points | Tested; `REACTION` in a Kratos run: the vertical reactions of the initial stage of a staged excavation add up to the weight of the model |
+| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points), `NODAL_WATER_FLOW_RATE` with a seepage face, and `REACTION_WATER_PRESSURE` when the stage computes reactions (the default); `HYDRAULIC_HEAD` at the Gauss points. `REACTION_WATER_PRESSURE` is the nodal water flow rate with the opposite sign. Every flow strategy computes it; only the seepage strategy computes `NODAL_WATER_FLOW_RATE`, which is zero otherwise. | Tested; in a Kratos run the two are equal and opposite at every node of the Muskat seepage case, and the flow in and out of the saturated column is Darcy's |
 | Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | Tested: a live Kratos run is checked, and agrees with the Kratos reference curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | Tested |
 
@@ -227,11 +227,14 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Runs | List all runs, open one, go through its stages | Tested |
-| Quantities | \|u\|, u_x, u_y, u_z, total and for each stage; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with the self weight); effective saturation, the flux q, q_x, q_y, q_z and, with a seepage face, the nodal water flow rate of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
+| Quantities | In groups. **Deformations** and **Stage deformations**: \|u\|, u_x, u_y, total and for each stage. **Effective stresses** (and **Total stresses** if Kratos wrote them): σ'xx, σ'yy, σ'zz, σ'xy; p', q, σ1, σ2, σ3, τ_max. **Water pressure and head**: pore pressure; hydraulic head (with the self weight), from the soil's integration points only. **Groundwater flow**: the flux \|q\|, q_x, q_y, and the nodal water flow rate (positive out) of every groundwater flow stage. **Saturation**: effective saturation, and the degree of saturation if Kratos wrote it. **Nodal forces**: the reaction \|R\|, R_x, R_y, per metre of the section. In a 2D section the z components (u_z, q_z, R_z, σ'yz, σ'xz) are not offered: they are zero. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Zero pressure line | The line where the pore pressure is zero, over the colours: always after a groundwater flow stage; after a coupled (mechanical) stage when switched on (`results zeroline on\|off`, off by default) | Tested |
+| Integration points | A stress or the hydraulic head, computed at the integration points, is drawn per element (the default) or averaged to the nodes, one choice for all of them (`results location elements\|nodes`, the **Location** box, *Results → Integration points*) | Tested |
+| Arrows | A vector (the displacement, the flux, the reaction) as arrows over the colours: any vector the stage has, over any field, such as the flux over the head (`results arrows on\|off\|<field>`). One arrow for each square of the arrow length; the longest arrow is 4 % of the model | Tested |
+| Totals | The nodal water flow rate and the reaction components are added up over the model: the water that comes in and goes out (and the difference: what the pores stored in a transient stage), or what the supports carry | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |

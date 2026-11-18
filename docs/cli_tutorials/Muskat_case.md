@@ -234,14 +234,16 @@ run Semi_Muskat_2026-10-24_01-22_3 finished in 0.6 s: 3 files in ...\Semi_Muskat
 next: kratos-cli results show Semi_Muskat_2026-10-24_01-22_3
 
 PS> kratos-cli results field 1 flow_rate
-Nodal water flow rate (m³/s/m), stage 1 (Flow): -3.67e-6 to 8.63e-7 over 669 nodes
+Nodal water flow rate (+ out) (m³/s/m), stage 1 (Flow): -3.67e-6 to 8.63e-7 over 669 nodes
   min -3.67e-6 at node 104
   max 8.63e-7 at node 2
+  out 1.90e-5, in 1.90e-5, out - in 2.04e-12 m³/s/m
 `--csv` writes every value.
 ```
 
 `flow_rate` is the water each node takes in (negative) or lets out (positive), per metre of
-the section. The face is open, at zero water pressure, from the tail water up to an exit
+the section. The `out` and `in` line adds it up over the model: in a steady state what comes
+in goes out. Every groundwater flow stage writes it, with or without a seepage face. The face is open, at zero water pressure, from the tail water up to an exit
 point at about 1.85 m, and closed above it. The water that comes in on the left,
 1.893e-5 m³/s per metre, leaves on the right. This is within 1 % of the discharge of Dupuit
 and Charny, K (3.0² - 0.48²) / (2 × 1.62) = 1.88e-5 m³/s per metre. The unsaturated soil

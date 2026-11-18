@@ -609,7 +609,7 @@ Stage 7 (Third excavation) offers:
     sxx       σxx                             Pa      elements/nodes
     syy       σyy                             Pa      elements/nodes
   ...
-  Groundwater
+  Water pressure and head
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy

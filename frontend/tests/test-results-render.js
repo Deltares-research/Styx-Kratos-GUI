@@ -429,6 +429,92 @@
     T.eq(R.isoline(s, [0, 0, 0, 0], s.positions, 0).length, 0);
   });
 
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  /* A 100 m square of nodes 1 m apart, so an arrow (4 m at most) has many nodes to a
+     square and the thinning shows. Node id = 1000 x + y + 1. */
+  function grid(n) {
+    var ids = [], positions = [];
+    for (var x = 0; x <= n; x++) {
+      for (var y = 0; y <= n; y++) {
+        ids.push(1000 * x + y + 1);
+        positions.push(x, y, 0);
+      }
+    }
+    return { node_ids: ids, positions: positions };
+  }
+
+  var SQUARE = [0, 0, 0, 100, 100, 0];
+
+  function arrowsOf(array) {
+    var segments = points(array), out = [];
+    for (var i = 0; i < segments.length; i += 2) out.push([segments[i], segments[i + 1]]);
+    return out;
+  }
+
+  test('an arrow starts at its node and points along the vector', function () {
+    var placed = [{ node_ids: [7], positions: [10, 20, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [7], values: [[3, 4, 0]] }, placed, SQUARE));
+    T.eq(lines.length, 3, 'a shaft and the two sides of its head');
+    var shaft = lines[0];
+    T.eq(shaft[0], [10, 20, 0]);
+    // The longest arrow is ARROW_FRACTION of the model's span: 4 m, along (3, 4)/5.
+    var length = R.ARROW_FRACTION * 100;
+    T.near(shaft[1][0], 10 + 0.6 * length, 1e-5);
+    T.near(shaft[1][1], 20 + 0.8 * length, 1e-5);
+    // Both sides of the head start at the tip and lean back from it.
+    lines.slice(1).forEach(function (side) {
+      T.near(side[0][0], shaft[1][0], 1e-5);
+      T.near(side[0][1], shaft[1][1], 1e-5);
+      var back = (side[1][0] - side[0][0]) * 0.6 + (side[1][1] - side[0][1]) * 0.8;
+      T.ok(back < 0, 'the head points back along the shaft');
+    });
+  });
+
+  test('arrows are to one scale, the longest set by the model', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 50, 50, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2], values: [[2, 0, 0], [1, 0, 0]] },
+                                  placed, SQUARE));
+    var shafts = [lines[0], lines[3]].map(function (l) { return l[1][0] - l[0][0]; });
+    shafts.sort(function (a, b) { return b - a; });
+    T.near(shafts[0], R.ARROW_FRACTION * 100, 1e-5);
+    T.near(shafts[1], shafts[0] / 2, 1e-5, 'half the vector, half the arrow');
+  });
+
+  test('a fine mesh gets one arrow per arrow length, not one per node', function () {
+    var placed = [grid(100)];
+    var values = placed[0].node_ids.map(function () { return [1, 0, 0]; });
+    var lines = arrowsOf(R.arrows({ ids: placed[0].node_ids, values: values },
+                                  placed, SQUARE));
+    var count = lines.length / 3;
+    // 10 201 nodes; squares of 4 m over a 100 m model: 26 x 26 at most.
+    T.ok(count <= 26 * 26, count + ' arrows');
+    T.ok(count >= 25 * 25, 'and still one in every square: ' + count);
+  });
+
+  test('a node with no vector, or nowhere drawn, gets no arrow', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 50, 50, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2, 3], values: [[1, 0, 0], [0, 0, 0],
+                                                             [1, 1, 0]] },
+                                  placed, SQUARE));
+    T.eq(lines.length, 3, 'node 2 is still, node 3 is in no section');
+    T.eq(lines[0][0], [10, 10, 0]);
+  });
+
+  test('a field with no movement in it has no arrows', function () {
+    var placed = [{ node_ids: [1], positions: [0, 0, 0] }];
+    T.eq(R.arrows({ ids: [1], values: [[0, 0, 0]] }, placed, SQUARE).length, 0);
+    T.eq(R.arrows({ ids: [], values: [] }, placed, SQUARE).length, 0);
+    T.eq(R.arrows(null, placed, SQUARE).length, 0);
+  });
+
+  test('arrows start where the node is drawn, deformed or not', function () {
+    var placed = [{ node_ids: [1], positions: new Float32Array([12, 34, 0]) }];
+    var lines = arrowsOf(R.arrows({ ids: [1], values: [[0, -1, 0]] }, placed, SQUARE));
+    T.eq(lines[0][0], [12, 34, 0]);
+    T.ok(lines[0][1][1] < 34, 'pointing down');
+  });
+
   test('over dry ground at exactly zero the line is the edge of the wet region',
        function () {
     /* A tension cut-off leaves the pressure at exactly 0 above the water: the line runs

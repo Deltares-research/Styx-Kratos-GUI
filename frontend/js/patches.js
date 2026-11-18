@@ -3814,6 +3814,8 @@ App.LivePatches = (function () {
           { label: 'Next stage', action: 'resultsRun', cmd: 'results stage +' },
           '-',
           { label: 'Field', sub: [] },
+          { label: 'Integration points', sub: [] },
+          { label: 'Arrows', sub: [] },
           { label: 'List fields', action: 'resultsRun', cmd: 'results fields' },
           '-',
           { label: 'Shading', sub: [
@@ -3901,6 +3903,38 @@ App.LivePatches = (function () {
         });
       });
       field.disabled = !field.sub.length;
+
+      /* Where a stress or the hydraulic head -- computed at the integration points --
+         is drawn. Set for all of them at once; offered while one is on screen. */
+      var integration = itemsOf('Integration points');
+      if (integration) {
+        integration.sub = [
+          { label: 'Per element (as computed)', action: 'resultsRun',
+            checked: state.integration !== 'nodes', cmd: 'results location elements' },
+          { label: 'Averaged to the nodes', action: 'resultsRun',
+            checked: state.integration === 'nodes', cmd: 'results location nodes' }
+        ];
+        integration.disabled = !state.integrationField;
+      }
+
+      /* Arrows: off, or any vector the stage has, over whatever is shaded -- the
+         flux over the head, say. */
+      var arrows = itemsOf('Arrows');
+      if (arrows) {
+        arrows.sub = [
+          { label: 'Off', action: 'resultsRun', checked: !state.arrows,
+            cmd: 'results arrows off' }
+        ];
+        if ((state.vectors || []).length) arrows.sub.push('-');
+        (state.vectors || []).forEach(function (vector) {
+          arrows.sub.push({
+            label: vector.group + ' · ' + vector.label + '  (' + vector.unit + ')',
+            checked: state.arrows === vector.name, action: 'resultsRun',
+            cmd: 'results arrows ' + vector.name
+          });
+        });
+        arrows.disabled = !(state.vectors || []).length;
+      }
 
       var colours = itemsOf('Colours');
       if (colours) {
@@ -4259,17 +4293,34 @@ App.LivePatches = (function () {
                  selected: s.index === state.stage, disabled: !s.results };
       }))));
 
+      // One <optgroup> per group of the catalogue, as the Field menu has a title each.
       var fields = [];
       ((state.catalogue && state.catalogue.groups) || []).forEach(function (group) {
         group.fields.forEach(function (entry) {
-          fields.push({ value: entry.name,
-                        label: group.name + ' · ' + entry.label + '  (' + entry.unit + ')',
+          fields.push({ value: entry.name, group: group.name,
+                        label: entry.label + '  (' + entry.unit + ')',
                         selected: state.field && state.field.field === entry.name });
         });
       });
       rows.push(row('Field', fields.length
         ? select('field', fields)
         : '<span class="dock-empty">this stage wrote nothing</span>'));
+      if (state.integrationField) {
+        rows.push(row('Location', select('location', [
+          { value: 'elements', label: 'per element (as computed)',
+            selected: state.integration !== 'nodes' },
+          { value: 'nodes', label: 'averaged to the nodes',
+            selected: state.integration === 'nodes' }
+        ])));
+      }
+      if ((state.vectors || []).length) {
+        rows.push(row('Arrows', select('arrows', [
+          { value: 'off', label: 'off', selected: !state.arrows }
+        ].concat(state.vectors.map(function (vector) {
+          return { value: vector.name, label: vector.label + '  (' + vector.unit + ')',
+                   selected: state.arrows === vector.name };
+        })))));
+      }
 
       rows.push(row('Shading', select('bands', [0, 4, 8, 16, 24, 32, 48].map(function (n) {
         return { value: n, label: n ? n + ' bands' : 'smooth',
@@ -4338,6 +4389,8 @@ App.LivePatches = (function () {
 
       bind(body, 'stage', function (value) { return 'results stage ' + value; });
       bind(body, 'field', function (value) { return 'results field ' + value; });
+      bind(body, 'location', function (value) { return 'results location ' + value; });
+      bind(body, 'arrows', function (value) { return 'results arrows ' + value; });
       bind(body, 'bands', function (value) {
         return value === '0' ? 'results smooth' : 'results bands ' + value;
       });
@@ -4415,13 +4468,24 @@ App.LivePatches = (function () {
       return '<label class="res-row"><span>' + esc(label) + '</span>' + control + '</label>';
     }
 
+    /* An entry with a `group` goes in an <optgroup> of that name, consecutive entries
+       of one group in one. */
     function select(name, entries) {
-      return '<select data-res="' + name + '">' + entries.map(function (entry) {
-        return '<option value="' + esc(entry.value) + '"'
+      var html = '', open = null;
+      entries.forEach(function (entry) {
+        var group = entry.group || null;
+        if (group !== open) {
+          if (open !== null) html += '</optgroup>';
+          if (group !== null) html += '<optgroup label="' + esc(group) + '">';
+          open = group;
+        }
+        html += '<option value="' + esc(entry.value) + '"'
              + (entry.selected ? ' selected' : '')
              + (entry.disabled ? ' disabled' : '') + '>'
              + esc(entry.label) + '</option>';
-      }).join('') + '</select>';
+      });
+      if (open !== null) html += '</optgroup>';
+      return '<select data-res="' + name + '">' + html + '</select>';
     }
 
     function esc(text) {

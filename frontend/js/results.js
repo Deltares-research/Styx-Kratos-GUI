@@ -12,7 +12,9 @@
        results open <id|n>     make one current; a bare number indexes the last listing
        results stage <n|+|->   choose a construction stage, or step through them
        results fields          what this stage can show
-       results field <name>    draw it
+       results field <name> [elements|nodes]   draw it
+       results location elements|nodes   integration-point fields per element or nodal
+       results arrows [on|off|<field>]   a vector as arrows over the shading
        results at <node id>    every field at one node
        results bands <n> | smooth | map <name> | deform <f|auto|off>
        results mesh [on|off]   the element outlines over the shading
@@ -61,7 +63,7 @@ App.Results = (function () {
      redraws without going near the server, and a stage change keeps the field. */
   var view = {
     stage: null, mesh: null, catalogue: null, field: null, location: 'nodes',
-    displacement: null, pressure: null
+    displacement: null, pressure: null, vectors: null
   };
 
   /* How a result is drawn until somebody says otherwise.
@@ -79,7 +81,18 @@ App.Results = (function () {
      flow stage the line is the point of the calculation -- where the phreatic surface
      ended up -- and is drawn whatever this says (`zeroLineShown`). */
   var DEFAULTS = { map: 'rainbow', bands: 32, deform: 0, reversed: false,
-                   mesh: false, loads: true, zeroLine: false, min: null, max: null };
+                   mesh: false, loads: true, zeroLine: false, min: null, max: null,
+                   location: 'elements', arrows: null };
+
+  /* `location` is where a field computed at the integration points -- a stress, the
+     hydraulic head -- is drawn: per element, as the solver computed it, or averaged
+     to the nodes for a smooth contour. One choice for all of them, kept across fields
+     and stages, so switching from σxx to σyy does not switch back. A nodal field is
+     drawn per node whatever it says.
+
+     `arrows` is the vector drawn as arrows over the shading: null for none, or the
+     name of a vector's magnitude (`flux`) to draw that one whatever is shaded -- the
+     flux over the head, say. `results arrows on` picks one (`defaultVector`). */
 
   /* The field the zero pressure line is traced on: Kratos' WATER_PRESSURE, per node
      (core/results/fields.py). */
@@ -92,15 +105,17 @@ App.Results = (function () {
      nothing. */
   var PREFERRED_FIELDS = ['duy', 'uy', 'u'];
 
-  var options = {
-    map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-    reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
-    zeroLine: DEFAULTS.zeroLine,
-    /* null means "follow the field". A typed range is kept across a change of stage
-       on purpose: a range that re-fits itself every stage makes every stage look
-       identical, which is the opposite of what stepping through them is for. */
-    min: DEFAULTS.min, max: DEFAULTS.max
-  };
+  /* A fresh copy of the defaults. `min`/`max` null means "follow the field". A typed
+     range is kept across a change of stage on purpose: a range that re-fits itself
+     every stage makes every stage look identical, which is the opposite of what
+     stepping through them is for. */
+  function defaults() {
+    var out = {};
+    Object.keys(DEFAULTS).forEach(function (key) { out[key] = DEFAULTS[key]; });
+    return out;
+  }
+
+  var options = defaults();
 
   function log(kind, line) {
     if (App.Command && App.Command[kind]) App.Command[kind](line);
@@ -199,10 +214,9 @@ App.Results = (function () {
     openRun = null;
     pending = Promise.resolve();
     view = { stage: null, mesh: null, catalogue: null, field: null,
-             location: 'nodes', displacement: null, pressure: null };
-    options = { map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-                reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
-                zeroLine: DEFAULTS.zeroLine, min: DEFAULTS.min, max: DEFAULTS.max };
+             location: 'nodes', displacement: null, pressure: null,
+             vectors: null };
+    options = defaults();
     if (App.ResultsPlot) App.ResultsPlot.forget();
     changed();
   }
@@ -222,7 +236,15 @@ App.Results = (function () {
       field: view.field,
       location: view.location,
       calculation: stageCalculation(),
-      pressure: !!offered(PRESSURE_FIELD)
+      pressure: !!offered(PRESSURE_FIELD),
+      // Where integration-point fields are drawn, and whether the field on screen is
+      // one -- the only kind the choice applies to.
+      integration: options.location,
+      integrationField: !!(view.field && offered(view.field.field)
+                           && offered(view.field.field).entry.locations.length > 1),
+      vectors: vectorFields(),
+      arrows: options.arrows,
+      arrowsOf: arrowsSource()
     };
   }
 
@@ -261,6 +283,9 @@ App.Results = (function () {
       ? view.displacement : null;
     var pressure = zeroLineShown() && view.pressure && view.pressure.stage === view.stage
       ? view.pressure.field : null;
+    var source = arrowsSource();
+    var vectors = source && view.vectors && view.vectors.stage === view.stage
+      && view.vectors.name === source ? view.vectors.answer : null;
     var range = {
       min: options.min === null ? view.field.min : options.min,
       max: options.max === null ? view.field.max : options.max
@@ -272,6 +297,7 @@ App.Results = (function () {
       field: view.field,
       displacement: displacement,
       pressure: pressure,
+      vectors: vectors,
       options: {
         map: options.map, bands: options.bands, deform: options.deform,
         reversed: options.reversed, mesh: options.mesh,
@@ -331,10 +357,32 @@ App.Results = (function () {
     });
   }
 
+  /* The vectors the arrows are drawn with, fetched once per stage and vector, and not
+     at all while no arrows are wanted. */
+  function withVectors() {
+    var name = arrowsSource();
+    if (!name || !openRun || !view.stage) return Promise.resolve();
+    if (view.vectors && view.vectors.stage === view.stage && view.vectors.name === name) {
+      return Promise.resolve();
+    }
+    var run = openRun, stage = view.stage;
+    function keep(answer) {
+      if (openRun === run && view.stage === stage) {
+        view.vectors = { stage: stage, name: name, answer: answer };
+      }
+    }
+    var path = ROOT + '/' + encodeURIComponent(run.id) + '/stages/' + stage
+             + '/vectors/' + encodeURIComponent(name);
+    return App.Api.get(path).then(keep).catch(function () {
+      // No arrows rather than an error: the contour is still worth showing.
+      keep(null);
+    });
+  }
+
   /* Fetch what is missing, then draw. Everything that changes the picture goes
      through this rather than calling `present` directly. */
   function redraw() {
-    return Promise.all([withDisplacement(), withPressure()]).then(present);
+    return Promise.all([withDisplacement(), withPressure(), withVectors()]).then(present);
   }
 
   /* The run that just finished, adopted and *read*.
@@ -404,7 +452,11 @@ App.Results = (function () {
     'results open <id|n>     open one; a bare number indexes the last listing',
     'results stage <n|name>  choose a construction stage; + and - step through them',
     'results fields          what this stage can show',
-    'results field <name>    draw it, e.g. `results field p`',
+    'results field <name> [elements|nodes]   draw it, e.g. `results field p`',
+    'results location elements|nodes   integration-point fields (stresses, head) per',
+    '                        element, or averaged to the nodes',
+    'results arrows [on|off|<field>]   a vector as arrows over the shading,',
+    '                        e.g. `results arrows flux`',
     'results at <node id>    every field at one node',
     'results deform <f|auto|off> / bands <n> / smooth / range auto|<min> <max>',
     'results map <name>      rainbow, turbo, viridis, plasma, inferno, diverging,',
@@ -473,7 +525,8 @@ App.Results = (function () {
       // alternative is losing a run you had in front of you to a typo.
       openRun = run;
       view = { stage: null, mesh: null, catalogue: null, field: null,
-               location: 'nodes', displacement: null, pressure: null };
+               location: 'nodes', displacement: null, pressure: null,
+               vectors: null };
       if (!quiet) report(run);
       else log('ok', run.id + ' is open — ' + plural(run.stages.length, 'stage')
                      + '. Results mode shows it; `results fields` lists what it has.');
@@ -663,6 +716,7 @@ App.Results = (function () {
       view.stage = index;
       view.displacement = null;
       view.pressure = null;
+      view.vectors = null;
       view.mesh = both[0];
       view.catalogue = both[1];
       view.field = null;
@@ -795,12 +849,16 @@ App.Results = (function () {
                  + '. `results fields` lists what is.');
       return Promise.resolve();
     }
-    var at = where || row.entry.locations[0];
-    if (row.entry.locations.indexOf(at) === -1) {
+    var locations = row.entry.locations;
+    var at = where || (locations.indexOf(options.location) !== -1
+                       ? options.location : locations[0]);
+    if (locations.indexOf(at) === -1) {
       log('err', '"' + name + '" can only be shown per '
-                 + row.entry.locations.join(' or ') + '.');
+                 + locations.join(' or ') + '.');
       return Promise.resolve();
     }
+    // A location typed for an integration-point field is the choice for all of them.
+    if (where && locations.length > 1) options.location = where;
     var path = ROOT + '/' + encodeURIComponent(openRun.id) + '/stages/' + view.stage
              + '/field/' + encodeURIComponent(name) + '?location=' + at;
     var mine = ++ticket;
@@ -814,10 +872,109 @@ App.Results = (function () {
                   + App.ResultsRender.format(field.min) + ' to '
                   + App.ResultsRender.format(field.max)
                   + ' over ' + plural(field.ids.length, at === 'nodes' ? 'node' : 'element')
+                  + (locations.length > 1
+                     ? (at === 'nodes' ? ', averaged to the nodes' : ', per element')
+                     : '')
                   + '.');
+        if (field.totals) log('note', totalsLine(field));
       }
       return redraw().then(function () { return field; });
     }).catch(fail);
+  }
+
+  /* The sums the server adds for a field whose total means something
+     (core/results/fields.py `Definition.summed`): for the nodal water flow rate, the
+     water the model lets out and takes in, and the difference -- zero in a steady
+     state, the water the pores stored (negative) or gave up in a transient one. */
+  function totalsLine(field) {
+    var t = field.totals, f = App.ResultsRender.format, unit = ' ' + field.unit;
+    if (field.field === 'flow_rate') {
+      return '  Out ' + f(t.positive) + unit + ', in ' + f(-t.negative) + unit
+           + ', out − in ' + f(t.net) + unit + '.';
+    }
+    return '  Sum ' + f(t.net) + unit + ' (positive ' + f(t.positive) + ', negative '
+         + f(t.negative) + ').';
+  }
+
+  /* `results location elements|nodes`: where integration-point fields are drawn. */
+  function setLocation(token) {
+    var where = { element: 'elements', elements: 'elements', node: 'nodes',
+                  nodes: 'nodes' }[(token || '').toLowerCase()];
+    if (!where) {
+      log('err', 'Usage: results location elements | nodes — per element, as the '
+                 + 'solver computed it, or averaged to the nodes.');
+      return Promise.resolve();
+    }
+    options.location = where;
+    var row = view.field && offered(view.field.field);
+    if (row && row.entry.locations.length > 1) return useField(view.field.field, where);
+    log('note', 'Integration-point fields will be drawn '
+                + (where === 'nodes' ? 'averaged to the nodes.' : 'per element.')
+                + (row ? ' ' + row.entry.label + ' has values per node only.' : ''));
+    changed();
+    return Promise.resolve();
+  }
+
+  /* The vector fields this stage has, one per vector: `{name, label, unit}` of each
+     magnitude, in menu order. What `results arrows <name>` takes. */
+  function vectorFields() {
+    var seen = {}, out = [];
+    entries().forEach(function (row) {
+      var name = row.entry.vector;
+      if (!name || seen[name]) return;
+      seen[name] = true;
+      var whole = offered(name);
+      out.push({ name: name, label: whole ? whole.entry.label : name,
+                 unit: row.entry.unit, group: row.group });
+    });
+    return out;
+  }
+
+  /* The vector the arrows draw now, or null: what `options.arrows` asks for, if this
+     stage has it. */
+  function arrowsSource() {
+    if (!options.arrows) return null;
+    var wanted = offered(options.arrows);
+    return wanted && wanted.entry.vector ? wanted.entry.vector : null;
+  }
+
+  /* The vector `results arrows on` draws: the one the field on screen is part of, or
+     else the stage's first. Null when the stage wrote no vectors. */
+  function defaultVector() {
+    var row = view.field && offered(view.field.field);
+    if (row && row.entry.vector) return row.entry.vector;
+    return (vectorFields()[0] || {}).name || null;
+  }
+
+  /* `results arrows [on|off|<field>]`. */
+  function setArrows(token) {
+    var word = (token || '').toLowerCase();
+    var on = word === 'on' || word === 'field' || word === 'yes'
+             || (word === '' && !options.arrows);
+    if (word === '' && options.arrows) options.arrows = null;
+    else if (word === 'off' || word === 'no' || word === 'none') options.arrows = null;
+    else if (on) {
+      var vector = defaultVector();
+      if (!vector) {
+        log('err', 'This stage wrote no vectors to draw as arrows.');
+        return Promise.resolve();
+      }
+      options.arrows = vector;
+    } else {
+      var row = offered(word);
+      if (!row || !row.entry.vector) {
+        var names = vectorFields().map(function (v) { return v.name; });
+        log('err', (row ? row.entry.label + ' is not part of a vector.'
+                        : 'No field called "' + word + '" in this stage.')
+                   + (names.length ? ' Arrows can be drawn for ' + names.join(', ') + '.'
+                                   : ' This stage wrote no vectors.'));
+        return Promise.resolve();
+      }
+      options.arrows = row.entry.vector;
+    }
+    log('note', settingsLine());
+    changed();
+    return redraw();
   }
 
   /* A saved picture walks the stages and fields without a line in the log for each. */
@@ -925,6 +1082,9 @@ App.Results = (function () {
          + ', mesh ' + (options.mesh ? 'on' : 'off')
          + ', loads ' + (options.loads ? 'on' : 'off')
          + ', zero pressure line ' + (options.zeroLine ? 'on' : 'off')
+         + ', arrows ' + (options.arrows || 'off')
+         + ', integration points ' + (options.location === 'nodes' ? 'averaged to nodes'
+                                                                   : 'per element')
          + ', range ' + (options.min === null ? 'auto' : options.min + ' to ' + options.max)
          + '.';
   }
@@ -1064,6 +1224,8 @@ App.Results = (function () {
       }
       return useField(parts[2], (parts[3] || '').toLowerCase() || null);
     }
+    if (verb === 'location') return setLocation(parts[2]);
+    if (verb === 'arrows') return setArrows(parts[2]);
     if (verb === 'at') return atNode(parts[2]);
     if (verb === 'csv') return exportCsv();
     // The wall and interface curves, stage by stage: frontend/js/results-plot.js.

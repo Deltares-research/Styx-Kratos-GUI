@@ -1218,6 +1218,210 @@
     });
   });
 
+  /* ── Integration points: per element or averaged to the nodes ────────── */
+
+  function fieldCalls(name) {
+    return api.calls.filter(function (path) {
+      return path.indexOf('/field/' + name + '?') !== -1;
+    });
+  }
+
+  test('an integration-point field is drawn per element until asked otherwise',
+       function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'elements');
+      T.eq(App.Results.state().integration, 'elements');
+      T.eq(App.Results.state().integrationField, true);
+      T.ok(said('per element'), lines().join(' | '));
+    });
+  });
+
+  test('results location nodes redraws the field averaged to the nodes, and keeps it',
+       function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      return App.Results.handleCommand('results location nodes');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+      T.ok(/location=nodes$/.test(fieldCalls('p').pop()));
+      T.ok(said('averaged to the nodes'), lines().join(' | '));
+      // A nodal field in between, then back: still averaged to the nodes.
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.state().integrationField, false, 'u_y is nodal only');
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes', 'and from one stage to the next');
+      App.Results.forget();
+      T.eq(App.Results.options().location, 'elements', 'per element for the next project');
+    });
+  });
+
+  test('a location typed with the field is the choice for the next one too', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p nodes');
+    }).then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+    });
+  });
+
+  test('results location with a nodal field on screen is remembered, not refused',
+       function () {
+    return showing().then(function () {
+      api.calls = [];
+      return App.Results.handleCommand('results location nodes');
+    }).then(function () {
+      T.eq(App.Results.options().location, 'nodes');
+      T.eq(fieldCalls('uy').length, 0, 'u_y is not fetched again');
+      T.eq(lines('err').length, 0);
+      return App.Results.handleCommand('results location sideways');
+    }).then(function () {
+      T.ok(said('Usage: results location'));
+    });
+  });
+
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  var VECTORS = { field: 'flux', label: '|q|', unit: 'm/s', source: 'FLUID_FLUX_VECTOR',
+                  ids: [1, 2, 3], values: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], max: 1 };
+
+  /* The default catalogue, with the flux and the head of a flow stage. */
+  function showingFlow() {
+    setup();
+    viewing();
+    var catalogue = JSON.parse(JSON.stringify(CATALOGUE));
+    catalogue.groups[0].fields.forEach(function (entry) { entry.vector = 'u'; });
+    catalogue.groups.push({ name: 'Water pressure and head', fields: [
+      { name: 'head', label: 'Hydraulic head', unit: 'm',
+        locations: ['elements', 'nodes'] }] });
+    catalogue.groups.push({ name: 'Groundwater flow', fields: [
+      { name: 'flux', label: '|q|', unit: 'm/s', locations: ['nodes'], vector: 'flux' },
+      { name: 'fluxx', label: 'q_x', unit: 'm/s', locations: ['nodes'], vector: 'flux' },
+      { name: 'flow_rate', label: 'Nodal water flow rate (+ out)', unit: 'm³/s/m',
+        locations: ['nodes'] }] });
+    var below = App.Api.get;
+    App.Api.get = function (path) {
+      if (/\/stages\/\d+\/fields$/.test(path)) {
+        api.calls.push(path);
+        return Promise.resolve(catalogue);
+      }
+      if (/\/vectors\//.test(path)) {
+        api.calls.push(path);
+        var name = decodeURIComponent(path.split('/vectors/')[1]);
+        return Promise.resolve(Object.assign({}, VECTORS, { field: name }));
+      }
+      if (/\/field\/flow_rate\?/.test(path)) {
+        api.calls.push(path);
+        var rate = FIELD('flow_rate', 'm³/s/m');
+        rate.totals = { positive: 2.4e-5, negative: -2.4e-5, net: 0 };
+        return Promise.resolve(rate);
+      }
+      return below(path);
+    };
+    return App.Results.handleCommand('results open ' + DETAIL.id);
+  }
+
+  function vectorCalls() {
+    return api.calls.filter(function (path) { return /\/vectors\//.test(path); });
+  }
+
+  test('no arrows are drawn, or fetched, until they are asked for', function () {
+    return showingFlow().then(function () {
+      T.eq(drawn[drawn.length - 1].vectors, null);
+      T.eq(vectorCalls().length, 0);
+      T.eq(App.Results.state().vectors.map(function (v) { return v.name; }),
+           ['u', 'flux'], 'one entry per vector, in menu order');
+    });
+  });
+
+  test('results arrows on picks the vector of the field on screen', function () {
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field fluxx');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows on');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, 'flux', 'a vector, not "the field on screen"');
+      T.eq(App.Results.state().arrowsOf, 'flux');
+      T.eq(vectorCalls(), ['/api/results/runs/' + DETAIL.id + '/stages/2/vectors/flux']);
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux');
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(vectorCalls().length, 1, 'a display option fetches nothing again');
+      T.ok(drawn[drawn.length - 1].vectors);
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux', 'kept when the field changes');
+    });
+  });
+
+  test('results arrows <field> draws that vector over whatever is shaded', function () {
+    /* The flow net: the head shaded, the flux as arrows over it. */
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field head');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows flux');
+    }).then(function () {
+      var last = drawn[drawn.length - 1];
+      T.eq(last.field.field, 'head');
+      T.eq(last.vectors.field, 'flux');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux', 'kept from stage to stage');
+      T.eq(vectorCalls().length, 2, 'fetched once per stage');
+      return App.Results.handleCommand('results arrows off');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors, null);
+    });
+  });
+
+  test('results arrows on over a field that is not a vector picks the first vector',
+       function () {
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field head');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, 'u', 'a bare `results arrows` toggles on');
+      T.eq(drawn[drawn.length - 1].vectors.field, 'u');
+      return App.Results.handleCommand('results arrows');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, null, 'and off again');
+      T.eq(drawn[drawn.length - 1].vectors, null);
+    });
+  });
+
+  test('results arrows refuses a field that is not part of a vector', function () {
+    return showingFlow().then(function () {
+      log = [];
+      return App.Results.handleCommand('results arrows head');
+    }).then(function () {
+      T.ok(said('not part of a vector'), lines().join(' | '));
+      T.ok(said('u, flux'), 'and names the ones that are');
+      T.eq(App.Results.options().arrows, null);
+    });
+  });
+
+  test('the nodal water flow rate says what comes in and what goes out', function () {
+    return showingFlow().then(function () {
+      log = [];
+      return App.Results.handleCommand('results field flow_rate');
+    }).then(function () {
+      T.ok(said('Out 2.40e-5'), lines().join(' | '));
+      T.ok(said('in 2.40e-5'));
+      T.ok(said('out − in 0 '));
+    });
+  });
+
   test('the mesh setting is kept from one stage to the next', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results mesh on');

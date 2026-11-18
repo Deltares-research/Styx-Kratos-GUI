@@ -519,8 +519,8 @@ def stage_fields(run: Run, index: int) -> dict:
 
     stage = stage_record(run, index)
     return {"stage": stage,
-            "groups": fields.catalogue(stage_results(run, index),
-                                              run_unit_system(run))}
+            "groups": fields.catalogue(stage_results(run, index), run_unit_system(run),
+                                       stage_mesh(run, index).dimension)}
 
 
 def stage_field(run: Run, index: int, name: str, location: str = "nodes") -> dict:
@@ -537,6 +537,13 @@ def stage_displacement(run: Run, index: int) -> dict:
     from core.results import fields
 
     return fields.displacement(stage_results(run, index))
+
+
+def stage_vectors(run: Run, index: int, name: str) -> dict:
+    """The vectors behind one field of one stage -- what its arrows are drawn with."""
+    from core.results import fields
+
+    return fields.vectors(stage_results(run, index), name, run_unit_system(run))
 
 
 def stage_at_node(run: Run, index: int, node: int) -> dict:

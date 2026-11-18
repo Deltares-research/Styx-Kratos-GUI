@@ -58,6 +58,11 @@
     if (/\/stages\/\d+\/displacement$/.test(path)) return { source: null, ids: [], values: [] };
     var f = /\/field\/([^?]+)/.exec(path);
     if (f) return field(decodeURIComponent(f[1]));
+    var v = /\/vectors\/([^/]+)$/.exec(path);
+    if (v) {
+      return { field: decodeURIComponent(v[1]), label: '|q|', unit: 'm/s', source: 'X',
+               ids: [1, 2, 3], values: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], max: 1 };
+    }
     if (path === BASE + '/members') return ANSWERS.members;
     var m = /\/members\/wall\/([^/]+)$/.exec(path);
     if (m) return plot(decodeURIComponent(m[1]));
@@ -309,6 +314,68 @@
       T.ok(stage.sub[1].checked, 'the stage on screen is ticked');
       T.ok(fields.sub.some(function (s) { return s.cmd === 'results field uy'; }));
     }));
+  });
+
+  /* A stage catalogue with an integration-point field and a vector, for as long as
+     `body` runs. */
+  function withHeadAndFlux(body) {
+    var fields = ANSWERS.fields;
+    ANSWERS.fields = JSON.parse(JSON.stringify(fields));
+    ANSWERS.fields.groups.push({ name: 'Water pressure and head', fields: [
+      { name: 'head', label: 'Hydraulic head', unit: 'm', locations: ['elements', 'nodes'] }] });
+    ANSWERS.fields.groups.push({ name: 'Groundwater flow', fields: [
+      { name: 'flux', label: '|q|', unit: 'm/s', locations: ['nodes'], vector: 'flux' }] });
+    function back() { ANSWERS.fields = fields; }
+    return Promise.resolve().then(body).then(back, function (e) { back(); throw e; });
+  }
+
+  test('results: the menu and the window choose where integration points are drawn, and arrows', function () {
+    return withHeadAndFlux(function () {
+      var ctx = rig();
+      var menu = function () {
+        return (App.MENUS || []).filter(function (m) { return m.label === 'Results'; })[0];
+      };
+      var item = function (label) {
+        return menu().items.filter(function (i) { return i && i.label === label; })[0];
+      };
+      var control = function (name) {
+        return dialogTitled(ctx, 'Choose results').querySelector('[data-res="' + name + '"]');
+      };
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(item('Integration points').disabled, 'u_y is nodal: nothing to choose');
+        T.ok(!control('location'), 'and no Location row');
+        T.ok(!item('Arrows').disabled, 'the stage has a vector');
+        T.ok(item('Arrows').sub.some(function (s) { return s.cmd === 'results arrows flux'; }));
+        T.ok(!item('Arrows').sub.some(function (s) { return s.cmd === 'results arrows on'; }),
+             'off and the vectors only, no "of the field on screen"');
+        T.ok(!Array.prototype.some.call(control('arrows').options,
+                                        function (o) { return o.value === 'on'; }));
+        var groups = Array.prototype.map.call(
+          control('field').querySelectorAll('optgroup'), function (g) { return g.label; });
+        T.eq(groups, ['Deformations', 'Water pressure and head', 'Groundwater flow']);
+        control('field').value = 'head';
+        control('field').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(!item('Integration points').disabled, 'the head is an integration-point field');
+        T.ok(item('Integration points').sub[0].checked, 'per element by default');
+        control('location').value = 'nodes';
+        control('location').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results location nodes') >= 0, ctx.commands.join(' | '));
+        T.ok(item('Integration points').sub[1].checked, 'the menu follows');
+        control('arrows').value = 'flux';
+        control('arrows').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results arrows flux') >= 0, ctx.commands.join(' | '));
+        T.eq(App.Results.options().arrows, 'flux');
+      }));
+    });
   });
 
   test('results: every display control issues its command and updates the shared options', function () {

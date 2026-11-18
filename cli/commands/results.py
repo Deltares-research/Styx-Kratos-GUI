@@ -183,10 +183,25 @@ def show_field(args: argparse.Namespace) -> Answer:
         pairs = list(zip(field["values"], field["ids"]))
         low, high = min(pairs), max(pairs, key=lambda pair: (pair[0], -pair[1]))
         lines += [f"  min {tables.shown(low[0])} at {where} {low[1]}",
-                  f"  max {tables.shown(high[0])} at {where} {high[1]}",
-                  "`--csv` writes every value."]
+                  f"  max {tables.shown(high[0])} at {where} {high[1]}"]
+        if "totals" in field:
+            lines.append(_totals(field))
+        lines.append("`--csv` writes every value.")
     return Answer(data=field, lines=lines,
                   csv=tables.field_csv(field, label, stage["stage"]))
+
+
+def _totals(field: dict) -> str:
+    """The sums of a field whose total means something (`fields.Definition.summed`). For
+    the nodal water flow rate: the water let out, the water taken in, and the difference
+    -- zero in a steady state, what the pores stored or gave up in a transient one."""
+    totals, unit = field["totals"], field["unit"]
+    if field["field"] == "flow_rate":
+        return (f"  out {tables.shown(totals['positive'])}, in "
+                f"{tables.shown(-totals['negative'])}, out - in "
+                f"{tables.shown(totals['net'])} {unit}")
+    return (f"  sum {tables.shown(totals['net'])} {unit} (positive "
+            f"{tables.shown(totals['positive'])}, negative {tables.shown(totals['negative'])})")
 
 
 def show_at_node(args: argparse.Namespace) -> Answer:

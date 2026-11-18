@@ -742,7 +742,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
-| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results zeroline`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn |
+| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results zeroline`, `results arrows`, `results location`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn (`kratos-cli results field RUN NAME --location` for the location) |
 
 While a drawing tool is placing points, typing `x y` or `x y z` places the next one. In the
 terminal, the points are the command's own: `--points`, `--head`, `--at`.
