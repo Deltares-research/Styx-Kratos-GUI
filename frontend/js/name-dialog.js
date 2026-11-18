@@ -32,7 +32,9 @@ App.NameDialog = (function () {
      { name (the input's name and the answer's key), label, value, help, unit (shown
      after the field), empty (the note for an empty field), check (as for `ask`),
      choices (a list of { value, label }: the field is a drop-down list of them, and
-     the answer is the chosen value) }. */
+     the answer is the chosen value) }, check (a function of the answer object, run
+     after each field passes its own check, that answers a note when the values do not
+     go together, or null). */
   function form(options) {
     var opts = options || {};
     var fields = opts.fields || [];
@@ -58,6 +60,11 @@ App.NameDialog = (function () {
             return;
           }
           values[field.name] = text;
+        }
+        var together = opts.check ? opts.check(values) : null;
+        if (together) {
+          message.textContent = together;
+          return;
         }
         answer(values);
         shell.close();

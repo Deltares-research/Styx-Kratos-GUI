@@ -302,8 +302,8 @@
                      { name: 'Pit B', gravity_acceleration: '9.81' }];
       App.NameDialog = { form: function (options) {
         T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
-             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81],
-              ['unit_system', App.Units.current()]]);
+             [['name', App.PROJECT.name], ['x0', 0], ['x1', 60], ['y0', -40], ['y1', 0],
+              ['gravity_acceleration', 9.81], ['unit_system', App.Units.current()]]);
         return Promise.resolve(answers.shift());
       } };
       return App.LivePatches.projectProperties().then(function () {
@@ -374,6 +374,58 @@
         T.eq(App.PROJECT.unit_system, other.name);
         T.ok(ctx.lines.indexOf('note:Converted library values') >= 0, 'the notes are shown');
         T.ok(ctx.lines.indexOf('ok:The project is now in ' + other.title + '.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sets the size of the soil block, as kratos-cli domain does', function () {
+    return withShell(function (ctx, host) {
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      function input(name) { return dialog.querySelector('input[name=' + name + ']'); }
+      function ok() {
+        Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+          return button.textContent === 'OK';
+        })[0].click();
+      }
+      T.eq(['x0', 'x1', 'y0', 'y1'].map(function (n) { return input(n).value; }),
+           ['0', '60', '-40', '0'], 'the fields start at the project\'s size');
+      T.ok(!input('z0') && !input('z1'), 'a 2D model has no z extent to set');
+      input('x1').value = '-5';
+      ok();
+      T.ok(host.querySelector('.name-dialog-window'), 'a reversed x keeps the window open');
+      T.ok(dialog.textContent.indexOf('x max must be above x min.') >= 0);
+      input('x1').value = 'wide';
+      ok();
+      T.ok(dialog.textContent.indexOf('Type a number, in m.') >= 0);
+      input('x1').value = '80';
+      input('y0').value = '-60';
+      ok();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/domain']);
+        T.eq(ctx.requests[0].body, { x: [0, 80], y: [-60, 0] }, 'only the axes that changed');
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn');
+        T.ok(ctx.lines.some(function (line) { return /^ok:Size of the soil block: x 0 to/.test(line); }));
+      });
+    });
+  });
+
+  test('Project properties shows z in 3D, and a refused size is reported', function () {
+    return withShell(function (ctx, host) {
+      App.PROJECT.dimension = 3;
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      T.eq(dialog.querySelector('input[name=z1]').value, '10');
+      dialog.querySelector('input[name=z1]').value = '20';
+      ctx.failure = new Error('The bottom -60 is above the top of the last layer');
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests[0].body, { z: [0, 20] });
+        T.ok(ctx.lines.indexOf('err:Could not change the size: The bottom -60 is above the '
+                               + 'top of the last layer') >= 0);
       });
     });
   });

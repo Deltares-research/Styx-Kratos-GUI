@@ -54,8 +54,18 @@ How the GUI takes the values that you type:
 ![The New project window with the project name typed in. The New project button on the toolbar is outlined.](images/crow/01_project.png)
 
 The title bar shows the project name. A new project is a 2D section, so the **2D** button
-on the toolbar is already selected. **File** > **Project properties…** shows the
-gravitational acceleration g = 9.81 m/s². Keep that value.
+on the toolbar is already selected.
+
+A new project has a soil block 20 m wide and 15 m deep. The CROW model is 80 m wide and
+60 m deep. Set its size in the project properties:
+
+1. Click **File** > **Project properties…**.
+2. Type `80` in **x max** and `-60` in **y min**. Keep `0` in **x min** and in **y max**:
+   the ground is at y = 0.
+3. Keep the gravitational acceleration g = 9.81 m/s².
+4. Click **OK**.
+
+![The Project properties window with the new size of the soil block. The x max and y min fields are outlined.](images/crow/01_project_properties.png)
 
 ## 2. Make the two soils
 
@@ -120,7 +130,7 @@ The sand, from the top of its window:
 
 ![The Soil material window of the sand, from its top.](images/crow/02_soils_sand.png)
 
-## 3. Add the soil layers and set the width
+## 3. Add the soil layers
 
 The layers are stacked from the ground surface down. The clay is split at −8 m, so that the
 floor of the third lift is on a layer boundary.
@@ -139,14 +149,7 @@ floor of the third lift is on a layer boundary.
 
 ![The Modify soil layers window with the three layers. The Modify soil layers tool is outlined.](images/crow/03_layers.png)
 
-No window sets the width of the model. Set it in the Selection explorer of a layer:
-
-1. In the Model explorer, click **Soil_Top**.
-2. In the Selection explorer, type `80` in **x max** and press Enter.
-
-![The model after x max is set to 80 m. The Soil_Top row in the Model explorer and the x max row in the Selection explorer are outlined.](images/crow/03_layers_width.png)
-
-All layers are now 80 m wide.
+The layers are 80 m wide, the width of the soil block from step 1.
 
 ## 4. Give the soil its water pressure
 

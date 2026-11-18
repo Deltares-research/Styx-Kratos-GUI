@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
                                          field, fill, mode, project, rail, rail_tool,
-                                         rename, select_in_tree, selection_row,
+                                         rename, selection_row,
                                          set_in_selection, tool, tree_row, tree_rows, type_command,
                                          window, window_fits)
 from tests.models import crow
@@ -38,12 +38,25 @@ def new_project(tour: Tour) -> None:
     tour.until(f"App.PROJECT.name === {MODEL.name!r}")
     # A new project is a 2D section already: no need to press 2D.
     tour.until("App.PROJECT.dimension === 2 && App.state.modelMode === '2d'")
+    # The size of the soil block is a project property.
+    tour.settle()
+    page.locator("#menubar").get_by_text("File", exact=True).click()
+    page.locator(".menu-item", has_text="Project properties…").click()
+    d = MODEL.domain
+    window(page).locator("input[name=x1]").fill(f"{d.x1:g}")
+    window(page).locator("input[name=y0]").fill(f"{d.y_bottom:g}")
+    tour.picture("properties", mark=[field(page, "x max"), field(page, "y min")])
+    window(page).get_by_role("button", name="OK").click()
+    tour.until(f"App.PROJECT.domain.x1 === {d.x1} && App.PROJECT.domain.y_bottom === {d.y_bottom}")
 
 
 def project_is_new(tour: Tour) -> None:
     got = project(tour)
     assert got["name"] == MODEL.name and got["dimension"] == 2
     assert got["gravity_acceleration"] == MODEL.gravity_acceleration
+    d = got["domain"]
+    assert (d["x0"], d["x1"], d["y_bottom"], d["y_top"]) == \
+        (MODEL.domain.x0, MODEL.domain.x1, MODEL.domain.y_bottom, MODEL.domain.y_top)
 
 
 # ── 2. The soils ───────────────────────────────────────────────────────────
@@ -112,7 +125,7 @@ def two_soils(tour: Tour) -> None:
         assert abs(got[soil.name]["r_inter"] - soil.r_inter) < 1e-12
 
 
-# ── 3. The layers and the width ────────────────────────────────────────────
+# ── 3. The layers ──────────────────────────────────────────────────────────
 
 def layers(tour: Tour) -> None:
     page = tour.page
@@ -132,12 +145,6 @@ def layers(tour: Tour) -> None:
     dialog.locator(".dlg-foot .btn-primary").click()
     tour.until(f"App.PROJECT.layers.length === {len(MODEL.layers)}")
     tour.settle()
-    # No window sets the width: the Selection explorer of a layer does.
-    select_in_tree(tour, MODEL.layers[0].name)
-    set_in_selection(tour, "x max", f"{MODEL.domain.x1:g}")
-    tour.until(f"App.PROJECT.domain.x1 === {MODEL.domain.x1}")
-    tour.picture("width", mark=[tree_row(page, MODEL.layers[0].name),
-                                selection_row(page, "x max")])
 
 
 def three_layers(tour: Tour) -> None:
@@ -546,7 +553,7 @@ def contours(tour: Tour) -> None:
 STEPS = [
     Step("01_project", "Start a new project", new_project, project_is_new),
     Step("02_soils", "Make the two soils", soils, two_soils),
-    Step("03_layers", "Add the soil layers and set the width", layers, three_layers),
+    Step("03_layers", "Add the soil layers", layers, three_layers),
     Step("04_water", "Give the soil its water pressure", water, water_condition),
     Step("05_wall", "Add the sheet pile wall", wall, one_wall),
     Step("06_lines", "Draw the floors of the first two lifts", lines),

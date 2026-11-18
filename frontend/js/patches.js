@@ -1885,23 +1885,95 @@ App.LivePatches = (function () {
       });
   }
 
+  /* The model's extents in Project properties: [field, label, domain key, help]. In 2D
+     the out-of-plane z is left out, as the Selection explorer leaves it out. */
+  var EXTENTS = [
+    ['x0', 'x min', 'x0', null],
+    ['x1', 'x max', 'x1', null],
+    ['y0', 'y min', 'y_bottom', 'The bottom of the soil block.'],
+    ['y1', 'y max', 'y_top', 'The ground level: the top of the first soil layer.'],
+    ['z0', 'z min', 'z0', null],
+    ['z1', 'z max', 'z1', null]
+  ];
+
+  function extentsShown(project) {
+    return EXTENTS.filter(function (e) {
+      return project.dimension !== 2 || e[0].charAt(0) !== 'z';
+    });
+  }
+
+  function numberInMetres(text) {
+    return isFinite(Number(text)) ? null : 'Type a number, in m. The decimal sign is a point.';
+  }
+
+  /* The axes whose extent the window changed, as PATCH /api/project/domain and
+     `kratos-cli domain --x --y --z` take them: { x: [from, to], ... }. */
+  function changedExtents(project, values) {
+    var domain = project.domain || {};
+    var update = {};
+    ['x', 'y', 'z'].forEach(function (axis) {
+      var lo = axis + '0', hi = axis + '1';
+      if (values[lo] === undefined || values[hi] === undefined) return;
+      var pair = [Number(values[lo]), Number(values[hi])];
+      var keys = EXTENTS.filter(function (e) { return e[0] === lo || e[0] === hi; })
+        .map(function (e) { return e[2]; });
+      if (pair[0] !== domain[keys[0]] || pair[1] !== domain[keys[1]]) update[axis] = pair;
+    });
+    return update;
+  }
+
+  function setExtents(update) {
+    var words = Object.keys(update).map(function (axis) {
+      return '--' + axis + ' ' + update[axis][0] + ' ' + update[axis][1];
+    });
+    if (App.Command && App.Command.write) App.Command.write('echo', '> domain ' + words.join(' '));
+    return App.Api.patch('/api/project/domain', update)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh().then(function () { return result; });
+      })
+      .then(function (result) {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        var d = result.project.domain;
+        if (App.Command) {
+          App.Command.ok('Size of the soil block: x ' + d.x0 + ' to ' + d.x1 + ' m, y '
+                         + d.y_bottom + ' to ' + d.y_top + ' m.');
+          (result.notes || []).forEach(function (note) { App.Command.note(note); });
+        }
+        return true;
+      })
+      .catch(function (error) {
+        if (App.Command) App.Command.err('Could not change the size: ' + error.message);
+        return false;
+      });
+  }
+
   /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
-     sets it, the gravitational acceleration g, as `kratos-cli gravity FILE G` sets it,
-     and the unit system, as `kratos-cli units FILE SYSTEM` (or the `units` command)
-     sets it. Name and g go through the whole-project PUT; a new unit system then goes
-     through PATCH /api/project/units, which converts every value once. Undo takes back
-     each of the two like any edit. */
+     sets it, the size of the soil block, as `kratos-cli domain FILE --x --y --z` sets it,
+     the gravitational acceleration g, as `kratos-cli gravity FILE G` sets it, and the
+     unit system, as `kratos-cli units FILE SYSTEM` (or the `units` command) sets it.
+     Name and g go through the whole-project PUT; a new size then goes through PATCH
+     /api/project/domain, which moves the top of the first layer and the bottom of the
+     last with it; a new unit system last through PATCH /api/project/units, which
+     converts every value once. Undo takes back each one like any edit. */
   function projectProperties() {
     var project = App.PROJECT || {};
     var name = project.name || '';
     var g = typeof project.gravity_acceleration === 'number' ? project.gravity_acceleration
                                                              : App.Units.gravity('SI');
     var system = App.Units.system(project);
+    var domain = project.domain || {};
+    var shown = extentsShown(project);
     return App.NameDialog.form({
       title: 'Project properties',
       fields: [
         { name: 'name', label: 'Project name', value: name, empty: 'Type a name.',
-          help: 'Shown in the title bar, and the name Save gives the file.' },
+          help: 'Shown in the title bar, and the name Save gives the file.' }
+      ].concat(shown.map(function (e) {
+        return { name: e[0], label: e[1], value: domain[e[2]], unit: 'm', help: e[3],
+                 empty: 'Type the ' + e[1] + ' of the soil block, in m.',
+                 check: numberInMetres };
+      })).concat([
         { name: 'gravity_acceleration', label: 'Gravity', value: g, unit: 'm/s²',
           empty: 'Type the gravitational acceleration, in m/s².',
           check: function (text) {
@@ -1914,16 +1986,26 @@ App.LivePatches = (function () {
             return { value: s.name, label: s.title };
           }),
           help: 'A change converts every value: a cohesion of 5000 Pa becomes 5 kPa.' }
-      ]
+      ]),
+      check: function (values) {
+        var axes = shown.filter(function (e) { return e[0].charAt(1) === '0'; })
+          .map(function (e) { return e[0].charAt(0); });
+        var bad = axes.filter(function (axis) {
+          return !(Number(values[axis + '1']) > Number(values[axis + '0']));
+        })[0];
+        return bad ? bad + ' max must be above ' + bad + ' min.' : null;
+      }
     }).then(function (values) {
       if (values === null) return;
       var newG = Number(values.gravity_acceleration);
       var newSystem = values.unit_system || system;
+      var extents = changedExtents(project, values);
+      var resize = Object.keys(extents).length > 0;
       var said = [];
       if (values.name !== name) said.push('Project name: ' + values.name + '.');
       if (newG !== g) said.push('Gravity: g = ' + newG + ' m/s².');
       var convert = newSystem !== system;
-      if (!said.length && !convert) return;
+      if (!said.length && !resize && !convert) return;
       var put = Promise.resolve(true);
       if (said.length) {
         // Only what changed: a rename leaves the project's gravity fields as they are.
@@ -1942,6 +2024,8 @@ App.LivePatches = (function () {
         });
       }
       return put.then(function (done) {
+        return done && resize ? setExtents(extents) : done;
+      }).then(function (done) {
         if (!done || !convert) return;
         if (App.Command) {
           if (App.Command.write) App.Command.write('echo', '> units ' + newSystem);

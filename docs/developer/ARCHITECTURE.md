@@ -115,7 +115,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/domain`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder); `POST /api/calculate/stop` (stop the run: Kratos is killed, the run answers `stopped`) |

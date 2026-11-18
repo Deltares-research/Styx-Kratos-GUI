@@ -1815,6 +1815,14 @@ class DimensionUpdate(Base):
     section_offset: float | None = None
 
 
+class DomainUpdate(Base):
+    """The model's extents on the axes given (`session.set_domain`, `kratos-cli domain`):
+    `x` and `z` as (from, to), `y` as (bottom, top). An axis left out keeps its extent."""
+    x: tuple[float, float] | None = None
+    y: tuple[float, float] | None = None
+    z: tuple[float, float] | None = None
+
+
 class BoxRefinement(Base):
     kind: Literal["box"]
     size: float = Field(gt=0)

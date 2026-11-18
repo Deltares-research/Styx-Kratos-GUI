@@ -57,9 +57,13 @@ Click **Calculate** between Staged construction and Results.
   labels and the **Convergence** window of a finished calculation are cleared.
   **Open project…** clears them in the same way.
 - **Project properties:** **File** → **Project properties…** changes the name of the open
-  project, the gravitational acceleration g (9.81 m/s² in a new project) and the unit
-  system. In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli gravity FILE G` and
-  `kratos-cli units FILE kN` do the same.
+  project, the size of the soil block, the gravitational acceleration g (9.81 m/s² in a
+  new project) and the unit system. The size is **x min**, **x max**, **y min** (the
+  bottom) and **y max** (the ground level), in m. A 3D model also has **z min** and
+  **z max**. A new project is 20 m wide (x 0 to 20) and 15 m deep (y −15 to 0). A new
+  **y min** or **y max** also moves the bottom of the last layer or the top of the first.
+  In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli domain FILE --x FROM TO
+  --y BOTTOM TOP`, `kratos-cli gravity FILE G` and `kratos-cli units FILE kN` do the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your
