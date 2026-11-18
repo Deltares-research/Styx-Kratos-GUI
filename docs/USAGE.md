@@ -438,8 +438,9 @@ leaves a seepage face out, and warns.
 
 When you open Mesh mode and there is no mesh yet, the **Mesh properties** window opens.
 When there is a mesh, Mesh mode shows it, and the window stays closed. Use the
-**Mesh properties** tool to change the settings and mesh again. A calculation also makes a
-mesh: after it, Mesh mode shows that mesh. A change to the stages, the materials or the
+**Mesh properties** tool to change the settings and mesh again. A calculation uses this
+mesh and does not mesh again. A calculation on a model with no mesh makes one: after it,
+Mesh mode shows that mesh. A change to the stages, the materials or the
 project name keeps the mesh. Any other change to the model removes it.
 
 The **Mesh properties** window has these settings:
@@ -679,13 +680,18 @@ last calculation for each stage.
 
 Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. Styx then:
 
-1. makes the mesh,
+1. uses the mesh of the model, or makes one if there is no mesh yet,
 2. writes the Kratos input files into a new run folder in `~/KratosGUI/runs`,
 3. runs Kratos, and
 4. opens Results mode when Kratos is done.
 
-While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*, and the
-**Convergence** window shows each iteration of the solver (see
+If you made the mesh in Mesh mode, or an earlier calculation made it, and the model did not
+change since, Calculate uses that mesh and does not mesh again. The log shows *Writing the
+deck from the existing mesh and running Kratos…*. If there is no mesh yet, the log shows a
+warning: Calculate makes the mesh with the global settings of **Mesh properties**. To check
+the mesh before you calculate, make it in Mesh mode first.
+
+While Kratos runs, the **Convergence** window shows each iteration of the solver (see
 [Follow the solver](#follow-the-solver)). You can run one calculation at a time. If a stage
 fails, the log shows which stage failed and why, and the Stages explorer shows which stages
 finished.

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import json
 import math
 import time
 
@@ -23,6 +24,11 @@ ALGORITHM_3D = {"delaunay": 1, "frontal": 4, "hxt": 10}
 # gmsh's Mesh.Algorithm, the 2D counterpart. Frontal-Delaunay is gmsh's own
 # recommendation for quality on plane surfaces.
 ALGORITHM_2D = {"meshadapt": 1, "auto": 2, "delaunay": 5, "frontal": 6}
+
+# The project fields the mesher never reads. A change to one of them -- a stage, a
+# material, the project name -- keeps the mesh. The same list as NOT_MESHED in
+# frontend/js/mesh-settings.js, which decides when the viewport keeps the mesh on screen.
+NOT_MESHED = ("name", "stages", "materials", "fluid", "gravity_acceleration")
 
 
 @dataclass
@@ -59,6 +65,9 @@ class MeshModel:
     soil body's triangles (in 3D, its own skin), or a structure's line segments. What
     the Model explorer's colour toggle draws, so a user can see which elements are the
     sheet pile's. `sections` stays the one grey buffer the mesh is normally drawn as."""
+    reused: bool = False
+    """True when this is the mesh made before for the same inputs, taken as it was
+    rather than generated again (`mesh_project`)."""
 
     def to_dict(self) -> dict:
         return {
@@ -69,6 +78,30 @@ class MeshModel:
             "meshed_keys": self.meshed_keys,
             "parts": [section.to_dict() for section in self.parts],
         }
+
+
+# The inputs of the mesh in `solid_model.MESH_MODEL`, and that mesh, or None. Kept in
+# the process that owns gmsh: the gmsh worker of the server, or a script's own process.
+_kept: tuple[str, MeshModel] | None = None
+
+
+def _mesh_inputs(project: Project, **settings: object) -> str:
+    """What a mesh is made from, as one string: the project without NOT_MESHED, and
+    the settings as `mesh_project` resolved them. Two equal strings give the same mesh."""
+    inputs = project.model_dump(mode="json", exclude=set(NOT_MESHED))
+    return json.dumps({"project": inputs, "settings": settings}, sort_keys=True,
+                      default=lambda value: value.model_dump(mode="json"))
+
+
+def _kept_mesh(inputs: str) -> MeshModel | None:
+    """The mesh made before from `inputs`, made current again, or None when there is
+    none: other inputs, or gmsh cleared since (an import, a new gmsh session)."""
+    if _kept is None or _kept[0] != inputs:
+        return None
+    if solid_model.MESH_MODEL not in gmsh.model.list():
+        return None
+    gmsh.model.setCurrent(solid_model.MESH_MODEL)
+    return replace(_kept[1], reused=True)
 
 
 def mesh_project(project: Project, element_size: float | None = None,
@@ -99,8 +132,23 @@ def mesh_project(project: Project, element_size: float | None = None,
     if requested_order not in (1, 2):
         raise ValueError("order must be 1 or 2")
 
+    # The same inputs as the mesh made last: that mesh is still in gmsh, so it is used
+    # as it is. Generate mesh and then Calculate meshes the model once, not twice.
+    global _kept
+    inputs = _mesh_inputs(
+        project, size=size, order=requested_order, refinements=refinements or [],
+        algorithm_3d=algorithm, algorithm_2d=algorithm_planar, optimization=optimizer,
+        smoothing=smooth, curvature_points=curvature, size_min_factor=minimum_factor,
+        second_order_linear=linear_order_two, volume_keys=volume_keys or [],
+        body_sizes=project.mesh.body_sizes if body_sizes is None else body_sizes,
+        size_bands=project.mesh.size_bands if size_bands is None else size_bands)
+    kept = _kept_mesh(inputs)
+    if kept is not None:
+        return kept
+    _kept = None
+
     started = time.perf_counter()
-    built = solid_model.build_geometry(project)
+    built = solid_model.build_geometry(project, solid_model.MESH_MODEL)
     # Expanded, because what picks these may pick *layers*: a script, or a choice made
     # before a line cut the layer, names the layer, and a staged layer is several
     # bodies. Naming the layer has to bring the lifts dug out of it, or a project whose
@@ -184,8 +232,10 @@ def mesh_project(project: Project, element_size: float | None = None,
     finally:
         gmsh.logger.stop()
 
-    return MeshModel(bbox=built.bbox, stats=stats, sections=sections, log=log,
+    mesh = MeshModel(bbox=built.bbox, stats=stats, sections=sections, log=log,
                      meshed_keys=list(meshed_keys), parts=parts)
+    _kept = (inputs, mesh)
+    return mesh
 
 
 @dataclass(frozen=True)
