@@ -22,3 +22,5 @@ markdown_extensions:
 nav:
   - Home: index.md
   - CROW excavation wall: CROW_case.md
+  - Levee seepage: levee_seepage_case.md
+
