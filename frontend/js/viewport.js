@@ -731,7 +731,6 @@ App.Viewport = (function () {
 
   function conditionGlyphSpec(record, project, outlines) {
     var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
-                 label: null,
                  active: record.active !== false };
     var d = project.domain;
     var two = project.dimension === 2;
@@ -779,7 +778,7 @@ App.Viewport = (function () {
       return spec;
     }
 
-    // A seepage face: its edge or line, with arrows out of the soil, and the word.
+    // A seepage face: its edge or line, with arrows out of the soil.
     if (record.kind === 'seepage') {
       var path = record.on === 'face'
         ? faceOutline(project, record.face, outlines)
@@ -803,35 +802,28 @@ App.Viewport = (function () {
           spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
         });
       }
-      var mid = path[Math.floor(path.length / 2)];
-      spec.label = { text: 'seepage', at: [mid[0], mid[1], z] };
       return spec;
     }
 
-    // A water pressure: its level or line, dashed, and what it is.
+    // A water pressure: its level or line, dashed. The symbol carries no words: the
+    // name and the value are in the Model explorer.
     spec.dashed = true;
     var type = record.fluid_pressure_type;
     if (type === 'Hydrostatic' && typeof record.reference_coordinate === 'number') {
       var y = record.reference_coordinate;
       spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
         : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
-      spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
     } else if (type === 'Phreatic_Multi_Line' && record.x_coordinates) {
       var zs = record.z_coordinates;
       spec.lines.push(record.x_coordinates.map(function (x, k) {
         return [x, record.y_coordinates[k], two ? z : (zs ? zs[k] : z)];
       }));
-      var last = record.x_coordinates.length - 1;
-      spec.label = { text: 'h = ' + record.y_coordinates[last].toFixed(2) + ' m',
-                     at: [record.x_coordinates[last], record.y_coordinates[last], z] };
     } else if (type === 'Uniform') {
       var where = record.on === 'face' ? faceOutline(project, record.face, outlines)
         : (record.on === 'line' || record.on === 'point')
           ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
           : null;
       if (where) spec.lines.push(where);
-      var at = where ? where[0] : [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2, z];
-      spec.label = { text: 'p = ' + record.value, at: at };
     }
     return spec;
   }
@@ -928,10 +920,6 @@ App.Viewport = (function () {
       }
     });
 
-    if (spec.label) {
-      group.add(makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
-                          spec.label.at[2], spec.size * 0.8));
-    }
     group.traverse(function (child) {
       child.userData.key = record.id;
       if (child.material) {

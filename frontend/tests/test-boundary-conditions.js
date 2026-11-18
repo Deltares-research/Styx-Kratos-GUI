@@ -178,14 +178,14 @@
     T.eq(BC().label(record), 'exit  ·  seepage');
   });
 
-  test('a seepage face draws its line, arrows out of the soil and the word', function () {
+  test('a seepage face draws its line and arrows out of the soil, without words', function () {
     var spec = App.Viewport.conditionGlyphSpec(
       seepage('exit', 'line', { points: [[20, -1], [20, -6]] }), section());
     T.eq(spec.lines[0], [[20, -1, 5], [20, -6, 5]]);
     T.ok(spec.symbols.length > 1 && spec.symbols.every(function (s) {
       return s.arrow && s.outward[0] === 1 && s.outward[1] === 0;
     }), 'every arrow points out of the right side');
-    T.eq(spec.label.text, 'seepage');
+    T.eq(spec.label, undefined, 'no word beside the symbol');
     var top = App.Viewport.conditionGlyphSpec(seepage('top', 'face', { face: 'top' }),
                                               section());
     T.eq(top.symbols[0].outward, [0, 1]);
@@ -435,15 +435,16 @@
          [1, true, [-1, 0]], 'z does not count in a section');
   });
 
-  test('a water pressure draws its own level, with h beside it', function () {
+  test('a water pressure draws its own level, without words beside it', function () {
     var spec = App.Viewport.conditionGlyphSpec(pressure('pore', 'domain'), section());
     T.eq(spec.lines[0], [[0, -2, 5], [20, -2, 5]]);
-    T.eq(spec.label.text, 'h = -2.00 m');
+    T.eq(spec.label, undefined, 'no h = beside the level');
     T.eq(spec.dashed, true);
     var phreatic = App.Viewport.conditionGlyphSpec(pressure('line', 'domain', {
       fluid_pressure_type: 'Phreatic_Multi_Line', x_coordinates: [0, 20],
       y_coordinates: [-1, -3] }), section());
     T.eq(phreatic.lines[0], [[0, -1, 5], [20, -3, 5]]);
+    T.eq(phreatic.label, undefined, 'no h = beside the phreatic line');
   });
 
   test('the conditions may be shown in every mode; Results shows only the water',
