@@ -154,7 +154,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 
 | Role | Modules in `frontend/js/` |
 |---|---|
-| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
+| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `dialog-fit.js` (a window with help text opens wide enough to read it), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
 | Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `boundary-conditions.js` (the boundary conditions window, and the `boundary` and `gravity` commands), `point-list.js` (the list of points in the Line and normal load windows), `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
