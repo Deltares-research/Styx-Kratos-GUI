@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
@@ -38,6 +38,11 @@ def _not_blank(name: str) -> str:
 
 
 RequiredName = Annotated[str, AfterValidator(_not_blank)]
+
+GIVEN_BODY_NAME = re.compile(r"Part \d+")
+"""The name a new soil body is given, `Part 1`, ... (`Project.split_soil`). A body with it
+says its layer's or soil surface's name before it (`soil_body_labels`); a body the user
+renamed is called by its new name alone."""
 
 ATTACHMENT_TOLERANCE = 1e-6
 """Metres. How close an anchor head must be to a sheet pile to count as on it."""
@@ -68,6 +73,37 @@ class CustomPart(Base):
     `cad_import`), and kept so `Project.extent` knows how far the model reaches without
     reopening every .brep. Optional: a project saved before this was recorded still
     loads, and simply contributes nothing to the extent."""
+
+    def section_outline(self) -> tuple[tuple[tuple[float, float], ...], float, float] | None:
+        """Its outline in the x-y section and the z range it spans, when a line can cut it,
+        else None.
+
+        A line cuts soil, so the part needs a material, and it cuts across z, so the part
+        has to be a prism along z: a `polygon_extrude` swept along z from corners at one z,
+        which every 2D soil surface is (`drafts.section_prism`), or a `box`. An imported
+        solid, a cylinder or a prism swept another way is left whole."""
+        if self.mat is None or not self.recipe:
+            return None
+        recipe = self.recipe
+        try:
+            if recipe.get("kind") == "polygon_extrude":
+                vertices = recipe["vertices"]
+                ex, ey, ez = (float(v) for v in recipe["extrusion"])
+                levels = {float(v[2]) for v in vertices}
+                if len(vertices) < 3 or abs(ex) > 1e-12 or abs(ey) > 1e-12 \
+                        or abs(ez) <= 1e-12 or len(levels) != 1:
+                    return None
+                z = levels.pop()
+                outline = tuple((float(v[0]), float(v[1])) for v in vertices)
+                return outline, min(z, z + ez), max(z, z + ez)
+            if recipe.get("kind") == "box":
+                (x, y, z), (dx, dy, dz) = recipe["origin"], recipe["size"]
+                (x0, x1), (y0, y1), (z0, z1) = (sorted((float(a), float(a) + float(d)))
+                                                for a, d in ((x, dx), (y, dy), (z, dz)))
+                return ((x0, y0), (x1, y0), (x1, y1), (x0, y1)), z0, z1
+        except (KeyError, TypeError, ValueError, IndexError):
+            return None
+        return None
 
 
 # ── Domain ──────────────────────────────────────────────────────────────────
@@ -253,21 +289,30 @@ class Line(Base):
 
 
 class SoilBody(Base):
-    """A piece of a soil layer that lines or sheet piles cut off, with what the user calls
-    it. Its part key is `soil_<layer>__<id>`, which stages and conditions name.
+    """A piece of a soil layer, or of a drawn soil surface, that lines or sheet piles cut
+    off, with what the user calls it. Its part key is `soil_<layer>__<id>`, or
+    `<part>__<id>` for a piece of the custom part `part`, which stages and conditions name.
 
     `point` lies inside the piece and ties this record to it when the lines change: what
     is cut off by a new line elsewhere leaves this piece, its key and its name alone. A
     script may leave the records out; `Project.split_soil` makes them."""
     id: Ident
     name: RequiredName
-    layer: Ident
+    layer: Ident | None = None
+    """The layer it is a piece of; or `part` says which drawn soil surface."""
+    part: Ident | None = None
+    """The custom part (`CustomPart.key`) it is a piece of, when it is not a layer's."""
     point: tuple[float, float]             # in-plane (x, y), metres
     mat: Ident | None = None
     """Its material, in every stage. A record made without one, by a script or by a line
-    that cuts a new piece off, takes its layer's then (`Project._split_the_soil`). An edit
-    that gives the layer another material gives it to every part of the layer too
-    (`session._parts_take_their_layers_material`)."""
+    that cuts a new piece off, takes its layer's or part's then (`Project._split_the_soil`).
+    An edit that gives the layer or the part another material gives it to every piece of it
+    too (`session._parts_take_their_layers_material`)."""
+    removed: bool = False
+    """Deleted on its own (`session.remove_body`): the soil there is left out of the model,
+    a void, while the rest of its layer or surface stays. The record stays too, so its
+    `point` keeps the piece out when the lines change; a piece with no line left to cut it
+    off comes back with its layer or surface."""
 
     @field_validator("id")
     @classmethod
@@ -277,14 +322,67 @@ class SoilBody(Base):
                              f"in its key: {value!r}")
         return value
 
+    @model_validator(mode="after")
+    def _one_owner(self) -> SoilBody:
+        if (self.layer is None) == (self.part is None):
+            raise ValueError(f"soil body {self.id!r} needs either a layer or a part, "
+                             "and not both")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _leave_out_the_other_owner(self, handler: SerializerFunctionWrapHandler) -> dict:
+        """Only the owner it has, and `removed` only on a removed piece, so a file written
+        before pieces of parts, or before a piece could be removed, reads the same."""
+        data = handler(self)
+        return {key: value for key, value in data.items()
+                if (value is not None or key not in ("layer", "part"))
+                and (value or key != "removed")}
+
+    @property
+    def owner_key(self) -> str:
+        """The part key of what it is a piece of: `soil_<layer>`, or the custom part's."""
+        return f"soil_{self.layer}" if self.layer is not None else str(self.part)
+
+    @property
+    def key(self) -> str:
+        """Its part key, `<owner key>__<id>`."""
+        return f"{self.owner_key}__{self.id}"
+
 
 class SoilPiece(NamedTuple):
     """One closed piece of soil, as `Project.split_soil` finds it."""
     key: str
-    layer: SoilLayer
+    layer: SoilLayer | None
+    """The layer it is a piece of; `None` for a piece of a drawn soil surface (`part`)."""
     piece: regions.Piece
     body: SoilBody | None
     """Its record; `None` for a layer in one piece, which is its own body."""
+    part: CustomPart | None = None
+    """The drawn soil surface it is a piece of, when it is not a layer's."""
+    z: tuple[float, float] | None = None
+    """The z range a piece of a part spans (`CustomPart.section_outline`); a layer's piece
+    spans the domain."""
+
+    @property
+    def owner_key(self) -> str:
+        if self.layer is not None:
+            return f"soil_{self.layer.id}"
+        assert self.part is not None
+        return self.part.key
+
+    @property
+    def owner_name(self) -> str:
+        if self.layer is not None:
+            return self.layer.name
+        assert self.part is not None
+        return self.part.label
+
+    @property
+    def owner_mat(self) -> str:
+        if self.layer is not None:
+            return self.layer.mat
+        assert self.part is not None and self.part.mat is not None
+        return self.part.mat
 
 
 class Excavation(Base):
@@ -585,14 +683,20 @@ class AnchorSection(KratosPropertySet):
     """Left None for a tendon, which takes no compression at all."""
 
 
-class Anchor(Base):
-    """One anchor: a two-node tie from a sheet pile to a restrained point.
+AnchorEnd = Literal["free", "fixed"]
+"""What an anchor end is joined to: the mesh ("free") -- for a head the structure it is
+on, or else the soil; for a tail the soil -- or nothing, held in place ("fixed")."""
 
-    The formulation is the one Kratos' reference decks write -- a single
-    `LinearTrussElement2D2N` whose head node is shared with the beam and whose tail node
-    belongs to no other element, held by its own node group. The tail is therefore *not*
-    coupled to the soil continuum: the grouted body is idealised as a fixed point, which
-    is the standard plane-strain treatment.
+
+class Anchor(Base):
+    """One anchor: a two-node tie from its head to its tail.
+
+    A single `LinearTrussElement2D2N`. What each end is joined to is `head_end` and
+    `tail_end`. A free head on a sheet pile shares the beam's node; a free head on no
+    pile is a node of the soil mesh (`Project.anchor_on_structure`). A free tail is a
+    node of the soil mesh, so the tie pulls on the soil there. A fixed end belongs to no
+    other element and is held by its own node group, the formulation Kratos' reference
+    decks write for the tail, which idealises the grouted body as a fixed point.
 
     Dimension-native `(x, y)` like every other 2D record.
     """
@@ -607,6 +711,17 @@ class Anchor(Base):
     positive in tension (smeared by the tendon's spacing in 2D, like its area). Per
     anchor rather than per section: two anchors of the same tendon are routinely
     stressed differently, and each anchor is its own property set in the deck."""
+    head_end: AnchorEnd = "free"
+    """"free": the head is a node of the structure it is on, or of the soil mesh.
+    "fixed": the head is in no element and held in place, and is not snapped onto a
+    structure. A record that does not say is free, which is what every head was before
+    the choice existed."""
+    tail_end: AnchorEnd = "fixed"
+    """"free": the tail is a node of the soil mesh. "fixed": the tail is in no element
+    and held in place. A new anchor is free (`core.model.drafts.anchor`,
+    `App.Anchors.draft`); a record that does not say is fixed, which is what every
+    anchor was before the choice existed, so a project saved then gives the same
+    results."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -982,11 +1097,11 @@ class Member(Base):
 
 
 class SpaceAnchor(Base):
-    """One 3D anchor: a two-node tie in space, from a wall or member to a fixed point.
+    """One 3D anchor: a two-node tie in space, from its head to its tail.
 
-    The same formulation as the 2D `Anchor` -- head shared with the structure it hangs
-    from, tail in no element at all and pinned by its own node group -- one dimension
-    up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
+    The same formulation as the 2D `Anchor` -- a free head shared with the wall or member
+    it is on, or a node of the soil mesh; a free tail a node of the soil mesh; a fixed end
+    held by its own node group (`head_end`, `tail_end`) -- one dimension up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
     smear and means nothing here, where every anchor is a discrete member.
     """
     id: Ident
@@ -996,6 +1111,10 @@ class SpaceAnchor(Base):
     head: tuple[float, float, float]
     tail: tuple[float, float, float]
     prestress: float = 0.0
+    head_end: AnchorEnd = "free"
+    """As `Anchor.head_end`."""
+    tail_end: AnchorEnd = "fixed"
+    """As `Anchor.tail_end`."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -2237,20 +2356,26 @@ class Project(Base):
         a stage that named a whole layer now cut names each of its pieces, which is the
         same soil. The other collections are checked against the result."""
         _reject_duplicates([line.id for line in self.lines], "line")
-        _reject_duplicates([f"soil_{body.layer}__{body.id}" for body in self.bodies],
-                           "soil body")
+        _reject_duplicates([body.key for body in self.bodies], "soil body")
         if self.lines and not self.layered_soil:
             raise ValueError("a project with layered_soil false takes no lines: its soil is "
                              "the seeded demo's")
-        pieces = self.split_soil()
+        pieces = self.split_soil(removed=True)
         # A part keeps the material it was cut off with when its layer's changes: a record
         # that has none takes its layer's now, as a new piece does.
         pieces = [piece if piece.body is None or piece.body.mat is not None
                   else piece._replace(body=piece.body.model_copy(
-                      update={"mat": piece.layer.mat}))
+                      update={"mat": piece.owner_mat}))
                   for piece in pieces]
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
-        _reject_same_names(pieces)
+        # A removed piece keeps its record, but is in the model no more (`split_soil`).
+        pieces = [piece for piece in pieces if piece.body is None or not piece.body.removed]
+        owners = {piece.owner_key for piece in pieces}
+        emptied = sorted({body.owner_key for body in self.bodies} - owners)
+        if emptied:
+            raise ValueError("every part of " + ", ".join(emptied) + " is removed: delete "
+                             "the whole layer or soil surface instead")
+        _reject_same_names(pieces, self.dimension)
         # The viewport keeps a line's drawing under its id, beside the parts', the
         # conditions' and the water level's.
         taken = sorted({line.id for line in self.lines}
@@ -2267,7 +2392,7 @@ class Project(Base):
         cut: dict[str, list[str]] = {}
         for piece in pieces:
             if piece.body is not None:
-                cut.setdefault(f"soil_{piece.layer.id}", []).append(piece.key)
+                cut.setdefault(piece.owner_key, []).append(piece.key)
 
         def named(keys: list[str]) -> list[str]:
             return [each for key in keys for each in cut.get(key, [key])]
@@ -2423,33 +2548,22 @@ class Project(Base):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at ({x}, {y})"
                     )
-            # The head becomes a node the beam shares, so it has to be on a live pile.
-            # Only checked while the anchor is active: deleting a pile under a disabled
-            # anchor must not make the saved project unopenable.
-            if anchor.active and not any(
-                point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
-                for beam in self.sheet_piles if beam.active
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a sheet pile"
-                )
+            # An end joined to the soil has to be where soil can be: a head that is on no
+            # pile, and a free tail. Only checked while the anchor is active, as a
+            # disabled anchor is not built.
+            if anchor.active:
+                for end, (x, y) in self.anchor_soil_ends(anchor):
+                    if y > extent.y_top:
+                        raise ValueError(
+                            f"anchor {anchor.id!r} {end} at ({x}, {y}) is joined to the "
+                            "soil but lies above it"
+                        )
         for anchor in self.space_anchors:
             for point in (anchor.head, anchor.tail):
                 if not extent.contains(*point):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at {point}"
                     )
-            # The 3D head hangs from whatever structure is there: the swept surface of a
-            # panel, or the polyline of a member. Same rule as 2D, two shapes to test.
-            if anchor.active and not (
-                any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
-                    for panel in self.panels if panel.active)
-                or any(point_on_polyline(anchor.head, member.points, ATTACHMENT_TOLERANCE)
-                       for member in self.members if member.active)
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a wall or member"
-                )
 
         sections = {s.id for s in self.beam_sections}
         for beam in self.sheet_piles:
@@ -2789,6 +2903,34 @@ class Project(Base):
     def space_anchors(self) -> list[SpaceAnchor]:
         return [a for a in self.anchors if isinstance(a, SpaceAnchor)]
 
+    def anchor_on_structure(self, anchor: Anchor | SpaceAnchor) -> bool:
+        """Whether the head of `anchor` is on a live structure, whose node it then
+        shares: a sheet pile for a 2D anchor, a wall or a member for a 3D one. A head
+        on none is a node of the soil mesh instead -- an anchor needs no structure. A
+        fixed head shares no node, so it is on no structure wherever it is."""
+        if anchor.head_end == "fixed":
+            return False
+        if isinstance(anchor, SpaceAnchor):
+            return (any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
+                        for panel in self.panels if panel.active)
+                    or any(point_on_polyline(anchor.head, member.points,
+                                             ATTACHMENT_TOLERANCE)
+                           for member in self.members if member.active))
+        return any(point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
+                   for beam in self.sheet_piles if beam.active)
+
+    def anchor_soil_ends(self, anchor: Anchor | SpaceAnchor
+                         ) -> list[tuple[str, tuple[float, ...]]]:
+        """The ends of `anchor` that are nodes of the soil mesh, as ("head" | "tail",
+        point): a free head when it is on no structure, the tail when it is free."""
+        ends: list[tuple[str, tuple[float, ...]]] = []
+        if anchor.head_end == "free" and not self.anchor_on_structure(anchor):
+
+            ends.append(("head", anchor.head))
+        if anchor.tail_end == "free":
+            ends.append(("tail", anchor.tail))
+        return ends
+
     def structures_for(self, dimension: int) -> list[Beam | Panel | Member]:
         """The structures this dimension builds, in `beams[]` order.
 
@@ -2883,15 +3025,22 @@ class Project(Base):
     def soil_body_labels(self) -> dict[str, str]:
         """What to call each soil body in front of a user, keyed by part key.
 
-        A body that is the whole of its layer is just the layer's name; one that is a piece
-        of a cut layer says which piece.
+        A body that is the whole of its layer is just the layer's name. A piece of a cut
+        layer or soil surface is called by the name the user gave it, as typed; a piece
+        with the name it was given (`GIVEN_BODY_NAME`) says what it is a piece of, as
+        `Soil_1 · Part 1`.
 
         Published beside `soil_body_keys` rather than derived in the browser, for the same
         reason: the split is this class's to describe.
         """
-        return {piece.key: (f"{piece.layer.name} · {piece.body.name}" if piece.body
-                            else piece.layer.name)
-                for piece in self.split_soil()}
+        def label(piece: SoilPiece) -> str:
+            if piece.body is None:
+                return piece.owner_name
+            if GIVEN_BODY_NAME.fullmatch(piece.body.name):
+                return f"{piece.owner_name} · {piece.body.name}"
+            return piece.body.name
+
+        return {piece.key: label(piece) for piece in self.split_soil()}
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -2900,7 +3049,7 @@ class Project(Base):
 
         Published beside `soil_body_labels`, for the Model explorer's rows."""
         return {piece.key: (piece.body.mat if piece.body and piece.body.mat
-                            else piece.layer.mat)
+                            else piece.owner_mat)
                 for piece in self.split_soil()}
 
     def _soil_cutters(self) -> tuple[regions.Polyline, ...]:
@@ -2914,26 +3063,48 @@ class Project(Base):
         return tuple(tuple((float(x), float(y)) for x, y in points) for points in polylines)
 
     def _pieces_with(self, cutters: tuple[regions.Polyline, ...]
-                     ) -> list[tuple[SoilLayer, tuple[regions.Piece, ...]]]:
+                     ) -> list[tuple[SoilLayer | CustomPart, tuple[regions.Piece, ...]]]:
+        """The pieces of every layer, then of every drawn soil surface a line can cut
+        (`CustomPart.section_outline`), that `cutters` make."""
         d = self.domain
-        return [(layer, regions.pieces(d.x0, d.x1, layer.bottom, layer.top, cutters))
-                for layer in self.layers]
+        found: list[tuple[SoilLayer | CustomPart, tuple[regions.Piece, ...]]] = [
+            (layer, regions.pieces(d.x0, d.x1, layer.bottom, layer.top, cutters))
+            for layer in self.layers]
+        if not self.layered_soil:
+            return found
+        for part in self.custom_parts:
+            section = part.section_outline()
+            if section is not None:
+                found.append((part, regions.polygon_pieces(section[0], cutters)))
+        return found
 
-    def split_soil(self) -> list[SoilPiece]:
-        """The pieces the layers are cut into, each with its key and its record.
+    def split_soil(self, removed: bool = False) -> list[SoilPiece]:
+        """The pieces the layers and the drawn soil surfaces are cut into, each with its key
+        and its record. A piece removed on its own (`SoilBody.removed`) is not in the model,
+        so it is left out, unless `removed` asks for it too: `_split_the_soil` keeps its
+        record.
 
         A layer in one piece is its own body, with the plain key `soil_<layer>`. A layer in
-        several has no plain key any more: each piece is `soil_<layer>__<id>`. A record
-        holds the piece its `point` lies in, the first record of two in one piece being the
-        one that stays. A piece with no record gets a new one, `part1`, `part2`, ... in the
-        order of the pieces, so the same lines give the same keys.
+        several has no plain key any more: each piece is `soil_<layer>__<id>`. A drawn soil
+        surface (a custom part) is the same, `<part>__<id>`, except that one in one piece is
+        not listed here: it stays the custom part it is. A record holds the piece its
+        `point` lies in, the first record of two in one piece being the one that stays. A
+        piece with no record gets a new one, `part1`, `part2`, ... in the order of the
+        pieces, so the same lines give the same keys.
         """
         out: list[SoilPiece] = []
-        for layer, found in self._pieces_with(self._soil_cutters()):
+        for owner, found in self._pieces_with(self._soil_cutters()):
+            layer = owner if isinstance(owner, SoilLayer) else None
+            part = owner if isinstance(owner, CustomPart) else None
             if len(found) == 1:
-                out.append(SoilPiece(f"soil_{layer.id}", layer, found[0], None))
+                if layer is not None:
+                    out.append(SoilPiece(f"soil_{layer.id}", layer, found[0], None))
                 continue
-            records = [body for body in self.bodies if body.layer == layer.id]
+            section = part.section_outline() if part is not None else None
+            z = (section[1], section[2]) if section is not None else None
+            records = [body for body in self.bodies
+                       if (body.layer == layer.id if layer is not None
+                           else part is not None and body.part == part.key)]
             held: dict[int, SoilBody] = {}
             for body in records:
                 at = next((index for index, piece in enumerate(found)
@@ -2951,14 +3122,23 @@ class Project(Base):
                     # A part renamed `Part 3` keeps the next new piece from being one too.
                     while f"part{number}" in used or _deck_word(f"Part {number}") in taken:
                         number += 1
-                    record = SoilBody(id=f"part{number}", name=f"Part {number}", layer=layer.id,
-                                      point=piece.point, mat=layer.mat)
-                out.append(SoilPiece(f"soil_{layer.id}__{record.id}", layer, piece, record))
+                    record = SoilBody(id=f"part{number}", name=f"Part {number}",
+                                      layer=layer.id if layer is not None else None,
+                                      part=part.key if part is not None else None,
+                                      point=piece.point, mat=owner.mat)
+                if removed or not record.removed:
+                    out.append(SoilPiece(record.key, layer, piece, record, part, z))
         return out
 
+    def cut_parts(self) -> list[str]:
+        """The keys of the custom parts lines cut into pieces: each piece is a soil body
+        (`split_soil`), and the part's own key names no geometry any more."""
+        return list(dict.fromkeys(piece.part.key for piece in self.split_soil()
+                                  if piece.part is not None))
+
     def idle_lines(self) -> list[str]:
-        """The ids of the lines that split no soil: without one, the layers fall into as
-        many pieces as with it."""
+        """The ids of the lines that split no soil: without one, the layers and the drawn
+        soil surfaces fall into as many pieces as with it."""
         def count(cutters: tuple[regions.Polyline, ...]) -> int:
             return sum(len(found) for _, found in self._pieces_with(cutters))
 
@@ -2967,9 +3147,9 @@ class Project(Base):
                 if count(cutters[:index] + cutters[index + 1:]) == count(cutters)]
 
     def soil_bodies(self) -> list[tuple[str, float, float]]:
-        """Every soil body the layers are split into, as `(part key, y_bottom, y_top)`
-        (`split_soil`). Empty for a project with no ground in it yet, the site the server
-        opens on, for which `part_keys` asks during validation.
+        """Every soil body the layers and the drawn soil surfaces are split into, as
+        `(part key, y_bottom, y_top)` (`split_soil`). Empty for a project with no ground in
+        it yet, the site the server opens on, for which `part_keys` asks during validation.
         """
         return [(piece.key, piece.piece.bottom, piece.piece.top)
                 for piece in self.split_soil()]
@@ -2985,11 +3165,12 @@ class Project(Base):
     def expand_body_keys(self, keys: list[str]) -> list[str]:
         """Turn a list that may name soil *layers* into one naming soil *bodies*.
 
-        A cut layer is several bodies, and the parts of the app that let a user pick soil
-        pick layers, because that is what a user drew: the Mesh properties dialog lists
-        `project.layers` (`frontend/js/mesh-settings.js`). Naming a layer therefore has to
-        mean every piece of it, or checking one there would mesh some of it and leave the
-        rest out of the model.
+        A cut layer is several bodies, and a key saved before the cut, or typed in a
+        script, still names the layer, because that is what a user drew. (The Mesh
+        properties dialog lists the pieces of a cut layer or soil surface, one row each:
+        `frontend/js/mesh-settings.js`.) Naming a layer therefore has to mean every piece
+        of it, or a size or a choice made for it would reach some of it and leave the rest
+        out of the model.
 
         Anything that is not a soil layer passes through untouched, and a key that
         already names a body is kept as it stands, so this is safe to apply to any list
@@ -3060,7 +3241,11 @@ class Project(Base):
         # the namespace and the geometry from disagreeing about how many soil bodies a
         # project has.
         soils = [key for key, *_ in self.soil_bodies()]
-        customs = [p.key for p in self.custom_parts]
+        # A part cut into pieces is its pieces, which are soil bodies above. The stems
+        # also hold the layers' `soil_<id>`, which no custom part key (`drawn_N`,
+        # `imported_N`) can be.
+        cut = {key.partition("__")[0] for key in soils}
+        customs = [p.key for p in self.custom_parts if p.key not in cut]
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
                  + [i.id for i in self.interfaces])
         if self.layered_soil:
@@ -3174,15 +3359,26 @@ def _deck_word(name: str) -> str:
     return name.strip().casefold() if word[:1].isdigit() or not word else word
 
 
-def _reject_same_names(pieces: list[SoilPiece]) -> None:
-    """Refuse two pieces of one layer with the same name: the explorer, the stages and the
-    deck could not tell them apart. Pieces of two layers may share one, as `Top_Pit` and
-    `Low_Pit`."""
+def numbered_name(name: str, taken: Iterable[str]) -> str:
+    """`name`, or else `name_2`, `name_3`, ...: the first that no name in `taken` writes as
+    the same word in the deck (`_deck_word`). The deck numbers two parts of one name in the
+    same way (`core.kratos.writer._unique`), so the name a user sees is the deck's."""
+    words = {_deck_word(other) for other in taken}
+    candidate, number = name, 2
+    while _deck_word(candidate) in words:
+        candidate, number = f"{name}_{number}", number + 1
+    return candidate
+
+
+def _reject_same_names(pieces: list[SoilPiece], dimension: int) -> None:
+    """Refuse two pieces of one layer, or of one drawn soil surface, with the same name:
+    the explorer, the stages and the deck could not tell them apart. Pieces of two layers
+    may share one, as `Top_Pit` and `Low_Pit`."""
     seen: dict[tuple[str, str], SoilPiece] = {}
     for piece in pieces:
         if piece.body is None:
             continue
-        word = (piece.layer.id, _deck_word(piece.body.name))
+        word = (piece.owner_key, _deck_word(piece.body.name))
         first = seen.setdefault(word, piece)
         if first is piece:
             continue
@@ -3190,5 +3386,7 @@ def _reject_same_names(pieces: list[SoilPiece]) -> None:
         names = (f"both called {piece.body.name!r}" if first.body.name == piece.body.name
                  else f"called {first.body.name!r} and {piece.body.name!r}, which differ "
                       f"only in case or punctuation")
-        raise ValueError(f"{first.key} and {piece.key} in layer {piece.layer.name!r} are "
-                         f"{names}: give each part of a layer a name of its own")
+        what = ("layer" if piece.layer is not None
+                else "soil surface" if dimension == 2 else "soil volume")
+        raise ValueError(f"{first.key} and {piece.key} in {what} {piece.owner_name!r} are "
+                         f"{names}: give each part of a {what} a name of its own")

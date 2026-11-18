@@ -192,6 +192,11 @@
     'LivePatches.deleteCustomPart': function (c) {
       return App.LivePatches.deleteCustomPart(c.target);
     },
+    /* The model tree's Delete part on one part of a cut layer (patches.js
+       `deleteBodyPart`, after its OK). */
+    'LivePatches.deleteBody': function (c) {
+      return App.LivePatches.deleteBody(c.target);
+    },
     /* The command box: `cleargeometry`. */
     'Command.run': function () { return App.Command.run('cleargeometry'); }
   };

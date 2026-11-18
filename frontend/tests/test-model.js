@@ -219,17 +219,20 @@
     });
   });
 
-  test('an anchor head cannot be edited off the sheet pile it hangs from', function () {
-    withProject(anchoredProject(), function () {
-      var rows = App.OBJECT_PROPS.anchor_1.groups.Geometry;
-      var headX = rows.filter(function (row) { return row[0] === 'Head x'; })[0];
-      T.ok(headX[4].set(20), 'a head in mid-air is refused');
-      T.eq(App.ANCHORS[0].head[0], 12, 'and the anchor is left where it was');
-      var headZ = rows.filter(function (row) { return row[0] === 'Head y'; })[0];
-      T.eq(headZ[4].set(-5), null, 'sliding along the pile is fine');
-      T.eq(App.ANCHORS[0].head[1], -5);
+  test('an anchor head may be edited off its pile into the soil, not into the air',
+    function () {
+      withProject(anchoredProject(), function () {
+        var rows = App.OBJECT_PROPS.anchor_1.groups.Geometry;
+        var headX = rows.filter(function (row) { return row[0] === 'Head x'; })[0];
+        var headY = rows.filter(function (row) { return row[0] === 'Head y'; })[0];
+        T.eq(headY[4].set(-5), null, 'sliding along the pile is fine');
+        T.eq(App.ANCHORS[0].head[1], -5);
+        T.eq(headX[4].set(20), null, 'off the pile, the head is a node of the soil');
+        T.eq(App.ANCHORS[0].head[0], 20);
+        T.ok(headY[4].set(3), 'off the pile and above the ground is refused');
+        T.eq(App.ANCHORS[0].head[1], -5, 'and the anchor is left where it was');
+      });
     });
-  });
 
   test('the tendon rows edit the shared library and reject a bad value', function () {
     withProject(anchoredProject(), function () {
@@ -1159,7 +1162,8 @@
     withProject(project(TWO), function () {
       App.Model.setMeshStats({
         nodes: 146321, elements: 82809, seconds: 5.125,
-        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {}
+        by_type: { 'Tetrahedron 10': 82809 }, quality_histogram: {},
+        average_size: 1.23456
       });
 
       var rows = App.OBJECT_PROPS.mesh.groups.Statistics;
@@ -1167,6 +1171,7 @@
       T.eq(value('Elements'), '82 809');
       T.eq(value('Nodes'), '146 321');
       T.eq(value('Element type'), 'Tetrahedron 10');
+      T.eq(value('Average element size'), '1.235', 'the size the server measured');
 
       var labels = [];
       (function walk(nodes) {
@@ -1265,6 +1270,46 @@
       T.eq(body.mat, 'm2', 'so a later change to the layer leaves the part alone');
       T.eq(editor.set('m4'), null);
       T.eq(body.mat, 'm4');
+    });
+  });
+
+  /* Issue #125: a line across a drawn soil surface cuts it into soil bodies, and each
+     gets a row and a Selection explorer entry, as a piece of a layer does. */
+  function cutSurface() {
+    var surface = { key: 'drawn_0', label: 'Bank', color: '#c4a86a', source: 'gui', mat: 'm2',
+                    recipe: { kind: 'polygon_extrude', extrusion: [0, 0, 40],
+                              vertices: [[0, 0, 0], [3, 0, 0], [3, 3, 0], [0, 3, 0]] } };
+    return Object.assign(project(TWO, [surface], true), {
+      bodies: [{ id: 'part1', name: 'Part 1', part: 'drawn_0', point: [0.5, 1.5], mat: 'm2' },
+               { id: 'part2', name: 'Part 2', part: 'drawn_0', point: [2, 1.5], mat: 'm4' }],
+      soil_body_keys: ['soil_L1', 'soil_L2', 'drawn_0__part1', 'drawn_0__part2'],
+      soil_body_labels: { soil_L1: 'Soil_1', soil_L2: 'Soil_2',
+                          drawn_0__part1: 'Bank · Part 1', drawn_0__part2: 'Bank · Part 2' },
+      soil_body_materials: { soil_L1: 'm2', soil_L2: 'm4', drawn_0__part1: 'm2',
+                             drawn_0__part2: 'm4' }
+    });
+  }
+
+  test('each piece of a cut soil surface has its own row, in place of the surface', function () {
+    withProject(cutSurface(), function () {
+      var node = soilNode(App.TREES.soil);
+      var objs = (node.children || []).map(function (c) { return c.obj; });
+      T.eq(objs, ['soil_L1', 'soil_L2', 'drawn_0__part1', 'drawn_0__part2']);
+      T.eq(node.count, 4);
+      T.eq(node.children[3].label, 'Bank · Part 2  ·  Clay, stiff');
+    });
+  });
+
+  test('a piece of a soil surface names the surface and keeps its own material', function () {
+    withProject(cutSurface(), function () {
+      var props = App.OBJECT_PROPS['drawn_0__part2'];
+      T.eq(props.title, 'Bank · Part 2');
+      var surface = props.groups.General.filter(function (row) {
+        return row[0] === 'Soil surface';
+      })[0];
+      T.eq(surface[1], 'Bank');
+      T.eq(materialRow('drawn_0__part2')[4].get(), 'm4');
+      T.ok(App.Lines.bodyOf('drawn_0__part2'), 'App.Lines knows the piece by its key');
     });
   });
 })();

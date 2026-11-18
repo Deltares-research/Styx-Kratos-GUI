@@ -212,6 +212,22 @@ def test_an_anchor_holds_the_model_too():
         Project.model_validate(payload)))
 
 
+def test_an_anchor_with_a_fixed_head_holds_the_model_and_a_free_one_does_not():
+    from tests.models.excavation import excavation_project
+    payload = excavation_project(staged=False).model_dump()
+    payload["boundary_conditions"] = []
+
+    def rigid(head_end):
+        payload["anchors"] = [dict(a, head_end=head_end, tail_end="free")
+                              for a in payload["anchors"]]
+        return any("rigid body" in w for w in condition_checks.warnings(
+            Project.model_validate(payload)))
+
+    assert not rigid("fixed")
+    assert rigid("free")
+
+
+
 def test_a_support_along_a_line_holds_the_nodes_on_that_line(gmsh_session):
     export = writer.export_project(section([
         *[c.model_dump() for c in standard_conditions()],

@@ -626,7 +626,8 @@ ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "spacing": 2.5,
                   "tension_limit": 900_000.0, "compression_limit": None, "variables": {
                       "YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006, "DENSITY": 7850.0}}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
-          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0, "active": True}
+          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0,
+          "head_end": "free", "tail_end": "free", "active": True}
 
 
 def test_patch_structures_creates_an_anchor_on_a_sheet_pile(client):
@@ -1250,6 +1251,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # The convergence figure, and the window that shows it live
+                             # during Calculate.
+                             "convergence-plot.js", "convergence-window.js",
                              "picture-draw.js", "picture-writers.js", "picture.js",
                              "picture-dialog.js",
                              # The version the server writes into the page, in place of

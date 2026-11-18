@@ -397,9 +397,10 @@ App.Viewport = (function () {
   /* The soil's edges that a line puts there, where it splits a layer: each piece draws
      one along the line. They are drawn with the line, so hiding the line in the Model
      explorer hides all of it, not only its dashes over the seam. An edge on a layer's
-     outline stays the soil's, as it is there with or without the line. In 3D an edge
-     across the model at one of the line's points goes with it too, unless it is the
-     domain's side. Pure, so it is testable without a renderer.
+     outline, or on the outline of a drawn soil surface, stays the soil's, as it is there
+     with or without the line. In 3D an edge across the model at one of the line's points
+     goes with it too, unless it is the domain's side. Pure, so it is testable without a
+     renderer.
 
      Returns `edges`, each section's flat LineSegments pairs less the seams, and
      `seams`, one `{line, section, edges}` per line and section that has one. */
@@ -409,6 +410,11 @@ App.Viewport = (function () {
     var layers = {};
     ((project && project.layers) || []).forEach(function (layer) {
       layers['soil_' + layer.id] = layer;
+    });
+    // A piece of a drawn soil surface is `<part>__<id>`, and its outline is the part's.
+    ((project && project.custom_parts) || []).forEach(function (part) {
+      var outline = partOutline(part);
+      if (outline) layers[part.key] = { outline: outline };
     });
     var d = project && project.domain;
     // The edges come rounded to 4 decimals (core/geometry/tessellation.py DECIMALS).
@@ -430,6 +436,10 @@ App.Viewport = (function () {
     }
 
     function onOutline(s, layer) {
+      if (layer.outline) {
+        return [[s[0], s[1]], [s[3], s[4]], [(s[0] + s[3]) / 2, (s[1] + s[4]) / 2]]
+          .every(function (p) { return onPolyline(p[0], p[1], layer.outline); });
+      }
       var across = near(s[0], s[3]) && near(s[1], s[4]);
       var sides = [[0, d.x0], [0, d.x1]];
       if (!across) sides.push([1, layer.top], [1, layer.bottom]);
@@ -467,6 +477,23 @@ App.Viewport = (function () {
       });
     });
     return { edges: edges, seams: seams };
+  }
+
+  /* The closed outline, in the section, of a drawn part that is a polygon swept along z
+     or a box. Which parts a line can cut is the server's rule
+     (core/model/schemas.py `CustomPart.section_outline`): only a cut part has pieces
+     (`<part>__<id>` in `soil_body_keys`) that look its outline up here. */
+  function partOutline(part) {
+    var recipe = part && part.recipe;
+    var points = null;
+    if (recipe && recipe.kind === 'polygon_extrude' && recipe.vertices) {
+      points = recipe.vertices.map(function (v) { return [v[0], v[1]]; });
+    } else if (recipe && recipe.kind === 'box' && recipe.origin && recipe.size) {
+      var x0 = recipe.origin[0], y0 = recipe.origin[1];
+      var x1 = x0 + recipe.size[0], y1 = y0 + recipe.size[1];
+      points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    }
+    return points && points.length > 2 ? points.concat([points[0]]) : null;
   }
 
   /* Frees GPU memory before a group is replaced. The frozen code never does
@@ -1665,8 +1692,12 @@ App.Viewport = (function () {
 
   function rebuildModeGroups() {
     soilKeys = soilKeysOf(App.PROJECT, App.LAYERS);
+    // A part a line cut is drawn as its pieces, which are soil keys (`<part>__<id>`).
     var customKeys = ((App.PROJECT && App.PROJECT.custom_parts) || [])
-      .map(function (p) { return p.key; });
+      .map(function (p) { return p.key; })
+      .filter(function (key) {
+        return !soilKeys.some(function (soil) { return soil.split('__')[0] === key; });
+      });
     var loadKeys = ((App.PROJECT && App.PROJECT.loads) || []).filter(function (load) {
       return !App.Loads || App.Loads.compatible(load, App.PROJECT);
     }).map(function (load) { return load.id; });

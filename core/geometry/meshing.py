@@ -32,6 +32,9 @@ class MeshStats:
     by_type: dict[str, int]
     quality_histogram: dict[str, int]
     seconds: float
+    average_size: float = 0.0
+    """The mean edge length of the elements [m]: halfway between each element's
+    shortest and longest edge, averaged. 0 for an empty mesh."""
 
     def to_dict(self) -> dict:
         return {
@@ -40,6 +43,7 @@ class MeshStats:
             "by_type": self.by_type,
             "quality_histogram": self.quality_histogram,
             "seconds": self.seconds,
+            "average_size": self.average_size,
         }
 
 
@@ -97,11 +101,11 @@ def mesh_project(project: Project, element_size: float | None = None,
 
     started = time.perf_counter()
     built = solid_model.build_geometry(project)
-    # Expanded, because what picks these picks *layers*: the Mesh properties dialog
-    # lists `project.layers`, and a staged layer is several bodies. Naming the layer has
-    # to bring the lifts dug out of it, or a project whose pit is staged meshes only the
-    # ground outside it -- see `Project.expand_body_keys`. A no-op when nothing is
-    # staged, and on a list that already names bodies.
+    # Expanded, because what picks these may pick *layers*: a script, or a choice made
+    # before a line cut the layer, names the layer, and a staged layer is several
+    # bodies. Naming the layer has to bring the lifts dug out of it, or a project whose
+    # pit is staged meshes only the ground outside it -- see `Project.expand_body_keys`.
+    # A no-op when nothing is staged, and on a list that already names bodies.
     meshed_keys = project.expand_body_keys(volume_keys) if volume_keys \
         else project.part_keys()
     unknown = sorted(set(meshed_keys) - set(project.part_keys()))
@@ -594,12 +598,16 @@ def _stats(seconds: float, dim: int = 3) -> MeshStats:
         all_elements.extend(int(tag) for tag in tags)
 
     histogram = {label: 0 for label in QUALITY_LABELS}
+    average_size = 0.0
     if all_elements:
         qualities = gmsh.model.mesh.getElementQualities(all_elements, "minSICN")
         for quality in qualities:
             value = min(1.0, float(quality))
             index = sum(value >= boundary for boundary in QUALITY_BINS)
             histogram[QUALITY_LABELS[index]] += 1
+        shortest = gmsh.model.mesh.getElementQualities(all_elements, "minEdge")
+        longest = gmsh.model.mesh.getElementQualities(all_elements, "maxEdge")
+        average_size = float(sum(shortest) + sum(longest)) / (2 * len(all_elements))
 
     return MeshStats(
         nodes=len(node_tags),
@@ -607,6 +615,7 @@ def _stats(seconds: float, dim: int = 3) -> MeshStats:
         by_type=by_type,
         quality_histogram=histogram,
         seconds=round(seconds, 3),
+        average_size=round(average_size, 4),
     )
 
 

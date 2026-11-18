@@ -3344,6 +3344,8 @@ window.DRAFTS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -4865,10 +4867,12 @@ window.DRAFTS_FIXTURE =
           -3.0
         ],
         "tail": [
-          14.19152,
-          -8.735764
+          14.0,
+          -9.0
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
@@ -4902,11 +4906,13 @@ window.DRAFTS_FIXTURE =
           -8.0
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
     {
-      "title": "an anchor head far from the pile is refused",
+      "title": "an anchor head far from the pile stays in the soil",
       "call": "Anchors.draftFromPoints",
       "project": "pile",
       "args": [
@@ -4921,7 +4927,24 @@ window.DRAFTS_FIXTURE =
           ]
         ]
       ],
-      "error": "The anchor head must be placed on a sheet pile."
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "strand",
+        "head": [
+          10.0,
+          -2.0
+        ],
+        "tail": [
+          20.0,
+          -8.0
+        ],
+        "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
+        "active": true
+      }
     },
     {
       "title": "a strut from the part of a pile above the ground",
@@ -4937,7 +4960,8 @@ window.DRAFTS_FIXTURE =
             16,
             4
           ]
-        ]
+        ],
+        "fixed"
       ],
       "result": {
         "id": "anchor_1",
@@ -4953,8 +4977,28 @@ window.DRAFTS_FIXTURE =
           4.0
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "fixed",
         "active": true
       }
+    },
+    {
+      "title": "a free anchor tail in the air is refused",
+      "call": "Anchors.draftFromPoints",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          [
+            12.3,
+            4
+          ],
+          [
+            16,
+            4
+          ]
+        ]
+      ],
+      "error": "A free anchor tail must be in the soil. Move the tail down, or make the tail end fixed."
     },
     {
       "title": "an anchor tail below the model is refused",
@@ -4970,7 +5014,8 @@ window.DRAFTS_FIXTURE =
             16,
             -40
           ]
-        ]
+        ],
+        "fixed"
       ],
       "error": "The anchor must stay inside the model domain."
     },
@@ -4989,19 +5034,131 @@ window.DRAFTS_FIXTURE =
           2.25
         ],
         "tail": [
-          20.19152,
-          -3.485764
+          20.0,
+          -4.0
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
     {
-      "title": "an anchor with nothing to hang from is refused",
+      "title": "an anchor with no structure starts in the soil",
       "call": "Anchors.draft",
       "project": "section",
       "args": [],
-      "error": "An anchor hangs from a sheet pile; create one first."
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.5,
+          -2.0
+        ],
+        "tail": [
+          21.0,
+          -8.0
+        ],
+        "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor head in the air on no structure is refused",
+      "call": "Anchors.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            20,
+            3
+          ],
+          [
+            25,
+            -8
+          ]
+        ],
+        "fixed"
+      ],
+      "error": "An anchor head on no structure must be in the soil. Move the head down, onto a structure, or make the head end fixed."
+    },
+    {
+      "title": "a fixed anchor head is not snapped onto the pile",
+      "call": "Anchors.draftFromPoints",
+      "project": "pile",
+      "args": [
+        [
+          [
+            6.4,
+            -2
+          ],
+          [
+            20,
+            -8
+          ]
+        ],
+        "free",
+        "fixed"
+      ],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "strand",
+        "head": [
+          6.4,
+          -2.0
+        ],
+        "tail": [
+          20.0,
+          -8.0
+        ],
+        "prestress": 0.0,
+        "head_end": "fixed",
+        "tail_end": "free",
+        "active": true
+      }
+    },
+    {
+      "title": "a fixed anchor head may be in the air",
+      "call": "Anchors.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            20,
+            3
+          ],
+          [
+            25,
+            -8
+          ]
+        ],
+        "free",
+        "fixed"
+      ],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          20.0,
+          3.0
+        ],
+        "tail": [
+          25.0,
+          -8.0
+        ],
+        "prestress": 0.0,
+        "head_end": "fixed",
+        "tail_end": "free",
+        "active": true
+      }
     },
     {
       "title": "an anchor on a wall",
@@ -5019,11 +5176,13 @@ window.DRAFTS_FIXTURE =
           12.5
         ],
         "tail": [
-          20.69152,
-          -8.860764,
+          21.0,
+          -9.0,
           12.5
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
@@ -5043,11 +5202,13 @@ window.DRAFTS_FIXTURE =
           12.5
         ],
         "tail": [
-          20.69152,
-          -8.860764,
+          21.0,
+          -9.0,
           12.5
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
@@ -5066,10 +5227,12 @@ window.DRAFTS_FIXTURE =
           -3.125
         ],
         "tail": [
-          20.69152,
-          -8.860764
+          21.0,
+          -9.0
         ],
         "prestress": 0.0,
+        "head_end": "free",
+        "tail_end": "free",
         "active": true
       }
     },
@@ -5088,10 +5251,12 @@ window.DRAFTS_FIXTURE =
             -3.125
           ],
           "tail": [
-            20.69152,
-            -8.860764
+            21.0,
+            -9.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "free",
           "active": true
         }
       ],

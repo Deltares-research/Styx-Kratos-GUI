@@ -109,7 +109,8 @@ def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
 def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     """A row with no size of its own follows the global size as it is typed; a size typed
     on a row is kept, also when it is the old global size. Every layer is meshed: the
-    window has no check box to leave one out."""
+    window has no check box to leave one out. A layer the lines and the sheet pile cut has
+    a row for each part (issue #125)."""
     project = excavation_project(staged=False)
     assert project.mesh.element_size == 5.0
     assert app_page.request.put(live_server["url"] + "/api/project",
@@ -122,8 +123,9 @@ def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     app_page.evaluate("App.MeshSettings.open()")
     window = app_page.locator("#mesh-settings-dialog")
     window.locator("[name=element_size]").fill("2.5")
-    assert window.locator("[data-body-size-key=soil_L_mid]").input_value() == "2.5"
-    window.locator("[data-body-size-key=soil_L_top]").fill("5")
+    assert window.locator(".mesh-body-size").count() == len(project.soil_body_keys) == 7
+    assert window.locator("[data-body-size-key=soil_L_mid__pit]").input_value() == "2.5"
+    window.locator("[data-body-size-key=soil_L_top__lift1]").fill("5")
     window.locator("[data-body-size-key=soil_L_bot]").fill("7")
     assert window.locator(".mesh-body-table input[type=checkbox]").count() == 0
     window.get_by_role("button", name="Apply", exact=True).click()
@@ -131,7 +133,8 @@ def test_mesh_properties_saves_what_it_shows(app_page, live_server):
 
     mesh = app_page.request.get(live_server["url"] + "/api/project").json()["mesh"]
     assert mesh["element_size"] == 2.5
-    assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top": 5.0, "soil_L_bot": 7.0}
+    assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top__lift1": 5.0,
+                                  "soil_L_bot": 7.0}
     assert app_page.evaluate("App.Export.meshRequest().volume_keys") is None
     assert app_page.errors == []
 

@@ -1444,7 +1444,7 @@ App.BoundaryConditions = (function () {
 
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' boundary condition',
-      width: 600, height: 560,
+      width: 600, height: 620,
       buttons: [
         { label: 'Pick on model…', onClick: pick },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },

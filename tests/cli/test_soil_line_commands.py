@@ -66,7 +66,7 @@ def test_a_body_can_be_named_and_given_a_material(cli, site):
     assert cli("body", site, "set", "soil_top__part1", "--name", "Pit", "--material", "grout"
                ).code == 0
     project = session.load(site)
-    assert project.soil_body_labels["soil_top__part1"] == "top · Pit"
+    assert project.soil_body_labels["soil_top__part1"] == "Pit"
     assert project.soil_body_materials["soil_top__part1"] == "grout"
     assert cli("body", site, "set", "soil_top__part1", "--material", "layer").code == 0
     assert session.load(site).soil_body_materials["soil_top__part1"] == "sand"
@@ -148,3 +148,12 @@ def test_the_soil_layers_window_and_the_command_line_give_a_layers_parts_its_mat
     assert answer.status_code == 200
     assert answer.json()["project"]["bodies"] == by_command["bodies"]
     assert [body["mat"] for body in by_command["bodies"]] == ["grout", "grout"]
+
+
+def test_one_body_can_be_removed_and_leaves_the_rest_of_its_layer(cli, site):
+    assert cli("line", site, "add", "side", "--points", "5", "0", "5", "-4").code == 0
+    assert cli("body", site, "remove", "soil_top__part1").code == 0
+    assert session.load(site).soil_body_keys == ["soil_top__part2", "soil_low"]
+    ran = cli("body", site, "remove", "soil_top__part2")
+    assert ran.code != 0
+    assert "last part of soil_top" in ran.err

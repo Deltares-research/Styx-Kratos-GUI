@@ -289,8 +289,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     panel_blocks = [] if flow else _harvest(_panel_bodies(project, dim), 2, SHELLS,
                                             model_dim=dim)
     blocks.extend(panel_blocks)
+    soil_nodes = {tag for _, _, rows in soil_blocks for row in rows for tag in row}
     anchor_blocks, anchor_supports = (([], {}) if flow else
-                                      _anchor_ties(project, dim, _world_coordinates()))
+                                      _anchor_ties(project, dim, _world_coordinates(),
+                                                   soil_nodes))
     blocks.extend(anchor_blocks)
     # A flow deck's only conditions are its seepage faces; a deformation deck's are its
     # loads, and a seepage face is left out of it (`condition_checks.warnings` says so).
@@ -375,8 +377,9 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     parts.extend(load_parts)
     parts.extend((name, sorted(node_id[tag] for tag in tags), [], [])
                  for name, tags in surface_water.node_parts)
-    supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
-                for key, tag in anchor_supports.items() if tag in node_id]
+    supports: list[tuple[str, list[int], list[int], list[int]]] = [
+        (f"{names[key]}_Support", [node_id[tag] for tag in tags if tag in node_id], [], [])
+        for key, tags in anchor_supports.items() if any(tag in node_id for tag in tags)]
     parts.extend(supports)
     # A node-only part per side of every tie `_split_ties` found, so the process below
     # can name them; see `_interface_elements`.
@@ -446,8 +449,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         )
 
     load_mask = [True, True, dim == 3]
-    # The far end of every anchor is pinned: in this formulation the grouted body is a
-    # fixed point, so the tie reacts against a restraint rather than against the soil.
+    # A fixed end of an anchor is pinned: the grouted body is idealised as a fixed
+    # point, so the tie reacts against a restraint rather than against the soil. A free
+    # end is a node of the mesh and has no support (`_anchor_ties`).
+
     anchor_fixities = [(name, list(load_mask), "") for name, _, _, _ in supports]
     # A sheet pile does not exist before it is installed: it and whichever interface(s)
     # tie it to the soil are staged together, deactivated in the deck's initial state and
@@ -1293,25 +1298,32 @@ def _interface_of(project: Project, key: str):
     return next(interface for interface in project.interfaces if interface.id == stem)
 
 def _anchor_ties(project: Project, dim: int,
-                 world: dict[int, tuple[float, float, float]]
-                 ) -> tuple[list[tuple[str, str, list[list[int]]]], dict[str, int]]:
-    """One two-node truss per active anchor, plus the tail node each one is held by.
+                 world: dict[int, tuple[float, float, float]],
+                 soil: set[int] | None = None
+                 ) -> tuple[list[tuple[str, str, list[list[int]]]], dict[str, list[int]]]:
+    """One two-node truss per active anchor, plus the fixed end nodes of each one with a
+    fixed head or tail, which its own node group holds.
 
     Built from located nodes rather than harvested from a meshed curve, the same way a
     point load's condition is. That is what makes the result match the reference deck
     exactly: one linear element whatever the mesh order, with the head node the beam
-    already owns and a tail node bonded to nothing.
+    already owns. A fixed end node is bonded to nothing, so it is looked for among the
+    nodes of neither the soil nor a structure; a free tail, and a free head on no
+    structure, is the node of the soil mesh `soil` (the soil's node tags) that
+    `solid_model._embed_beams` put there.
 
-    The head is resolved to a *beam* node specifically. `solid_model._attach_anchors` draws
-    the anchor as display geometry whose own head vertex sits at the same place, so a
-    plain nearest-node search could pick that stray instead of the pile's node.
+    A head on a structure is resolved to a *beam* node specifically.
+    `solid_model._attach_anchors` draws the anchor as display geometry whose own head
+    vertex sits at the same place, so a plain nearest-node search could pick that stray
+    instead of the pile's node. An end in the soil is resolved to a soil node for the
+    same reason.
     """
     # In 3D both kinds are live: a space anchor is drawn in the model, and a plane
     # anchor hangs off the sheet pile that `solid_model._section_sweeps` put on the cut.
     anchors = (project.plane_anchors if dim == 2
                else project.plane_anchors + project.space_anchors)
-    # The structures an anchor may hang from: a 2D head is on a sheet pile, a 3D head on
-    # a wall or a member. Resolved to *structural* nodes specifically, because
+    # The structures an anchor may hang from: a 2D head on a sheet pile, a 3D head on a
+    # wall or a member. Resolved to *structural* nodes specifically, because
     # `solid_model._attach_anchors` draws the tie's own head vertex at the same place and a
     # plain nearest-node search could pick that stray instead.
     structural = {tag for _, _, rows in _harvest(_beam_bodies(project, dim), 1, BEAMS,
@@ -1320,20 +1332,52 @@ def _anchor_ties(project: Project, dim: int,
     structural |= {tag for _, _, rows in _harvest(_panel_bodies(project, dim), 2, SHELLS,
                                                   model_dim=dim)
                    for row in rows for tag in row}
-    blocks, supports = [], {}
+    # A fixed end is its own node, which neither the soil nor a structure owns.
+    loose = set(world) - structural - (soil or set())
+    blocks: list[tuple[str, str, list[list[int]]]] = []
+    supports: dict[str, list[int]] = {}
     for anchor in anchors:
         if not anchor.active:
             continue
-        head = _node_at(anchor.head, project, world, structural)
-        tail = _node_at(anchor.tail, project, world, None)
+        free = anchor.tail_end == "free"
+        free_head = anchor.head_end == "free"
+        # A free head on no structure is a node of the soil mesh, as a free tail is.
+        on_structure = project.anchor_on_structure(anchor)
+        head = _node_at(_placed(anchor.head, project, dim), project, world,
+                        loose if not free_head else
+                        structural if on_structure else (soil or set()))
+        tail = _node_at(_placed(anchor.tail, project, dim), project, world,
+                        (soil or set()) if free else loose)
+        if head is None and free_head and not on_structure:
+            raise ExportError(
+                f"anchor {anchor.name!r} has a head that is on no structure and not in "
+                "the soil, so it is joined to nothing. Move the head into the soil or "
+                "onto a structure."
+            )
+        if head is not None and tail is None and free:
+            raise ExportError(
+                f"anchor {anchor.name!r} has a free tail that is not in the soil, so it "
+                "is joined to nothing. Move the tail into the soil, or make the tail "
+                "end fixed."
+            )
         if head is None or tail is None:
             raise ExportError(
                 f"anchor {anchor.name!r} has no mesh node at its "
                 f"{'head' if head is None else 'tail'}; re-mesh the model."
             )
         blocks.append((anchor.id, TRUSSES[dim], [[head, tail]]))
-        supports[anchor.id] = tail
+        held = ([head] if not free_head else []) + ([tail] if not free else [])
+        if held:
+            supports[anchor.id] = held
     return blocks, supports
+
+
+def _placed(point: tuple[float, ...], project: Project, dim: int) -> tuple[float, ...]:
+    """An anchor end where the model has it: a plane anchor's `(x, y)` lies on the cut
+    in the solid model (`solid_model._attach_anchors`), and is its own in a section."""
+    if dim == 3 and len(point) == 2:
+        return (point[0], point[1], project.cut_at())
+    return point
 
 
 def _node_at(point: tuple[float, ...], project: Project,
@@ -2202,17 +2246,21 @@ def _part_names(project: Project) -> dict[str, str]:
     # of: `Upper_Sand`, then `Upper_Sand_lift1`. A staged body has no name of its own in
     # the project -- the user named the layer, not the lift -- so it takes the layer's
     # and says which part of it this is.
-    layers = {f"soil_{layer.id}": layer for layer in project.layers}
-    recorded = {piece.key: piece.body.name for piece in project.split_soil() if piece.body}
-    for key, *_ in project.soil_bodies():
-        stem, _, suffix = key.partition("__")
-        layer = layers[stem]
-        base = _sanitise(layer.name) or layer.id
+    owners = {f"soil_{layer.id}": _sanitise(layer.name) or layer.id for layer in project.layers}
+    # A piece of a drawn soil surface is named after the surface, as a layer's is.
+    owners.update({part.key: _sanitise(part.label) or part.key for part in project.custom_parts})
+    pieces = project.split_soil()
+    for piece in pieces:
+        stem, _, suffix = piece.key.partition("__")
         # A piece a line cut off has a name of its own, which the deck says.
-        suffix = _sanitise(recorded[key]) or suffix if key in recorded else suffix
-        names[key] = _unique(f"{base}_{suffix}" if suffix else base, used)
+        if piece.body is not None:
+            suffix = _sanitise(piece.body.name) or suffix
+        names[piece.key] = _unique(f"{owners[stem]}_{suffix}" if suffix else owners[stem],
+                                   used)
+    cut = {piece.part.key for piece in pieces if piece.part is not None}
     for part in project.custom_parts:
-        names[part.key] = _unique(_sanitise(part.label) or part.key, used)
+        if part.key not in cut:
+            names[part.key] = _unique(_sanitise(part.label) or part.key, used)
     for load in project.loads:
         names[load.id] = _unique(_sanitise(load.name) or load.id, used)
     for beam in project.beams:

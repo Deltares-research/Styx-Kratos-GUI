@@ -294,7 +294,7 @@ App.Loads = (function () {
       title: (source.id && collection().some(function (item) { return item.id === source.id; }))
         ? 'Edit ' + displayKind + ' load'
         : 'Create ' + displayKind + ' load',
-      width: 590, height: App.PROJECT.dimension === 2 ? 430 : 540,
+      width: 590, height: App.PROJECT.dimension === 2 ? 550 : 720,
       buttons: [
         { label: 'Pick on model…', onClick: function () { pick(load.kind); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
