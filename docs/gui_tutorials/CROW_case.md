@@ -323,20 +323,21 @@ by the soil's own **Rinter** from step 2.
 
    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
-5. In the Selection explorer of the interface, set **Virtual thickness** to `1` and press
-   Enter. With a virtual thickness of 1 m, the stiffness of the interface comes directly
-   from the shear modulus of the soil, as the next paragraph shows.
-6. In **Law**, select **Coulomb**.
-7. In the **R_inter** row, click **Each soil's own R_inter**.
+5. In the Selection explorer of the interface, in **Law**, select **Coulomb**.
+6. Keep the other values of a new interface. **Stiffness** shows **From the soil** and
+   **R_inter** shows **Each soil's own**, so each part of the interface uses the
+   stiffness and the Rinter of its soil. **Virtual thickness** is 1 m, so the stiffness of
+   the interface comes directly from the shear modulus of the soil, as the next paragraph
+   shows.
 
-![The Selection explorer of the interface. The Law and Virtual thickness rows and the Each soil's own R_inter button are outlined.](images/crow/09_interface_contact.png)
+![The Selection explorer of the interface. The Law, Stiffness, R_inter and Virtual thickness rows are outlined.](images/crow/09_interface_contact.png)
 
 A Coulomb interface slips when the shear stress reaches the reduced strength of the soil.
 Styx derives the stiffness of the interface from the soil: the shear stiffness is G / t
 and the normal stiffness is 10 G / t, where G is the shear modulus of the soil and t is
-the virtual thickness. For the clay, G = 375 kPa, so the shear stiffness is 375 kPa/m and
-the normal stiffness is 3 750 kPa/m. The factor 10 makes the interface much stiffer across
-the wall than along it: the soil can slip along the wall, but it does not go into the wall
+the virtual thickness. R_inter reduces the strength only, not the stiffness. For the clay,
+G = 375 kPa, so the shear stiffness is 375 kPa/m and the normal stiffness is 3 750 kPa/m.
+The factor 10 makes the interface much stiffer across the wall than along it: the soil can slip along the wall, but it does not go into the wall
 or come away from it. Kratos' reference interface materials use the same factor.
 
 ## 10. Add the surcharge and the water loads

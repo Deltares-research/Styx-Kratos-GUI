@@ -5294,8 +5294,8 @@ window.DRAFTS_FIXTURE =
           "id": "interfacesection_1",
           "name": "Interface",
           "material": null,
-          "r_inter": 0.7,
-          "virtual_thickness": 0.01,
+          "r_inter": null,
+          "virtual_thickness": 1.0,
           "permeability": "Neutral"
         }
       ]

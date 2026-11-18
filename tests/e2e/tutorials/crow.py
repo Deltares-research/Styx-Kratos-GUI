@@ -317,14 +317,13 @@ def interface(tour: Tour) -> None:
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.interfaces || []).length === 1")
     tour.settle()
-    set_in_selection(tour, "Virtual thickness", f"{CONTACT_SECTION.virtual_thickness:g}")
+    # A new contact already has the CROW values: the stiffness from the soil, each soil's
+    # own R_inter and a virtual thickness of 1 m. Only the law is chosen.
     choose_in_selection(tour, "Law", "Coulomb")
-    # The button goes once it is used: the screenshot shows it before.
-    own = page.locator("#grid-selection button", has_text="Each soil’s own R_inter")
     tour.picture("contact", mark=[selection_row(page, "Law"),
-                                  selection_row(page, "Virtual thickness"), own])
-    own.click()
-    tour.settle()
+                                  selection_row(page, "Stiffness"),
+                                  selection_row(page, "R_inter"),
+                                  selection_row(page, "Virtual thickness")])
 
 
 def one_interface(tour: Tour) -> None:
@@ -333,6 +332,9 @@ def one_interface(tour: Tour) -> None:
     assert section["constitutive_law"] == CONTACT_SECTION.constitutive_law
     assert section["virtual_thickness"] == CONTACT_SECTION.virtual_thickness
     assert section.get("r_inter") is None and section.get("material") is None
+    # Both stiffnesses left to the export, which derives G / t and 10 G / t.
+    assert "INTERFACE_NORMAL_STIFFNESS" not in section["variables"]
+    assert "INTERFACE_SHEAR_STIFFNESS" not in section["variables"]
 
 
 # ── 9. The loads ───────────────────────────────────────────────────────────

@@ -300,14 +300,20 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
    numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
    thickness, and the permeability. A new contact takes the soil each part of the
-   interface runs against (**From the soil it runs against**). The **Elastic** law reads
-   the stiffnesses only. The **Coulomb** law reads a strength too, and slips when the
-   shear stress reaches it: under **Strength**, select **From the soil** (the soil's,
-   reduced by **R_inter**) or **Set on the interface** (type `GEO_COHESION` and
-   `GEO_FRICTION_ANGLE`). **R_inter** is one number for the whole contact; click **Each
-   soil's own R_inter** to use the R_inter of each soil instead. A linear elastic soil has
-   no strength, so against one the contact gets its own, and you set it. The contact takes
-   the saturation of its soil, and a Coulomb contact also takes its tension cut-off.
+   interface runs against (**From the soil it runs against**), the R_inter of each soil,
+   and a virtual thickness of 1 m. Under **Stiffness**, select **From the soil** (the
+   export takes shear G / t and normal 10 G / t from the soil, with t the virtual
+   thickness) or **Set on the interface** (type `INTERFACE_NORMAL_STIFFNESS` and
+   `INTERFACE_SHEAR_STIFFNESS`; they start from the values the soil gives). The
+   **Elastic** law reads the stiffnesses only. The **Coulomb** law reads a strength too,
+   and slips when the shear stress reaches it: under **Strength**, select **From the
+   soil** (the soil's, reduced by **R_inter**) or **Set on the interface** (type
+   `GEO_COHESION` and `GEO_FRICTION_ANGLE`). R_inter reduces the strength only, not the
+   stiffness. Under **R_inter**, select **Each soil's own** (the R_inter of each
+   soil) or **Set on the interface** (type one number for the whole contact in **R_inter
+   value**). A linear elastic soil has no strength, so against one the contact gets its
+   own, and you set it. The contact takes the saturation of its soil, and a Coulomb
+   contact also takes its tension cut-off.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length

@@ -233,7 +233,11 @@ SECTION_DEFAULTS_SI: dict[str, dict[str, Any]] = {
                # A four-strand tendon, per anchor.
                "variables": {"YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006,
                              "DENSITY": 7850.0}},
-    "interface": {"name": "Interface", "r_inter": 0.7, "virtual_thickness": 0.01,
+    # No r_inter: each stretch takes the Rinter of the soil it runs against. A virtual
+    # thickness of 1 m: the derived stiffnesses are G and 10 G, as in the reference deck.
+    # Both are what `InterfaceSection` itself defaults to, so a contact drawn in the GUI
+    # or made by `section add` is the one a model script writes.
+    "interface": {"name": "Interface", "r_inter": None, "virtual_thickness": 1.0,
                   "permeability": "Neutral",
                   "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
                   "variables": {}},
@@ -241,7 +245,7 @@ SECTION_DEFAULTS_SI: dict[str, dict[str, Any]] = {
 """A new section of each kind, in SI (`App.Beams.defaultSection`, `defaultPanelSection`,
 `App.Anchors.defaultSection`, `App.Interfaces.defaultSection`). The tendon's working
 limit is a force and is stated in the project's force unit; a new interface section
-reduces the project's first soil."""
+takes the soil each stretch runs against."""
 
 SECTION_KINDS = {"beam": BeamSection, "panel": PanelSection, "anchor": AnchorSection,
                  "interface": InterfaceSection}
