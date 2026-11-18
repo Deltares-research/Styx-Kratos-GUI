@@ -2047,55 +2047,74 @@ App.LivePatches = (function () {
       });
   }
 
-  function stageToolbar() {
-    var el = App.UI.el;
-    var icon = App.UI.icon;
-    var bar = el('div.dlg-toolbar.stage-toolbar');
-    var selected = selectedStageId();
+  /* The stage buttons: add, insert, duplicate and delete, on the selected stage.
+     `new`/`copy`/`delete` are the mockup's own icon names (js/data.js:63-76); `phase`
+     stands in for insert, which has no icon of its own in the frozen set. */
+  var STAGE_ACTIONS = [
+    ['new', 'Add stage', function () {
+      return App.Stages.added(App.PROJECT);
+    }, 'Stage added.', 'addStage'],
+    ['phase', 'Insert stage above the selected one', function (selected) {
+      return App.Stages.inserted(App.PROJECT, selected);
+    }, 'Stage inserted.', 'insertStage', 'Nothing goes before the initial stage.'],
+    ['copy', 'Duplicate the selected stage', function (selected) {
+      return App.Stages.copied(App.PROJECT, selected);
+    }, 'Stage duplicated.', 'duplicateStage'],
+    ['delete', 'Delete the selected stage', function (selected) {
+      return App.Stages.removed(App.PROJECT, selected);
+    }, 'Stage deleted.', 'deleteStage', 'The initial stage is always there.']
+  ];
 
-    /* The icon row at the top left of the Stages window. `new`/`copy`/`delete`
-       are the mockup's own icon names (js/data.js:63-76); `stage` stands in for
-       insert, which has no icon of its own in the frozen set. */
-    [['new', 'Add stage', function () {
-        return App.Stages.added(App.PROJECT);
-      }, 'Stage added.', 'addStage'],
-     ['phase', 'Insert stage above the selected one', function () {
-        return selected ? App.Stages.inserted(App.PROJECT, selected) : null;
-      }, 'Stage inserted.', 'insertStage', 'Nothing goes before the initial stage.'],
-     ['copy', 'Duplicate the selected stage', function () {
-        return selected ? App.Stages.copied(App.PROJECT, selected) : null;
-      }, 'Stage duplicated.', 'duplicateStage'],
-     ['delete', 'Delete the selected stage', function () {
-        return selected ? App.Stages.removed(App.PROJECT, selected) : null;
-      }, 'Stage deleted.', 'deleteStage', 'The initial stage is always there.']
-    ].forEach(function (spec) {
+  /* The stage buttons, added to `bar`: the same in the Stages panel and the Stages
+     window. Each acts on the stage selected when it is clicked. `saved`, if given,
+     runs once the new list has come back from the server. Answers a function that
+     enables the buttons for the stage selected now. */
+  function stageButtons(bar, saved) {
+    var el = App.UI.el;
+    var buttons = STAGE_ACTIONS.map(function (spec) {
       // Named, as the rail buttons are, so a script or a screen reader can find it.
       var button = el('button.tbtn', { type: 'button' });
       button.setAttribute('data-action', spec[4]);
       button.setAttribute('aria-label', spec[1]);
-      button.appendChild(icon(spec[0]));
+      button.appendChild(App.UI.icon(spec[0]));
       App.UI.attachTip(button, spec[1]);
-      button.disabled = spec[0] !== 'new' && !selected;
       button.addEventListener('click', function () {
         App.UI.hideTip();
-        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
-          return stage.id;
-        });
-        var list = spec[2]();
-        if (!list) { App.Command.err('Select a stage first.'); return; }
+        var selected = selectedStageId();
+        if (spec[0] !== 'new' && !selected) { App.Command.err('Select a stage first.'); return; }
         // Insert and Delete refuse the initial stage (App.Stages.inserted, .removed).
         if (spec[5] && App.Stages.isInitial(App.PROJECT, selected)) {
           App.Command.err(spec[5]);
           return;
         }
+        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
+          return stage.id;
+        });
+        var list = spec[2](selected);
         // A stage just made is the one to fill in next, so it is selected; after a
         // delete, selectedStageId falls back to the first.
         var made = list.filter(function (stage) { return before.indexOf(stage.id) < 0; })[0];
         if (made) App.state.phase = made.id;
-        saveStages(list, spec[3]);
+        var done = saveStages(list, spec[3]);
+        if (saved) done.then(saved);
       });
       bar.appendChild(button);
+      return button;
     });
+    function sync() {
+      var selected = selectedStageId();
+      buttons.forEach(function (button, i) {
+        button.disabled = STAGE_ACTIONS[i][0] !== 'new' && !selected;
+      });
+    }
+    sync();
+    return sync;
+  }
+
+  function stageToolbar() {
+    var el = App.UI.el;
+    var bar = el('div.dlg-toolbar.stage-toolbar');
+    stageButtons(bar);
 
     bar.appendChild(el('span.tbsep'));
 
@@ -2592,8 +2611,20 @@ App.LivePatches = (function () {
 
     var selected = selectedStageId();
 
+    /* The panel's stage buttons, above the list: a stage is added, duplicated or
+       deleted without closing the window. A deck's stages are the deck's, and it has
+       none. The stage a button made is the one shown next. */
+    var redraw = null, toolbar = null, syncButtons = function () {};
+    if (!(App.PROJECT && App.PROJECT.deck)) {
+      toolbar = el('div.dlg-toolbar.stage-toolbar');
+      syncButtons = stageButtons(toolbar, function () {
+        selected = selectedStageId();
+        if (redraw) redraw();
+      });
+    }
+
     App.Dialogs.open({
-      title: 'Stages',
+      title: 'Stages', toolbar: toolbar,
       width: Math.min(1180, window.innerWidth - 40),
       height: Math.min(720, window.innerHeight - 40),
       buttons: [{ label: 'Close', primary: true }],
@@ -2618,12 +2649,13 @@ App.LivePatches = (function () {
           App.UI.clear(left);
           App.UI.clear(right);
           App.UI.clear(log);
+          syncButtons();
 
           var stages = (App.PROJECT && App.PROJECT.stages) || [];
           if (!stages.length) {
             right.appendChild(el('p', { text:
-              'This project has no stages yet. Close this and use ' +
-              '"Add stage" in the Stages panel.' }));
+              'This project has no stages yet. Use "Add stage" above to add the ' +
+              'initial stage.' }));
             return;
           }
 
@@ -2713,6 +2745,7 @@ App.LivePatches = (function () {
               'stages after it follow until one of them changes it again.' }));
         }
 
+        redraw = draw;
         draw();
       }
     });

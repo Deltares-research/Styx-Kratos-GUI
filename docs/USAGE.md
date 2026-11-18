@@ -488,6 +488,10 @@ Use the buttons at the top of the Stages explorer to change the sequence:
 | Delete | Deletes the selected stage |
 | Stages… | Opens the **Stages** window with the settings of each stage |
 
+The **Stages** window has the same four buttons (Add stage, Insert stage, Duplicate and
+Delete) above its list of stages, so you can change the sequence without closing it. A new
+stage is selected, so you can set it up next.
+
 ### Switch parts on and off
 
 1. Select a stage in the Stages explorer.
