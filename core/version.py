@@ -23,7 +23,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
-VERSION = "0.1.3a"
+VERSION = "0.1.3"
 """The number of the release this code is, or is on its way from."""
 
 ROOT = Path(__file__).resolve().parents[1]
