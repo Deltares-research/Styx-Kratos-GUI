@@ -146,6 +146,50 @@ test('a second press while one is in flight is refused rather than queued', func
   });
 });
 
+test('a run the user stopped is reported as stopped, not as a failure', function () {
+  return withCalculateStubs(function (logged) {
+    App.Api = { post: function () {
+      return Promise.resolve(calculationResult({
+        ok: false, stopped: true, returncode: 1, seconds: 41.2,
+        stage: { index: 3, of: 7, name: 'Second excavation' },
+        error: 'Stopped by the user after 41.2 s, in stage 3 of 7 (Second excavation).'
+      }));
+    } };
+    return App.Calculate.run().then(function () {
+      T.ok(!logged.some(function (line) { return line[0] === 'err'; }), 'no red lines');
+      T.ok(logged.some(function (line) {
+        return line[1] === 'Calculation stopped after 41.2 s, in stage 3 of 7 ("Second '
+             + 'excavation"). The stages before it finished and keep their results. The '
+             + 'model has not changed.';
+      }), logged.map(function (line) { return line[1]; }).join(' | '));
+      T.ok(logged.some(function (line) { return line[1].indexOf('Model_2026-09-20_10-15') > 0; }),
+           'and where its files are');
+      T.eq(App.Results.remembered.length, 1, 'what it wrote can still be opened');
+    });
+  });
+});
+
+test('a stop that cannot reach the server says so and leaves the run going', function () {
+  return withCalculateStubs(function (logged) {
+    var release;
+    App.Api = { post: function (path) {
+      if (path === '/api/calculate/stop') return Promise.reject(new Error('offline'));
+      return new Promise(function (resolve) { release = resolve; });
+    } };
+    var run = App.Calculate.run();
+    return App.Calculate.stop().then(function (answer) {
+      T.eq(answer, false);
+      T.eq(App.Calculate.stopping(), false);
+      T.eq(App.Calculate.running(), true);
+      T.ok(logged.some(function (line) {
+        return line[0] === 'err' && line[1] === 'The calculation could not be stopped: offline';
+      }));
+      release(calculationResult());
+      return run;
+    });
+  });
+});
+
 test('a broken calculation listener is reported separately without failing the run', function () {
   return withCalculateStubs(function (logged) {
     var timeout = window.setTimeout, scheduled = [], armed = true;
@@ -169,5 +213,94 @@ test('a broken calculation listener is reported separately without failing the r
       T.ok(!logged.some(function (line) { return line[0] === 'err'; }));
       return T.rejects(scheduled[0].callback);
     }).then(function (error) { T.eq(error, failure); });
+  });
+});
+
+/* A model meshed already is not meshed again; one with no mesh gets a warning first. */
+function withViewportMesh(hasMesh, body) {
+  var saved = App.Viewport;
+  App.Viewport = {
+    hasMesh: function () { return hasMesh; },
+    calculatedMeshFits: function () { return false; },
+    meshKey: function () { return 'key'; },
+    rememberCalculatedMesh: function () {},
+    meshRefinements: function () { return []; }
+  };
+  function restore() { App.Viewport = saved; }
+  return Promise.resolve().then(body).then(function (value) { restore(); return value; },
+                                           function (error) { restore(); throw error; });
+}
+
+test('a model with a mesh is calculated from that mesh, with no warning', function () {
+  return withCalculateStubs(function (logged) {
+    App.Api = { post: function () {
+      return Promise.resolve(calculationResult({ mesh_reused: true }));
+    } };
+    return withViewportMesh(true, function () {
+      return App.Calculate.run().then(function () {
+        T.ok(logged.some(function (line) {
+          return line[1].indexOf('from the existing mesh') !== -1;
+        }), 'the log says the existing mesh is used');
+        T.ok(!logged.some(function (line) { return /Warning|Meshing/.test(line[1]); }),
+             'no warning and no "Meshing" line');
+      });
+    });
+  });
+});
+
+test('a model with no mesh is warned about before it is meshed', function () {
+  return withCalculateStubs(function (logged) {
+    App.Api = { post: function () {
+      return Promise.resolve(calculationResult({ mesh_reused: false }));
+    } };
+    return withViewportMesh(false, function () {
+      return App.Calculate.run().then(function () {
+        var warned = logged.findIndex(function (line) {
+          return line[1].indexOf('Warning: the model has no mesh yet') !== -1;
+        });
+        T.ok(warned !== -1, 'the warning is in the log');
+        T.ok(logged[warned][1].indexOf('global element size 2.5 m') !== -1,
+             'and it names the global element size: ' + logged[warned][1]);
+        T.ok(logged[warned + 1][1].indexOf('Meshing') === 0, 'then the run meshes');
+      });
+    });
+  });
+});
+
+test('what the server did about the mesh is said when the page did not expect it', function () {
+  return withCalculateStubs(function (logged) {
+    App.Api = { post: function () {
+      return Promise.resolve(calculationResult({ mesh_reused: false }));
+    } };
+    return withViewportMesh(true, function () {
+      return App.Calculate.run().then(function () {
+        T.ok(logged.some(function (line) {
+          return line[1].indexOf('meshed the model again') !== -1;
+        }), 'a mesh the server lost is said');
+        logged.length = 0;
+        App.Api = { post: function () {
+          return Promise.resolve(calculationResult({ mesh_reused: true }));
+        } };
+        App.Viewport.hasMesh = function () { return false; };
+        return App.Calculate.run();
+      }).then(function () {
+        T.ok(logged.some(function (line) {
+          return line[1].indexOf('still had a mesh') !== -1;
+        }), 'and so is a mesh the server still had');
+      });
+    });
+  });
+});
+
+test('a deck case is run as it is, with no word about a mesh', function () {
+  return withCalculateStubs(function (logged) {
+    App.PROJECT = { deck: { name: 'imported' }, mesh: {} };
+    App.Api = { post: function () { return Promise.resolve(calculationResult()); } };
+    return withViewportMesh(false, function () {
+      return App.Calculate.run().then(function () {
+        T.ok(logged.some(function (line) { return line[1] === 'Running the deck with Kratos…'; }));
+        T.ok(!logged.some(function (line) { return /mesh/i.test(line[1]); }));
+      });
+    });
   });
 });

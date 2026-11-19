@@ -76,8 +76,8 @@ def test_a_model_built_in_the_terminal_comes_back_whole(cli, tmp_path):
     for argv in (
         ("new", path, "--name", "Pit C"),
         ("domain", path, "--x", "0", "40", "--y", "-30", "0", "--z", "0", "10"),
-        ("material", path, "add", "clay", "--preset", "m3", "K0_NC=0.6"),
-        ("material", path, "add", "sand", "--preset", "m5"),
+        ("material", path, "add", "clay", "--preset", "clay_shallow", "K0_NC=0.6"),
+        ("material", path, "add", "sand", "--preset", "sand"),
         ("layer", path, "add", "top", "--material", "clay", "--bottom", "-6"),
         ("layer", path, "add", "bottom", "--material", "sand", "--bottom", "-30"),
         ("line", path, "add", "floor", "--points", "0", "-2", "5", "-2"),

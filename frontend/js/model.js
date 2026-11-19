@@ -303,7 +303,7 @@ App.Model = (function () {
     return mine.length ? mine : ['soil_' + layer.id];
   }
 
-  /* What a body is made of: its own material, or its layer's. */
+  /* What a body is made of: its own material, or its layer's or surface's. */
   function bodyMaterial(layer, key) {
     var own = (App.PROJECT && App.PROJECT.soil_body_materials) || {};
     return App.matById(own[key] || layer.mat);
@@ -314,6 +314,30 @@ App.Model = (function () {
     return layerBodies(layer).map(function (key) {
       var m = bodyMaterial(layer, key);
       return { label: (labels[key] || layer.name) + '  ·  ' + m.name,
+               swatch: m.color, leaf: true, eye: true, obj: key };
+    });
+  }
+
+  /* The bodies a line cut a drawn soil surface into, `<part>__<id>`, or none when no
+     line cuts it: then the part is one row of its own (soilBodyChild). */
+  function partBodies(part) {
+    var published = (App.PROJECT && App.PROJECT.soil_body_keys) || [];
+    return published.filter(function (key) { return key.split('__')[0] === part.key; });
+  }
+
+  /* What a piece of a soil surface is a piece of, in the shape bodyProps reads. */
+  function partOwner(part) {
+    return { name: part.label, mat: part.mat, part: part,
+             noun: App.PROJECT && App.PROJECT.dimension === 3 ? 'Soil volume' : 'Soil surface' };
+  }
+
+  function partChildren(part) {
+    var keys = partBodies(part);
+    if (!keys.length) return [soilBodyChild(part)];
+    var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
+    return keys.map(function (key) {
+      var m = bodyMaterial(part, key);
+      return { label: (labels[key] || part.label) + '  ·  ' + m.name,
                swatch: m.color, leaf: true, eye: true, obj: key };
     });
   }
@@ -492,15 +516,54 @@ App.Model = (function () {
   /* A condition's own row: what it is, in the words `boundary list` uses. */
   /* A support in a groundwater flow project says it is left out, as an inactive
      condition says it is inactive (`App.BoundaryConditions.unusedInFlow`). */
-  function conditionChild(record) {
+  /* A phreatic line with water on the ground has a row under it that says in which
+     stages (`surfaceWaterStages`): the export adds its weight on the ground there and
+     fixes the water pressure on the wet surface, and nothing else in the tree shows
+     it. `onGround` is that line's stage names, `[null]` for a model with no stages. */
+  function conditionChild(record, onGround) {
     var conditions = App.BoundaryConditions;
     var label = conditions ? conditions.label(record) : record.name;
     var note = record.active === false ? '  (inactive)'
       : conditions && conditions.unusedInFlow(record, App.PROJECT)
         ? '  (unused in flow)' : '';
-    return { label: label + note,
-             icon: record.kind === 'displacement' ? 'prescribed' : 'water',
-             leaf: true, eye: true, obj: record.id };
+    var node = { label: label + note,
+                 icon: record.kind === 'displacement' ? 'prescribed' : 'water',
+                 leaf: true, eye: true, obj: record.id };
+    if (onGround && onGround.length) {
+      var named = onGround.filter(function (name) { return name !== null; });
+      node.leaf = false;
+      node.expanded = false;
+      node.children = [{
+        label: 'Water on the ground' + (named.length
+          ? '  ·  ' + (named.length === 1 ? 'stage ' : 'stages ') + named.join(', ') : ''),
+        icon: 'water', leaf: true
+      }];
+    }
+    return node;
+  }
+
+  /* `{phreatic line id: [stage name, ...]}`: the stages in which the water of the
+     line stands on the ground (`App.SurfaceWater.stagesWithWater`), read off the
+     viewport's last build. Empty without one, in 3D and with a branching stage tree.
+     The last answer is kept on the function, so the viewport can tell whether a new
+     build changed it (viewport.js `refreshSurfaceWaterRows`). */
+  function surfaceWaterStages() {
+    var project = App.PROJECT;
+    var sections = App.Viewport && App.Viewport.builtSections
+      ? App.Viewport.builtSections() : null;
+    var out = {};
+    var order = project && App.Stages ? App.Stages.order(project) : null;
+    if (project && sections && App.SurfaceWater && order !== null && !project.deck) {
+      out = App.SurfaceWater.stagesWithWater(project, sections, order, function (id) {
+        var hidden = {};
+        App.Stages.hiddenKeys(project, id, 'staged').forEach(function (key) {
+          hidden[key] = true;
+        });
+        return hidden;
+      });
+    }
+    surfaceWaterStages.last = out;
+    return out;
   }
 
   function yesNo(get, set) {
@@ -1240,6 +1303,44 @@ App.Model = (function () {
     return rows;
   }
 
+  /* Head end and Tail end: free (attached to the mesh) or fixed (held in place), as in
+     the anchor's window. A record that does not say has a free head and a fixed tail
+     (core/model/schemas.py). */
+  var ANCHOR_END_DEFAULTS = { head_end: 'free', tail_end: 'fixed' };
+
+  function anchorEndKindEditor(anchor, key) {
+    return {
+      kind: 'select',
+      options: function () {
+        var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+        return ['free', 'fixed'].map(function (value) {
+          return { value: value, text: labels[value] || value };
+        });
+      },
+      get: function () { return anchor[key] || ANCHOR_END_DEFAULTS[key]; },
+      set: function (value) {
+        var was = anchor[key];
+        anchor[key] = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor[key] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function anchorEndKindRow(anchor, key) {
+    var value = anchor[key] || ANCHOR_END_DEFAULTS[key];
+    var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+    return [key === 'head_end' ? 'Head end' : 'Tail end', labels[value] || value, '', false,
+            anchorEndKindEditor(anchor, key)];
+  }
+
+
+  function anchorEditRow(anchor) {
+    return ['Edit', '', '', false, { kind: 'button', text: 'Edit anchor…',
+      run: function () { if (App.Anchors) App.Anchors.edit(anchor.id); } }];
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1262,10 +1363,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
@@ -1291,10 +1395,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,
@@ -1431,22 +1538,31 @@ App.Model = (function () {
     };
   }
 
-  /* R_inter: one number for the whole contact, or none, which is each soil's own
-     (`Material.r_inter`) along the stretch that runs against it. None reads as words;
-     writing those words back changes nothing, as a derived stiffness does. */
-  var EACH_SOIL = 'each soil’s own';
+  /* R_inter: none, which is each soil's own (`Material.r_inter`) along the stretch that
+     runs against it, or one number for the whole contact. Which of the two is a choice,
+     as the strength is (`contactStrengthEditor`); only the number is typed, in a row of
+     its own. One set on the interface starts from the R_inter of the soil the contact
+     names, or else from a new soil's (`Material.r_inter`). */
+  var EACH_SOIL = 'Each soil’s own', ON_INTERFACE = 'Set on the interface';
+  var EACH_SOIL_R = 'soil', OWN_R = 'own', NEW_SOIL_R_INTER = 0.7;
 
-  function contactRInter(section) {
-    return section.r_inter === null || section.r_inter === undefined
-      ? EACH_SOIL : section.r_inter;
+  function ownRInter(section) {
+    return section.r_inter !== null && section.r_inter !== undefined;
   }
 
-  function contactRInterEditor(section) {
-    var number = contactNumberEditor(section, 'r_inter', '', 2);
+  function contactRInterChoice(section) {
     return {
-      kind: 'number', decimals: 2, unit: '',
-      get: function () { return contactRInter(section); },
-      set: function (value) { return value === EACH_SOIL ? null : number.set(value); }
+      kind: 'select',
+      options: function () {
+        return [{ value: EACH_SOIL_R, text: EACH_SOIL }, { value: OWN_R, text: ON_INTERFACE }];
+      },
+      get: function () { return ownRInter(section) ? OWN_R : EACH_SOIL_R; },
+      set: function (value) {
+        if ((value === OWN_R) === ownRInter(section)) return null;
+        var soil = App.matById && section.material ? App.matById(section.material) : null;
+        section.r_inter = value === OWN_R ? (soil && soil.rInter) || NEW_SOIL_R_INTER : null;
+        return null;
+      }
     };
   }
 
@@ -1535,6 +1651,39 @@ App.Model = (function () {
     };
   }
 
+  /* The two stiffnesses, chosen as the strength is: derived from the soil -- G / t and
+     10 G / t at export -- or set on the interface, starting from what the export would
+     derive, and then typed in their own rows. */
+  function contactStiffnessChoice(section) {
+    var I = App.Interfaces;
+    return {
+      kind: 'select',
+      options: function () {
+        return [{ value: FROM_SOIL, text: 'From the soil' },
+                { value: OWN_STRENGTH, text: 'Set on the interface' }];
+      },
+      get: function () { return I.ownStiffness(section) ? OWN_STRENGTH : FROM_SOIL; },
+      set: function (value) {
+        // Nothing to do when it is so already; one stiffness typed on the command line
+        // and not the other is filled in.
+        var both = I.STIFFNESS.every(function (name) { return name in (section.variables || {}); });
+        if (value === OWN_STRENGTH ? both : !I.ownStiffness(section)) return null;
+        var before = JSON.parse(JSON.stringify(section.variables || {}));
+        var soil = null;
+        if (value === OWN_STRENGTH) soil = I.setOwnStiffness(section);
+        else I.soilStiffness(section);
+        var problem = I.validateSection(section);
+        if (problem) { section.variables = before; return problem; }
+        if (value === OWN_STRENGTH && App.Command && App.Command.note) {
+          App.Command.note('The interface stiffness starts from '
+            + (soil ? soil.name + ': G / t and 10 G / t' : 'the Mohr-Coulomb defaults')
+            + '. Change the two numbers as needed.');
+        }
+        return null;
+      }
+    };
+  }
+
   function contactPermeabilityEditor(section) {
     return {
       kind: 'select',
@@ -1583,25 +1732,21 @@ App.Model = (function () {
     // The law first: it says what else is listed.
     var properties = I ? [['Law', contact.constitutive_law || I.ELASTIC_LAW, '', false,
                            contactLawEditor(contact)]] : [];
-    // The two stiffnesses, typed in place: what a user comes here to set. Left out
-    // they read "derived" -- the soil's own shear modulus over the virtual thickness
-    // supplies them at export -- and the button puts them back to that.
-    var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
-    properties = properties.concat(stiffnesses.map(function (name) {
-      return App.PropertySets.typedRow('interface', contact, name, check);
-    }));
-    var typed = stiffnesses.filter(function (name) {
-      return (contact.variables || {})[name] !== undefined;
-    });
-    if (typed.length) {
-      properties.push(['Stiffness', '', '', false, { kind: 'button',
-        text: 'Derive from the soil', run: function () {
-          typed.forEach(function (name) {
-            App.PropertySets.assign(contact, name, undefined, check);
-          });
-          // The same write a typed value makes: the whole section library with it.
-          if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
-        } }]);
+    var strength = I ? I.STRENGTH : [];
+    var stiffnesses = I ? I.STIFFNESS : [];
+    var rows = App.PropertySets.rows('interface', contact,
+                                     App.PROJECT && App.PROJECT.dimension, check);
+    // The two stiffnesses: from the soil -- its shear modulus over the virtual thickness
+    // at export -- or set on the interface, and then typed in their own rows.
+    if (I) {
+      var ownStiff = I.ownStiffness(contact);
+      properties.push(['Stiffness', ownStiff ? 'Set on the interface' : 'From the soil', '',
+                       false, contactStiffnessChoice(contact)]);
+      if (ownStiff) {
+        properties = properties.concat(rows.filter(function (row) {
+          return stiffnesses.indexOf(row[0]) >= 0;
+        }));
+      }
     }
     properties.push(
       ['Soil', (App.matById && contact.material
@@ -1612,9 +1757,6 @@ App.Model = (function () {
     // reduce one (`kratos-cli section add --help` says the same). Any other law -- a
     // Coulomb one, or one typed on the command line -- lists the strength: the soil's,
     // reduced by R_inter, or the contact's own, typed.
-    var strength = I ? I.STRENGTH : [];
-    var rows = App.PropertySets.rows('interface', contact,
-                                     App.PROJECT && App.PROJECT.dimension, check);
     if (I && (contact.constitutive_law || I.ELASTIC_LAW) !== I.ELASTIC_LAW) {
       var own = I.ownStrength(contact);
       properties.push(['Strength', own ? 'Set on the interface' : 'From the soil', '', false,
@@ -1624,16 +1766,12 @@ App.Model = (function () {
           return strength.indexOf(row[0]) >= 0;
         }));
       } else {
-        // One number for the whole contact, typed in place; or none, which reads
-        // "each soil's own", and the button goes back to that.
-        properties.push(['R_inter', contactRInter(contact) === EACH_SOIL
-          ? EACH_SOIL : String(contact.r_inter), '', false, contactRInterEditor(contact)]);
-        if (contactRInter(contact) !== EACH_SOIL) {
-          properties.push(['R_inter', '', '', false, { kind: 'button',
-            text: 'Each soil’s own R_inter', run: function () {
-              contact.r_inter = null;
-              if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
-            } }]);
+        // Each soil's own R_inter, or one number for the whole contact, typed below.
+        properties.push(['R_inter', ownRInter(contact) ? ON_INTERFACE : EACH_SOIL, '', false,
+                         contactRInterChoice(contact)]);
+        if (ownRInter(contact)) {
+          properties.push(['R_inter value', String(contact.r_inter), '', false,
+                           contactNumberEditor(contact, 'r_inter', '', 2)]);
         }
       }
     }
@@ -1755,39 +1893,48 @@ App.Model = (function () {
   }
 
   /* A soil body a line or a sheet pile cut off: what it is called and what it is made
-     of. Which layer it came out of is fixed. */
-  function bodyProps(layer, body, key) {
+     of. Which layer or soil surface (`owner`, partOwner) it came out of is fixed. */
+  function bodyProps(owner, body, key) {
     var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
-    return {
-      title: labels[key] || body.name, icon: 'cube',
-      groups: {
-        'General': [
-          ['Name', body.name, '', true],
-          ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
-            run: function () {
-              return App.NameDialog.ask({ title: 'Rename', value: body.name,
-                                          help: 'Shown in the Model explorer.' })
-                .then(function (name) {
-                  if (name !== null && App.Lines) {
-                    return App.Lines.saveBody(key, { name: name }).catch(function () {});
-                  }
-                });
-            } }],
-          ['Layer', layer.name, '', true],
-          // The materials only, the part's chosen: it has one of its own from the moment
-          // a line cuts it off, and keeps it when its layer's changes.
-          ['Material', bodyMaterial(layer, key).name, '', false, {
-            kind: 'select',
-            options: function () {
-              return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
-            },
-            get: function () { return body.mat || layer.mat; },
-            set: function (value) { body.mat = value || layer.mat; return null; }
-          }],
-          ['Volume', '—', 'm³', true]
-        ]
-      }
-    };
+    var noun = (owner.noun || 'Layer').toLowerCase();
+    var general = [
+      // The name the Model explorer shows, so the panel, the row and the Rename window
+      // all say the same (js/patches.js renameBodyPart).
+      ['Name', labels[key] || body.name, '', true],
+      ['Rename part', '', '', false, { kind: 'button', text: 'Rename…',
+        run: function () { if (App.LivePatches) return App.LivePatches.renameBodyPart(key); }
+      }],
+      [owner.noun || 'Layer', owner.name, '', true],
+      // The materials only, the part's chosen: it has one of its own from the moment
+      // a line cuts it off, until its layer or surface is given another.
+      ['Material', bodyMaterial(owner, key).name, '', false, {
+        kind: 'select',
+        options: function () {
+          return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
+        },
+        get: function () { return body.mat || owner.mat; },
+        set: function (value) { body.mat = value || owner.mat; return null; }
+      }],
+      ['Volume', '—', 'm³', true]
+    ];
+    // The corners are the surface's, so they are edited there, for every piece at once.
+    if (owner.part && App.SoilVolumeDialog) {
+      general.push(['Corners', '', '', false, {
+        kind: 'button', text: 'Edit coordinates…',
+        run: function () { App.SoilVolumeDialog.open(owner.part); }
+      }]);
+    }
+    // This part alone, which leaves a void (js/patches.js deleteBodyPart); or the whole
+    // layer or surface, every part of it.
+    general.push(['Delete part', '', '', false, {
+      kind: 'button', text: 'Delete part',
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyPart(key); }
+    }]);
+    general.push(['Delete ' + noun, '', '', false, {
+      kind: 'button', text: 'Delete ' + noun,
+      run: function () { if (App.LivePatches) App.LivePatches.deleteBodyOwner(key); }
+    }]);
+    return { title: labels[key] || body.name, icon: 'cube', groups: { 'General': general } };
   }
 
   function normalLoadProps(record) {
@@ -1983,8 +2130,12 @@ App.Model = (function () {
       var layerRows = layers.reduce(function (rows, layer) {
         return rows.concat(layerChildren(layer));
       }, []);
-      node.count = layerRows.length + soilBodies.length;
-      node.children = layerRows.concat(soilBodies.map(soilBodyChild));
+      // A soil surface a line cut is one row per piece, as a cut layer is.
+      var partRows = soilBodies.reduce(function (rows, part) {
+        return rows.concat(partChildren(part));
+      }, []);
+      node.count = layerRows.length + partRows.length;
+      node.children = layerRows.concat(partRows);
     });
 
     customGeometryNode.count = plainParts.length;
@@ -2022,6 +2173,13 @@ App.Model = (function () {
     });
     Object.keys(App.OBJECT_PROPS).forEach(function (key) {
       if (/^(drawn|imported)_/.test(key) && !currentPartKeys[key]) delete App.OBJECT_PROPS[key];
+    });
+    // Each piece of a cut soil surface shows what a piece of a layer shows.
+    soilBodies.forEach(function (part) {
+      partBodies(part).forEach(function (key) {
+        var body = App.Lines && App.Lines.bodyOf(key);
+        if (body) App.OBJECT_PROPS[key] = bodyProps(partOwner(part), body, key);
+      });
     });
 
     var loadNode = findLoadConditionsNode();
@@ -2097,7 +2255,10 @@ App.Model = (function () {
       return !(App.BoundaryConditions && App.BoundaryConditions.heldBySection(record, App.PROJECT));
     });
     boundaryNode.count = listed.length;
-    boundaryNode.children = listed.map(conditionChild);
+    var onGround = surfaceWaterStages();
+    boundaryNode.children = listed.map(function (record) {
+      return conditionChild(record, onGround[record.id]);
+    });
     // No "Boundary conditions [0]" row, nor an empty "Model conditions", for a model
     // without any.
     conditionsNode.children = listed.length ? [boundaryNode] : [];
@@ -2220,6 +2381,7 @@ App.Model = (function () {
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    surfaceWaterStages: surfaceWaterStages,
     clearMeshStats: clearMeshStats,
     setImportedParts: setImportedParts,
     domain: function () { return domain; }

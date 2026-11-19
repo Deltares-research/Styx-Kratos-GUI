@@ -63,6 +63,9 @@ App.Picture = (function () {
   /* `null` for what a picture cannot show: a sprite that says nothing about its text. */
   function describe(object) {
     if (!object.material || Array.isArray(object.material)) return null;
+    // Drawn by a shader on screen only (a wide line's band, results-view.js); the line
+    // it sits on is in the picture instead.
+    if (object.userData.screenOnly) return null;
     if (object.isSprite) {
       var text = object.userData.pictureText;
       if (!text) return null;
@@ -83,7 +86,8 @@ App.Picture = (function () {
     if (object.isLineSegments || object.isLine) {
       var dashed = object.material.isLineDashedMaterial;
       return Object.assign(common(object, object.isLineSegments ? 'lines' : 'strip'), {
-        dash: dashed ? { size: object.material.dashSize, gap: object.material.gapSize } : null
+        dash: dashed ? { size: object.material.dashSize, gap: object.material.gapSize } : null,
+        weight: object.userData.lineWeight || 1
       });
     }
     if (object.isPoints) {
@@ -861,6 +865,62 @@ App.Picture = (function () {
     });
   }
 
+  /* ── A figure window's Save button ────────────────────────────────────── */
+
+  /* The one Save button of a figure window -- the plot along the wall, the Convergence
+     window: a small menu of the formats its command saves, opened above the button when
+     there is no room below it. A pick calls `onPick(format)` at once, from its own
+     click, so the browser still opens its save window. The page closes an open menu on
+     any press outside it -- on this button too -- so the click that follows such a press
+     must not open the menu again. */
+  var FIGURE_FORMATS = [
+    { label: 'PNG', format: 'png' },
+    { label: 'PDF', format: 'pdf' },
+    { label: 'SVG', format: 'svg' },
+    { label: 'CSV', format: 'csv' }
+  ];
+
+  function saveMenu(button, onPick) {
+    var open = false, justClosed = false, pressClosed = false;
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('mousedown', function () { pressClosed = justClosed; });
+
+    function show() {
+      App.UI.closePopups(0);
+      var r = button.getBoundingClientRect();
+      var menu = App.UI.popup(App.Menu.build(FIGURE_FORMATS, function (it) {
+        onPick(it.format);
+      }), r.left, r.bottom);
+      // The menu layer lies under the dialogs' layer, so the menu goes up beside the
+      // window it belongs to. Both layers cover the page, so it keeps its place.
+      var dialogs = document.getElementById('modal-layer');
+      if (dialogs) dialogs.appendChild(menu);
+      var height = menu.getBoundingClientRect().height;
+      if (r.bottom + height > window.innerHeight - 4) {
+        menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
+      }
+      open = true;
+      button.setAttribute('aria-expanded', 'true');
+      App.UI.whenClosed(function () {
+        open = false;
+        button.setAttribute('aria-expanded', 'false');
+        justClosed = true;
+        setTimeout(function () { justClosed = false; }, 0);
+      });
+    }
+
+    return {
+      toggle: function () {
+        var closedByThisPress = pressClosed;
+        pressClosed = false;
+        if (open) App.UI.closePopups(0);
+        else if (!closedByThisPress) show();
+      },
+      close: function () { if (open) App.UI.closePopups(0); }
+    };
+  }
+
   /* ── For `kratos-cli picture` ─────────────────────────────────────────── */
 
   /* The CLI has no browser of its own, so it opens this page with no window and a job in
@@ -1000,6 +1060,7 @@ App.Picture = (function () {
     canCopy: canCopy, copy: copy, save: save, command: command, isMany: isMany,
     inResults: inResults, inStaged: inStaged, resultStages: resultStages,
     askOverwrite: askOverwrite, outlet: outlet, saveFigure: saveFigure, figure: figure,
+    saveMenu: saveMenu,
     runJob: runJob, jobFromAddress: jobFromAddress, startJob: startJob
   };
 })();

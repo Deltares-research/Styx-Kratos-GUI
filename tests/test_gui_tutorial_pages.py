@@ -41,4 +41,5 @@ def test_the_page_is_on_the_site(name):
     page = tutorials.load(name).PAGE
     assert (tutorials.PAGES / page).is_file()
     assert f"({page})" in (tutorials.PAGES / "index.md").read_text(encoding="utf-8")
-    assert f": {page}" in MKDOCS.read_text(encoding="utf-8"), f"{page} is not in the nav"
+    assert f": docs/gui_tutorials/{page}" in MKDOCS.read_text(encoding="utf-8"), \
+        f"{page} is not in the nav"

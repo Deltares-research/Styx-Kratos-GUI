@@ -29,10 +29,14 @@ from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing
 from core import session
 from core.kratos import condition_checks
 from core.model import drafts, stages
-from core.model.schemas import FACES, Project
+from core.model.schemas import FACES, INTERPOLATE, LINE_TYPES, Project
 
-PRESSURE_TYPES = ("Uniform", "Hydrostatic", "Phreatic_Multi_Line")
-"""`--water-pressure`: Kratos' `fluid_pressure_type`, under its own names."""
+PRESSURE_TYPES = ("Uniform", "Hydrostatic", "Phreatic_Multi_Line", "Head_Line")
+"""`--water-pressure`: Kratos' `fluid_pressure_type`, under its own names, and
+`Head_Line`, which Kratos is given as a `Phreatic_Multi_Line` (`schemas.PressureType`)."""
+
+DEFAULT_WATER = "default"
+"""`boundary soil-water P SOIL default`: the soil takes the phreatic line again."""
 
 WATER_OPTIONS = {"reference_coordinate": "--reference-coordinate", "value": "--value",
                  "phreatic_line": "--phreatic-line",
@@ -65,6 +69,15 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(actions, common, "standard", standard_conditions,
            help="the standard supports, the bottom fixed and the sides on rollers, in "
                 "place of the supports on the faces")
+    soil = action(actions, common, "soil-water", soil_water,
+                  help="the water each soil takes: the phreatic line, a head line, or "
+                       "interpolated between the soils above and below it")
+    soil.add_argument("soil", nargs="?", metavar="SOIL",
+                      help="a soil, as `parts` lists it: a layer soil_<id> with all its "
+                           "pieces, one body, or a custom part with a material")
+    soil.add_argument("water", nargs="?", metavar="WATER",
+                      help=f"the id of a head line, {INTERPOLATE}, or {DEFAULT_WATER} for "
+                           "the phreatic line")
 
     gravity = commands.add_parser("gravity", parents=[common],
                                   help="show whether the self weight acts, or set g",
@@ -102,8 +115,10 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                              "groundwater flow calculation: on a face, or a line along the "
                              "soil's outer boundary")
     parser.add_argument("--water-pressure", choices=PRESSURE_TYPES, metavar="TYPE",
-                        help="Uniform (--value), Hydrostatic (--reference-coordinate) or "
-                             "Phreatic_Multi_Line (--phreatic-line)")
+                        help="Uniform (--value), Hydrostatic (--reference-coordinate), "
+                             "Phreatic_Multi_Line (--phreatic-line; one a stage) or "
+                             "Head_Line (--phreatic-line), the head of the water in the "
+                             "soils that take it (soil-water)")
     parser.add_argument("--reference-coordinate", type=float, metavar="Y",
                         help="Hydrostatic: the level where the pressure is zero, in metres "
                              "(default: the project's water level)")
@@ -111,9 +126,11 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                         help="Uniform: the pressure, in the project's units, Kratos' sign "
                              "(compression negative)")
     parser.add_argument("--phreatic-line", nargs="+", metavar="N",
-                        help="Phreatic_Multi_Line: its points x y x y ..., x increasing")
+                        help="Phreatic_Multi_Line, Head_Line: its points x y x y ..., x "
+                             "increasing")
     parser.add_argument("--pressure-tension-cut-off", type=float, metavar="STRESS",
-                        help="Hydrostatic, Phreatic_Multi_Line: the most suction above the "
+                        help="Hydrostatic, Phreatic_Multi_Line, Head_Line: the most "
+                             "suction above the "
                              "level (default 0: no suction)")
     held = parser.add_mutually_exclusive_group()
     held.add_argument("--fixed", dest="is_fixed", action="store_const", const=True,
@@ -176,8 +193,8 @@ def add_condition(args: argparse.Namespace) -> Answer:
     if support:
         raise CommandError("--roller and --fix are a support's; a water pressure is "
                            "--fixed or --initial")
-    if args.water_pressure == "Phreatic_Multi_Line" and args.phreatic_line is None:
-        raise CommandError("a Phreatic_Multi_Line needs its points: --phreatic-line "
+    if args.water_pressure in LINE_TYPES and args.phreatic_line is None:
+        raise CommandError(f"a {args.water_pressure} needs its points: --phreatic-line "
                            "X Y X Y ...")
     record = drafts.water_pressure_condition(
         project, target.pop("on"), id=args.id, name=args.name,
@@ -297,6 +314,42 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
     return answer
 
 
+def soil_water_lines(project: Project) -> list[str]:
+    """Each soil and the water it takes, as `boundary soil-water` prints it."""
+    phreatic = [line.name for line in project.phreatic_lines()]
+    default = ("the phreatic line its stage has on (" + ", ".join(phreatic) + ")"
+               if len(phreatic) > 1 else f"the phreatic line {phreatic[0]}" if phreatic
+               else "the phreatic line (there is none)")
+    lines = {line.id: line for line in project.head_lines()}
+
+    def said(water: str | None) -> str:
+        if water is None:
+            return default
+        if water == INTERPOLATE:
+            return "interpolated between the soils above and below it"
+        return f"the head line {lines[water].name} ({water})"
+
+    return [f"{soil}  {said(project.soil_water.get(soil))}"
+            for soil in project.soil_part_keys()] or ["This model has no soil yet."]
+
+
+def soil_water(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    if args.soil is None:
+        return Answer(data=dict(project.soil_water), lines=soil_water_lines(project))
+    if args.water is None:
+        raise CommandError("give the soil's water: the id of a head line, "
+                           f"{INTERPOLATE}, or {DEFAULT_WATER} for the phreatic line")
+    water = None if args.water == DEFAULT_WATER else args.water
+    project = session.set_soil_water(project, args.soil, water)
+    answer = edited(args, project, f"soil {args.soil} takes "
+                    + ("the phreatic line" if water is None else
+                       "interpolated water" if water == INTERPOLATE else
+                       f"its water from {water}"))
+    answer.lines += soil_water_lines(project)
+    return answer
+
+
 def _acceleration(text: str) -> float:
     """g in m/s2. `on` and `off` are refused with what decides the self weight now."""
     word = text.strip().lower()
@@ -413,7 +466,8 @@ def prescribed(record) -> str:
     elif record.fluid_pressure_type == "Hydrostatic":
         what = f"hydrostatic about {record.reference_coordinate:g} m"
     else:
-        what = "phreatic line " + " -> ".join(
+        what = ("head line " if record.fluid_pressure_type == "Head_Line"
+                else "phreatic line ") + " -> ".join(
             _xy(point) for point in zip(record.x_coordinates or [],
                                         record.y_coordinates or []))
     if record.fluid_pressure_type != "Uniform" and record.pressure_tension_cut_off:

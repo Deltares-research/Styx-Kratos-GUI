@@ -63,17 +63,35 @@ SUITES = {
         [JS / "structure-glyphs.js"],
         TESTS / "test-structure-glyphs.js",
     ),
+    # The water the export puts on the ground, for the stage on screen: which stretch
+    # of the soil's boundary it presses on, and the arrows. Drawing them is viewport.js's.
+    "surface-water": (
+        [JS / "surface-water.js"],
+        TESTS / "test-surface-water.js",
+    ),
     # `water <level>` / `water off`: what was asked and what to send. The request and
     # the redraw are patches.js's.
     "water": (
         [JS / "unit-table.js", JS / "units.js", JS / "water-command.js"],
         TESTS / "test-water-command.js",
     ),
+    # `domain` / `domain --x FROM TO --y BOTTOM TOP`: what was asked, what to send, and
+    # the line Project properties writes. The request and the redraw are patches.js's.
+    "domain": (
+        [JS / "domain-command.js"],
+        TESTS / "test-domain-command.js",
+    ),
     # `script <file.py>`: what was asked and what to send. The request and what is said
     # once it is written are patches.js's.
     "script": (
         [JS / "script-command.js"],
         TESTS / "test-script-command.js",
+    ),
+    # Help > Documentation and GUI tutorials: which page of the site each opens. The
+    # menu rows and F1 are patches.js's.
+    "documentation": (
+        [JS / "documentation.js"],
+        TESTS / "test-documentation.js",
     ),
     # `node <id>`, the right-click "which parts is this node in" and the hover: the
     # node -> parts index and the text. The fetch, the marker and the menu are DOM.
@@ -98,6 +116,13 @@ SUITES = {
     "results-plot": (
         [JS / "download.js", JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
+    ),
+    # `results convergence` and its figure, drawn from real logs the server parsed
+    # (the fixture, written by tests/test_convergence_parity.py).
+    "convergence-plot": (
+        [TESTS / "fixtures" / "convergence-cases.js", JS / "download.js",
+         JS / "results-render.js", JS / "results.js", JS / "convergence-plot.js"],
+        TESTS / "test-convergence-plot.js",
     ),
     # A saved picture: the scene as a list of shapes, then those shapes as a file. Reading
     # the scene, the canvas, the clipboard and the save windows are in the browser suite.

@@ -1,8 +1,8 @@
 # Code size of Styx
 
 This page gives the size of the code: the lines, classes and functions of each module. Use
-it to see where the code is and how large each part is. The numbers are a snapshot of the
-`docs/developer-guide` branch on 2026-10-21. For how the parts work together, see
+it to see where the code is and how large each part is. The numbers are a snapshot of
+the code on 2026-11-19. For how the parts work together, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## How the code is counted
@@ -24,22 +24,22 @@ it to see where the code is and how large each part is. The numbers are a snapsh
 
 | Area | Language | Files | Lines | Code | Classes | Functions | Methods |
 |---|---|--:|--:|--:|--:|--:|--:|
-| Engine and server (`core/`, `backend/`) | Python | 51 | 16,538 | 9,291 | 92 | 580 | 100 |
-| Command line (`cli/`) | Python | 22 | 3,695 | 2,681 | 5 | 213 | 23 |
-| Server tests (`tests/`) | Python | 139 | 31,198 | 19,411 | 20 | 2,533 | 49 |
-| Benchmarks and test runner (`benchmarks/`, `tools/`) | Python | 6 | 822 | 583 | 5 | 47 | 0 |
-| Browser app (`frontend/js`) | JavaScript | 39 | 17,541 | 12,654 | 0 | 1,977 | 0 |
-| Frozen shell (`frontend/base/js`) | JavaScript | 9 | 3,914 | 2,754 | 0 | 401 | 0 |
-| Browser tests (`frontend/tests`, JS) | JavaScript | 55 | 14,387 | 11,550 | 0 | 2,851 | 0 |
-| Browser test runners (`frontend/tests`, Python) | Python | 2 | 408 | 264 | 0 | 7 | 0 |
-| Stylesheets | CSS | 4 | 1,189 | 974 | 0 | 0 | 0 |
-| HTML pages | HTML | 2 | 389 | 311 | 0 | 0 | 0 |
-| **Total** | | **329** | **90,081** | **60,473** | **122** | **8,609** | **172** |
+| Engine and server (`core/`, `backend/`) | Python | 61 | 25,748 | 14,799 | 111 | 916 | 159 |
+| Command line (`cli/`) | Python | 26 | 5,827 | 4,302 | 8 | 317 | 35 |
+| Server tests (`tests/`) | Python | 195 | 52,521 | 34,020 | 33 | 4,201 | 72 |
+| Benchmarks and test runner (`benchmarks/`, `tools/`) | Python | 8 | 1,321 | 926 | 5 | 71 | 0 |
+| Browser app (`frontend/js`) | JavaScript | 61 | 35,233 | 26,530 | 0 | 3,981 | 0 |
+| Frozen shell (`frontend/base/js`) | JavaScript | 9 | 3,971 | 2,794 | 0 | 406 | 0 |
+| Browser tests (`frontend/tests`, JS) | JavaScript | 81 | 29,523 | 24,923 | 0 | 6,141 | 0 |
+| Browser test runners (`frontend/tests`, Python) | Python | 2 | 480 | 318 | 0 | 7 | 0 |
+| Stylesheets | CSS | 4 | 1,472 | 1,182 | 0 | 0 | 0 |
+| HTML pages | HTML | 2 | 465 | 381 | 0 | 0 | 0 |
+| **Total** | | **449** | **156,561** | **110,175** | **157** | **16,040** | **266** |
 
 | Scope | Files | Lines | Code |
 |---|--:|--:|--:|
-| Application code | 127 | 43,266 | 28,665 |
-| Tests, benchmarks and test runners | 202 | 46,815 | 31,808 |
+| Application code | 163 | 72,716 | 49,988 |
+| Tests, benchmarks and test runners | 286 | 83,845 | 60,187 |
 
 ## Modules
 
@@ -50,99 +50,105 @@ largest files and one row for the rest.
 
 | Module | Lines | Code | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|
-| `core/model/schemas.py` | 2,034 | 1,102 | 43 | 6 | 72 |
-| `core/kratos/writer.py` | 1,699 | 949 | 2 | 49 | 0 |
-| `core/session.py` | 1,146 | 698 | 6 | 66 | 0 |
-| `core/geometry/solid_model.py` | 1,258 | 689 | 2 | 37 | 0 |
-| `core/geometry/meshing.py` | 668 | 456 | 3 | 22 | 2 |
-| `core/model/drafts.py` | 664 | 456 | 1 | 35 | 0 |
-| `core/kratos/parameters.py` | 783 | 394 | 1 | 22 | 0 |
-| `core/results/catalog.py` | 637 | 329 | 3 | 32 | 0 |
-| `core/kratos/mdpa_reader.py` | 518 | 306 | 4 | 15 | 5 |
-| `core/kratos/materials.py` | 437 | 255 | 1 | 13 | 0 |
-| `core/geometry/tessellation.py` | 388 | 214 | 2 | 12 | 2 |
-| `core/analysis/calculation.py` | 411 | 210 | 2 | 15 | 0 |
-| `core/kratos/interfaces.py` | 365 | 204 | 3 | 16 | 0 |
-| `core/model/script_writer.py` | 276 | 201 | 0 | 11 | 0 |
+| `core/model/schemas.py` | 3,400 | 1,858 | 53 | 20 | 124 |
+| `core/kratos/writer.py` | 2,876 | 1,746 | 3 | 78 | 0 |
+| `core/session.py` | 1,677 | 1,032 | 6 | 95 | 0 |
+| `core/geometry/solid_model.py` | 1,386 | 772 | 2 | 41 | 0 |
+| `core/geometry/meshing.py` | 1,044 | 709 | 4 | 34 | 2 |
+| `core/model/drafts.py` | 1,004 | 648 | 1 | 48 | 0 |
+| `core/model/migration.py` | 936 | 616 | 0 | 50 | 0 |
+| `core/kratos/parameters.py` | 1,161 | 566 | 2 | 26 | 0 |
+| `core/model/soil_models.py` | 770 | 427 | 2 | 45 | 0 |
+| `core/kratos/materials.py` | 635 | 377 | 1 | 19 | 0 |
+| `core/results/catalog.py` | 705 | 367 | 3 | 36 | 0 |
+| `core/model/solver.py` | 546 | 350 | 0 | 14 | 0 |
+| `core/analysis/calculation.py` | 604 | 319 | 2 | 24 | 0 |
+| `core/kratos/interfaces.py` | 538 | 313 | 3 | 22 | 0 |
+| `core/kratos/mdpa_reader.py` | 517 | 306 | 4 | 15 | 5 |
+| `core/model/stages.py` | 511 | 261 | 1 | 28 | 0 |
+| `core/results/fields.py` | 522 | 260 | 2 | 20 | 1 |
+| `core/kratos/condition_checks.py` | 412 | 249 | 0 | 27 | 0 |
+| `core/kratos/external_deck.py` | 394 | 236 | 1 | 17 | 0 |
+| `core/model/script_writer.py` | 309 | 224 | 0 | 12 | 0 |
+| `core/model/regions.py` | 314 | 216 | 1 | 19 | 4 |
+| `core/geometry/tessellation.py` | 386 | 212 | 2 | 12 | 2 |
+| `core/results/convergence.py` | 321 | 205 | 0 | 10 | 0 |
 | `core/results/gid_reader.py` | 351 | 200 | 5 | 3 | 9 |
-| `core/kratos/external_deck.py` | 342 | 197 | 1 | 17 | 0 |
-| `core/results/fields.py` | 385 | 187 | 2 | 15 | 1 |
-| `core/model/stages.py` | 365 | 182 | 1 | 17 | 0 |
-| `core/model/migration.py` | 243 | 173 | 0 | 13 | 0 |
-| `core/geometry/cad_import.py` | 242 | 170 | 2 | 10 | 2 |
-| `core/scripting.py` | 271 | 151 | 1 | 9 | 0 |
-| `core/model/units.py` | 222 | 143 | 2 | 11 | 0 |
-| `core/results/mesh.py` | 280 | 141 | 0 | 10 | 0 |
-| `backend/launcher.py` | 176 | 115 | 0 | 11 | 0 |
-| `core/gmsh_worker.py` | 212 | 103 | 1 | 15 | 0 |
-| 26 smaller files | 2,165 | 1,066 | 4 | 98 | 7 |
+| `core/scripting.py` | 303 | 171 | 1 | 10 | 0 |
+| 36 smaller files | 4,126 | 2,159 | 12 | 191 | 12 |
 
 ### Command line (`cli/`)
 
 | Module | Lines | Code | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|
-| `cli/commands/structures.py` | 548 | 440 | 0 | 33 | 0 |
+| `cli/commands/structures.py` | 674 | 550 | 0 | 35 | 0 |
+| `cli/commands/results.py` | 539 | 405 | 0 | 32 | 0 |
+| `cli/commands/conditions.py` | 492 | 383 | 0 | 27 | 0 |
 | `cli/terminal/shell.py` | 502 | 374 | 2 | 13 | 22 |
-| `cli/commands/results.py` | 411 | 306 | 0 | 25 | 0 |
-| `cli/commands/ground.py` | 304 | 223 | 0 | 22 | 0 |
-| `cli/commands/project.py` | 272 | 216 | 0 | 16 | 0 |
-| `cli/commands/stages.py` | 257 | 180 | 0 | 19 | 0 |
-| `cli/commands/inspection.py` | 203 | 150 | 0 | 11 | 0 |
+| `cli/commands/ground.py` | 433 | 330 | 0 | 28 | 0 |
+| `cli/commands/stages.py` | 426 | 305 | 0 | 25 | 0 |
+| `cli/commands/project.py` | 345 | 272 | 0 | 21 | 0 |
+| `cli/commands/picture.py` | 262 | 208 | 0 | 15 | 0 |
+| `cli/terminal/pictures.py` | 229 | 170 | 2 | 8 | 7 |
+| `cli/commands/analysis.py` | 213 | 154 | 1 | 8 | 4 |
+| `cli/commands/inspection.py` | 205 | 152 | 0 | 11 | 0 |
+| `cli/commands/meshing.py` | 194 | 144 | 0 | 12 | 0 |
 | `cli/commands/volumes.py` | 179 | 135 | 0 | 10 | 0 |
-| `cli/commands/meshing.py` | 127 | 90 | 0 | 9 | 0 |
-| `cli/terminal/words.py` | 134 | 89 | 0 | 10 | 0 |
+| `cli/terminal/words.py` | 183 | 119 | 0 | 15 | 0 |
+| `cli/commands/surfaces.py` | 157 | 114 | 0 | 11 | 0 |
+| `cli/terminal/main.py` | 151 | 94 | 1 | 4 | 2 |
+| `cli/terminal/tables.py` | 141 | 90 | 0 | 7 | 0 |
 | `cli/terminal/style.py` | 131 | 84 | 0 | 9 | 0 |
-| `cli/terminal/tables.py` | 100 | 66 | 0 | 5 | 0 |
-| `cli/terminal/output.py` | 119 | 65 | 2 | 9 | 0 |
-| `cli/terminal/main.py` | 104 | 63 | 1 | 3 | 1 |
-| `cli/commands/analysis.py` | 84 | 62 | 0 | 5 | 0 |
+| `cli/terminal/output.py` | 131 | 72 | 2 | 10 | 0 |
 | `cli/commands/edit.py` | 85 | 55 | 0 | 7 | 0 |
-| `cli/terminal/files.py` | 75 | 48 | 0 | 5 | 0 |
+| `cli/terminal/files.py` | 89 | 54 | 0 | 6 | 0 |
 | `cli/commands/interactive.py` | 35 | 26 | 0 | 2 | 0 |
-| `cli/__main__.py` | 23 | 9 | 0 | 0 | 0 |
+| `cli/__main__.py` | 29 | 12 | 0 | 1 | 0 |
+| `cli/terminal/__init__.py` | 2 | 0 | 0 | 0 | 0 |
 | `cli/__init__.py` | 0 | 0 | 0 | 0 | 0 |
 | `cli/commands/__init__.py` | 0 | 0 | 0 | 0 | 0 |
-| `cli/terminal/__init__.py` | 2 | 0 | 0 | 0 | 0 |
 
 ### Server tests (`tests/`)
 
 | Module | Lines | Code | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|
-| `tests/test_api.py` | 1,651 | 1,040 | 0 | 107 | 0 |
-| `tests/test_schemas.py` | 1,571 | 969 | 0 | 162 | 0 |
-| `tests/test_kratos.py` | 1,215 | 755 | 0 | 110 | 0 |
-| `tests/test_layout.py` | 932 | 623 | 0 | 53 | 0 |
-| `tests/test_session.py` | 861 | 508 | 0 | 101 | 0 |
+| `tests/test_schemas.py` | 1,904 | 1,209 | 0 | 192 | 0 |
+| `tests/test_api.py` | 1,866 | 1,178 | 0 | 123 | 0 |
+| `tests/test_kratos.py` | 1,487 | 948 | 0 | 131 | 0 |
+| `tests/test_session.py` | 1,222 | 741 | 0 | 138 | 0 |
+| `tests/test_kratos_interfaces.py` | 1,124 | 696 | 0 | 94 | 0 |
+| `tests/test_layout.py` | 935 | 625 | 0 | 53 | 0 |
+| `tests/test_soil_models.py` | 895 | 604 | 0 | 73 | 0 |
+| `tests/test_soil_lines.py` | 837 | 577 | 0 | 98 | 0 |
+| `tests/e2e/test_pictures.py` | 719 | 577 | 0 | 43 | 0 |
+| `tests/test_calculate.py` | 861 | 513 | 3 | 62 | 7 |
+| `tests/test_results.py` | 786 | 489 | 0 | 66 | 0 |
+| `tests/test_deck.py` | 652 | 463 | 0 | 51 | 0 |
 | `tests/test_mdpa_import.py` | 714 | 457 | 0 | 47 | 0 |
-| `tests/test_deck.py` | 560 | 396 | 0 | 44 | 0 |
-| `tests/test_calculate.py` | 668 | 376 | 3 | 51 | 7 |
-| `tests/test_kratos_interfaces.py` | 643 | 370 | 0 | 52 | 0 |
-| `tests/test_results.py` | 619 | 367 | 0 | 54 | 0 |
-| `tests/test_result_mesh.py` | 511 | 343 | 0 | 33 | 0 |
-| `tests/test_github_automation.py` | 511 | 318 | 0 | 60 | 0 |
-| `tests/test_build_2d.py` | 528 | 306 | 0 | 42 | 0 |
-| `tests/api/test_route_contract.py` | 375 | 303 | 1 | 14 | 0 |
-| `tests/test_load_translation.py` | 552 | 290 | 0 | 47 | 0 |
-| `tests/test_kratos_3d.py` | 501 | 286 | 0 | 45 | 0 |
-| `tests/test_result_fields.py` | 525 | 284 | 0 | 39 | 0 |
-| `tests/test_script.py` | 394 | 276 | 0 | 31 | 0 |
-| `tests/test_gid_results.py` | 432 | 271 | 0 | 28 | 0 |
-| `tests/test_build.py` | 420 | 234 | 0 | 27 | 0 |
-| `tests/test_meshing_2d.py` | 377 | 232 | 0 | 33 | 0 |
-| `tests/test_export_golden.py` | 375 | 228 | 0 | 30 | 0 |
-| `tests/test_stages.py` | 400 | 228 | 0 | 40 | 0 |
-| `tests/pipeline/deck_invariants.py` | 315 | 227 | 0 | 16 | 0 |
-| `tests/test_kratos_stage_processes.py` | 355 | 211 | 0 | 40 | 0 |
-| 114 smaller files | 15,193 | 9,513 | 16 | 1227 | 42 |
+| `tests/test_draft_parity.py` | 528 | 450 | 0 | 19 | 0 |
+| `tests/test_result_fields.py` | 743 | 447 | 0 | 52 | 0 |
+| `tests/test_stages.py` | 697 | 447 | 0 | 68 | 0 |
+| `tests/api/test_route_contract.py` | 533 | 431 | 1 | 19 | 0 |
+| The steps of the GUI tutorial in `tests/e2e/tutorials/` | 580 | 428 | 0 | 32 | 0 |
+| `tests/test_kratos_flow.py` | 607 | 412 | 0 | 53 | 0 |
+| `tests/test_drafts.py` | 623 | 399 | 0 | 61 | 0 |
+| `tests/cli/test_structure_commands.py` | 607 | 397 | 0 | 54 | 0 |
+| `tests/e2e/test_flows.py` | 544 | 395 | 0 | 33 | 0 |
+| `tests/test_result_mesh.py` | 546 | 372 | 0 | 35 | 0 |
+| `tests/kratos/test_live_interfaces.py` | 576 | 361 | 0 | 34 | 0 |
+| `tests/test_kratos_stage_processes.py` | 577 | 352 | 0 | 63 | 0 |
+| 170 smaller files | 31,358 | 20,052 | 29 | 2,507 | 65 |
 
 ### Benchmarks and test runner (`benchmarks/`, `tools/`)
 
 | Module | Lines | Code | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|
-| `benchmarks/cases.py` | 328 | 239 | 0 | 29 | 0 |
+| `benchmarks/cases.py` | 490 | 358 | 0 | 41 | 0 |
 | `benchmarks/runner.py` | 181 | 134 | 4 | 6 | 0 |
+| `tools/docs_site.py` | 179 | 121 | 0 | 7 | 0 |
+| `benchmarks/models.py` | 164 | 110 | 0 | 6 | 0 |
 | `tools/test.py` | 145 | 99 | 1 | 6 | 0 |
-| `benchmarks/models.py` | 116 | 75 | 0 | 5 | 0 |
+| `tools/gui_tutorial.py` | 110 | 68 | 0 | 4 | 0 |
 | `benchmarks/__main__.py` | 52 | 36 | 0 | 1 | 0 |
 | `benchmarks/__init__.py` | 0 | 0 | 0 | 0 | 0 |
 
@@ -150,45 +156,32 @@ largest files and one row for the rest.
 
 | Module | Lines | Code | Functions |
 |---|--:|--:|--:|
-| `frontend/js/patches.js` | 3,781 | 2,760 | 420 |
-| `frontend/js/viewport.js` | 2,400 | 1,669 | 229 |
-| `frontend/js/model.js` | 1,664 | 1,271 | 255 |
-| `frontend/js/results.js` | 936 | 656 | 92 |
-| `frontend/js/beams.js` | 538 | 415 | 75 |
-| `frontend/js/soil-volume-dialog.js` | 453 | 340 | 50 |
-| `frontend/js/anchors.js` | 431 | 331 | 64 |
-| `frontend/js/loads.js` | 365 | 317 | 46 |
-| `frontend/js/results-plot.js` | 476 | 307 | 59 |
-| `frontend/js/material-sets.js` | 358 | 299 | 59 |
-| `frontend/js/draw-input.js` | 330 | 278 | 22 |
-| `frontend/js/stages.js` | 468 | 262 | 54 |
-| `frontend/js/mesh-labels.js` | 397 | 259 | 42 |
-| `frontend/js/interfaces.js` | 325 | 242 | 43 |
-| `frontend/js/normal-loads.js` | 323 | 241 | 44 |
-| `frontend/js/mdpa-import-dialog.js` | 310 | 240 | 28 |
-| `frontend/js/mesh-settings.js` | 284 | 239 | 35 |
-| `frontend/js/unit-table.js` | 242 | 235 | 0 |
-| `frontend/js/results-view.js` | 334 | 232 | 32 |
-| `frontend/js/ruler.js` | 302 | 201 | 23 |
-| `frontend/js/results-render.js` | 344 | 200 | 14 |
-| `frontend/js/part-colors.js` | 267 | 182 | 43 |
-| `frontend/js/node-parts.js` | 253 | 181 | 36 |
-| `frontend/js/property-sets.js` | 236 | 178 | 23 |
-| `frontend/js/canvas-renderer.js` | 271 | 177 | 18 |
-| `frontend/js/orbit.js` | 167 | 117 | 13 |
-| `frontend/js/import-dialog.js` | 126 | 104 | 16 |
-| `frontend/js/history.js` | 142 | 96 | 28 |
-| `frontend/js/export.js` | 138 | 84 | 13 |
-| `frontend/js/zip.js` | 112 | 82 | 10 |
-| `frontend/js/units.js` | 113 | 77 | 20 |
-| `frontend/js/material-library.js` | 83 | 68 | 12 |
-| `frontend/js/calculate.js` | 112 | 60 | 10 |
-| `frontend/js/api.js` | 90 | 59 | 15 |
-| `frontend/js/deck.js` | 94 | 48 | 12 |
-| `frontend/js/download.js` | 80 | 45 | 12 |
-| `frontend/js/water-command.js` | 72 | 39 | 3 |
-| `frontend/js/buffers.js` | 71 | 37 | 4 |
-| `frontend/js/script-command.js` | 53 | 26 | 3 |
+| `frontend/js/patches.js` | 5,454 | 3,963 | 593 |
+| `frontend/js/viewport.js` | 4,198 | 3,022 | 417 |
+| `frontend/js/model.js` | 2,389 | 1,862 | 372 |
+| `frontend/js/boundary-conditions.js` | 1,880 | 1,535 | 244 |
+| `frontend/js/solver-settings.js` | 1,022 | 1,012 | 0 |
+| `frontend/js/results.js` | 1,289 | 912 | 132 |
+| `frontend/js/picture.js` | 1,066 | 894 | 190 |
+| `frontend/js/picture-draw.js` | 1,068 | 850 | 100 |
+| `frontend/js/interfaces.js` | 975 | 771 | 121 |
+| `frontend/js/convergence-plot.js` | 899 | 674 | 121 |
+| `frontend/js/soil-model-table.js` | 586 | 578 | 0 |
+| `frontend/js/material-sets.js` | 722 | 564 | 111 |
+| `frontend/js/mesh-settings.js` | 651 | 525 | 91 |
+| `frontend/js/stages.js` | 810 | 491 | 97 |
+| `frontend/js/anchors.js` | 632 | 471 | 88 |
+| `frontend/js/soil-layers-dialog.js` | 582 | 463 | 88 |
+| `frontend/js/beams.js` | 541 | 417 | 76 |
+| `frontend/js/results-render.js` | 631 | 400 | 39 |
+| `frontend/js/results-view.js` | 541 | 381 | 46 |
+| `frontend/js/results-plot.js` | 504 | 379 | 71 |
+| `frontend/js/soil-volume-dialog.js` | 464 | 350 | 50 |
+| `frontend/js/picture-writers.js` | 415 | 337 | 44 |
+| `frontend/js/surface-water.js` | 452 | 322 | 59 |
+| `frontend/js/loads.js` | 372 | 321 | 47 |
+| `frontend/js/convergence-window.js` | 396 | 300 | 36 |
+| 36 smaller files | 6,694 | 4,736 | 748 |
 
 ### Frozen shell (`frontend/base/js`)
 
@@ -198,7 +191,7 @@ largest files and one row for the rest.
 | `frontend/base/js/data.js` | 956 | 749 | 54 |
 | `frontend/base/js/explorer.js` | 385 | 257 | 42 |
 | `frontend/base/js/app.js` | 335 | 236 | 28 |
-| `frontend/base/js/ui.js` | 317 | 177 | 34 |
+| `frontend/base/js/ui.js` | 374 | 217 | 39 |
 | `frontend/base/js/orbit.js` | 193 | 117 | 13 |
 | `frontend/base/js/toolbars.js` | 166 | 115 | 24 |
 | `frontend/base/js/command.js` | 139 | 100 | 15 |
@@ -208,36 +201,36 @@ largest files and one row for the rest.
 
 | Module | Lines | Code | Functions |
 |---|--:|--:|--:|
-| `frontend/tests/test-results.js` | 1,207 | 983 | 271 |
-| `frontend/tests/test-model.js` | 1,059 | 866 | 216 |
-| `frontend/tests/test-patches.js` | 979 | 825 | 253 |
-| `frontend/tests/test-loads.js` | 596 | 495 | 134 |
-| `frontend/tests/test-viewport.js` | 670 | 455 | 100 |
-| `frontend/tests/test-normal-loads.js` | 492 | 405 | 113 |
+| `frontend/tests/test-results.js` | 1,705 | 1,425 | 386 |
+| `frontend/tests/test-authoring-dom.js` | 1,349 | 1,281 | 240 |
+| `frontend/tests/test-model.js` | 1,361 | 1,131 | 274 |
+| `frontend/tests/test-patches.js` | 1,250 | 1,070 | 340 |
+| `frontend/tests/test-viewport-live.js` | 1,018 | 933 | 243 |
+| `frontend/tests/test-patches-editing.js` | 839 | 808 | 236 |
+| `frontend/tests/test-picture-live.js` | 789 | 698 | 224 |
+| `frontend/tests/test-viewport.js` | 916 | 658 | 140 |
+| `frontend/tests/test-boundary-conditions.js` | 744 | 657 | 113 |
+| `frontend/tests/test-picture-draw.js` | 739 | 610 | 131 |
+| `frontend/tests/test-stages.js` | 788 | 609 | 144 |
+| `frontend/tests/test-patches-results.js` | 670 | 609 | 164 |
+| `frontend/tests/test-toolbar.js` | 673 | 581 | 179 |
+| `frontend/tests/test-patches-stages.js` | 617 | 551 | 123 |
+| `frontend/tests/test-material-sets.js` | 600 | 536 | 103 |
+| `frontend/tests/test-loads.js` | 624 | 519 | 146 |
+| `frontend/tests/test-results-render.js` | 725 | 502 | 98 |
+| `frontend/tests/test-normal-loads.js` | 595 | 496 | 125 |
+| `frontend/tests/test-convergence-plot.js` | 561 | 480 | 98 |
+| `frontend/tests/test-not-yet.js` | 525 | 457 | 114 |
+| `frontend/tests/test-results-plot.js` | 536 | 431 | 110 |
+| `frontend/tests/test-model-props.js` | 452 | 407 | 93 |
+| `frontend/tests/test-calculate-button.js` | 464 | 403 | 103 |
+| `frontend/tests/test-soil-layers-dialog.js` | 445 | 398 | 108 |
 | `frontend/tests/test-frozen-ui.js` | 443 | 390 | 80 |
-| `frontend/tests/test-stages.js` | 521 | 383 | 99 |
-| `frontend/tests/test-results-plot.js` | 443 | 352 | 90 |
-| `frontend/tests/test-results-render.js` | 481 | 315 | 61 |
-| `frontend/tests/test-viewport-live.js` | 357 | 315 | 82 |
-| `frontend/tests/test-toolbar.js` | 385 | 314 | 88 |
-| `frontend/tests/test-interfaces.js` | 348 | 291 | 70 |
-| `frontend/tests/test-mdpa-import.js` | 299 | 245 | 56 |
-| `frontend/tests/test-patches-results.js` | 270 | 238 | 68 |
-| `frontend/tests/test-part-colors.js` | 292 | 225 | 40 |
-| `frontend/tests/test-beams.js` | 255 | 224 | 46 |
-| `frontend/tests/test-anchors.js` | 242 | 211 | 37 |
-| `frontend/tests/test-water.js` | 295 | 209 | 53 |
-| `frontend/tests/test-import-dialogs.js` | 237 | 208 | 55 |
-| `frontend/tests/test-results-view.js` | 229 | 202 | 46 |
-| `frontend/tests/test-patches-stages.js` | 229 | 200 | 54 |
-| `frontend/tests/test-mesh-labels.js` | 239 | 182 | 31 |
-| `frontend/tests/test-node-parts.js` | 263 | 178 | 48 |
-| `frontend/tests/test-draw-pointer.js` | 197 | 173 | 40 |
-| 30 smaller files | 3,359 | 2,666 | 620 |
+| 56 smaller files | 10,095 | 8,283 | 2,026 |
 
 ### Browser test runners (`frontend/tests`, Python)
 
 | Module | Lines | Code | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|
+| `frontend/tests/run_headless.py` | 283 | 182 | 0 | 3 | 0 |
 | `frontend/tests/syntax_check.py` | 197 | 136 | 0 | 4 | 0 |
-| `frontend/tests/run_headless.py` | 211 | 128 | 0 | 3 | 0 |

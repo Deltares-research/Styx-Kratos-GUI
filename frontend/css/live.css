@@ -179,29 +179,18 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
    state for these, because none of them did anything. Matches .tbtn.disabled. */
 .rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }
 
-/* ── What Styx does not do yet ──────────────────────────────────────────────
-   patches.js NOT_YET / `implemented`. A rail tool with nothing behind it is greyed
-   like one of the wrong dimension, but keeps its pointer events so that its tip --
-   "… — not available yet" -- can still say why. It carries aria-disabled rather
-   than `disabled`, which would stop the tip too; patches.js guardNotYet refuses the
-   click. The hover is held at grey so it does not light up as if it were ready. */
-.rail-btn.disabled.not-yet,
-.rail-btn.disabled.not-yet:hover {
-  pointer-events: auto; cursor: not-allowed;
-  background: none; border-color: transparent; color: var(--c-disabled);
-}
-
 /* Buttons the live layer greys with the `disabled` attribute alone -- the stage
    toolbar, the soil-volume table, a dialog's footer while it saves -- looked exactly
    as pressable as before, because the frozen sheet styles only the `.disabled`
    class. The Calculate button is left to its own section further down. */
 .tbtn:disabled:not(.tbtn-cta) { color: var(--c-disabled); pointer-events: none; }
 .btn:disabled { opacity: .5; pointer-events: none; }
-.rail-btn:disabled:not(.not-yet) { color: var(--c-disabled); pointer-events: none; }
+.rail-btn:disabled { color: var(--c-disabled); pointer-events: none; }
 
-/* The title bar's window controls, which a page cannot work. */
-.wc:disabled svg { stroke: rgba(255, 255, 255, .4); }
-.wc:disabled:hover { background: none; }
+/* A tool of the other dimension (2D or 3D) is left off the rail, with any divider
+   it leaves behind. `.rail-btn` sets `display: grid`, which beats the browser's
+   own `[hidden]` rule. */
+.rail-btn[hidden], .rail-sep[hidden] { display: none; }
 
 /* ── 2D rulers ──────────────────────────────────────────────────────
    One canvas per viewport edge, painted by frontend/js/ruler.js from the same
@@ -272,6 +261,13 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .vp-legend-unit,
 .vp-legend-foot { color: var(--c-ink-soft); font-size: 10px; }
 .vp-legend-foot { margin-top: 4px; }
+/* The key to the zero water pressure line drawn over the shading. */
+.vp-legend-zero { display: flex; align-items: center; gap: 4px; }
+.vp-legend-zero i {
+  display: inline-block;
+  width: 16px;
+  border-top: 3px solid;
+}
 
 /* The ramp and its ticks share one box, so a tick can be positioned as a
    percentage of the ramp's own height and stay beside the colour it names. */
@@ -298,6 +294,63 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   transform: translateY(-50%);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* ── Flow conditions: the water of each soil ──────────────────────────────
+   Which colour is which water line, over the viewport (viewport.js
+   syncWaterLegend). Where the Results legend sits: the two never show together. */
+.vp-water-legend {
+  position: absolute;
+  right: 40px;
+  bottom: 56px;
+  max-width: 220px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--c-ink);
+  pointer-events: none;
+}
+.vp-water-legend[hidden] { display: none; }
+.vp-water-legend-title { font-weight: 600; margin-bottom: 4px; }
+.vp-water-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 18px;
+}
+.vp-water-legend-row > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp-water-legend-swatch {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 12px;
+  border: 1px solid;
+  box-sizing: border-box;
+}
+/* The line itself across the swatch: solid for the phreatic line, dashed for a head
+   line, as they are drawn. */
+.vp-water-legend-line {
+  position: absolute;
+  left: -1px; right: -1px; top: 3px;
+  border-top: 2px solid;
+}
+.vp-water-legend-line.dashed { border-top-style: dashed; }
+
+/* The swatch beside each soil in the Boundary conditions window's Soil water. */
+.bc-water-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border: 1px solid;
+  box-sizing: border-box;
 }
 
 /* ── The Results explorer ─────────────────────────────────────────────── */
@@ -422,6 +475,31 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
 .rp-host svg { display: block; width: 100%; height: auto; }
 
+/* The Convergence window (frontend/js/convergence-window.js): two status lines in words
+   and numbers, the stage slider, then the figure of frontend/js/convergence-plot.js,
+   which fills the rest and grows with the window. */
+.dlg-convergence .dlg-body { overflow: hidden; padding: 0; }
+.cv-window { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cv-status {
+  flex: 0 0 auto; padding: 6px 12px; font-size: 12px; line-height: 1.45;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-line1 { font-weight: 600; color: var(--c-ink); }
+.cv-line2 { color: var(--c-ink-soft); min-height: 1.45em; }
+.cv-stages {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+  font-size: 12px; border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-stages[hidden] { display: none; }
+.cv-stages-label { color: var(--c-ink-soft); }
+.cv-stage-slider { flex: 1 1 auto; min-width: 80px; margin: 0; }
+.cv-stage-name {
+  flex: 0 1 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--c-ink);
+}
+.cv-host { flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
+.cv-host svg { display: block; width: 100%; height: 100%; }
+
 /* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
    own colour -- outlined while off, filled while on, half filled for a group that is
    partly on. See addPartColorToggles in frontend/js/patches.js. */
@@ -467,10 +545,12 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .stages-overview-list .phase-kind { flex: 0 0 auto; }
 .stages-overview-list .phase-id { color: var(--c-ink-faint); }
 .phase-dot.failed { background: #d64545; }
+.phase-dot.stopped { background: #d98c1f; }
 .stages-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
   border: 1px solid var(--c-line); background: var(--c-panel-2); }
 .stages-overview-box.done, .stages-overview-box.initial { color: var(--brand-green); }
 .stages-overview-box.failed { color: #d64545; }
+.stages-overview-box.stopped { color: #b36b00; }
 .stages-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
   overflow: auto; margin: 0 0 10px; }
 
@@ -487,6 +567,10 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
   font-family: var(--font-mono); font-size: var(--fs-sm); }
 .bc-other span { flex: 1 1 auto; }
+/* The table of one group of conditions: one row per condition, read-only cells. */
+.bc-list td { vertical-align: top; border-bottom: 1px solid var(--c-border); }
+.bc-list td.bc-actions { white-space: nowrap; }
+.bc-list td.bc-actions .btn + .btn { margin-left: 4px; }
 .bc-axes label { margin-right: 6px; }
 
 /* ── Calculate: greyed out, and while it runs ─────────────────────────────
@@ -514,6 +598,21 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   animation: calculate-spin 0.9s linear infinite;
 }
 .rail-btn.calculating::before { width: 15px; height: 15px; }
+
+/* While a run goes on, the toolbar's Calculate button is Stop (patches.js
+   `paintCalculating`): red, with a square in place of the play arrow. */
+#maintoolbar .tbtn-cta.stop-calc,
+#maintoolbar .tbtn-cta.stop-calc:hover {
+  background: #fdecec; border-color: #c62828; color: #b71c1c; cursor: pointer;
+}
+#maintoolbar .tbtn-cta.stop-calc:hover { background: #f9d6d6; }
+.tbtn.stop-calc svg { display: none; }
+.tbtn.stop-calc::before {
+  content: ''; width: 10px; height: 10px; border-radius: 1px; background: currentColor;
+}
+.dlg-convergence .cv-stop { color: #b71c1c; border-color: #c62828; }
+.dlg-convergence .cv-stop[hidden] { display: none; }
+.dlg-calc-stop .calc-stop-text { padding: 14px 16px; line-height: 1.45; }
 @keyframes calculate-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .tbtn.calculating::before, .rail-btn.calculating::before { animation: none; }
@@ -570,6 +669,9 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis;
 }
 .material-sets .material-swatch { display: inline-block; width: 18px; height: 18px; vertical-align: middle; }
+/* The colour column as narrow as its heading allows; the rest goes to the name and model. */
+.material-sets th:first-child,
+.material-sets td:first-child { width: 1%; white-space: nowrap; text-align: center; }
 .material-water { margin-top: 10px; }
 .material-water h3 { margin: 0 0 4px; }
 /* The presets, below the soils. */
@@ -628,3 +730,12 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .feedback-note-x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
                    border: 0; background: none; color: var(--c-ink-soft); cursor: pointer; }
 .feedback-note-x:hover { color: var(--c-ink); background: var(--c-hover); }
+
+/* Beside the Stages explorer the Model explorer gives way, down to its header, so the
+   Selection explorer keeps its 70 px and the Stages explorer stays inside the dock on
+   a short screen. The frozen row kept the Model explorer at its full height and pushed
+   the bottom of the Stages explorer out of view (css/layout.css #dock.has-phases). */
+#dock.has-phases {
+  --r-model: minmax(var(--h-dockhead),
+    min(var(--h-model-panel), calc(100% - 2 * var(--split) - 70px - var(--h-phases))));
+}

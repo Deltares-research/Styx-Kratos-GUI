@@ -144,7 +144,7 @@ def test_fields_are_grouped_the_way_an_engineer_looks_for_them(stage):
 
     assert "Deformations" in groups
     assert "Effective stresses" in groups
-    assert "Groundwater" in groups
+    assert "Water pressure and head" in groups
 
 
 # ── Units (task 9) ──────────────────────────────────────────────────────────
@@ -559,6 +559,185 @@ def test_a_node_in_an_excavated_body_keeps_the_field_rows_with_missing_values():
 
     assert inspected["at"] == [1, 0, 0]
     assert inspected["values"] == [{
-        "group": "Groundwater", "field": "pw", "label": "Pore pressure",
+        "group": "Water pressure and head", "field": "pw", "label": "Pore pressure",
         "unit": "kPa", "value": None,
     }]
+
+
+# ── A 2D section, the water, the forces ─────────────────────────────────────
+
+def test_a_2d_section_is_not_offered_what_is_zero_out_of_its_plane(stage):
+    """u_z, and the shear stresses on the plane of the section, are zero in plane
+    strain. The normal stress out of the plane is not, and stays."""
+    mesh, results = stage
+    assert mesh.dimension == 2
+
+    flat = names(fields.catalogue(results, dimension=mesh.dimension))
+    solid = names(fields.catalogue(results, dimension=3))
+
+    assert {"uz", "syz", "sxz"} <= solid
+    assert not {"uz", "syz", "sxz"} & flat
+    assert {"u", "ux", "uy", "szz", "sxy"} <= flat
+    # Asked for by name it is still what Kratos wrote: zero.
+    assert set(fields.values(results, mesh, "uz")["values"]) == {0.0}
+
+
+# A triangle of soil and a beam along its bottom edge, both with a hydraulic head at
+# their integration points: the soil's is real, the beam's the 0 a beam writes for a
+# variable it does not compute.
+HEAD_MESH = dedent("""
+    MESH "Kratos_Triangle2D3_Mesh_1" dimension 2 ElemType Triangle Nnode 3
+    Coordinates
+    1 0 0 0
+    2 1 0 0
+    3 0 1 0
+    End Coordinates
+    Elements
+    1 1 2 3 1
+    End Elements
+    MESH "Kratos_Line2D2_Mesh_2" dimension 2 ElemType Linear Nnode 2
+    Coordinates
+    End Coordinates
+    Elements
+    2 1 2 2
+    End Elements
+    """)
+
+HEAD_RES = dedent("""
+    GiD Post Results File 1.2
+    Result "HYDRAULIC_HEAD" "Kratos" 1 Scalar OnGaussPoints "tri1_element_gp"
+    Values
+    1 -1.5
+    End Values
+    Result "HYDRAULIC_HEAD" "Kratos" 1 Scalar OnGaussPoints "lin2_element_gp"
+    Values
+    2 0
+     0
+    End Values
+    """)
+
+
+def test_the_head_is_an_integration_point_field_of_the_soil_alone():
+    mesh = gid_reader.read_mesh(HEAD_MESH)
+    results = gid_reader.read_results(HEAD_RES)
+
+    (entry,) = [e for group in fields.catalogue(results, dimension=2)
+                for e in group["fields"] if e["name"] == "head"]
+    assert entry["locations"] == ["elements", "nodes"]
+
+    per_element = fields.values(results, mesh, "head", "elements")
+    assert per_element["ids"] == [1], "the beam's 0 is not a head"
+    assert per_element["min"] == per_element["max"] == -1.5
+    per_node = fields.values(results, mesh, "head", "nodes")
+    assert per_node["values"] == [-1.5, -1.5, -1.5], "and is not averaged in"
+
+
+def flow(rate: str) -> gid_reader.Results:
+    """A flow stage with a flux, and a reaction of its fixed water pressures (or the
+    seepage strategy's flow rate): water in at node 1, out at node 2."""
+    return gid_reader.read_results(dedent(f"""
+        Result "FLUID_FLUX_VECTOR" "Kratos" 1 Vector OnNodes
+        Values
+        1 2e-6 0 0
+        2 2e-6 1e-6 0
+        3 0 0 0
+        End Values
+        {rate}
+        """))
+
+
+REACTION = ('Result "REACTION_WATER_PRESSURE" "Kratos" 1 Scalar OnNodes\n'
+            'Values\n1 3e-5\n2 -2e-5\n3 0\nEnd Values')
+SEEPAGE_RATE = ('Result "NODAL_WATER_FLOW_RATE" "Kratos" 1 Scalar OnNodes\n'
+                'Values\n1 -3e-5\n2 2e-5\n3 0\nEnd Values')
+
+
+@pytest.mark.parametrize("rate", [REACTION, SEEPAGE_RATE])
+def test_the_nodal_flow_rate_is_the_water_let_out_with_what_comes_in_and_goes_out(
+        stage, rate):
+    """Positive out: the reaction to a fixed water pressure turned round, or -- in a
+    run from before every flow stage wrote the reaction -- the seepage strategy's own
+    variable, which is that number already."""
+    mesh, _ = stage
+    field = fields.values(flow(rate), mesh, "flow_rate")
+
+    assert field["values"] == pytest.approx([-3e-5, 2e-5, 0.0])
+    assert field["unit"] == "m³/s/m"
+    assert field["totals"]["positive"] == pytest.approx(2e-5)
+    assert field["totals"]["negative"] == pytest.approx(-3e-5)
+    assert field["totals"]["net"] == pytest.approx(-1e-5)
+
+
+def test_the_water_is_grouped_into_pressure_flow_and_saturation():
+    results = gid_reader.read_results(dedent("""
+        Result "WATER_PRESSURE" "Kratos" 1 Scalar OnNodes
+        Values
+        1 -1000
+        End Values
+        Result "EFFECTIVE_SATURATION" "Kratos" 1 Scalar OnNodes
+        Values
+        1 1
+        End Values
+        """) + REACTION + "\n" + dedent("""
+        Result "FLUID_FLUX_VECTOR" "Kratos" 1 Vector OnNodes
+        Values
+        1 2e-6 0 0
+        End Values
+        Result "REACTION" "Kratos" 1 Vector OnNodes
+        Values
+        1 0 1000 0
+        End Values
+        """))
+
+    catalogue = {group["name"]: [e["name"] for e in group["fields"]]
+                 for group in fields.catalogue(results, dimension=2)}
+
+    assert list(catalogue) == ["Water pressure and head", "Groundwater flow",
+                               "Saturation", "Nodal forces"]
+    assert catalogue["Groundwater flow"] == ["flux", "fluxx", "fluxy", "flow_rate"]
+    assert catalogue["Nodal forces"] == ["reaction", "reactionx", "reactiony"]
+
+
+def test_a_vector_s_fields_say_which_vector_they_are_part_of(stage):
+    _, results = stage
+    vectors = {e["name"]: e.get("vector") for group in fields.catalogue(results)
+               for e in group["fields"]}
+    assert vectors["u"] == vectors["ux"] == "u"
+    assert vectors["p"] is None and vectors["pw"] is None
+
+
+def test_the_arrows_of_a_field_are_its_whole_vector(stage):
+    mesh, _ = stage
+    arrows = fields.vectors(flow(REACTION), "fluxy")
+
+    assert arrows["field"] == "flux"
+    assert arrows["source"] == "FLUID_FLUX_VECTOR"
+    assert arrows["ids"] == [1, 2, 3]
+    assert arrows["values"][1] == [2e-6, 1e-6, 0.0]
+    assert arrows["max"] == pytest.approx(math.sqrt(5e-12))
+
+
+def test_a_field_that_is_not_part_of_a_vector_has_no_arrows(stage):
+    _, results = stage
+    with pytest.raises(fields.UnknownField, match="not part of a vector"):
+        fields.vectors(results, "p")
+    with pytest.raises(fields.UnknownField, match="needs FLUID_FLUX_VECTOR"):
+        fields.vectors(results, "flux")
+
+
+def test_the_reactions_add_up_to_what_the_supports_carry():
+    mesh = gid_reader.GidMesh(nodes={1: (0, 0, 0), 2: (1, 0, 0)})
+    results = gid_reader.read_results(dedent("""
+        Result "REACTION" "Kratos" 1 Vector OnNodes
+        Values
+        1 10 400 0
+        2 -10 600 0
+        End Values
+        """))
+
+    vertical = fields.values(results, mesh, "reactiony", system="kN")
+    assert vertical["unit"] == "kN/m"
+    assert vertical["totals"]["net"] == pytest.approx(1000)
+    assert fields.values(results, mesh, "reactionx")["totals"]["net"] == pytest.approx(0)
+    assert "totals" not in fields.values(results, mesh, "reaction"), \
+        "a sum of magnitudes means nothing"

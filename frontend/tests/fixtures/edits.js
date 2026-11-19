@@ -270,6 +270,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -300,6 +302,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -381,6 +384,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -523,12 +527,12 @@ window.EDITS_FIXTURE =
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__retained": "Soil_Top · retained",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_top__lift1": "lift 1",
+        "soil_L_top__retained": "retained",
+        "soil_L_top__lift2": "lift 2",
+        "soil_L_top__lift3": "lift 3",
+        "soil_L_mid__pit": "below the pit",
+        "soil_L_mid__retained": "retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
@@ -828,6 +832,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -858,6 +864,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -939,6 +946,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1113,12 +1121,12 @@ window.EDITS_FIXTURE =
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__retained": "Soil_Top · retained",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_top__lift1": "lift 1",
+        "soil_L_top__retained": "retained",
+        "soil_L_top__lift2": "lift 2",
+        "soil_L_top__lift3": "lift 3",
+        "soil_L_mid__pit": "below the pit",
+        "soil_L_mid__retained": "retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
@@ -1442,6 +1450,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -1472,6 +1482,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -1553,6 +1564,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1695,12 +1707,12 @@ window.EDITS_FIXTURE =
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__retained": "Soil_Top · retained",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_top__lift1": "lift 1",
+        "soil_L_top__retained": "retained",
+        "soil_L_top__lift2": "lift 2",
+        "soil_L_top__lift3": "lift 3",
+        "soil_L_mid__pit": "below the pit",
+        "soil_L_mid__retained": "retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
@@ -2001,6 +2013,7 @@ window.EDITS_FIXTURE =
       ],
       "interfaces": [],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2082,6 +2095,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2222,12 +2236,12 @@ window.EDITS_FIXTURE =
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__retained": "Soil_Top · retained",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_top__lift1": "lift 1",
+        "soil_L_top__retained": "retained",
+        "soil_L_top__lift2": "lift 2",
+        "soil_L_top__lift3": "lift 3",
+        "soil_L_mid__pit": "below the pit",
+        "soil_L_mid__retained": "retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
@@ -2525,6 +2539,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -2555,6 +2571,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2636,6 +2653,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2947,12 +2965,12 @@ window.EDITS_FIXTURE =
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__retained": "Soil_Top · retained",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_top__lift1": "lift 1",
+        "soil_L_top__retained": "retained",
+        "soil_L_top__lift2": "lift 2",
+        "soil_L_top__lift3": "lift 3",
+        "soil_L_mid__pit": "below the pit",
+        "soil_L_mid__retained": "retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
@@ -3674,6 +3692,24 @@ window.EDITS_FIXTURE =
       "method": "DELETE",
       "route": "/api/project/custom_parts",
       "project": "pit with a drawn box",
+      "body": null
+    },
+    {
+      "title": "one part of a cut soil layer",
+      "call": "LivePatches.deleteBody",
+      "target": "soil_L_mid__pit",
+      "method": "DELETE",
+      "route": "/api/project/bodies/soil_L_mid__pit",
+      "project": "pit",
+      "body": null
+    },
+    {
+      "title": "one part of a cut soil layer a stage switches",
+      "call": "LivePatches.deleteBody",
+      "target": "soil_L_top__lift3",
+      "method": "DELETE",
+      "route": "/api/project/bodies/soil_L_top__lift3",
+      "project": "staged pit",
       "body": null
     },
     {

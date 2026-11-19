@@ -725,6 +725,108 @@ def drained_notes(value: object) -> list[str]:
             if variables.get("GEO_DRAINAGE_TYPE") == "DRAINED"]
 
 
+def _drawn_phreatic(record: object) -> TypeGuard[dict]:
+    """A phreatic line drawn on a line: the record whose reading changed on 2026-11-18."""
+    return (isinstance(record, dict) and record.get("kind") == "water_pressure"
+            and record.get("on") == "line"
+            and record.get("fluid_pressure_type") == "Phreatic_Multi_Line")
+
+
+def _level(record: dict) -> float | None:
+    """The level of a phreatic line that is level, or None for one that slopes."""
+    ys = record.get("y_coordinates")
+    if not isinstance(ys, list) or not ys or not all(isinstance(y, (int, float))
+                                                      for y in ys):
+        return None
+    return float(ys[0]) if max(ys) - min(ys) <= 1e-9 else None
+
+
+def _old_drawn_lines(value: object) -> list[dict]:
+    """The phreatic lines drawn on a line of a document saved before 2026-11-18."""
+    if not isinstance(value, dict) or "drawn_phreatic_lines" in value:
+        return []
+    conditions = value.get("boundary_conditions")
+    return ([c for c in conditions if _drawn_phreatic(c)]
+            if isinstance(conditions, list) else [])
+
+
+def drawn_water_lines(value: dict) -> dict:
+    """A document saved before 2026-11-18 reads a phreatic line drawn on a line
+    (`Phreatic_Multi_Line`, `on: "line"`) as a pressure on that line only -- a river
+    bank, say. Now it is the water of the whole soil wherever it was drawn
+    (`Project.phreatic_lines`). A level one is turned into a `Hydrostatic` condition at
+    its level on the same line, which sets the same pressure on the same nodes and
+    nothing else. A sloping one has no condition on a line alone that says the same; it
+    is kept, and so becomes the water of the whole soil, which `drawn_water_line_notes`
+    says -- unless the document has another phreatic line on the soil or a line, which
+    a stage could not have on beside it: then it is a head line, which acts on the soils
+    that take it, and so on none until the user gives it one.
+
+    The document says which way it reads them by `drawn_phreatic_lines`, which every
+    document saved since carries. One without it is converted; a record built in Python is
+    already in the new reading and is left alone."""
+    if "drawn_phreatic_lines" in value:
+        return value
+    out = dict(value)
+    out["drawn_phreatic_lines"] = "whole_soil"
+    conditions = out.get("boundary_conditions")
+    if not isinstance(conditions, list):
+        return out
+    others = [c for c in conditions if isinstance(c, dict)
+              and c.get("kind") == "water_pressure" and c.get("on") in ("domain", "line")
+              and c.get("fluid_pressure_type") == "Phreatic_Multi_Line"]
+
+    def converted(record: object) -> object:
+        if not _drawn_phreatic(record):
+            return record
+        level = _level(record)
+        if level is not None:
+            return {**{key: v for key, v in record.items()
+                       if key not in ("x_coordinates", "y_coordinates", "z_coordinates")},
+                    "fluid_pressure_type": "Hydrostatic", "reference_coordinate": level}
+        if len(others) > 1:
+            return {**record, "fluid_pressure_type": "Head_Line"}
+        return record
+
+    out["boundary_conditions"] = [converted(c) for c in conditions]
+    return out
+
+
+def drawn_water_line_notes(value: object) -> list[str]:
+    """What `drawn_water_lines` changes in an old document, one line per record: a level
+    line made a hydrostatic one says the same, but by another type; a sloping one is the
+    whole soil's water now, or a head line."""
+    lines = _old_drawn_lines(value)
+    conditions = value.get("boundary_conditions") if isinstance(value, dict) else []
+    phreatic = [c for c in conditions or [] if isinstance(c, dict)
+                and c.get("kind") == "water_pressure" and c.get("on") in ("domain", "line")
+                and c.get("fluid_pressure_type") == "Phreatic_Multi_Line"]
+    out = []
+    for record in lines:
+        name = record.get("name") or record.get("id")
+        level = _level(record)
+        if level is not None:
+            out.append(f"water pressure condition {name!r} was a phreatic line drawn on a "
+                       "line, which set the pressure on that line only. A phreatic line "
+                       "drawn on a line is now the water of the whole soil, so it is "
+                       f"Hydrostatic at {level:g} m now, on the same line: the same "
+                       "pressure on the same nodes.")
+        elif len(phreatic) > 1:
+            out.append(f"water pressure condition {name!r} was a phreatic line drawn on a "
+                       "line, which set the pressure on that line only. A phreatic line "
+                       "drawn on a line is now the water of the whole soil, and the "
+                       "project has another, so it is a head line now, which acts on the "
+                       "soils that take it under Soil water, and none yet.")
+        else:
+            out.append(f"water pressure condition {name!r} was a phreatic line drawn on a "
+                       "line, which set the pressure on that line only. A phreatic line "
+                       "drawn on a line is now the water of the whole soil wherever it "
+                       "was drawn, and where it stands above the ground the deck fixes "
+                       "the wet surface under it. For a pressure on that line alone, use "
+                       "a Hydrostatic condition on it.")
+    return out
+
+
 def upgraded(value: object) -> object:
     """`value`, a project document of any age, in the current shape: every conversion
     above, in the order the shapes came (`Project`'s validator)."""
@@ -737,14 +839,17 @@ def notes(value: object) -> list[str]:
     each: the gravity it no longer switches off (`gravity_notes`), the soils' own water
     it replaces (`water_notes`), the linear elastic soils whose K0 changes
     (`k0_notes`), the undrained soils that are coupled now (`undrained_notes`), the
-    drained soils that are not any more (`drained_notes`) and the contacts that lose
-    their soil's strength (`contact_notes`). Empty for a current document. Said when a
+    drained soils that are not any more (`drained_notes`), the contacts that lose
+    their soil's strength (`contact_notes`) and the phreatic lines drawn on a line that
+    are the whole soil's water now (`drawn_water_line_notes`). Empty for a current
+    document. Said when a
     file is opened (`core.session.migration_notes`, the GUI's Open), as the first save
     of it writes the new shape and the old values are gone."""
     gravity = gravity_notes(value)
+    drawn = drawn_water_line_notes(value)
     value = _before_water(value)
     return (gravity + water_notes(value) + k0_notes(value) + undrained_notes(value)
-            + drained_notes(value) + contact_notes(value))
+            + drained_notes(value) + contact_notes(value) + drawn)
 
 
 def _before_water(value: object) -> object:
@@ -756,7 +861,7 @@ def _before_water(value: object) -> object:
         value = migrate_records(value)
     if not isinstance(value, dict):
         return value
-    return flow_tolerance(screen_sides(drop_boreholes(value)))
+    return drawn_water_lines(flow_tolerance(screen_sides(drop_boreholes(value))))
 
 
 def _on_screen(interface: object, piles: dict) -> object:

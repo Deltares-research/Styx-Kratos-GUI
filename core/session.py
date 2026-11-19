@@ -37,11 +37,13 @@ from core import scripting
 from core.kratos import materials
 from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
-from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
+from core.model.schemas import (INTERPOLATE, ConditionsUpdate, CustomPart, DimensionUpdate,
+                                LayersUpdate,
                                 Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
                                 UnitsUpdate, WaterLevel, WaterUpdate, followed_tolerance,
+                                numbered_name,
                                 point_on_panel, point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
 
@@ -200,9 +202,9 @@ def _replace(temporary: str, path: Path) -> None:
 # ── Every edit ──────────────────────────────────────────────────────────────
 
 def _sizable_keys(project: Project) -> set[str]:
-    """What a mesh size can name: the bodies, a cut layer's key, which names each of
-    its pieces, and the lines and points of `Project.mesh_size_keys`."""
-    return set(project.mesh_size_keys())
+    """What a mesh size can name: the bodies, a cut layer's or soil surface's key, which
+    names each of its pieces, and the lines and points of `Project.mesh_size_keys`."""
+    return set(project.mesh_size_keys()) | {part.key for part in project.custom_parts}
 
 
 def _edited(project: Project, payload: dict) -> Project:
@@ -212,8 +214,11 @@ def _edited(project: Project, payload: dict) -> Project:
     a size belongs to its body, so an edit that takes a body away takes its size too --
     a layer removed or split, a line removed, a structure deleted -- whichever
     front end made the edit and however it was sent. A size for a body the model never
-    had is kept: `unknown_mesh_keys` names it as the mistake it is.
+    had is kept: `unknown_mesh_keys` names it as the mistake it is. And a soil layer or
+    a custom part the edit adds or renames gets a name no other one has
+    (`_distinct_soil_names`).
     """
+    _distinct_soil_names(project, payload)
     edited = Project.model_validate(payload)
     sizes = edited.mesh.body_sizes
     if not sizes:
@@ -228,22 +233,80 @@ def _edited(project: Project, payload: dict) -> Project:
         update={"body_sizes": kept, "size_bands": bands})})
 
 
+def _soil_names(payload: dict) -> list[tuple[str, dict, str]]:
+    """Every soil layer and custom part in `payload`, in the deck's order, as
+    `(the key it is known by, its record, the field that holds its name)`."""
+    layers = [(f"soil_{record.get('id')}", record, "name")
+              for record in payload.get("layers") or [] if isinstance(record, dict)]
+    parts = [(str(record.get("key")), record, "label")
+             for record in payload.get("custom_parts") or [] if isinstance(record, dict)]
+    return [(key, record, field) for key, record, field in layers + parts
+            if isinstance(record.get(field), str)]
+
+
+def _distinct_soil_names(project: Project, payload: dict) -> None:
+    """Give each soil layer and custom part the edit adds or renames a name that no other
+    one has: a second `Embankment` becomes `Embankment_2`, which is also the name of its
+    sub-model part in the deck (`schemas.numbered_name`), so the Model explorer, kratos-cli
+    and ProjectParameters.json say the same. A name a record already had stays, so an edit
+    never renames what it did not touch. `edit_notes` says which name was numbered."""
+    had = {f"soil_{layer.id}": layer.name for layer in project.layers}
+    had.update({part.key: part.label for part in project.custom_parts})
+    records = _soil_names(payload)
+    taken = [record[field] for key, record, field in records if had.get(key) == record[field]]
+    for key, record, field in records:
+        if had.get(key) != record[field]:
+            record[field] = numbered_name(record[field], taken)
+            taken.append(record[field])
+
+
+def _numbered_names(before: Project, after: Project) -> list[str]:
+    """The note on each soil layer or custom part an edit gave a number, because another
+    one has its name (`_distinct_soil_names`)."""
+    had = {f"soil_{layer.id}": layer.name for layer in before.layers}
+    had.update({part.key: part.label for part in before.custom_parts})
+    records = _soil_names(after.model_dump())
+    notes = []
+    for key, record, field in records:
+        name = record[field]
+        base, _, number = name.rpartition("_")
+        if had.get(key) == name or not base or not number.isdigit() or int(number) < 2:
+            continue
+        others = [other[field_] for key_, other, field_ in records if key_ != key]
+        if numbered_name(base, others) != name:
+            continue
+        what = ("soil layer" if key.startswith("soil_")
+                else "part" if record.get("mat") is None
+                else "soil surface" if after.dimension == 2 else "soil volume")
+        notes.append(f"Named the {what} {name!r}, because {base!r} is already in use.")
+    return notes
+
+
 def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
     """Every part of a layer the edit gives another material takes that material, a part
     given one of its own included: what the user changes is the soil of the whole layer.
+    The same for every piece of a drawn soil surface (a custom part) given another material.
 
-    Only the edits of a layer call this. An undo or an opened file sets the layers and the
-    parts together, as they were, and each part keeps the material it was written with.
-    A layer whose material is the one it had has not been given another, which matters
-    because the soil layers window sends every layer on every change.
+    Only the edits of a layer or of a custom part call this. An undo or an opened file sets
+    the layers and the parts together, as they were, and each part keeps the material it
+    was written with. A layer whose material is the one it had has not been given another,
+    which matters because the soil layers window sends every layer on every change.
     """
-    before = {layer.id: layer.mat for layer in project.layers}
-    given = {layer["id"]: layer.get("mat") for layer in payload.get("layers") or []
-             if isinstance(layer, dict) and layer.get("id") in before
-             and layer.get("mat") != before[layer["id"]]}
+    def changed(records: list | None, key: str, before: dict[str, str | None]) -> dict:
+        return {record[key]: record.get("mat") for record in records or []
+                if isinstance(record, dict) and record.get(key) in before
+                and record.get("mat") is not None
+                and record.get("mat") != before[record[key]]}
+
+    layers = changed(payload.get("layers"), "id",
+                     {layer.id: layer.mat for layer in project.layers})
+    parts = changed(payload.get("custom_parts"), "key",
+                    {part.key: part.mat for part in project.custom_parts})
     for body in payload.get("bodies") or []:
-        if isinstance(body, dict) and body.get("layer") in given:
-            body["mat"] = given[body["layer"]]
+        if isinstance(body, dict) and body.get("layer") in layers:
+            body["mat"] = layers[body["layer"]]
+        elif isinstance(body, dict) and body.get("part") in parts:
+            body["mat"] = parts[body["part"]]
 
 
 def removed_sizes(before: Project, after: Project) -> list[str]:
@@ -524,7 +587,12 @@ def with_created_part(project: Project, recipe: dict,
         edited.custom_parts.insert(at, part)
     else:
         edited.custom_parts.append(part)
-    return edited, part
+    # Validated, so a line across the new outline cuts it into pieces at once.
+    payload = edited.model_dump()
+    _parts_take_their_layers_material(project, payload)
+    result = _edited(project, payload)
+    # As stored: a name in use has a number now (`_distinct_soil_names`).
+    return result, next(p for p in result.custom_parts if p.key == key)
 
 
 def with_imported_part(project: Project, filename: str | None, built: dict,
@@ -542,7 +610,9 @@ def with_imported_part(project: Project, filename: str | None, built: dict,
     key = f"imported_{max(taken, default=-1) + 1}"
     part = CustomPart(
         key=key,
-        label=filename or key,
+        # Numbered as a drawn part is when its name is in use (`_distinct_soil_names`).
+        label=numbered_name(filename or key, [record[field] for _, record, field
+                                              in _soil_names(project.model_dump())]),
         source="import",
         source_file=built["brep_path"],
         imported_from=str(Path(source).resolve()) if source is not None else None,
@@ -563,7 +633,9 @@ def without_custom_parts(project: Project, keys: list[str]) -> Project:
     goes with it -- it describes nothing else.
     """
     gone = set(keys)
-    users = [(stage.id, sorted(gone & set(stage.activate + stage.deactivate)))
+    # A piece a line cut off the part goes with it.
+    pieces = {key for key, *_ in project.soil_bodies() if key.partition("__")[0] in gone}
+    users = [(stage.id, sorted((gone | pieces) & set(stage.activate + stage.deactivate)))
              for stage in project.stages]
     users = [(stage, named) for stage, named in users if named]
     if users:
@@ -585,13 +657,14 @@ def without_custom_part(project: Project, key: str) -> Project:
 
 def edit_notes(before: Project, after: Project) -> list[str]:
     """What to tell the user about an edit besides that it was done: the mesh sizes it took
-    away (`removed_sizes`), and each line it made or moved that splits no soil. kratos-cli
-    prints these after its answer and the GUI shows them in its Session log."""
+    away (`removed_sizes`), each soil name it gave a number (`_numbered_names`), and each
+    line it made or moved that splits no soil. kratos-cli prints these after its answer
+    and the GUI shows them in its Session log."""
     was = {line.id: line for line in before.lines}
     idle = after.idle_lines()
-    return removed_sizes(before, after) + [
-        f"Line {line.name!r} splits no soil: a line has to cross a soil layer from one edge "
-        "to another."
+    return removed_sizes(before, after) + _numbered_names(before, after) + [
+        f"Line {line.name!r} splits no soil: a line has to cross a soil layer or a soil "
+        f"{'surface' if after.dimension == 2 else 'volume'} from one edge to another."
         for line in after.lines if line.id in idle and was.get(line.id) != line]
 
 
@@ -1061,11 +1134,11 @@ def remove_line(project: Project, id: str) -> Project:
 
 def update_body(project: Project, key: str, **fields) -> Project:
     """The soil body `key` with its `name` or its `material` changed; `material=None` gives
-    it its layer's material as it is now. A body that is a whole layer is that layer's to
-    change."""
+    it its layer's or soil surface's material as it is now. A body that is a whole layer
+    is that layer's to change, and a whole soil surface is a custom part."""
     payload = project.model_dump()
-    for body in payload.get("bodies", []):
-        if f"soil_{body['layer']}__{body['id']}" == key:
+    for record, body in zip(project.bodies, payload.get("bodies", [])):
+        if record.key == key and not record.removed:
             if "name" in fields:
                 body["name"] = fields["name"]
             if "material" in fields:
@@ -1074,7 +1147,43 @@ def update_body(project: Project, key: str, **fields) -> Project:
     if any(f"soil_{layer.id}" == key for layer in project.layers):
         raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
                           "as a layer")
+    if any(part.key == key for part in project.custom_parts):
+        noun, command = (("soil surface", "surface set") if project.dimension == 2
+                         else ("soil volume", "volume"))
+        raise UnknownPart(f"{key} is a whole {noun}, not a part cut off by a line: change it "
+                          f"with `{command}`")
     raise UnknownPart(f"no soil body with key {key!r}")
+
+
+def remove_body(project: Project, key: str) -> Project:
+    """The project without the soil body `key`, one piece a line or a sheet pile cut off:
+    the soil there becomes a void, and the rest of its layer or soil surface stays
+    (`SoilBody.removed`).
+
+    The stages stop naming it, as it is no soil any more: a stage names it because it named
+    its layer before the cut. A boundary condition on it is refused, not dropped, as the
+    condition is the user's own choice. The last piece left is the whole layer or soil
+    surface, which is deleted as that."""
+    payload = project.model_dump()
+    at = next((index for index, record in enumerate(project.bodies)
+               if record.key == key and not record.removed), None)
+    if at is None:
+        return update_body(project, key)     # its refusal: a whole layer, or no such body
+    owner = project.bodies[at].owner_key
+    if [each for each, *_ in project.soil_bodies() if each.partition("__")[0] == owner] \
+            == [key]:
+        raise EditRefused(f"{key} is the last part of {owner}: delete the whole layer or "
+                          "soil surface instead")
+    users = sorted(condition.id for condition in project.boundary_conditions
+                   if condition.on == "part" and condition.part == key)
+    if users:
+        raise EditRefused(f"cannot delete {key}: boundary condition {', '.join(users)} is "
+                          "on it; delete that condition first")
+    payload["bodies"][at]["removed"] = True
+    for stage in payload["stages"]:
+        stage["activate"] = [each for each in stage["activate"] if each != key]
+        stage["deactivate"] = [each for each in stage["deactivate"] if each != key]
+    return _edited(project, payload)
 
 
 def assign_part_material(project: Project, key: str, material: str) -> Project:
@@ -1088,6 +1197,7 @@ def assign_part_material(project: Project, key: str, material: str) -> Project:
     for part in payload["custom_parts"]:
         if part["key"] == key:
             part["mat"], part["color"] = material, project.material(material).color
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 
@@ -1330,13 +1440,56 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
     """The boundary conditions, as one list: what `PATCH /api/project/conditions`
     sends. Left out, they stay."""
     payload = project.model_dump()
+    if update.stages is not None:
+        _stages_of_a_deck_are_read_only(project)
+        payload["stages"] = [stage.model_dump() for stage in update.stages]
     if update.boundary_conditions is not None:
-        _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
+        # Against the stages as they will be: the same request may take it out of them.
+        staged = (project if update.stages is None
+                  else project.model_copy(update={"stages": update.stages}))
+        _refuse_staged_conditions(staged, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
     if update.gravity_acceleration is not None:
         payload["gravity_acceleration"] = update.gravity_acceleration
-    return _edited(project, payload)
+    if update.soil_water is not None:
+        payload["soil_water"] = dict(update.soil_water)
+    edited = _edited(project, payload)
+    if update.stages is not None:
+        stages.linearise(edited)
+        stages.check_settings(edited)
+    if update.soil_water is not None:
+        _refuse_unknown_soil_water(edited, update.soil_water)
+    return edited
+
+
+def _refuse_unknown_soil_water(edited: Project, asked: dict[str, str]) -> None:
+    """Refuse a soil's water that names no soil or no head line: the project lets go of
+    one whose soil or line an edit took away (`Project.soil_water`), but one asked for
+    by name is a mistake to say."""
+    soils = edited.soil_part_keys()
+    lines = [line.id for line in edited.head_lines()]
+    for soil, water in asked.items():
+        if soil not in soils:
+            raise EditRefused(f"{soil!r} is not a soil of this project; the soils are "
+                              + (", ".join(soils) or "none"))
+        if water != INTERPOLATE and water not in lines:
+            raise EditRefused(
+                f"{water!r} is not a head line: a soil takes the phreatic line, a head "
+                "line (" + (", ".join(lines) or "there is none") + "), or "
+                f"{INTERPOLATE!r}")
+
+
+def set_soil_water(project: Project, soil: str, water: str | None) -> Project:
+    """`project` with the soil `soil` taking its water from the head line `water`, or
+    `INTERPOLATE`; None gives it the phreatic line again (`Project.soil_water`)."""
+    payload = project.model_dump()
+    chosen = dict(payload.get("soil_water") or {})
+    if water is None:
+        chosen.pop(soil, None)
+    else:
+        chosen[soil] = water
+    return replace_conditions(project, ConditionsUpdate(soil_water=chosen))
 
 
 def find_condition(project: Project, id: str):

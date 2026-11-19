@@ -152,8 +152,10 @@ Useful here:
 - `material list` shows the soils there are.
 - `material set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
   reduction.
-- `material presets` lists the library soils (`m1` Fill ... `m6` Bedrock), and
-  `material add ID --preset m3` starts from one instead of typing every variable.
+- `material presets` lists the library soils (`embankment` Embankment ...
+  `bedrock` Bedrock), and `material add ID --preset clay_shallow` starts from one
+  instead of typing every variable. Add `--model linear-elastic` to get it as a linear
+  elastic soil.
 
 #### Step 4. The soil layers
 
@@ -266,12 +268,12 @@ changed soil body soil_L_mid__part1; wrote ...\crow.json
 crow.json> body set soil_L_mid__part2 --name retained
 changed soil body soil_L_mid__part2; wrote ...\crow.json
 crow.json> body list
-soil_L_top__part3  Soil_Top · lift 1  ·  Clay
-soil_L_top__part2  Soil_Top · retained  ·  Clay
-soil_L_top__part1  Soil_Top · lift 2  ·  Clay
-soil_L_top__part4  Soil_Top · lift 3  ·  Clay
-soil_L_mid__part1  Soil_Middle · below the pit  ·  Clay
-soil_L_mid__part2  Soil_Middle · retained  ·  Clay
+soil_L_top__part3  lift 1  ·  Clay
+soil_L_top__part2  retained  ·  Clay
+soil_L_top__part1  lift 2  ·  Clay
+soil_L_top__part4  lift 3  ·  Clay
+soil_L_mid__part1  below the pit  ·  Clay
+soil_L_mid__part2  retained  ·  Clay
 soil_L_bot  Soil_Bottom  ·  Sand
 ```
 
@@ -287,21 +289,23 @@ soil_L_bot  Soil_Bottom  ·  Sand
 In the finite element model, the strut is a truss element: a straight bar between two
 points that carries only an axial force, in tension and in compression. In engineering, a
 strut takes compression and an anchor takes tension, but both are the same truss element.
-`kratos-cli` makes this element with the `anchor` commands, so the strut is an anchor whose
-tail is a pinned support:
+`kratos-cli` makes this element with the `anchor` commands. Both ends of a new anchor are
+free, attached to the mesh: the tail is a node of the soil mesh, so `--tail-end fixed`
+makes the tail of this strut a pinned support:
 
 ```text
 crow.json> section add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
 added anchor section (id strut, name Strut); wrote ...\crow.json
 
-crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5
+crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5 --tail-end fixed
 added anchor (id strut, name Strut); wrote ...\crow.json
 ```
 
 - One strut per metre of wall (`--spacing 1`): E = 210 GPa, A = 4.76·10⁻⁵ m².
 - The strut is massless and has no force limits (`none` clears a limit).
-- Its head is snapped onto the wall, because it becomes one of the wall's nodes. A head more
-  than 1 m from any structure is refused.
+- Its head end stays free, so the head is snapped onto the wall and becomes one of the
+  wall's nodes. A free head more than 1 m from any structure is a node of the soil mesh.
+  `--head-end fixed` holds a head in place.
 
 #### Step 9. The interface between wall and soil
 
@@ -639,7 +643,7 @@ Stage 7 (Third excavation) offers:
     sxx       σxx                             Pa      elements/nodes
     syy       σyy                             Pa      elements/nodes
   ...
-  Groundwater
+  Water pressure and head
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy

@@ -383,6 +383,7 @@ App.SoilVolumeDialog = (function () {
 
     layer.appendChild(scrim);
     layer.appendChild(dialog);
+    if (App.DialogFit) App.DialogFit.fit(dialog);
 
     function close() {
       if (scrim.parentNode) scrim.remove();
@@ -414,14 +415,20 @@ App.SoilVolumeDialog = (function () {
       if (editing) payload.replace = editing.key;
       if (options.insertBefore) payload.insert_before = options.insertBefore;
 
+      // The name as stored: one in use comes back numbered, `Embankment_2`.
+      var named = payload.label;
       App.Api.post('/api/geometry/create', payload)
-        .then(function () { return App.Model.load(); })
+        .then(function (answer) {
+          var part = answer && answer.parts && answer.parts[0];
+          if (part && part.label) named = part.label;
+          return App.Model.load();
+        })
         .then(function () { return App.Viewport.refresh(); })
         .then(function () {
           App.Explorer.mountTree(App.state.mode);
           if (App.state.selection) App.Explorer.mountSelection(App.state.selection);
           App.Command.ok((editing ? 'Updated' : 'Created') + ' soil ' + form + ' "' +
-                         payload.label + '" — ' + state.summary.split('· ')[1] + ' of ' +
+                         named + '" — ' + state.summary.split('· ')[1] + ' of ' +
                          App.matById(matSelect.value).name + '.');
           close();
           if (options.onSaved) options.onSaved();

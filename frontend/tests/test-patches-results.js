@@ -58,6 +58,11 @@
     if (/\/stages\/\d+\/displacement$/.test(path)) return { source: null, ids: [], values: [] };
     var f = /\/field\/([^?]+)/.exec(path);
     if (f) return field(decodeURIComponent(f[1]));
+    var v = /\/vectors\/([^/]+)$/.exec(path);
+    if (v) {
+      return { field: decodeURIComponent(v[1]), label: '|q|', unit: 'm/s', source: 'X',
+               ids: [1, 2, 3], values: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], max: 1 };
+    }
     if (path === BASE + '/members') return ANSWERS.members;
     var m = /\/members\/wall\/([^/]+)$/.exec(path);
     if (m) return plot(decodeURIComponent(m[1]));
@@ -311,6 +316,68 @@
     }));
   });
 
+  /* A stage catalogue with an integration-point field and a vector, for as long as
+     `body` runs. */
+  function withHeadAndFlux(body) {
+    var fields = ANSWERS.fields;
+    ANSWERS.fields = JSON.parse(JSON.stringify(fields));
+    ANSWERS.fields.groups.push({ name: 'Water pressure and head', fields: [
+      { name: 'head', label: 'Hydraulic head', unit: 'm', locations: ['elements', 'nodes'] }] });
+    ANSWERS.fields.groups.push({ name: 'Groundwater flow', fields: [
+      { name: 'flux', label: '|q|', unit: 'm/s', locations: ['nodes'], vector: 'flux' }] });
+    function back() { ANSWERS.fields = fields; }
+    return Promise.resolve().then(body).then(back, function (e) { back(); throw e; });
+  }
+
+  test('results: the menu and the window choose where integration points are drawn, and arrows', function () {
+    return withHeadAndFlux(function () {
+      var ctx = rig();
+      var menu = function () {
+        return (App.MENUS || []).filter(function (m) { return m.label === 'Results'; })[0];
+      };
+      var item = function (label) {
+        return menu().items.filter(function (i) { return i && i.label === label; })[0];
+      };
+      var control = function (name) {
+        return dialogTitled(ctx, 'Choose results').querySelector('[data-res="' + name + '"]');
+      };
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(item('Integration points').disabled, 'u_y is nodal: nothing to choose');
+        T.ok(!control('location'), 'and no Location row');
+        T.ok(!item('Arrows').disabled, 'the stage has a vector');
+        T.ok(item('Arrows').sub.some(function (s) { return s.cmd === 'results arrows flux'; }));
+        T.ok(!item('Arrows').sub.some(function (s) { return s.cmd === 'results arrows on'; }),
+             'off and the vectors only, no "of the field on screen"');
+        T.ok(!Array.prototype.some.call(control('arrows').options,
+                                        function (o) { return o.value === 'on'; }));
+        var groups = Array.prototype.map.call(
+          control('field').querySelectorAll('optgroup'), function (g) { return g.label; });
+        T.eq(groups, ['Deformations', 'Water pressure and head', 'Groundwater flow']);
+        control('field').value = 'head';
+        control('field').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(!item('Integration points').disabled, 'the head is an integration-point field');
+        T.ok(item('Integration points').sub[0].checked, 'per element by default');
+        control('location').value = 'nodes';
+        control('location').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results location nodes') >= 0, ctx.commands.join(' | '));
+        T.ok(item('Integration points').sub[1].checked, 'the menu follows');
+        control('arrows').value = 'flux';
+        control('arrows').dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results arrows flux') >= 0, ctx.commands.join(' | '));
+        T.eq(App.Results.options().arrows, 'flux');
+      }));
+    });
+  });
+
   test('results: every display control issues its command and updates the shared options', function () {
     var ctx = rig();
     function change(name, value, checked) {
@@ -347,6 +414,72 @@
          'results mesh off', 'results loads off', 'results deform 10', 'results range auto']
           .forEach(function (command) { T.ok(ctx.commands.indexOf(command) >= 0, command); });
       }));
+  });
+
+  /* A stage catalogue with a water pressure in it, and stages that solved
+     `calculation`, for as long as `body` runs. */
+  function withWater(calculation, body) {
+    var fields = ANSWERS.fields, stages = ANSWERS.run.stages;
+    ANSWERS.fields = JSON.parse(JSON.stringify(fields));
+    ANSWERS.fields.groups.push({ name: 'Groundwater', fields: [
+      { name: 'pw', label: 'Pore pressure', unit: 'kPa', locations: ['nodes'] }] });
+    ANSWERS.run.stages = stages.map(function (s) {
+      return Object.assign({}, s, { calculation: calculation });
+    });
+    function back() { ANSWERS.fields = fields; ANSWERS.run.stages = stages; }
+    return Promise.resolve().then(body).then(back, function (e) { back(); throw e; });
+  }
+
+  test('results: a coupled stage offers the zero pressure line as a box, unticked', function () {
+    return withWater('mechanical', function () {
+      var ctx = rig();
+      var box = function () {
+        return dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]');
+      };
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(box(), 'the box is there');
+        T.eq(box().checked, false, 'unticked by default');
+        box().checked = true;
+        box().dispatchEvent(new Event('change'));
+        return settle();
+      }).then(function () {
+        T.ok(ctx.commands.indexOf('results zeroline on') >= 0, ctx.commands.join(' | '));
+        T.eq(App.Results.options().zeroLine, true);
+        T.eq(box().checked, true, 'redrawn ticked');
+        var menu = (App.MENUS || []).filter(function (m) { return m.label === 'Results'; })[0];
+        var colours = menu.items.filter(function (i) { return i && i.label === 'Colours'; })[0];
+        var item = colours && colours.sub.filter(function (s) {
+          return s.label === 'Show zero pressure line';
+        })[0];
+        T.ok(item && item.checked, 'and the menu item is ticked with it');
+      }));
+    });
+  });
+
+  test('results: a flow stage has no zero pressure box: the line is always drawn', function () {
+    return withWater('flow', function () {
+      var ctx = rig();
+      return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+        App.runAction({ action: 'chooseResults' });
+        return settle();
+      }).then(function () {
+        T.ok(!dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]'));
+        T.ok(App.Results.zeroLineShown(), 'the line is on screen regardless');
+      }));
+    });
+  });
+
+  test('results: a stage with no water pressure has no zero pressure box', function () {
+    var ctx = rig();
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.runAction({ action: 'chooseResults' });
+      return settle();
+    }).then(function () {
+      T.ok(!dialogTitled(ctx, 'Choose results').querySelector('[data-res="zeroline"]'));
+    }));
   });
 
   /* App.UI keeps the first menu layer it finds, so this one stays for the whole page. */
@@ -446,7 +579,8 @@
     var ctx = rig(true);
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
       App.setMode('results');
-      T.ok(dialogTitled(ctx, 'Choose results'), 'entering Results opens the chooser');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'entering Results does not ask');
+      App.runAction({ action: 'chooseResults' });
       App.setCoords(12, -3, 0);
       T.eq(dock.querySelector('#sb-hint').textContent, 'Probe x=12');
       dock.querySelector('[data-cmd="results range auto"]').click();
@@ -462,6 +596,74 @@
       T.eq(dialogTitled(ctx, 'Plot along the wall'), undefined);
       T.eq(saveMenus().length, 0, 'its menu closes with it');
       T.eq(dock.querySelector('#panel-results').hidden, true);
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
+  });
+
+  test('results: coming back to Results shows the same result, and never asks again', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    var drawn = [];
+    App.ResultsView.draw = function (payload) { drawn.push(payload.field.field); };
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.state.mode = 'soil';
+      drawn.length = 0;
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'the first visit shows, not asks');
+      return settle(30);
+    }).then(function () {
+      T.ok(drawn.length > 0, 'the first visit draws the result the run opened on');
+      return resultsCommand('results field uy');
+    }).then(function () {
+      App.runAction({ action: 'chooseResults' });
+      App.runAction({ action: 'plotResults' });
+      return settle(60);
+    }).then(function () {
+      App.setMode('mesh');
+      App.setMode('soil');
+      drawn.length = 0;
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined,
+           'a chooser open when leaving does not come back by itself');
+      T.ok(dialogTitled(ctx, 'Plot along the wall'), 'the plot open when leaving comes back');
+      return settle(30);
+    }).then(function () {
+      T.eq(drawn, ['uy'], 'the same field is drawn again');
+      // A redraw of the same tab -- a part switched off in the Model explorer, or any
+      // edit that rebuilds the geometry -- calls setMode with the mode already on.
+      App.runAction({ action: 'chooseResults' });
+      button(dialogTitled(ctx, 'Choose results'), 'Close').click();
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined,
+           'a redraw in Results does not open the chooser');
+      App.runAction({ action: 'chooseResults' });
+      App.setMode('results');
+      T.eq(ctx.layer.querySelectorAll('.dlg-results').length, 1,
+           'nor close or duplicate one that is open');
+      App.setMode('soil');
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
+
+    function resultsCommand(text) {
+      return Promise.resolve(App.Results.handleCommand(text)).then(function () { return settle(30); });
+    }
+  });
+
+  test('results: the rail opens the chooser from any tab', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div><span id="sb-hint"></span>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.setMode('soil');
+      App.runAction({ action: 'chooseResults' });
+      T.eq(App.state.mode, 'results');
+      T.ok(dialogTitled(ctx, 'Choose results'), 'the rail opens it');
+      T.eq(dock.querySelector('#panel-results').hidden, false, 'the dock panel is there too');
+      App.setMode('soil');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined);
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 

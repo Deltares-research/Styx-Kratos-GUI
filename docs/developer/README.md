@@ -14,7 +14,7 @@ To use Styx, see the user guides: [INSTALLATION.md](../INSTALLATION.md),
 |---|---|
 | This page | The big picture: who does what, from a drawn model to its results |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The libraries, the modules, the HTTP API, the browser modules and Results mode |
-| [TESTING.md](TESTING.md) | How to run the tests, what CI runs, and how CI makes the [GUI tutorials site](TESTING.md#the-gui-tutorials) |
+| [TESTING.md](TESTING.md) | How to run the tests, what CI runs, and how CI makes the [documentation site](TESTING.md#the-gui-tutorials) |
 | [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) | The size of the code in each module |
 | [code-map/](code-map/GRAPH_REPORT.md) | A generated map of the code: the central classes, the groups of code that belong together, and a tree of files and functions that you can click |
 | [CONTRIBUTING.md](../../CONTRIBUTING.md) | How to set up, how to make a change (test first), and the checks of CI |
@@ -42,7 +42,7 @@ code of Styx. [pipeline.svg](pipeline.svg) is a text file that you can edit.
 | | Styx | Gmsh | Kratos |
 |---|---|---|---|
 | Role | The model and each translation | Geometry and mesh | The solver |
-| Work | Keeps the project as one checked `Project`, and checks the full model again at each edit. Makes the stage tree into Kratos stages. Splits the mesh along walls and writes interface elements. Writes the deck, starts Kratos, reads the results. | Builds solids with the OpenCASCADE kernel: boxes, boolean operations. Embeds walls, piles and anchors, so that the mesh follows them. Makes the finite-element mesh with the sizes and refinements that the model asks for. | GeoMechanicsApplication, run by its own orchestrator over the stages of the deck. Coupled soil and water (U-Pw elements), K0 initial stresses, parts switched on and off in stages. Writes GiD results and JSON curves for walls and interfaces. |
+| Work | Keeps the project as one checked `Project`, and checks the full model again at each edit. Makes the stage tree into Kratos stages. Splits the mesh along walls and writes interface elements. Writes the deck, starts Kratos, reads the results. | Builds solids with the OpenCASCADE kernel: boxes, boolean operations. Embeds walls, piles and anchors, so that the mesh follows them. Makes the finite-element mesh with the sizes and refinements that the model asks for. | GeoMechanicsApplication, run by its own orchestrator over the stages of the deck. Coupled soil and water (U-Pw elements) or groundwater flow alone (Pw elements), K0 initial stresses, parts switched on and off in stages. Writes GiD results and JSON curves for walls and interfaces. |
 | Runs in | The Python of the server or of `kratos-cli` | A separate worker process | A separate Python: the one that Kratos was built for |
 
 ## What Gmsh does
@@ -85,9 +85,10 @@ The export makes the mesh and writes a deck folder. Kratos starts with
 |---|---|---|
 | `<deck>.mdpa` | One node table, one element block for each soil body and structure, load conditions, and a SubModelPart for each part | The Gmsh mesh, the interface split and the part keys (`kratos/writer.py`, `kratos/interfaces.py`) |
 | `MaterialParameters.json` | A constitutive law and its Kratos variables for each material: soil, beams, anchors, interfaces | The property sets of the project as they are, plus the values that the user did not give and that Styx can calculate (K0 from ν or from Jaky, permeabilities, interface strength from its soil). In 2D, piles are spread over their spacing (`kratos/materials.py`). |
-| `ProjectParameters.json` | One Kratos stage for each stage: what is active, water, constraints, loads, solver settings, output processes | The stage tree, made into a list of Kratos stages with Activate and Deactivate steps. The solver block is a fixed default analysis (`model/stages.py`, `kratos/parameters.py`). |
+| `ProjectParameters.json` | One Kratos stage for each stage: what is active, water, constraints, loads, solver settings, output processes | The stage tree, made into a list of Kratos stages with Activate and Deactivate steps. The solver block of each stage comes from its calculation type and its expert solver settings (`model/stages.py`, `model/solver.py`, `kratos/parameters.py`). |
 | `initial_materials.json` | The materials, plus the K0 variables | Written only when the first stage runs the K0 procedure (`kratos/deck_files.py`) |
 | `kratos_gui_units.json` | The unit system, for the labels of the results. Kratos does not read it. | The project (`kratos/deck_files.py`) |
+| `kratos_gui_prestress_workaround.py` | A temporary Kratos process that stops Kratos from adding an anchor's prestress again in each stage | Copied from `kratos/prestress_workaround.py`, only into a deck that carries a prestressed anchor into a later stage (`kratos/deck_files.py`) |
 
 ## Run Kratos and read the results
 
@@ -147,7 +148,8 @@ frontend/      the browser app (index.html, js/, css/, three.js), with its tests
 tests/         pytest tests: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    the Kratos benchmark cases and the script that runs them
 tools/test.py  runs the test tiers (see TESTING.md)
-tools/gui_tutorial.py  makes the GUI tutorial screenshots and site (see TESTING.md)
+tools/gui_tutorial.py  makes the GUI tutorial screenshots, then the site (see TESTING.md)
+tools/docs_site.py     builds the documentation site from the pages in mkdocs.yml
 docs/          the user guides; docs/cli_tutorials/ for the kratos-cli tutorials,
                docs/gui_tutorials/ for the GUI tutorials, docs/developer/ for this guide
 run.bat        the launcher for Windows

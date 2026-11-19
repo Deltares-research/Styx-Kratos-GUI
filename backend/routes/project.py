@@ -17,7 +17,8 @@ from backend import store
 from backend.routes.common import refusals, stored
 from core import session
 from core.model import migration, stages
-from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
+from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, DomainUpdate,
+                                LayersUpdate,
                                 LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterUpdate)
@@ -190,6 +191,15 @@ async def patch_body(key: str, update: BodyUpdate) -> dict:
     return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
 
 
+@router.delete("/api/project/bodies/{key}")
+async def delete_body(key: str) -> dict:
+    """Delete one soil body a line cut off (`session.remove_body`): the soil there becomes
+    a void, and the rest of its layer or soil surface stays."""
+    with refusals():
+        project = session.remove_body(store.get(), key)
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
 @router.patch("/api/project/structures")
 async def patch_structures(update: StructuresUpdate) -> dict:
     """Replace Structure-mode objects as one validated project transaction
@@ -203,9 +213,16 @@ async def patch_structures(update: StructuresUpdate) -> dict:
 async def patch_conditions(update: ConditionsUpdate) -> dict:
     """Replace the boundary conditions as one list (`session.replace_conditions`).
     What the GUI's boundary conditions dialog, its explorer rows and the `boundary`
-    command send (frontend/js/boundary-conditions.js)."""
-    with refusals():
-        project = session.replace_conditions(store.get(), update)
+    command send (frontend/js/boundary-conditions.js). The stages may come with them, as
+    `patch_stages` takes them."""
+    try:
+        with refusals():
+            project = session.replace_conditions(store.get(), update)
+    except stages.StageError as failure:
+        raise RequestValidationError([{
+            "type": "value_error", "loc": ("body", "stages"), "msg": str(failure),
+            "input": [stage.model_dump() for stage in update.stages or []],
+        }]) from failure
     # A condition on a drawn line or point is embedded in the section, so the mesh
     # changes with it.
     return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
@@ -249,6 +266,17 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # frontend prints them under the mode-switch line (frontend/js/patches.js).
     return stored(project) | {"notes": notes,
             "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.patch("/api/project/domain")
+async def patch_domain(update: DomainUpdate) -> dict:
+    """The model's extents, as `kratos-cli domain --x --y --z` sets them
+    (`session.set_domain`): File > Project properties… in the GUI. A new bottom or top
+    moves the bottom of the last layer or the top of the first with it."""
+    with refusals():
+        project, notes = session.set_domain(store.get(), x=update.x, y=update.y, z=update.z)
+    return stored(project) | {"notes": notes,
+                              "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/units")

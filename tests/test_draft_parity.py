@@ -1,6 +1,6 @@
 """What a new record starts as, said twice and held to one document.
 
-The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the six presets
+The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the presets
 of `App.MaterialLibrary`; its material window fills in a soil model's defaults with
 `App.SoilModels.fill` and refuses what `App.SoilModels.problem` refuses; it starts a new sheet pile, wall, member, anchor, interface or
 load from the Structure mode's own `draft` functions. The command line starts each from
@@ -140,18 +140,31 @@ def calls(models: dict) -> list[dict]:
     call("an anchor raking back from the pile", "Anchors.draft", "pile", [], drafts.anchor)
     call("an anchor head snapped onto the pile", "Anchors.draftFromPoints", "pile",
          [[[6.4, -2], [20, -8]]], lambda p: drafts.anchor(p, (6.4, -2), (20, -8)))
-    call("an anchor head far from the pile is refused", "Anchors.draftFromPoints", "pile",
+    call("an anchor head far from the pile stays in the soil", "Anchors.draftFromPoints", "pile",
          [[[10, -2], [20, -8]]], lambda p: drafts.anchor(p, (10, -2), (20, -8)))
     call("a strut from the part of a pile above the ground", "Anchors.draftFromPoints",
+         "section_tall_pile", [[[12.3, 4], [16, 4]], "fixed"],
+         lambda p: drafts.anchor(p, (12.3, 4), (16, 4), tail_end="fixed"))
+    call("a free anchor tail in the air is refused", "Anchors.draftFromPoints",
          "section_tall_pile", [[[12.3, 4], [16, 4]]],
          lambda p: drafts.anchor(p, (12.3, 4), (16, 4)))
     call("an anchor tail below the model is refused", "Anchors.draftFromPoints",
-         "section_tall_pile", [[[12, 4], [16, -40]]],
-         lambda p: drafts.anchor(p, (12, 4), (16, -40)))
+         "section_tall_pile", [[[12, 4], [16, -40]], "fixed"],
+         lambda p: drafts.anchor(p, (12, 4), (16, -40), tail_end="fixed"))
     call("an anchor raking back from a pile above the ground", "Anchors.draft",
          "section_tall_pile", [], drafts.anchor)
-    call("an anchor with nothing to hang from is refused", "Anchors.draft", "section", [],
+    call("an anchor with no structure starts in the soil", "Anchors.draft", "section", [],
          drafts.anchor)
+    call("an anchor head in the air on no structure is refused", "Anchors.draftFromPoints",
+         "section", [[[20, 3], [25, -8]], "fixed"],
+         lambda p: drafts.anchor(p, (20, 3), (25, -8), tail_end="fixed"))
+    call("a fixed anchor head is not snapped onto the pile", "Anchors.draftFromPoints",
+         "pile", [[[6.4, -2], [20, -8]], "free", "fixed"],
+         lambda p: drafts.anchor(p, (6.4, -2), (20, -8), head_end="fixed"))
+    call("a fixed anchor head may be in the air", "Anchors.draftFromPoints",
+         "section", [[[20, 3], [25, -8]], "free", "fixed"],
+         lambda p: drafts.anchor(p, (20, 3), (25, -8), head_end="fixed"))
+
     call("an anchor on a wall", "Anchors.draft", "solid_wall", [], drafts.anchor)
     call("an anchor on a member", "Anchors.draft", "solid_member", [], drafts.anchor)
     call("a first anchor in a kN model", "Anchors.draft", "section_pile_kn", [],
@@ -451,7 +464,7 @@ def soil_model_cases() -> dict:
                     "unread": soil_models.unread(law, variables)}
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")
                    for variables in (
-                       drafts.preset("m1")["variables"],
+                       drafts.preset("embankment")["variables"],
                        {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
                         "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0, "MY_OWN": 2.0,
                         "PERMEABILITY_ZZ": 1e-12})],

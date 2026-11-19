@@ -298,6 +298,75 @@ def test_calculate_exports_and_runs_in_one_step(cli, site, stand_in_kratos):
     assert list(run.glob("*.mdpa"))
 
 
+def test_a_stopped_calculation_says_so_and_where_its_files_are(cli, site, stand_in_kratos):
+    """Ctrl+C, or Stop in the GUI, while `calculate` runs (`calculation.stop`)."""
+    import threading
+    import time
+
+    stand_in_kratos("import time\n"
+                    "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"
+                    "for _ in range(600):\n"
+                    "    print('iterating', flush=True)\n"
+                    "    time.sleep(0.05)\n")
+
+    def stop_when_running() -> None:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            directory = calculation.current_run()
+            log = directory / calculation.LOG_NAME if directory else None
+            if log is not None and log.is_file() and "iterating" in log.read_text(
+                    encoding="utf-8", errors="replace"):
+                calculation.stop()
+                return
+            time.sleep(0.02)
+
+    watcher = threading.Thread(target=stop_when_running)
+    watcher.start()
+    ran = cli("calculate", site)
+    watcher.join()
+
+    assert ran.code == 1
+    assert "stopped by the user in stage 1 of 1 (1_Flow)" in ran.out
+    assert "Stopped by the user after" in ran.err
+
+
+SLOW_RESIDUALS = (
+    "import time\n"
+    "print('[kratos-gui] stage begin 1/1 1_Flow', flush=True)\n"
+    "print('GeoMechanics Analysis: Analysis -START-', flush=True)\n"
+    "for n in range(3):\n"
+    "    print(f'RESIDUAL CRITERION:  :: [ Obtained ratio = {10.0 ** -n:g}; Expected ratio"
+    " = 0.01; Absolute norm = 1; Expected norm =  1e-09]', flush=True)\n"
+    "    time.sleep(0.4)\n"
+    "print('RESIDUAL CRITERION: Convergence is achieved', flush=True)\n"
+    "print('[kratos-gui] stage end 1/1 1_Flow', flush=True)\n")
+"""A stand-in that prints three residuals, 0.4 s apart, in one stage."""
+
+
+def test_follow_prints_each_iteration_on_stderr_and_keeps_stdout_the_answer(
+        cli, site, stand_in_kratos):
+    stand_in_kratos(SLOW_RESIDUALS)
+
+    ran = cli("--json", "calculate", site, "--follow")
+
+    assert ran.code == 0, ran.err
+    assert ran.json()["ok"] is True, "stdout is the JSON answer alone"
+    lines = [line.strip() for line in ran.err.splitlines()]
+    assert lines[0] == "stage 1 of 1: Flow"
+    assert [line.split(":")[0] for line in lines[1:4]] == [
+        "iteration 1", "iteration 2", "iteration 3"]
+    assert lines[3].endswith("met")
+    assert len(lines) == 4, "each line once"
+
+
+def test_without_follow_nothing_is_printed_during_the_run(cli, site, stand_in_kratos):
+    stand_in_kratos(SLOW_RESIDUALS)
+
+    ran = cli("--json", "calculate", site)
+
+    assert "iteration" not in ran.err
+
+
 # ── results ─────────────────────────────────────────────────────────────────
 
 def test_results_lists_the_runs_newest_first(cli, site, stand_in_kratos):

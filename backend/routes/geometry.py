@@ -105,9 +105,12 @@ async def create_geometry(recipe: dict) -> dict:
     # may have changed under it.
     with refusals():
         project, part = session.with_created_part(store.get(), recipe, res)
+    # A name in use, numbered (`session.edit_notes`), is said in the Session log.
+    notes = session.edit_notes(store.get(), project)
     store.put(project)
 
     return {
         "parts": [part.model_dump()],
+        "edit_notes": notes,
         "invalidates": ["geometry", "mesh", "tree", "project"]
     }

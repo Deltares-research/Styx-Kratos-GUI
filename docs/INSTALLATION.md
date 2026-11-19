@@ -103,7 +103,7 @@ If you get `Permission denied` (this can happen after unpacking a ZIP), run `bas
 instead.
 
 Then open **<http://127.0.0.1:8000/>** in your browser. On Windows this happens
-automatically. Leave the terminal window open while you work, and press <kbd>Ctrl</kbd>+<kbd>C</kbd>
+automatically, as soon as the server is ready. Leave the terminal window open while you work, and press <kbd>Ctrl</kbd>+<kbd>C</kbd>
 in it to stop the server.
 
 What the launcher does:
@@ -141,7 +141,7 @@ The package server gets Styx as a wheel. To build it, run this in the repository
 uv build --wheel
 ```
 
-The wheel goes into `dist/`, for example `dist/deltaresstyx-0.1.0-py3-none-any.whl`. Its
+The wheel goes into `dist/`, as `dist/deltaresstyx-<version>-py3-none-any.whl`. Its
 version is `VERSION` in `core/version.py`. The wheel holds the Python code and the browser
 app, and it gives the commands `deltaresstyx` and `kratos-cli`. Kratos is a package of its
 own, and since the names of the packages on Nexus and PyPI are not consistent yet, it is not

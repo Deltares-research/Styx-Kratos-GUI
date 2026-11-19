@@ -757,7 +757,7 @@ def test_a_water_level_may_stand_in_drawn_soil_above_the_layers():
 def test_a_material_is_added_and_its_id_must_be_free():
     from core.model import drafts
 
-    clay, _ = drafts.soil(seed_project(), "clay", preset="m3")
+    clay, _ = drafts.soil(seed_project(), "clay", preset="clay_shallow")
     project = session.add_material(seed_project(), clay)
     assert project.materials[-1].id == "clay"
 
@@ -868,10 +868,17 @@ def test_a_structure_is_changed_field_by_field():
     assert (strut.prestress, strut.name) == (1.0e5, "Prop")
 
 
-def test_an_anchor_moved_off_its_pile_is_refused():
-    with pytest.raises(ValidationError, match="not on a sheet pile"):
+def test_an_anchor_moved_off_its_pile_is_joined_to_the_soil():
+    project = session.update_structure(excavation_project(staged=False), "strut",
+                                       head=(10.0, -1.0))
+
+    assert not project.anchor_on_structure(project.anchors[0])
+
+
+def test_an_anchor_head_moved_into_the_air_is_refused():
+    with pytest.raises(ValidationError, match="joined to the soil but lies above it"):
         session.update_structure(excavation_project(staged=False), "strut",
-                                 head=(10.0, -1.0))
+                                 head=(10.0, 3.0))
 
 
 def test_a_structure_that_is_not_there_is_named_with_those_that_are():

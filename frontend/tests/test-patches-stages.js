@@ -373,6 +373,82 @@
     }, Promise.resolve()));
   });
 
+  function windowButtons(ctx) {
+    return ctx.layer.querySelectorAll('.dialog > .stage-toolbar button.tbtn');
+  }
+
+  function later() { return new Promise(function (r) { setTimeout(r, 20); }); }
+
+  test('stages window: it has the panel\'s add, insert, duplicate and delete buttons',
+       function () {
+    var ctx = rig(model());
+    try {
+      App.runAction({ action: 'stages' });
+      T.eq(Array.prototype.map.call(windowButtons(ctx), function (b) {
+        return b.getAttribute('data-action'); }),
+        ['addStage', 'insertStage', 'duplicateStage', 'deleteStage']);
+      T.ok(Array.prototype.every.call(windowButtons(ctx), function (b) { return !b.disabled; }));
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: a stage added there is listed and shown without closing it',
+       function () {
+    var ctx = rig(model());
+    App.state.phase = model().stages[1].id;
+    App.runAction({ action: 'stages' });
+    windowButtons(ctx)[0].click();
+    return done(ctx, later().then(function () {
+      T.eq(ctx.patches.length, 1, 'one PATCH');
+      var rows = windowRows(ctx);
+      T.eq(rows.length, model().stages.length + 1, 'the window lists the new stage');
+      var made = ctx.patches[0].body.stages[ctx.patches[0].body.stages.length - 1];
+      T.eq(App.state.phase, made.id, 'and selects it');
+      T.ok(rows[rows.length - 1].classList.contains('selected'));
+      T.ok(ctx.layer.querySelector('.stages-overview'), 'the window is still open');
+    }));
+  });
+
+  test('stages window: duplicate and delete act on the stage selected in the window',
+       function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'stages' });
+    windowRows(ctx)[2].click();
+    var gone = model().stages[2].id;
+    windowButtons(ctx)[3].click();
+    return done(ctx, later().then(function () {
+      T.ok(ctx.patches[0].body.stages.every(function (stage) { return stage.id !== gone; }),
+           'the stage selected in the window is deleted');
+      T.eq(windowRows(ctx).length, model().stages.length - 1);
+      windowButtons(ctx)[2].click();
+      return later();
+    }).then(function () {
+      T.eq(ctx.patches[1].body.stages.length, model().stages.length, 'one duplicated');
+    }));
+  });
+
+  test('stages window: a project with no stages gets its first one from the window',
+       function () {
+    var bare = JSON.parse(JSON.stringify(model()));
+    bare.stages = [];
+    var ctx = rig(bare);
+    App.runAction({ action: 'stages' });
+    T.eq(Array.prototype.map.call(windowButtons(ctx), function (b) { return b.disabled; }),
+         [false, true, true, true], 'only Add stage, with nothing selected');
+    windowButtons(ctx)[0].click();
+    return done(ctx, later().then(function () {
+      T.eq(windowRows(ctx).length, 1, 'the initial stage is listed');
+    }));
+  });
+
+  test('stages window: a deck\'s stages have no buttons', function () {
+    var ctx = rig(model());
+    try {
+      App.PROJECT.deck = { parameters: 'ProjectParameters_stage1.json' };
+      App.runAction({ action: 'stages' });
+      T.eq(windowButtons(ctx).length, 0);
+    } finally { ctx.restore(); }
+  });
+
   test("stage list: the dock's Stages… button opens the window", function () {
     var ctx = rig(model());
     try {

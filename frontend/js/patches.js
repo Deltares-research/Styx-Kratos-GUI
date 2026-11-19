@@ -166,7 +166,7 @@ App.LivePatches = (function () {
   }
 
   /* A sheet pile in a section is a wall panel in the solid model -- one tool, two
-     structures -- and an anchor hangs from whichever of them is there. The tool has
+     structures -- and an anchor may hang from whichever of them is there. The tool has
      to say which one it is about to make, for the same reason the soil-body tool
      renames itself below. */
   function nameStructureActions(is2d) {
@@ -371,6 +371,7 @@ App.LivePatches = (function () {
      through its own module, which is what validates, persists and refreshes the tree
      for it already. */
   function renameObject(kind, key) {
+    if (kind === 'body') return renameBodyPart(key);
     return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
                                 help: 'Shown in the Model explorer.' })
       .then(function (name) {
@@ -415,9 +416,6 @@ App.LivePatches = (function () {
       if (!line) return;
       line.name = name;
       return App.Lines.save(line).catch(reportRenameError);
-    }
-    if (kind === 'body') {
-      return App.Lines.saveBody(key, { name: name }).catch(reportRenameError);
     }
     if (kind === 'load') {
       var load = loadByKey(key);
@@ -466,6 +464,112 @@ App.LivePatches = (function () {
     if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + layer.name + '.');
     if (App.state && App.state.selection === key) App.selectObject(null);
     return App.commitSelectionEdit(null);
+  }
+
+  /* What the soil body `key` is a part of: its layer, or the soil surface (a custom
+     part) a line cut. Once a line cuts a layer or a surface, the explorer shows only
+     its parts, so a part's menu and panel are where the whole is deleted. */
+  function bodyOwner(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return null;
+    if (body.layer) {
+      var layer = App.layerById ? App.layerById(body.layer) : null;
+      return layer ? { kind: 'layer', noun: 'layer', key: 'soil_' + layer.id,
+                       record: layer, name: layer.name } : null;
+    }
+    var part = partByKey(body.part);
+    return part ? { kind: 'part', noun: in3D() ? 'soil volume' : 'soil surface',
+                    key: part.key, record: part, name: part.label } : null;
+  }
+
+  /* What the Model explorer calls the soil body `key`. */
+  function shownBodyName(key, body) {
+    return ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || body.name;
+  }
+
+  /* Rename part, from the explorer menu and from the part's panel alike. The window starts
+     with the name the Model explorer shows (`soil_body_labels`, such as `Sand · Part 2`),
+     not the shorter name the part was given (`Part 2`), so what you see in the row is what
+     you edit. OK on that name as it is changes nothing. A part is renamed on its own: its
+     layer is renamed in the Soil layers window, and a cut soil surface needs no name of its
+     own beside its parts'. */
+  function renameBodyPart(key) {
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!body) return;
+    var shown = shownBodyName(key, body);
+    return App.NameDialog.ask({ title: 'Rename part', value: shown,
+                                help: 'Shown in the Model explorer.' })
+      .then(function (name) {
+        if (name === null || name === shown) return;
+        // saveBody puts a refusal in the log itself.
+        return App.Lines.saveBody(key, { name: name }).catch(function () {});
+      });
+  }
+
+  /* The other parts of the layer or soil surface `key` is a part of, still in the model. */
+  function otherParts(key) {
+    var stem = key.split('__')[0];
+    return ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other !== key && other.split('__')[0] === stem;
+    });
+  }
+
+  /* One part alone goes (`session.remove_body`): the soil there becomes a void, and the
+     rest of its layer or soil surface stays. The last part left is the whole of it. */
+  function deleteBodyPart(key) {
+    var owner = bodyOwner(key);
+    var body = App.Lines && App.Lines.bodyOf(key);
+    if (!owner || !body) return;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete part',
+        'This deletes ' + shownBodyName(key, body) + ', one part of ' + owner.noun + ' ' + owner.name +
+        '. No soil is left there. The other parts of ' + owner.noun + ' ' + owner.name +
+        ' stay.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) { if (sure) return deleteBody(key); });
+  }
+
+  function deleteBody(key) {
+    var label = ((App.PROJECT && App.PROJECT.soil_body_labels) || {})[key] || key;
+    return deleteRequest('/api/project/bodies/' + encodeURIComponent(key), 'Delete failed')
+      .then(function (reply) {
+        if (reply && reply.project) App.Model.apply(reply.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.state && App.state.selection === key && App.selectObject) {
+          App.selectObject(null, 'tree');
+        }
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        if (App.Command && App.Command.ok) App.Command.ok('Deleted soil part ' + label + '.');
+      })
+      .catch(function (err) {
+        if (App.Command && App.Command.err) {
+          App.Command.err('Could not delete the soil part: ' + err.message);
+        }
+      });
+  }
+
+  /* The whole layer or soil surface goes, every part of it (Delete part takes one). */
+  function deleteBodyOwner(key) {
+    var owner = bodyOwner(key);
+    if (!owner) return;
+    var parts = ((App.PROJECT && App.PROJECT.soil_body_keys) || []).filter(function (other) {
+      return other.split('__')[0] === owner.key;
+    }).length;
+    return new Promise(function (resolve) {
+      confirmDialog('Delete ' + owner.noun,
+        'This deletes ' + owner.noun + ' ' + owner.name + ' and all its ' + parts + ' parts.',
+        function () { resolve(true); }, function () { resolve(false); });
+    }).then(function (sure) {
+      if (!sure) return;
+      if (owner.kind === 'part') return deleteCustomPart(owner.key);
+      var error = App.deleteLayerById(owner.record.id);
+      if (error) { if (App.Command && App.Command.err) App.Command.err(error); return; }
+      if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + owner.name + '.');
+      if (App.selectObject) App.selectObject(null, 'tree');
+      return App.commitSelectionEdit(null);
+    });
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -744,10 +848,11 @@ App.LivePatches = (function () {
     return true;
   }
 
-  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
-     "Create water level" draws nothing -- the water level is the `water` command and
-     its explorer row -- so the rail's water tools are the conditions' instead. */
-  /* The rail button of the boundary conditions, in Structures mode. A new
+  /* The boundary conditions come in two groups, each in its own mode: the
+     mechanical ones (supports) in Structures, the flow ones (water pressure, seepage
+     face) in Flow conditions. Each mode has a button that opens the window of one new
+     condition of its group, and one that opens the window of all of its group.
+     The rail button of the boundary conditions, in Structures mode. A new
      object each call: a rail item is one button, and the dimension gate below sets each
      flyout's items on their own. */
   function conditionTool() {
@@ -757,7 +862,8 @@ App.LivePatches = (function () {
       flyout: [
         { icon: 'prescribed', label: 'Create boundary condition…',
           action: 'createBoundaryCondition' },
-        { icon: 'prescribed', label: 'Boundary conditions…', action: 'boundaryConditions' },
+        { icon: 'conditionlist', label: 'Mechanical boundary conditions…',
+          action: 'mechanicalConditions' },
         { icon: 'prescribed', label: 'Line prescribed displacement',
           action: 'createSupportLine' },
         { icon: 'prescribed', label: 'Point prescribed displacement',
@@ -766,11 +872,24 @@ App.LivePatches = (function () {
     };
   }
 
+  /* The Structures rail button of the window of all mechanical conditions. */
+  function mechanicalConditionsTool() {
+    return { icon: 'conditionlist', tip: 'Mechanical boundary conditions…',
+             action: 'mechanicalConditions' };
+  }
+
+  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
+     "Create water level" draws nothing -- the water level is the `water` command and
+     its explorer row -- so the rail's water tools are the conditions' instead: a new
+     flow condition in its window, one drawn along a line or at a point, and the
+     window of them all. */
   function installBoundaryConditionTools() {
     var flow = (App.RAILS || {}).flow;
-    if (flow && !flow.some(function (tool) { return tool && tool.action === 'boundaryConditions'; })) {
+    if (flow && !flow.some(function (tool) { return tool && tool.action === 'flowConditions'; })) {
+      var drawTool = null;
       flow.forEach(function (tool) {
         if (tool && tool.icon === 'waterlevel' && !tool.action) {
+          drawTool = tool;
           tool.action = 'createWaterPressureLine';
           tool.tip = 'Create water pressure line';
           tool.flyout = [
@@ -783,21 +902,30 @@ App.LivePatches = (function () {
           ];
         }
       });
-      flow.splice(2, 0, { icon: 'settings', tip: 'Boundary conditions…',
-                          action: 'boundaryConditions' });
+      // New in its window, then drawn, then the window of them all.
+      var at = drawTool ? flow.indexOf(drawTool) : Math.min(2, flow.length);
+      flow.splice(at, 0, { icon: 'watercondition', tip: 'Create flow boundary condition…',
+                           action: 'createFlowCondition' });
+      flow.splice(at + (drawTool ? 2 : 1), 0, { icon: 'conditionlist',
+                                                tip: 'Flow boundary conditions…',
+                                                action: 'flowConditions' });
     }
     var menus = App.MENUS || [];
     var flowMenu = menus.filter(function (m) { return m.label === 'Flow conditions'; })[0];
-    if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'boundaryConditions'; })) {
-      flowMenu.items.unshift({ label: 'Boundary conditions…', icon: 'settings',
-                               action: 'boundaryConditions' }, '-');
+    if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'flowConditions'; })) {
+      flowMenu.items.unshift(
+        { label: 'Create flow boundary condition…', icon: 'watercondition',
+          action: 'createFlowCondition' },
+        { label: 'Flow boundary conditions…', icon: 'conditionlist',
+          action: 'flowConditions' }, '-');
     }
     var structuresMenu = menus.filter(function (m) { return m.label === 'Structures'; })[0];
     var items = structuresMenu ? structuresMenu.items : [];
     items.slice().forEach(function (item) {
       if (item && item.label === 'Create prescribed displacement') {
-        item.label = 'Boundary conditions…';
-        item.action = 'boundaryConditions';
+        item.label = 'Mechanical boundary conditions…';
+        item.icon = 'conditionlist';
+        item.action = 'mechanicalConditions';
         item.sub = false;
         items.splice(items.indexOf(item), 0, { label: 'Create boundary condition…',
                                                icon: 'prescribed',
@@ -888,6 +1016,21 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* `domain` / `domain --x FROM TO --y BOTTOM TOP --z FROM TO`, typed: show or set the
+     size of the soil block, as File > Project properties… and `kratos-cli domain` do.
+     What to send is App.DomainCommand's (tested headless); `setExtents` sends it.
+     `false` when it is not this command. */
+  function runDomainCommand(text) {
+    if (!App.DomainCommand) return false;
+    var answer = App.DomainCommand.command(text, App.PROJECT);
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    setExtents(answer.body);
+    return true;
+  }
+
   function runUnitsCommand(text) {
     if (!App.Units) return false;
     var answer = App.Units.command(text, App.PROJECT);
@@ -896,7 +1039,16 @@ App.LivePatches = (function () {
     if (!answer.ok) { App.Command.err(answer.message); return true; }
     if (!answer.body) { App.Command.note(answer.message); return true; }
     App.Command.note(answer.message);
-    App.Api.patch('/api/project/units', answer.body)
+    convertUnits(answer.body);
+    return true;
+  }
+
+  /* PATCH /api/project/units with `body` ({ unit_system }): the server converts every
+     value once (core/model/units.py `convert_project`). Then the model, the viewport
+     and the explorer are redrawn, and the server's notes are shown. Shared by the
+     `units` command and File > Project properties…. */
+  function convertUnits(body) {
+    return App.Api.patch('/api/project/units', body)
       .then(function (result) {
         App.Model.apply(result.project);
         return App.Viewport.refresh().then(function () { return result; });
@@ -909,7 +1061,6 @@ App.LivePatches = (function () {
         App.Command.ok('The project is now in ' + App.Units.title() + '.');
       })
       .catch(function (error) { App.Command.err(error.message); });
-    return true;
   }
 
   /* DELETE `path`, rejecting with the server's own `detail` when it refuses. A part a
@@ -951,9 +1102,8 @@ App.LivePatches = (function () {
       : kind === 'line' ? App.Lines
       : kind === 'condition' ? App.BoundaryConditions
       : kind === 'beam' ? App.Beams
+      : kind === 'anchor' ? App.Anchors
       : kind === 'interface' ? App.Interfaces : null;
-    // Anchors are not here: their `edit` saves the record rather than opening
-    // anything, so calling it would write, not show.
     if (owner && owner.edit) return owner.edit(key);
     if (App.selectObject) App.selectObject(key, 'tree');
   }
@@ -964,26 +1114,39 @@ App.LivePatches = (function () {
     var kind = objectKind(key);
     if (!kind) {
       // Not ours -- the frozen menu handles it (soil layers, groups, …), with its dead
-      // "Properties…" greyed on the way. See greyFrozenTreeProperties.
-      if (row) greyFrozenTreeProperties();
+      // rows taken out on the way. See dropFrozenTreeDeadRows.
+      if (row) dropFrozenTreeDeadRows(key);
       return;
     }
 
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
 
+    // A soil body is a part of a layer or a soil surface: Rename part… and Delete part act
+    // on the part, and Delete layer or Delete soil surface on the whole of it. The last
+    // part left is the whole of it, so it goes with the second.
+    var owner = kind === 'body' ? bodyOwner(key) : null;
+    var edits = owner ? [
+      { label: 'Rename part…', action: 'renameObject' },
+      { label: 'Delete part', icon: 'delete', action: 'deletePart',
+        disabled: !otherParts(key).length },
+      { label: 'Delete ' + owner.noun, icon: 'delete', action: 'deleteOwner' }
+    ] : [
+      { label: 'Rename…', action: 'renameObject' },
+      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' }
+    ];
     App.Menu.openAt([
       { label: 'Zoom to object', icon: 'zoomfit', action: 'zoomFit' },
       { label: App.Viewport.isVisible(key) ? 'Hide' : 'Show', icon: 'eye' },
-      '-',
-      { label: 'Rename…', action: 'renameObject' },
-      // A soil body goes when the line that made it goes.
-      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' },
+      '-'
+    ].concat(edits, [
       '-',
       { label: 'Properties…', icon: 'settings' }
-    ], event.clientX, event.clientY, function (it) {
+    ]), event.clientX, event.clientY, function (it) {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
+      if (it.action === 'deleteOwner') return deleteBodyOwner(key);
+      if (it.action === 'deletePart') return deleteBodyPart(key);
       if (it.action) { App.runAction(it); return; }
       if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
@@ -1005,18 +1168,12 @@ App.LivePatches = (function () {
      all six a few lines each rather than a feature apiece.
      ══════════════════════════════════════════════════════════════════════════ */
 
-  /* Actions a plane-strain section cannot serve. The four view presets and the
-     isometric view all resolve to the same locked camera; perspective would stop the
-     section being measurable; orbiting is undone by clampAngles as fast as it happens;
-     and a box or a cylinder is a solid, which is not a thing a 2D model contains. */
   /* What a 2D section cannot serve. Mostly the camera -- a locked section view cannot
-     orbit, take a preset angle or go perspective -- and, since the structures arrived,
-     the objects a plane has no room for: a box, a cylinder and a member all exist in
-     the solid model alone. `createSheetPile` is deliberately *not* here: it makes the
-     wall of whichever dimension is open. */
+     orbit, take a preset angle or go perspective -- and a member, which exists in the
+     solid model alone. `createSheetPile` is not here: it makes the wall of whichever
+     dimension is open. */
   var THREE_D_ONLY = ['viewFront', 'viewTop', 'viewSide', 'viewIso',
-                      'toggleProjection', 'navRotate', 'drawBox', 'drawCylinder',
-                      'createMember'];
+                      'toggleProjection', 'navRotate', 'createMember'];
 
   /* And the mirror of it. An interface is a zero-thickness contact along a line in
      the section: every reference deck that has one is plane strain, and the 3D
@@ -1073,8 +1230,9 @@ App.LivePatches = (function () {
      plates and embedded beams, a tunnel designer, a Python interpreter, a macro
      library. Most of it has nothing behind it, and a button that looks ready and
      then answers "not available" in the log is a button the user learns to distrust
-     -- along with every button beside it. So a control with no live behaviour is
-     drawn greyed, in every place it appears, by one rule:
+     -- along with every button beside it. A greyed one only clutters the menu. So a
+     control with no live behaviour is taken out, in every place it appears, by one
+     rule:
 
        a control works when it carries an action that is not on NOT_YET. A row with
        no action works only when it opens a real submenu -- an array the caller
@@ -1086,12 +1244,19 @@ App.LivePatches = (function () {
 
        importSoilLayers   the mockup's import dialog, which imports nothing.
        drawPoint          draws a point, which the server then refuses: the creation
-                          recipes (core/geometry/primitives.py) have no `point` kind. */
-  var NOT_YET = ['importSoilLayers', 'drawPoint'];
+                          recipes (core/geometry/primitives.py) have no `point` kind.
+       drawPolygon        "Create surface": a flat surface with no material. The mesh
+                          leaves it out, with a note, so Kratos never sees it.
+       drawBox,           a solid with no material, and the Selection explorer offers
+       drawCylinder,      no way to give it one: the deck gets a body that no material
+       importModel        is assigned to. Soil comes from Soil > Create soil surface…,
+                          which asks for the material. */
+  /* Help > Kratos documentation opens this. */
+  var KRATOS_DOCS_URL =
+    'https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/user_documentation/';
 
-  /* Appended to a greyed rail tool's tip, the tip being the only words a rail button
-     has. Menus need no such suffix: a grey row in a list of black ones says it. */
-  var NOT_YET_TIP = ' — not available yet';
+  var NOT_YET = ['importSoilLayers', 'drawPoint', 'drawPolygon', 'drawBox', 'drawCylinder',
+                 'importModel'];
 
   /* Separators ('-') and section captions are not controls, so they always pass. */
   function implemented(item) {
@@ -1100,26 +1265,38 @@ App.LivePatches = (function () {
     return Array.isArray(item.sub);
   }
 
-  /* The name a control goes by in the log, without the suffix its tip was given. */
+  /* The name a control goes by in the log. */
   function controlName(item) {
-    return String(item.label || item.tip || item.action || '').replace(NOT_YET_TIP, '');
+    return String(item.label || item.tip || item.action || '');
   }
 
-  /* Greys every row of a menu or flyout that does nothing, descending into real
-     submenus. It only ever greys: rows that are greyed for another reason (2D or 3D,
-     an empty undo history) are owned by the code that greys them. A tick on a row
-     that does nothing -- "Global water level" -- is a state nobody can change, so it
-     goes too. */
-  function greyNotYet(items) {
-    (items || []).forEach(function (item) {
-      if (!item || typeof item !== 'object') return;
-      if (!implemented(item)) { item.disabled = true; item.checked = false; }
-      if (Array.isArray(item.sub)) greyNotYet(item.sub);
-    });
+  /* A separator with nothing on one side of it, or right after another, fences off
+     nothing. Removing rows leaves such separators behind, so they go too. In place:
+     js/menubar.js and js/toolbars.js read these very arrays. */
+  function tidySeparators(items) {
+    for (var i = items.length - 1; i >= 0; i--) {
+      if (items[i] !== '-') continue;
+      if (i === 0 || i === items.length - 1 || items[i + 1] === '-') items.splice(i, 1);
+    }
+    return items;
+  }
+
+  /* Takes every row of a menu or flyout that does nothing out of the list, in place,
+     descending into real submenus. Rows that are greyed for another reason (2D or 3D,
+     an empty undo history) are not touched: they work at other times. */
+  function dropNotYet(items) {
+    if (!Array.isArray(items)) return items;
+    for (var i = items.length - 1; i >= 0; i--) {
+      var item = items[i];
+      if (!implemented(item)) { items.splice(i, 1); continue; }
+      if (item && Array.isArray(item.sub)) dropNotYet(item.sub);
+      if (item && Array.isArray(item.flyout)) dropNotYet(item.flyout);
+    }
+    return tidySeparators(items);
   }
 
   /* The rail's half of it, on the data js/toolbars.js mounts from, so a remount on a
-     mode change draws the tool greyed with no second pass.
+     mode change draws the rail without them with no second pass.
 
      "Select" is the exception that is not one: the frozen rail gives it no action,
      but it is the pointer every mode starts with and picking works. Without an action
@@ -1127,33 +1304,29 @@ App.LivePatches = (function () {
      `select`, which App.runAction answers by ending whatever draw or pick tool is
      running.
 
-     A greyed tool loses its flyout: a corner triangle on a tool that does nothing
-     offers variants of nothing, and the tip would say "click the corner for more".
-
      It runs once, at the end of install(), when every live action has been hung on
-     the frozen tools -- run earlier, it would grey Create point for still having
-     none. The verdict is kept on the tool as `notYet`, which is what gateRail reads
-     after each mount. */
-  function greyRailTools() {
+     the frozen tools -- run earlier, it would take out Create line for still having
+     none. */
+  function dropRailTools() {
     Object.keys(App.RAILS || {}).forEach(function (mode) {
       (App.RAILS[mode] || []).forEach(function (tool) {
-        if (!tool || typeof tool !== 'object') return;
-        if (tool.icon === 'select' && !tool.action) tool.action = 'select';
-        if (implemented(tool)) return;
-        tool.notYet = true;
-        delete tool.flyout;
-        // "Tunnel designer… — not available yet" reads as two pauses; the ellipsis
-        // promises a window that is not there, so it goes.
-        if (tool.tip && tool.tip.indexOf(NOT_YET_TIP) < 0) {
-          tool.tip = tool.tip.replace(/…$/, '') + NOT_YET_TIP;
-        }
+        if (tool && tool.icon === 'select' && !tool.action) tool.action = 'select';
       });
+      dropNotYet(App.RAILS[mode]);
     });
   }
 
-  function greyEverythingNotYet() {
-    (App.MENUS || []).forEach(function (menu) { greyNotYet(menu.items); });
-    greyRailTools();
+  /* A menu with nothing left in it would open an empty box, so it goes. In place, as
+     js/menubar.js reads this very array. */
+  function dropEverythingNotYet() {
+    var menus = App.MENUS || [];
+    menus.forEach(function (menu) { dropNotYet(menu.items); });
+    var kept = menus.filter(function (menu) {
+      return (menu.items || []).some(function (item) { return item !== '-'; });
+    });
+    menus.length = 0;
+    Array.prototype.push.apply(menus, kept);
+    dropRailTools();
   }
 
   /* The ticks in the menus, read from the state they describe rather than left at
@@ -1198,38 +1371,37 @@ App.LivePatches = (function () {
   }
 
   /* The frozen tree menu (js/explorer.js:102) ends in a "Properties…" that its
-     callback lets fall off the end for every row. The live rows get a menu of their
-     own with a working one (onTreeContextMenu); for the rest, the frozen row
+     callback lets fall off the end for every row, and greys "Rename…" and "Delete"
+     with no action on every row that is not a soil layer. The live rows get a menu of
+     their own with working ones (onTreeContextMenu); for the rest, the frozen row
      listener runs right after this, inside the same event, and calls App.Menu.openAt
-     -- so a one-shot openAt is lent for that call and greys the row on the way
-     through. The timer puts the real one back should the frozen listener not run. */
-  function greyFrozenTreeProperties() {
+     -- so a one-shot openAt is lent for that call and takes those dead rows out on
+     the way through. "Hide"/"Show" has no action either, but the frozen callback
+     answers it by its label, so it stays. A soil's row also gets the water it takes,
+     as in the viewport. The timer puts the real openAt back should the frozen
+     listener not run. */
+  function dropFrozenTreeDeadRows(key) {
     if (!App.Menu || typeof App.Menu.openAt !== 'function' || App.Menu.openAt.__tree) return;
     var menu = App.Menu;
     var openAt = menu.openAt;
     var lent = function (items, x, y, onPick) {
       menu.openAt = openAt;
-      (items || []).forEach(function (item) {
-        if (item && /^Properties/.test(item.label || '') && !item.action) item.disabled = true;
+      var kept = tidySeparators((items || []).filter(function (item) {
+        return !item || typeof item !== 'object' || item.title || item.action
+          || /^(Hide|Show)$/.test(item.label || '');
+      }));
+      // A soil's row in Flow conditions: the water it takes, as in the viewport.
+      return openAt(withSoilWaterRows(kept, key), x, y, function (item) {
+        if (item && item.action === 'soilWater') {
+          return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
+        }
+        if (onPick) return onPick(item);
+        return App.runAction(item);
       });
-      return openAt(items, x, y, onPick);
     };
     lent.__tree = true;
     menu.openAt = lent;
     setTimeout(function () { if (menu.openAt === lent) menu.openAt = openAt; }, 0);
-  }
-
-  /* The title bar's minimise, maximise and close (frontend/index.html) are drawn like a
-     desktop window's and have no listener: a page cannot minimise the browser it is
-     in. Greyed, and their tooltips say so. */
-  function greyWindowControls() {
-    if (typeof document === 'undefined') return;
-    Array.prototype.forEach.call(document.querySelectorAll('#titlebar .wc'), function (b) {
-      if (b.disabled) return;
-      b.disabled = true;
-      b.classList.add('disabled');
-      b.title = (b.title || 'Window control') + ' — not available in Styx';
-    });
   }
 
   /* ── Structures rail order ──────────────────────────────────────────────
@@ -1241,12 +1413,11 @@ App.LivePatches = (function () {
      tools. Groups become the separators the rail draws between them. */
   var STRUCTURES_RAIL_GROUPS = [
     ['select', 'selectmulti'],
-    ['drawPoint', 'drawLine', 'drawPolygon', 'drawBox'],
+    ['drawLine'],
     ['plate', 'beam', 'embedded', 'createSheetPile', 'createMember', 'createAnchor',
      'interface'],
-    ['createLoad', 'createBoundaryCondition'],
-    ['tunnel'],
-    ['importModel']
+    ['createLoad', 'createBoundaryCondition', 'mechanicalConditions'],
+    ['tunnel']
   ];
 
   /* The frozen node-to-node anchor tool draws nothing -- frontend/js/anchors.js owns
@@ -1278,10 +1449,9 @@ App.LivePatches = (function () {
 
   function orderSoilRail(tools) { return orderRail(tools, SOIL_RAIL_GROUPS, SOIL_DROPPED); }
 
-  /* The Soil menu reads as its rail does; importing layers is a menu-only door. */
+  /* The Soil menu reads as its rail does. */
   var SOIL_MENU_GROUPS = [
     ['materials', 'soilLayers'],
-    ['importSoilLayers'],
     ['createSoilVolume']
   ];
 
@@ -1350,7 +1520,6 @@ App.LivePatches = (function () {
     var rail = document.getElementById('toolrail');
     var tools = (App.RAILS || {})[mode || (App.state || {}).mode] || [];
     if (!rail) return;
-    guardNotYet(rail);
     var buttons = rail.querySelectorAll('.rail-btn');
     var i = 0;
     tools.forEach(function (tool) {
@@ -1364,36 +1533,35 @@ App.LivePatches = (function () {
       else button.removeAttribute('data-action');
       button.setAttribute('data-tool', tool.action || tool.icon);
       if (tool.tip) button.setAttribute('aria-label', tool.tip);
-      // A tool on NOT_YET is greyed but not `disabled`: Chrome sends no mouseenter
-      // to a disabled button, and that is the event its tip waits for. `not-yet`
-      // keeps its pointer events (css/live.css) and guardNotYet eats the click.
-      var missing = !!tool.notYet;
-      var off = missing || !availableNow(tool.action) || calculateOff(tool);
+      // A tool of the other dimension is left off the rail, not drawn greyed: in
+      // 2D there is no box or member to make, and in 3D no line or interface. It
+      // comes back when the model switches. Calculate still greys while it runs.
+      var wrongDimension = !availableNow(tool.action);
+      var off = wrongDimension || calculateOff(tool);
       if (tool.action === 'calculate') paintCalculating(button);
+      button.hidden = wrongDimension;
       button.classList.toggle('disabled', off);
-      button.classList.toggle('not-yet', missing);
-      button.disabled = off && !missing;
-      if (missing) button.setAttribute('aria-disabled', 'true');
-      else button.removeAttribute('aria-disabled');
+      button.disabled = off;
     });
+    hideStraySeparators(rail);
   }
 
-  /* One capturing listener on the rail itself, which runs before the listeners
-     js/toolbars.js puts on each button: a press on a not-yet tool goes no further,
-     so neither the tool nor its "not implemented" note nor the active highlight
-     happens -- and the tip, which a press would otherwise hide, stays up to say why.
-     The rail element outlives every remount (App.UI.clear only empties it). */
-  function guardNotYet(rail) {
-    if (rail.__notYetGuard) return;
-    rail.__notYetGuard = true;
-    function guard(event) {
-      var button = event.target.closest && event.target.closest('.rail-btn.not-yet');
-      if (!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    rail.addEventListener('click', guard, true);
-    rail.addEventListener('mousedown', guard, true);
+  /* A separator with nothing shown between it and the one before it (or the top of
+     the rail), or nothing after it, would draw two lines in a row or a line at the
+     end: hidden with the tools around it. */
+  function hideStraySeparators(rail) {
+    var last = null;
+    var seen = false;
+    Array.prototype.forEach.call(rail.children, function (child) {
+      if (child.classList.contains('rail-sep')) {
+        child.hidden = !seen;
+        if (seen) last = child;
+        seen = false;
+      } else if (!child.hidden) {
+        seen = true;
+      }
+    });
+    if (!seen && last) last.hidden = true;
   }
 
   /* One place decides what is available, so the toolbar, the menus, the rail and the
@@ -1497,7 +1665,12 @@ App.LivePatches = (function () {
      entry's own `tip` stays the string it was, for everything else that reads it.
 
      The rail button is mounted afresh on every mode change and its tip is joined into
-     a string at mount, so it is greyed (gateRail) but keeps its plain tip. */
+     a string at mount, so it is greyed (gateRail) but keeps its plain tip.
+
+     While a run goes on, the toolbar button and the Stages menu's item are Stop: a
+     red square and "Stop", which asks and then stops Kratos (`App.Calculate.askStop`).
+     Once asked, they say "Stopping…" until the run answers. F9 and the rail do not
+     stop a run: a key pressed twice must not end an hour of work. */
 
   var CALCULATE_TIP = 'Calculate (F9): mesh the model and run it in Kratos.';
 
@@ -1515,9 +1688,24 @@ App.LivePatches = (function () {
     return !!tool && tool.action === 'calculate' && !calculateNow().ok;
   }
 
+  function stoppingNow() {
+    var calc = App.Calculate;
+    return !!(calc && typeof calc.stopping === 'function' && calc.stopping());
+  }
+
+  /* True while a run goes on and no stop has been asked: the button is Stop. */
+  function stoppable(now) {
+    return !!now.running && !stoppingNow()
+      && !!(App.Calculate && typeof App.Calculate.askStop === 'function');
+  }
+
+  /* The toolbar button is Stop while a run goes on; the rail button only spins. */
   function paintCalculating(button) {
-    var busy = !!calculateNow().running;
-    button.classList.toggle('calculating', busy);
+    var now = calculateNow();
+    var busy = !!now.running;
+    var stop = stoppable(now) && !button.classList.contains('rail-btn');
+    button.classList.toggle('calculating', busy && !stop);
+    button.classList.toggle('stop-calc', stop);
     if (busy) button.setAttribute('aria-busy', 'true');
     else button.removeAttribute('aria-busy');
   }
@@ -1525,6 +1713,7 @@ App.LivePatches = (function () {
   var calculateTip = {
     toString: function () {
       var now = calculateNow();
+      if (stoppable(now)) return App.Calculate.STOP_TIP || 'Stop the calculation.';
       return now.ok ? CALCULATE_TIP : now.reason;
     }
   };
@@ -1545,26 +1734,29 @@ App.LivePatches = (function () {
 
   function syncCalculate() {
     var now = calculateNow();
+    var stop = stoppable(now);
+    var off = !now.ok && !stop;
+    var busyLabel = stop ? 'Stop' : stoppingNow() ? 'Stopping…' : 'Calculating…';
     var entry = calculateEntry();
     // On the data as well as the button, so a remount of the toolbar keeps it.
-    if (entry) entry.disabled = !now.ok;
+    if (entry) entry.disabled = off;
 
     var button = typeof document !== 'undefined'
       && document.querySelector('#maintoolbar .tbtn[data-action="calculate"]');
     if (button) {
-      button.classList.toggle('disabled', !now.ok);
-      button.setAttribute('aria-disabled', now.ok ? 'false' : 'true');
+      button.classList.toggle('disabled', off);
+      button.setAttribute('aria-disabled', off ? 'true' : 'false');
       paintCalculating(button);
       var label = button.querySelector('span');
       if (label) {
-        label.textContent = now.running ? 'Calculating…' : ((entry && entry.wide) || 'Calculate');
+        label.textContent = now.running ? busyLabel : ((entry && entry.wide) || 'Calculate');
       }
     }
 
     menuItemsFor('calculate').forEach(function (item) {
       if (item.calculateLabel === undefined) item.calculateLabel = item.label;
-      item.disabled = !now.ok;
-      item.label = now.running ? 'Calculating…' : item.calculateLabel;
+      item.disabled = off;
+      item.label = now.running ? (stop ? 'Stop calculation' : busyLabel) : item.calculateLabel;
     });
 
     gateRail();
@@ -1624,14 +1816,37 @@ App.LivePatches = (function () {
     if (App.Calculate && typeof App.Calculate.onChange === 'function') {
       App.Calculate.onChange(syncCalculate);
     }
+    if (App.Calculate && typeof App.Calculate.onStop === 'function') {
+      App.Calculate.onStop(syncCalculate);
+    }
     syncCalculate();
   }
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
 
+  /* An app window with OK and Cancel. `onCancel` (optional) is called when it closes
+     without OK: by Cancel, the close button or Escape. */
+  function confirmDialog(title, text, onConfirm, onCancel) {
+    if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
+    var confirmed = false;
+    App.Dialogs.open({
+      title: title, width: 440, height: 220,
+      buttons: [{ label: 'OK', primary: true,
+                  onClick: function () { confirmed = true; return onConfirm(); } },
+                { label: 'Cancel' }],
+      onClose: function () { if (!confirmed && onCancel) onCancel(); },
+      build: function (body) {
+        body.appendChild(App.UI.el('div.dlg-simple', null, [
+          App.UI.el('h3', { text: title }),
+          App.UI.el('p', { text: text })
+        ]));
+      }
+    });
+  }
+
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
-  function adoptProject(project, message) {
+  function adoptProject(project, message, keepCommands) {
     App.Model.apply(project);
     App.History.reset();
     syncHistoryButtons();
@@ -1663,11 +1878,44 @@ App.LivePatches = (function () {
     // Results mode with nothing to show is a dead end, so leave it -- for the mode a
     // new project opens in anyway.
     if (App.state && App.state.mode === 'results') App.setMode('soil');
+    wipeSession(keepCommands);
 
     return Promise.resolve(App.Viewport.refresh()).then(function () {
       if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
       if (App.Command) App.Command.ok(message);
     });
+  }
+
+  /* What the session still shows of the document that was open goes with it: the
+     command log, the Model history tab, the commands the arrow keys bring back, the
+     selection, the mesh, the node and element ID labels and the Convergence window of
+     a finished run. A run still going keeps its window: Stop is in it. The next
+     document starts as clean as a fresh start of the app, without the welcome text.
+     `run <file.py>` keeps the commands: the user typed them in this session, and the
+     arrow keys bring the run back to run the edited file again. */
+  function wipeSession(keepCommands) {
+    if (!keepCommands) {
+      cmdHistory.length = 0;
+      cmdIndex = 0;
+    }
+    if (!keepCommands && typeof document !== 'undefined') {
+      ['cmd-log', 'cmd-history'].forEach(function (id) {
+        var box = document.getElementById(id);
+        if (box) box.textContent = '';
+      });
+      var entry = document.getElementById('cmd-entry');
+      if (entry) entry.value = '';
+    }
+    var viewport = App.Viewport || {};
+    if (App.MeshLabels && viewport.setLabels) {
+      App.MeshLabels.KINDS.forEach(function (kind) { viewport.setLabels(kind, false); });
+    }
+    if (viewport.clearMesh) viewport.clearMesh();
+    if (App.state && App.state.selection && App.selectObject) App.selectObject(null);
+    var running = App.Calculate && App.Calculate.running && App.Calculate.running();
+    if (App.ConvergenceWindow && App.ConvergenceWindow.close && !running) {
+      App.ConvergenceWindow.close();
+    }
   }
 
   /* An empty site, not the seeded demo -- the server owns what "empty" means, and a
@@ -1688,45 +1936,158 @@ App.LivePatches = (function () {
       });
   }
 
+  /* The model's extents in Project properties: [field, label, domain key, help]. In 2D
+     the out-of-plane z is left out, as the Selection explorer leaves it out. */
+  var EXTENTS = [
+    ['x0', 'x min', 'x0', null],
+    ['x1', 'x max', 'x1', null],
+    ['y0', 'y min', 'y_bottom', 'The bottom of the soil block.'],
+    ['y1', 'y max', 'y_top', 'The ground level: the top of the first soil layer.'],
+    ['z0', 'z min', 'z0', null],
+    ['z1', 'z max', 'z1', null]
+  ];
+
+  function extentsShown(project) {
+    return EXTENTS.filter(function (e) {
+      return project.dimension !== 2 || e[0].charAt(0) !== 'z';
+    });
+  }
+
+  function numberInMetres(text) {
+    return isFinite(Number(text)) ? null : 'Type a number, in m. The decimal sign is a point.';
+  }
+
+  /* The axes whose extent the window changed, as PATCH /api/project/domain and
+     `kratos-cli domain --x --y --z` take them: { x: [from, to], ... }. */
+  function changedExtents(project, values) {
+    var domain = project.domain || {};
+    var update = {};
+    ['x', 'y', 'z'].forEach(function (axis) {
+      var lo = axis + '0', hi = axis + '1';
+      if (values[lo] === undefined || values[hi] === undefined) return;
+      var pair = [Number(values[lo]), Number(values[hi])];
+      var keys = EXTENTS.filter(function (e) { return e[0] === lo || e[0] === hi; })
+        .map(function (e) { return e[2]; });
+      if (pair[0] !== domain[keys[0]] || pair[1] !== domain[keys[1]]) update[axis] = pair;
+    });
+    return update;
+  }
+
+  /* PATCH /api/project/domain with `update` ({ x: [from, to], ... }), then the model,
+     the viewport and the explorer are redrawn. Shared by File > Project properties…
+     and the `domain` command. */
+  function setExtents(update) {
+    return App.Api.patch('/api/project/domain', update)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh().then(function () { return result; });
+      })
+      .then(function (result) {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        var d = result.project.domain;
+        if (App.Command) {
+          App.Command.ok('Size of the soil block: x ' + d.x0 + ' to ' + d.x1 + ' m, y '
+                         + d.y_bottom + ' to ' + d.y_top + ' m.');
+          (result.notes || []).forEach(function (note) { App.Command.note(note); });
+        }
+        return true;
+      })
+      .catch(function (error) {
+        if (App.Command) App.Command.err('Could not change the size: ' + error.message);
+        return false;
+      });
+  }
+
   /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
-     sets it, and the gravitational acceleration g, as `kratos-cli gravity FILE G` sets
-     it. Through the whole-project PUT, so Undo takes it back like any edit. */
+     sets it, the size of the soil block, as `kratos-cli domain FILE --x --y --z` sets it,
+     the gravitational acceleration g, as `kratos-cli gravity FILE G` sets it, and the
+     unit system, as `kratos-cli units FILE SYSTEM` (or the `units` command) sets it.
+     Name and g go through the whole-project PUT; a new size then goes through PATCH
+     /api/project/domain, which moves the top of the first layer and the bottom of the
+     last with it; a new unit system last through PATCH /api/project/units, which
+     converts every value once. Undo takes back each one like any edit. */
   function projectProperties() {
     var project = App.PROJECT || {};
     var name = project.name || '';
     var g = typeof project.gravity_acceleration === 'number' ? project.gravity_acceleration
                                                              : App.Units.gravity('SI');
+    var system = App.Units.system(project);
+    var domain = project.domain || {};
+    var shown = extentsShown(project);
     return App.NameDialog.form({
       title: 'Project properties',
       fields: [
         { name: 'name', label: 'Project name', value: name, empty: 'Type a name.',
-          help: 'Shown in the title bar, and the name Save gives the file.' },
+          help: 'Shown in the title bar, and the name Save gives the file.' }
+      ].concat(shown.map(function (e) {
+        return { name: e[0], label: e[1], value: domain[e[2]], unit: 'm', help: e[3],
+                 empty: 'Type the ' + e[1] + ' of the soil block, in m.',
+                 check: numberInMetres };
+      })).concat([
         { name: 'gravity_acceleration', label: 'Gravity', value: g, unit: 'm/s²',
           empty: 'Type the gravitational acceleration, in m/s².',
           check: function (text) {
             var value = Number(text);
             return isFinite(value) && value > 0 ? null : 'Gravity is a number above 0 m/s².';
           },
-          help: 'The self weight of every body. The water keeps its specific weight.' }
-      ]
+          help: 'The self weight of every body. The water keeps its specific weight.' },
+        { name: 'unit_system', label: 'Unit system', value: system,
+          choices: App.Units.systems().map(function (s) {
+            return { value: s.name, label: s.title };
+          }),
+          help: 'A change converts every value: a cohesion of 5000 Pa becomes 5 kPa.' }
+      ]),
+      check: function (values) {
+        var axes = shown.filter(function (e) { return e[0].charAt(1) === '0'; })
+          .map(function (e) { return e[0].charAt(0); });
+        var bad = axes.filter(function (axis) {
+          return !(Number(values[axis + '1']) > Number(values[axis + '0']));
+        })[0];
+        return bad ? bad + ' max must be above ' + bad + ' min.' : null;
+      }
     }).then(function (values) {
       if (values === null) return;
       var newG = Number(values.gravity_acceleration);
+      var newSystem = values.unit_system || system;
+      var extents = changedExtents(project, values);
+      var resize = Object.keys(extents).length > 0;
       var said = [];
       if (values.name !== name) said.push('Project name: ' + values.name + '.');
       if (newG !== g) said.push('Gravity: g = ' + newG + ' m/s².');
-      if (!said.length) return;
-      // Only what changed: a rename leaves the project's gravity fields as they are.
-      var edited = JSON.parse(JSON.stringify(App.PROJECT));
-      edited.name = values.name;
-      if (newG !== g) edited.gravity_acceleration = newG;
-      return App.Api.put('/api/project', edited).then(function (saved) {
-        App.Model.apply(saved);
-        if (App.Command) App.Command.ok(said.join(' '));
-      }).catch(function (error) {
-        if (App.Command) {
-          App.Command.err('Could not change the project properties: ' + error.message);
+      var convert = newSystem !== system;
+      if (!said.length && !resize && !convert) return;
+      var put = Promise.resolve(true);
+      if (said.length) {
+        // Only what changed: a rename leaves the project's gravity fields as they are.
+        var edited = JSON.parse(JSON.stringify(App.PROJECT));
+        edited.name = values.name;
+        if (newG !== g) edited.gravity_acceleration = newG;
+        put = App.Api.put('/api/project', edited).then(function (saved) {
+          App.Model.apply(saved);
+          if (App.Command) App.Command.ok(said.join(' '));
+          return true;
+        }).catch(function (error) {
+          if (App.Command) {
+            App.Command.err('Could not change the project properties: ' + error.message);
+          }
+          return false;
+        });
+      }
+      return put.then(function (done) {
+        if (!done || !resize) return done;
+        // The line the command box takes for the same edit (`runDomainCommand`).
+        if (App.Command && App.Command.write) {
+          App.Command.write('echo', '> ' + App.DomainCommand.line(extents));
         }
+        return setExtents(extents);
+      }).then(function (done) {
+        if (!done || !convert) return;
+        if (App.Command) {
+          if (App.Command.write) App.Command.write('echo', '> units ' + newSystem);
+          App.Command.note('Converting every value from ' + App.Units.title(system)
+                           + ' to ' + App.Units.title(newSystem) + '…');
+        }
+        return convertUnits({ unit_system: newSystem });
       });
     });
   }
@@ -1899,6 +2260,18 @@ App.LivePatches = (function () {
     App.Viewport.setLabels(kind, on, function (count) {
       if (!on) return App.Command.note(noun + ' ID labels hidden.');
       if (count === null) return;                            // already reported
+      var mode = App.state && App.state.mode;
+      // The numbers are drawn on a mesh that is on screen. A tab that does not draw the
+      // mesh there is keeps them on for the tabs that do.
+      if (!count && mode !== 'mesh' && mode !== 'results'
+          && App.Viewport.hasMesh && App.Viewport.hasMesh()) {
+        return App.Command.note(noun + ' IDs are on. They are drawn on the mesh: '
+          + 'in the Mesh tab and in Results.');
+      }
+      if (!count && mode === 'results') {
+        App.Viewport.setLabels(kind, false);
+        return App.Command.note('Nothing to label — open a result first.');
+      }
       if (!count) {
         App.Viewport.setLabels(kind, false);
         return App.Command.note(
@@ -1922,8 +2295,11 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(gateViewportItems(withPictureRows(withStageRows(withLabelRows(items), key))), x, y,
-               function (item) {
+        openAt(gateViewportItems(withPictureRows(withSoilWaterRows(
+          withStageRows(withLabelRows(items), key), key))), x, y, function (item) {
+          if (item && item.action === 'soilWater') {
+            return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
+          }
           if (item && item.action === 'stageActivate') {
             return switchPartInStage(item.stageKey, true);
           }
@@ -1970,6 +2346,9 @@ App.LivePatches = (function () {
     var total = ((App.PROJECT && App.PROJECT.stages) || []).length;
     if (!result) { stageRun = null; }
     else if (result.ok) { stageRun = { completed: total }; }
+    else if (result.stopped) {
+      stageRun = { completed: result.stage ? result.stage.index - 1 : 0, stopped: true };
+    }
     else if (result.stage) {
       stageRun = { completed: result.stage.index - 1, failed: true,
                    error: result.error || null };
@@ -2013,55 +2392,74 @@ App.LivePatches = (function () {
       });
   }
 
-  function stageToolbar() {
-    var el = App.UI.el;
-    var icon = App.UI.icon;
-    var bar = el('div.dlg-toolbar.stage-toolbar');
-    var selected = selectedStageId();
+  /* The stage buttons: add, insert, duplicate and delete, on the selected stage.
+     `new`/`copy`/`delete` are the mockup's own icon names (js/data.js:63-76); `phase`
+     stands in for insert, which has no icon of its own in the frozen set. */
+  var STAGE_ACTIONS = [
+    ['new', 'Add stage', function () {
+      return App.Stages.added(App.PROJECT);
+    }, 'Stage added.', 'addStage'],
+    ['phase', 'Insert stage above the selected one', function (selected) {
+      return App.Stages.inserted(App.PROJECT, selected);
+    }, 'Stage inserted.', 'insertStage', 'Nothing goes before the initial stage.'],
+    ['copy', 'Duplicate the selected stage', function (selected) {
+      return App.Stages.copied(App.PROJECT, selected);
+    }, 'Stage duplicated.', 'duplicateStage'],
+    ['delete', 'Delete the selected stage', function (selected) {
+      return App.Stages.removed(App.PROJECT, selected);
+    }, 'Stage deleted.', 'deleteStage', 'The initial stage is always there.']
+  ];
 
-    /* The icon row at the top left of the Stages window. `new`/`copy`/`delete`
-       are the mockup's own icon names (js/data.js:63-76); `stage` stands in for
-       insert, which has no icon of its own in the frozen set. */
-    [['new', 'Add stage', function () {
-        return App.Stages.added(App.PROJECT);
-      }, 'Stage added.', 'addStage'],
-     ['phase', 'Insert stage above the selected one', function () {
-        return selected ? App.Stages.inserted(App.PROJECT, selected) : null;
-      }, 'Stage inserted.', 'insertStage', 'Nothing goes before the initial stage.'],
-     ['copy', 'Duplicate the selected stage', function () {
-        return selected ? App.Stages.copied(App.PROJECT, selected) : null;
-      }, 'Stage duplicated.', 'duplicateStage'],
-     ['delete', 'Delete the selected stage', function () {
-        return selected ? App.Stages.removed(App.PROJECT, selected) : null;
-      }, 'Stage deleted.', 'deleteStage', 'The initial stage is always there.']
-    ].forEach(function (spec) {
+  /* The stage buttons, added to `bar`: the same in the Stages panel and the Stages
+     window. Each acts on the stage selected when it is clicked. `saved`, if given,
+     runs once the new list has come back from the server. Answers a function that
+     enables the buttons for the stage selected now. */
+  function stageButtons(bar, saved) {
+    var el = App.UI.el;
+    var buttons = STAGE_ACTIONS.map(function (spec) {
       // Named, as the rail buttons are, so a script or a screen reader can find it.
       var button = el('button.tbtn', { type: 'button' });
       button.setAttribute('data-action', spec[4]);
       button.setAttribute('aria-label', spec[1]);
-      button.appendChild(icon(spec[0]));
+      button.appendChild(App.UI.icon(spec[0]));
       App.UI.attachTip(button, spec[1]);
-      button.disabled = spec[0] !== 'new' && !selected;
       button.addEventListener('click', function () {
         App.UI.hideTip();
-        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
-          return stage.id;
-        });
-        var list = spec[2]();
-        if (!list) { App.Command.err('Select a stage first.'); return; }
+        var selected = selectedStageId();
+        if (spec[0] !== 'new' && !selected) { App.Command.err('Select a stage first.'); return; }
         // Insert and Delete refuse the initial stage (App.Stages.inserted, .removed).
         if (spec[5] && App.Stages.isInitial(App.PROJECT, selected)) {
           App.Command.err(spec[5]);
           return;
         }
+        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
+          return stage.id;
+        });
+        var list = spec[2](selected);
         // A stage just made is the one to fill in next, so it is selected; after a
         // delete, selectedStageId falls back to the first.
         var made = list.filter(function (stage) { return before.indexOf(stage.id) < 0; })[0];
         if (made) App.state.phase = made.id;
-        saveStages(list, spec[3]);
+        var done = saveStages(list, spec[3]);
+        if (saved) done.then(saved);
       });
       bar.appendChild(button);
+      return button;
     });
+    function sync() {
+      var selected = selectedStageId();
+      buttons.forEach(function (button, i) {
+        button.disabled = STAGE_ACTIONS[i][0] !== 'new' && !selected;
+      });
+    }
+    sync();
+    return sync;
+  }
+
+  function stageToolbar() {
+    var el = App.UI.el;
+    var bar = el('div.dlg-toolbar.stage-toolbar');
+    stageButtons(bar);
 
     bar.appendChild(el('span.tbsep'));
 
@@ -2121,6 +2519,31 @@ App.LivePatches = (function () {
   /* The viewport menu's two rows for a stageable part, in Staged construction: the
      state the part does not have in the selected stage is offered, the other greyed,
      so the menu also says which one it is in. */
+  /* A soil right-clicked in Flow conditions: the water it takes, a submenu of the
+     phreatic line, each head line and interpolated, the one it takes now ticked -- the
+     same choice as its row of Soil water in the Boundary conditions window
+     (`App.BoundaryConditions.soilWaterMenu`). */
+  function soilWaterKey(key) {
+    var BC = App.BoundaryConditions;
+    if (!key || !App.PROJECT || App.PROJECT.deck || !BC || !BC.soilWaterMenu) return null;
+    if (!App.state || App.state.mode !== 'flow') return null;
+    return BC.soilPartKeys(App.PROJECT).indexOf(key) >= 0 ? key : null;
+  }
+
+  function withSoilWaterRows(items, key) {
+    var soil = soilWaterKey(key);
+    if (!soil) return items;
+    var BC = App.BoundaryConditions;
+    var choices = BC.soilWaterMenu(App.PROJECT, soil);
+    var now = choices.filter(function (choice) { return choice.checked; })[0];
+    var rows = [
+      { label: 'Water: ' + (now ? now.label : 'phreatic line'), sub: choices },
+      '-'
+    ];
+    var at = items.length && items[0] && items[0].title ? 1 : 0;
+    return items.slice(0, at).concat(rows, items.slice(at));
+  }
+
   function withStageRows(items, key) {
     var part = stagePartKey(key);
     var stage = part && selectedStageId();
@@ -2585,8 +3008,20 @@ App.LivePatches = (function () {
 
     var selected = selectedStageId();
 
+    /* The panel's stage buttons, above the list: a stage is added, duplicated or
+       deleted without closing the window. A deck's stages are the deck's, and it has
+       none. The stage a button made is the one shown next. */
+    var redraw = null, toolbar = null, syncButtons = function () {};
+    if (!(App.PROJECT && App.PROJECT.deck)) {
+      toolbar = el('div.dlg-toolbar.stage-toolbar');
+      syncButtons = stageButtons(toolbar, function () {
+        selected = selectedStageId();
+        if (redraw) redraw();
+      });
+    }
+
     App.Dialogs.open({
-      title: 'Stages',
+      title: 'Stages', toolbar: toolbar,
       width: Math.min(1180, window.innerWidth - 40),
       height: Math.min(720, window.innerHeight - 40),
       buttons: [{ label: 'Close', primary: true }],
@@ -2611,12 +3046,13 @@ App.LivePatches = (function () {
           App.UI.clear(left);
           App.UI.clear(right);
           App.UI.clear(log);
+          syncButtons();
 
           var stages = (App.PROJECT && App.PROJECT.stages) || [];
           if (!stages.length) {
             right.appendChild(el('p', { text:
-              'This project has no stages yet. Close this and use ' +
-              '"Add stage" in the Stages panel.' }));
+              'This project has no stages yet. Use "Add stage" above to add the ' +
+              'initial stage.' }));
             return;
           }
 
@@ -2713,6 +3149,7 @@ App.LivePatches = (function () {
               'stage added later starts from the stage before it.' }));
         }
 
+        redraw = draw;
         draw();
       }
     });
@@ -2802,6 +3239,7 @@ App.LivePatches = (function () {
     ['script <file.py>', 'write the model as a Python file that builds it'],
     ['mesh', 'generate the finite element mesh'],
     ['calculate', 'mesh the model and run it in Kratos (F9)'],
+    ['calculate stop', 'stop the running calculation; what it wrote stays'],
     ['results', 'open what a calculation wrote (try "results runs")'],
     ['export', 'write the Kratos deck'],
     ['stages', 'the Stages overview: every stage, its time and result'],
@@ -2829,9 +3267,9 @@ App.LivePatches = (function () {
     plate: 'Structures > Create wall panel… (3D), or `kratos-cli wall add`',
     beam: 'Structures > Create sheet pile…, or `kratos-cli beam add`',
     anchor: 'Structures > Create anchor…, or `kratos-cli anchor add`',
-    surface: 'the Create surface tool of Structures mode',
+    surface: 'Soil > Create soil surface…',
     line: 'the Create line tool of Structures mode',
-    point: 'the Create point tool of Structures mode'
+    point: 'the Create line tool of Structures mode, which is drawn point by point'
   };
 
   /* Every first word js/command.js answers itself: its mode jumps, its `switch`, and
@@ -2919,6 +3357,8 @@ App.LivePatches = (function () {
     var plotWindow = null;       // the wall/interface plot window, while it is open
     var plotColumns = 0;         // panels per row it was last drawn with
     var plotReloading = null;    // the run a reload of the plot is under way for
+    var resultsLeft = null;      // what Results showed when it was left, to come back to
+    var inResults = false;       // whether Results is the mode on screen
 
     extendViewportMenu();
 
@@ -2940,7 +3380,7 @@ App.LivePatches = (function () {
     var frozenAction = App.runAction;
     App.runAction = function (item) {
       // A menu item or tool from the mockup that nothing implements yet, or one on
-      // NOT_YET. Both are greyed wherever they are drawn, so this is a stale menu or a
+      // NOT_YET. Both are taken out wherever they are drawn, so this is a stale menu or a
       // caller that did not ask `implemented` -- and it gets the same answer.
       if (item && (!item.action || NOT_YET.indexOf(item.action) >= 0)) {
         if (controlName(item) && App.Command) {
@@ -2984,6 +3424,12 @@ App.LivePatches = (function () {
         return;
       }
 
+      // A page on the web, in a tab of its own so the model stays open here.
+      if (item && item.action === 'kratosDocs') {
+        window.open(KRATOS_DOCS_URL, '_blank', 'noopener');
+        return;
+      }
+
       /* Every Results menu entry. One action carrying the command it stands for,
          rather than one action name per entry: the menu is then a list of the same
          strings the command box takes, and adding an entry is adding a line of data. */
@@ -3000,7 +3446,14 @@ App.LivePatches = (function () {
       // already up.
       if (item && item.action === 'chooseResults') {
         if (App.state && App.state.mode !== 'results') App.setMode('results');
-        else openResultsWindow();
+        openResultsWindow();
+        return;
+      }
+      // The Results menu's and rail's "Convergence": `results convergence`, without
+      // switching to Results mode -- it is read while a run goes on, and of a run that
+      // wrote no results at all.
+      if (item && item.action === 'showConvergence') {
+        resultsCommand('results convergence');
         return;
       }
       // The rail's "Plot along the wall": the same `results plot` the command box runs,
@@ -3098,12 +3551,19 @@ App.LivePatches = (function () {
         if (App.NormalLoads) App.NormalLoads.start();
         return;
       }
-      if (item && item.action === 'boundaryConditions') {
-        if (App.BoundaryConditions) App.BoundaryConditions.open();
+      // The window of all conditions, of the mechanical ones, or of the flow ones.
+      var conditionWindows = { boundaryConditions: 'all', mechanicalConditions: 'mechanical',
+                               flowConditions: 'flow' };
+      if (item && conditionWindows.hasOwnProperty(item.action)) {
+        if (App.BoundaryConditions) App.BoundaryConditions.open(conditionWindows[item.action]);
         return;
       }
       if (item && item.action === 'createBoundaryCondition') {
-        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null);
+        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'mechanical');
+        return;
+      }
+      if (item && item.action === 'createFlowCondition') {
+        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'flow');
         return;
       }
       var drawnConditions = {
@@ -3136,7 +3596,17 @@ App.LivePatches = (function () {
         if (App.Export) App.Export.run();
         return;
       }
+      if (item && item.action === 'openDocumentation') {
+        if (App.Documentation) App.Documentation.open(item.page);
+        return;
+      }
       if (item && item.action === 'calculate') {
+        // While a run goes on, the toolbar button (`cta`) and the menu item are Stop.
+        // F9 (an action with no label) and the rail are refused below instead.
+        if ((item.cta || item.label) && stoppable(calculateNow())) {
+          App.Calculate.askStop();
+          return;
+        }
         // The button is greyed for the same reason; F9 and a menu left open are not.
         if (refuseCalculate()) return;
         if (App.Calculate) App.Calculate.run();
@@ -3192,8 +3662,8 @@ App.LivePatches = (function () {
 
     /* The menu twins of tools that work, given the tool's action -- a row that does
        nothing beside a button that does the same thing is the disagreement this
-       file exists to stop. Refine, coarsen and reset get theirs so that NOT_YET greys
-       the rows and the rail buttons together. */
+       file exists to stop. Refine, coarsen and reset get theirs so that the rows and
+       the rail buttons are kept or taken out together. */
     var MENU_ACTIONS = {
       File: { 'New project…': 'newProject', 'Open project…': 'openProject',
               'Save': 'saveProject', 'Save as…': 'saveProject' },
@@ -3212,6 +3682,14 @@ App.LivePatches = (function () {
       })[0];
       meshMenu.items.splice(meshMenu.items.indexOf(generateItem) + 1, 0,
         { label: 'Clear mesh', icon: 'delete', action: 'clearMesh' });
+    }
+    // The Kratos GeoMechanics user documentation, under Command reference: what the
+    // solver does with the model Styx writes.
+    var helpMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Help'; })[0];
+    if (helpMenu && !helpMenu.items.some(function (i) { return i && i.action === 'kratosDocs'; })) {
+      var reference = helpMenu.items.filter(function (i) { return i && i.action === 'cmdref'; })[0];
+      helpMenu.items.splice(reference ? helpMenu.items.indexOf(reference) + 1 : 0, 0,
+        { label: 'Kratos documentation', icon: 'help', action: 'kratosDocs' });
     }
     (App.MENUS || []).forEach(function (menu) {
       var wanted = MENU_ACTIONS[menu.label];
@@ -3246,6 +3724,43 @@ App.LivePatches = (function () {
     if (!App.ICONS.section2d) {
       App.ICONS.section2d = '<path d="M4 5h16v14H4z"/><path d="M4 12h16"/><path d="M8 5v14"/>';
     }
+
+    /* The sheet pile and the anchor share one cross-section: the ground higher on
+       the right than on the left, drawn faded, and the part the tool makes drawn
+       in full over it -- the wall, or the anchor's plate, rod and grout body. The
+       section is drawn close up, the ground reaching nearly to the icon's edges,
+       so the part reads at 14 px; the wall is one straight line, drawn heavier
+       than the icon's usual stroke. The sheet pile tool, the wall panel and their
+       rows in the Model explorer ask for 'wall', which data.js never had, so they
+       used to fall back to the info glyph. data.js's 'anchor' (a ship's anchor)
+       is replaced so the two read as one family. */
+    var iconGround = '<path d="M1 15.5h9.3M10.3 8H23" opacity=".32"/>';
+    if (!App.ICONS.wall || App.ICONS.wall.indexOf('opacity') < 0) {
+      App.ICONS.wall = '<path d="M10.3 2.5v19" stroke-width="2.1"/>' + iconGround;
+    }
+    if (!App.ICONS.anchor || App.ICONS.anchor.indexOf('opacity') < 0) {
+      App.ICONS.anchor = '<path d="M11.3 9.2v3" stroke-width="2.5"/>'
+                       + '<path d="M11.3 10.7l6 2.8"/>'
+                       + '<path d="M17.3 13.5l4.8 2.2" stroke-width="3.4"/>' + iconGround;
+    }
+
+    /* A boundary condition is a support: a triangle on hatched ground, the symbol
+       engineering drawings use and the one the viewport draws on the soil edges.
+       data.js's 'prescribed' (an arrow onto a line) read as a load, so it is
+       replaced in place and the tool, its flyout, the menu row and the explorer rows
+       all change with it. */
+    App.ICONS.prescribed = '<path d="M12 3.5l-6.5 11h13z"/><path d="M3 17.5h18"/>'
+                         + '<path d="M6.5 17.5L4 21M11 17.5L8.5 21M15.5 17.5L13 21'
+                         + 'M20 17.5L17.5 21"/>';
+
+    /* A new flow condition: the water table symbol, a triangle point down on the
+       water line, over the water. */
+    App.ICONS.watercondition = '<path d="M8 3.5h8L12 9.5z"/><path d="M3 9.5h18"/>'
+                             + '<path d="M3 14.5c3-3 6 3 9 0s6-3 9 0"/>'
+                             + '<path d="M3 19.5c3-3 6 3 9 0s6-3 9 0"/>';
+    // The window of all conditions of a group: a table of rows.
+    App.ICONS.conditionlist = '<path d="M3 4h18v16H3z"/>'
+                            + '<path d="M3 9h18M3 14.5h18M8.5 4v16"/>';
 
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {
@@ -3315,8 +3830,8 @@ App.LivePatches = (function () {
     }
     applyRulers();
 
-    // Named so that NOT_YET can grey them, here and in the Mesh menu alike. By icon,
-    // not by tip: greyRailTools appends to the tip.
+    // Named so that they are kept, here and in the Mesh menu alike. By icon, not by
+    // tip, since the tip is replaced just below.
     var MESH_TOOL_ACTIONS = { refine: 'refineMesh', coarsen: 'coarsenMesh',
                               resetmesh: 'resetMeshRefinement' };
     // The frozen tips do not say that the tool works on the selected object.
@@ -3380,6 +3895,35 @@ App.LivePatches = (function () {
         var at = exportAt === -1 ? fileMenu.items.length : exportAt + 1;
         fileMenu.items.splice(at, 0,
           { label: 'Import mesh (.mdpa)…', icon: 'open', action: 'importMdpa' });
+      }
+    }
+
+    /* Help > Reference manual and Tutorial manual had no action in the frozen mockup
+       (js/data.js:188), so they were greyed. They open the documentation site now
+       (js/documentation.js), under the names its pages go by, side by side: the
+       mockup had Command reference between the two. */
+    var helpMenu = App.MENUS.find(function (m) { return m.label === 'Help'; });
+    if (helpMenu) {
+      var tutorials = null;
+      helpMenu.items.forEach(function (item) {
+        if (!item || typeof item !== 'object' || item.action) return;
+        if (item.label === 'Reference manual') {
+          item.label = 'Documentation';
+          item.action = 'openDocumentation';
+          item.page = 'home';
+        } else if (item.label === 'Tutorial manual') {
+          item.label = 'GUI tutorials';
+          item.action = 'openDocumentation';
+          item.page = 'tutorials';
+          tutorials = item;
+        }
+      });
+      if (tutorials) {
+        helpMenu.items.splice(helpMenu.items.indexOf(tutorials), 1);
+        var docsAt = helpMenu.items.findIndex(function (item) {
+          return item && item.action === 'openDocumentation';
+        });
+        helpMenu.items.splice(docsAt + 1, 0, tutorials);
       }
     }
 
@@ -3498,6 +4042,13 @@ App.LivePatches = (function () {
         App.RAILS.structures.push({ icon: 'cube', tip: 'Create box', action: 'drawBox' });
       }
 
+      // Beside the condition tool: the window of all mechanical conditions.
+      if (!App.RAILS.structures.some(function (tool) {
+        return tool && tool.action === 'mechanicalConditions';
+      })) {
+        App.RAILS.structures.push(mechanicalConditionsTool());
+      }
+
       // Everything above appends; this is what puts the rail back in order.
       App.RAILS.structures = orderStructuresRail(App.RAILS.structures);
     }
@@ -3560,12 +4111,11 @@ App.LivePatches = (function () {
     if (App.Menu && App.Menu.mountBar && document.getElementById('menubar')) App.Menu.mountBar();
 
     /* Every live action is on its tool and its menu row by now, so whatever is still
-       without one is what Styx does not do: grey it, in the menus and on the rail.
+       without one is what Styx does not do: take it out, of the menus and the rail.
        See NOT_YET. The rest is the menus starting out in step with the toolbar:
        Undo was enabled in the Edit menu and greyed on the toolbar until the first
        edit, and the ticks were js/data.js's, not the state's. */
-    greyEverythingNotYet();
-    greyWindowControls();
+    dropEverythingNotYet();
     syncHistoryButtons();
     syncCheckMarks();
 
@@ -3593,7 +4143,8 @@ App.LivePatches = (function () {
         return frozenCalcRun(function (result) {
           rememberRun(result);
           if (done) done(result);
-          if (!result || !App.Results || !App.Results.ready) return;
+          // A run the user stopped leaves them where they were, at the model.
+          if (!result || result.stopped || !App.Results || !App.Results.ready) return;
           App.Results.ready().then(function () {
             if (App.Results.stage()) App.setMode('results');
           });
@@ -3667,14 +4218,21 @@ App.LivePatches = (function () {
           + '<circle cx="17.5" cy="12.5" r="1.3"/>';
       }
 
+      if (App.ICONS && !App.ICONS.convergence) {
+        App.ICONS.convergence = '<path d="M4 4v16h16"/>'
+          + '<path d="M7 6l3 5 3-2 3 6 3 2"/><path d="M6 17.5h14" stroke-dasharray="2 2"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
         '-',
-        // The chooser opens with the mode; this is how it comes back once closed.
+        // The chooser never opens by itself; this is how the user opens it.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
-            + 'pressure on it, every stage', action: 'plotResults' }
+            + 'pressure on it, every stage', action: 'plotResults' },
+        { icon: 'convergence', tip: 'Convergence — how the solver converged, iteration '
+            + 'by iteration', action: 'showConvergence' }
       ];
 
       /* `App.setMode` is frozen and knows only about the stages panel (js/app.js:25).
@@ -3717,6 +4275,10 @@ App.LivePatches = (function () {
           }
         });
       }
+
+      // The Convergence window: its own file, which hears from App.Calculate and
+      // App.ConvergencePlot itself.
+      if (App.ConvergenceWindow) App.ConvergenceWindow.install();
 
       /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
          opens when a `results plot` asks for it -- typed, or from any button. */
@@ -3813,6 +4375,8 @@ App.LivePatches = (function () {
           { label: 'Next stage', action: 'resultsRun', cmd: 'results stage +' },
           '-',
           { label: 'Field', sub: [] },
+          { label: 'Integration points', sub: [] },
+          { label: 'Arrows', sub: [] },
           { label: 'List fields', action: 'resultsRun', cmd: 'results fields' },
           '-',
           { label: 'Shading', sub: [
@@ -3834,6 +4398,7 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Convergence…', icon: 'convergence', action: 'showConvergence' },
           { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
             cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
@@ -3901,6 +4466,38 @@ App.LivePatches = (function () {
       });
       field.disabled = !field.sub.length;
 
+      /* Where a stress or the hydraulic head -- computed at the integration points --
+         is drawn. Set for all of them at once; offered while one is on screen. */
+      var integration = itemsOf('Integration points');
+      if (integration) {
+        integration.sub = [
+          { label: 'Per element (as computed)', action: 'resultsRun',
+            checked: state.integration !== 'nodes', cmd: 'results location elements' },
+          { label: 'Averaged to the nodes', action: 'resultsRun',
+            checked: state.integration === 'nodes', cmd: 'results location nodes' }
+        ];
+        integration.disabled = !state.integrationField;
+      }
+
+      /* Arrows: off, or any vector the stage has, over whatever is shaded -- the
+         flux over the head, say. */
+      var arrows = itemsOf('Arrows');
+      if (arrows) {
+        arrows.sub = [
+          { label: 'Off', action: 'resultsRun', checked: !state.arrows,
+            cmd: 'results arrows off' }
+        ];
+        if ((state.vectors || []).length) arrows.sub.push('-');
+        (state.vectors || []).forEach(function (vector) {
+          arrows.sub.push({
+            label: vector.group + ' · ' + vector.label + '  (' + vector.unit + ')',
+            checked: state.arrows === vector.name, action: 'resultsRun',
+            cmd: 'results arrows ' + vector.name
+          });
+        });
+        arrows.disabled = !(state.vectors || []).length;
+      }
+
       var colours = itemsOf('Colours');
       if (colours) {
         var options = App.Results.options();
@@ -3923,6 +4520,15 @@ App.LivePatches = (function () {
           action: 'resultsRun',
           cmd: 'results loads ' + (options.loads === false ? 'on' : 'off')
         });
+        // As the panel's box: a flow stage always draws the line, so it is offered
+        // only over a coupled stage that wrote a water pressure.
+        if (state.pressure && state.calculation !== 'flow') {
+          colours.sub.push({
+            label: 'Show zero pressure line', checked: !!options.zeroLine,
+            action: 'resultsRun',
+            cmd: 'results zeroline ' + (options.zeroLine ? 'off' : 'on')
+          });
+        }
       }
     }
 
@@ -4049,7 +4655,8 @@ App.LivePatches = (function () {
         onClose: function () { saveMenu.close(); plotWindow = null; plotColumns = 0; }
       });
       handle.dialog.classList.add('dlg-plot');
-      saveMenu = plotSaveMenu(handle.dialog.querySelector('.dlg-foot .btn'));
+      saveMenu = App.Picture.saveMenu(handle.dialog.querySelector('.dlg-foot .btn'),
+                                      function (format) { resultsCommand('results plot ' + format); });
 
       var layer = document.getElementById('modal-layer');
       var scrims = layer ? layer.querySelectorAll('.scrim') : [];
@@ -4067,59 +4674,6 @@ App.LivePatches = (function () {
         new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
       }
       return handle;
-    }
-
-    /* The plot window's one Save button: a small menu of the formats `results plot`
-       saves, opened above the button when there is no room below it. A pick saves at
-       once, from its own click, so the browser still opens its save window. The page
-       closes an open menu on any press outside it -- on this button too -- so the click
-       that follows such a press must not open the menu again. */
-    var PLOT_SAVE_FORMATS = [
-      { label: 'PNG', format: 'png' },
-      { label: 'PDF', format: 'pdf' },
-      { label: 'SVG', format: 'svg' },
-      { label: 'CSV', format: 'csv' }
-    ];
-
-    function plotSaveMenu(button) {
-      var open = false, justClosed = false, pressClosed = false;
-      button.setAttribute('aria-haspopup', 'menu');
-      button.setAttribute('aria-expanded', 'false');
-      button.addEventListener('mousedown', function () { pressClosed = justClosed; });
-
-      function show() {
-        App.UI.closePopups(0);
-        var r = button.getBoundingClientRect();
-        var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
-          resultsCommand('results plot ' + it.format);
-        }), r.left, r.bottom);
-        // The menu layer lies under the dialogs' layer, so the menu goes up beside the
-        // window it belongs to. Both layers cover the page, so it keeps its place.
-        var dialogs = document.getElementById('modal-layer');
-        if (dialogs) dialogs.appendChild(menu);
-        var height = menu.getBoundingClientRect().height;
-        if (r.bottom + height > window.innerHeight - 4) {
-          menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
-        }
-        open = true;
-        button.setAttribute('aria-expanded', 'true');
-        App.UI.whenClosed(function () {
-          open = false;
-          button.setAttribute('aria-expanded', 'false');
-          justClosed = true;
-          setTimeout(function () { justClosed = false; }, 0);
-        });
-      }
-
-      return {
-        toggle: function () {
-          var closedByThisPress = pressClosed;
-          pressClosed = false;
-          if (open) App.UI.closePopups(0);
-          else if (!closedByThisPress) show();
-        },
-        close: function () { if (open) App.UI.closePopups(0); }
-      };
     }
 
     function closePlotWindow() {
@@ -4193,17 +4747,32 @@ App.LivePatches = (function () {
       if (!panel || !dock) return;
       panel.hidden = !on;
       if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
+      var resultsOn = inResults;
+      inResults = on;
       if (on) {
         mountResultsPanel();
-        // Entering the mode opens the chooser, every time. It is what the mode is
-        // for, and the dock panel alone is easy to miss down the side of the page.
-        // The rail's "Choose results" reopens it after it has been closed. It fills
-        // itself as it is built, so there is nothing to render afterwards.
-        openResultsWindow();
+        // Already in Results: a redraw of the same tab (a part switched off in the
+        // Model explorer, any edit that rebuilds the geometry). The contour and the
+        // windows are still up as the user left them; leave them alone.
+        if (resultsOn) return;
+        var back = resultsLeft;
+        resultsLeft = null;
+        // Show the result that is open straight away: the same stage and field as
+        // last time, or the first one a new run opens on. The Choose results window
+        // never opens by itself -- asking again on every visit was in the way, and
+        // the dock panel and the rail's "Choose results" are always there.
+        if (App.Results.field()) App.Results.redraw();
+        if (back && back.run === App.Results.current() && back.plot) openPlotWindow();
       } else {
+        // Remember what was on screen, so coming back shows it again. Only on the
+        // way out of Results: going from one other mode to the next must not
+        // overwrite it.
+        if (resultsOn && App.Results.current()) {
+          resultsLeft = { run: App.Results.current(), plot: !!plotWindow };
+        }
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the
-        // window with it, since it belongs to a mode that is no longer on.
+        // windows with it, since they belong to a mode that is no longer on.
         closeResultsWindow();
         closePlotWindow();
         if (App.ResultsView) App.ResultsView.clear();
@@ -4249,17 +4818,34 @@ App.LivePatches = (function () {
                  selected: s.index === state.stage, disabled: !s.results };
       }))));
 
+      // One <optgroup> per group of the catalogue, as the Field menu has a title each.
       var fields = [];
       ((state.catalogue && state.catalogue.groups) || []).forEach(function (group) {
         group.fields.forEach(function (entry) {
-          fields.push({ value: entry.name,
-                        label: group.name + ' · ' + entry.label + '  (' + entry.unit + ')',
+          fields.push({ value: entry.name, group: group.name,
+                        label: entry.label + '  (' + entry.unit + ')',
                         selected: state.field && state.field.field === entry.name });
         });
       });
       rows.push(row('Field', fields.length
         ? select('field', fields)
         : '<span class="dock-empty">this stage wrote nothing</span>'));
+      if (state.integrationField) {
+        rows.push(row('Location', select('location', [
+          { value: 'elements', label: 'per element (as computed)',
+            selected: state.integration !== 'nodes' },
+          { value: 'nodes', label: 'averaged to the nodes',
+            selected: state.integration === 'nodes' }
+        ])));
+      }
+      if ((state.vectors || []).length) {
+        rows.push(row('Arrows', select('arrows', [
+          { value: 'off', label: 'off', selected: !state.arrows }
+        ].concat(state.vectors.map(function (vector) {
+          return { value: vector.name, label: vector.label + '  (' + vector.unit + ')',
+                   selected: state.arrows === vector.name };
+        })))));
+      }
 
       rows.push(row('Shading', select('bands', [0, 4, 8, 16, 24, 32, 48].map(function (n) {
         return { value: n, label: n ? n + ' bands' : 'smooth',
@@ -4300,6 +4886,14 @@ App.LivePatches = (function () {
                                     + (options.loads !== false ? ' checked' : '')
                                     + ' title="The loads and the water level over the'
                                     + ' colours">'));
+      /* The zero water pressure line. A flow stage always draws it, so the box is only
+         offered for a coupled one -- and only when the stage wrote a water pressure. */
+      if (state.pressure && state.calculation !== 'flow') {
+        rows.push(row('Zero pressure', '<input type="checkbox" data-res="zeroline"'
+                                  + (options.zeroLine ? ' checked' : '')
+                                  + ' title="The line where the water pressure is zero'
+                                  + ' (the phreatic surface)">'));
+      }
       rows.push(row('Deformed', select('deform', [
         { value: 'off', label: 'off', selected: !options.deform },
         { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
@@ -4320,6 +4914,8 @@ App.LivePatches = (function () {
 
       bind(body, 'stage', function (value) { return 'results stage ' + value; });
       bind(body, 'field', function (value) { return 'results field ' + value; });
+      bind(body, 'location', function (value) { return 'results location ' + value; });
+      bind(body, 'arrows', function (value) { return 'results arrows ' + value; });
       bind(body, 'bands', function (value) {
         return value === '0' ? 'results smooth' : 'results bands ' + value;
       });
@@ -4343,6 +4939,12 @@ App.LivePatches = (function () {
       if (loadsBox) {
         loadsBox.addEventListener('change', function () {
           resultsCommand('results loads ' + (loadsBox.checked ? 'on' : 'off'));
+        });
+      }
+      var zeroBox = body.querySelector('[data-res="zeroline"]');
+      if (zeroBox) {
+        zeroBox.addEventListener('change', function () {
+          resultsCommand('results zeroline ' + (zeroBox.checked ? 'on' : 'off'));
         });
       }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });
@@ -4391,13 +4993,24 @@ App.LivePatches = (function () {
       return '<label class="res-row"><span>' + esc(label) + '</span>' + control + '</label>';
     }
 
+    /* An entry with a `group` goes in an <optgroup> of that name, consecutive entries
+       of one group in one. */
     function select(name, entries) {
-      return '<select data-res="' + name + '">' + entries.map(function (entry) {
-        return '<option value="' + esc(entry.value) + '"'
+      var html = '', open = null;
+      entries.forEach(function (entry) {
+        var group = entry.group || null;
+        if (group !== open) {
+          if (open !== null) html += '</optgroup>';
+          if (group !== null) html += '<optgroup label="' + esc(group) + '">';
+          open = group;
+        }
+        html += '<option value="' + esc(entry.value) + '"'
              + (entry.selected ? ' selected' : '')
              + (entry.disabled ? ' disabled' : '') + '>'
              + esc(entry.label) + '</option>';
-      }).join('') + '</select>';
+      });
+      if (open !== null) html += '</optgroup>';
+      return '<select data-res="' + name + '">' + html + '</select>';
     }
 
     function esc(text) {
@@ -4456,6 +5069,8 @@ App.LivePatches = (function () {
       if (runBoundaryCommand(text)) return;
       // `units` / `units <system>`: the project's unit system.
       if (runUnitsCommand(text)) return;
+      // `domain` / `domain --x FROM TO --y BOTTOM TOP`: the size of the soil block.
+      if (runDomainCommand(text)) return;
       // `node <id>`: which SubModelParts a node is in.
       if (runNodeCommand(text)) return;
       // `script <file.py>`: the model written as a Python file that builds it again.
@@ -4464,6 +5079,11 @@ App.LivePatches = (function () {
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'calculate') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        // `calculate stop`: typed, so it does not ask first.
+        if ((text.trim().split(/\s+/)[1] || '').toLowerCase() === 'stop') {
+          if (App.Calculate && App.Calculate.stop) return App.Calculate.stop();
+          return;
+        }
         if (refuseCalculate()) return;
         if (App.Calculate) return App.Calculate.run();
         return;
@@ -4510,11 +5130,11 @@ App.LivePatches = (function () {
             // that, rather than meshing the empty site its project carries.
             if (App.Deck && App.Deck.hasMesh(result)) {
               return adoptProject(result.project, 'Ran ' + scriptPath
-                + ' — a Kratos deck, opened with its own mesh.')
+                + ' — a Kratos deck, opened with its own mesh.', true)
                 .then(function () { showDeck(result.mesh, result.project); });
             }
             return adoptProject(result.project,
-              'Ran ' + scriptPath + ' — model built. Meshing it now.')
+              'Ran ' + scriptPath + ' — model built. Meshing it now.', true)
               .then(function () { requestMesh(true, null); });
           })
           .catch(function (error) {
@@ -4741,6 +5361,13 @@ App.LivePatches = (function () {
       /* The shortcuts js/data.js prints next to the menu items it never wired up.
          Ctrl+N and Ctrl+O are the browser's own in most builds and cannot always be
          taken; the menu and the toolbar are the reliable route to those two. */
+      // F1, Help > Documentation, from anywhere: it types nothing, so the command box
+      // has no use for it. Taken from the browser, whose own F1 opens its help pages.
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'F1' || event.ctrlKey || event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        App.runAction({ action: 'openDocumentation', page: 'home' });
+      });
       document.addEventListener('keydown', function (event) {
         if (!event.ctrlKey || event.altKey) return;
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
@@ -4826,10 +5453,11 @@ App.LivePatches = (function () {
     THREE_D_ONLY: THREE_D_ONLY, availableIn2D: availableIn2D,
     TWO_D_ONLY: TWO_D_ONLY, availableIn3D: availableIn3D,
     syncDimensionAvailability: syncDimensionAvailability, syncHistoryButtons: syncHistoryButtons,
-    NOT_YET: NOT_YET, NOT_YET_TIP: NOT_YET_TIP, implemented: implemented,
-    greyEverythingNotYet: greyEverythingNotYet, syncCheckMarks: syncCheckMarks,
+    NOT_YET: NOT_YET, implemented: implemented, tidySeparators: tidySeparators,
+    dropEverythingNotYet: dropEverythingNotYet, syncCheckMarks: syncCheckMarks,
     gateViewportItems: gateViewportItems,
     newProject: newProject, openProject: openProject, saveProject: saveProject,
+    wipeSession: wipeSession,
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
@@ -4845,6 +5473,8 @@ App.LivePatches = (function () {
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
+    renameBodyPart: renameBodyPart, deleteBodyOwner: deleteBodyOwner,
+    deleteBodyPart: deleteBodyPart, deleteBody: deleteBody,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };

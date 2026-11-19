@@ -8,9 +8,10 @@
                                                   the run for the replay
 
 NAME is a tutorial in `tests/e2e/tutorials/`; `python tools/gui_tutorial.py --help` lists
-them. The screenshots go in `docs/gui_tutorials/images/NAME/`, and the site is built from
-`docs/gui_tutorials/` into `build/gui_tutorials/site/` (open its `index.html`). Neither is
-committed: CI makes both again for every pull request and every merge.
+them. The screenshots go in `docs/gui_tutorials/images/NAME/`. Then `tools/docs_site.py`
+builds the whole documentation site, these pages with it, into `build/docs_site/site/`
+(open its `index.html`). Neither is committed: CI makes both again for every pull request
+and every merge.
 
 It plays the tutorial's steps in the real GUI, through `tests/e2e/test_gui_tutorials.py
 --doc-screenshots`, so it also checks that the steps still work and still build the
@@ -26,7 +27,6 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
-import re
 import subprocess
 import sys
 
@@ -34,16 +34,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.launcher import platform_venv_name, venv_python  # noqa: E402
+from tools import docs_site  # noqa: E402
 
 TUTORIALS = ROOT / "tests" / "e2e" / "tutorials"
 IMAGES = ROOT / "docs" / "gui_tutorials" / "images"
-SITE = ROOT / "build" / "gui_tutorials" / "site"
-"""Where `mkdocs.yml` (`site_dir`) builds the site."""
 WARNINGS = ROOT / "build" / "gui_tutorials" / "deck-warnings.txt"
 """Where the test notes a deck that differs from its recorded run
 (`tests/fakes/replay_kratos.py`, `WARNINGS_ENV`)."""
-IMAGE = re.compile(r"!\[[^\]]*\]\((images/[^)\s]+)\)")
-"""A Markdown image, and its path (as `tests/e2e/tutorials/__init__.py` reads it)."""
 
 
 def tutorial_names() -> list[str]:
@@ -85,35 +82,6 @@ def screenshots(python: pathlib.Path, names: list[str], args) -> int:
     return code
 
 
-def missing_images() -> list[str]:
-    """The screenshots a page shows that are not in `IMAGES`. Zensical's strict build checks
-    the links of a page, but not its images."""
-    pages = IMAGES.parent
-    return [f"{page.name}: {path}" for page in sorted(pages.glob("*.md"))
-            for path in IMAGE.findall(page.read_text(encoding="utf-8"))
-            if not (pages / path).is_file()]
-
-
-def site(python: pathlib.Path) -> int:
-    missing = missing_images()
-    if missing:
-        print("The site was not built: these screenshots are missing:\n  "
-              + "\n  ".join(missing), file=sys.stderr)
-        return 1
-    found = subprocess.run([str(python), "-c", "import zensical"], cwd=ROOT,
-                           capture_output=True).returncode == 0
-    if not found:
-        print(f"The site was not built, because zensical is not installed in {python}.\n"
-              "To build the site, install zensical with\n"
-              f"  {python} -m pip install -r requirements-docs.txt", file=sys.stderr)
-        return 2
-    code = subprocess.run([str(python), "-m", "zensical", "build", "--strict", "--clean",
-                           "-f", "mkdocs.yml"], cwd=ROOT).returncode
-    if code == 0:
-        print(f"site in {SITE}: open {SITE / 'index.html'}")
-    return code
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("names", nargs="*", metavar="NAME",
@@ -134,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     python = server_python()
     code = screenshots(python, names, args)
     if code == 0 and not args.no_site:
-        code = site(python)
+        code = docs_site.build(python)
     return code
 
 

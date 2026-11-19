@@ -318,6 +318,53 @@ App.ResultsRender = (function () {
     return out;
   }
 
+  /* ── ID labels ────────────────────────────────────────────────────────── */
+
+  /* Where the node and element numbers of one drawn section go, as `{id, x, y, z}`
+     (frontend/js/mesh-labels.js). `positions` are the ones on screen -- deformed when
+     the mesh is -- so a number stays on its node at any deformation factor.
+
+     A node goes at its vertex. An element goes at the mean of the vertices it is drawn
+     with: the triangles it makes (`triangle_elements`) and its line work
+     (`edge_elements`). For the simplices a deck holds that is its centroid, as
+     `writer._element_labels` places it -- a quadratic element's extra nodes are edge
+     midpoints. A 3D section draws only its skin, so a solid's number sits on the face
+     that is seen. */
+  function labelPoints(section, positions, kind) {
+    var at = positions || section.positions || [];
+    function point(id, i) {
+      return { id: id, x: at[3 * i], y: at[3 * i + 1], z: at[3 * i + 2] };
+    }
+    var nodeIds = section.node_ids || [];
+    if (kind !== 'elements') {
+      return nodeIds.map(function (id, i) { return point(id, i); });
+    }
+    var vertices = {}, order = [];
+    function take(element, vertex) {
+      if (element === undefined || element === null || vertex === undefined) return;
+      if (!vertices[element]) { vertices[element] = {}; order.push(element); }
+      vertices[element][vertex] = true;
+    }
+    var indices = section.indices || [];
+    (section.triangle_elements || []).forEach(function (element, t) {
+      for (var k = 0; k < 3; k++) take(element, indices[3 * t + k]);
+    });
+    var edges = section.edge_indices || [];
+    (section.edge_elements || []).forEach(function (element, e) {
+      take(element, edges[2 * e]);
+      take(element, edges[2 * e + 1]);
+    });
+    return order.map(function (element) {
+      var list = Object.keys(vertices[element]);
+      var sum = [0, 0, 0];
+      list.forEach(function (v) {
+        for (var axis = 0; axis < 3; axis++) sum[axis] += at[3 * v + axis];
+      });
+      return { id: element, x: sum[0] / list.length, y: sum[1] / list.length,
+               z: sum[2] / list.length };
+    });
+  }
+
   /* The factor that makes the largest movement a readable fraction of the model.
 
      A ceiling, not a normalisation: a model that has already moved further than that
@@ -329,6 +376,226 @@ App.ResultsRender = (function () {
     if (!(span > 0)) return 1;
     var wanted = AUTO_FRACTION * span / largest;
     return wanted > 1 ? wanted : 1;
+  }
+
+  /* ── Contour lines ────────────────────────────────────────────────────── */
+
+  /* Where `values` crosses `level` across a section's triangles, as line segments: a
+     Float32Array of x,y,z,x,y,z per segment, in the coordinates of `positions` (the
+     drawn, possibly deformed, buffer -- so the line sits on the shading it explains).
+
+     Marching triangles: a triangle with vertices on both sides of the level is cut
+     once, between the two points where its sides cross it, each found by linear
+     interpolation along that side. Neighbouring triangles interpolate the shared side
+     the same way, so the pieces join into one line.
+
+     "Below" is strictly less than the level and everything else is above. The zero
+     water pressure line is what this is for, and a stage's pressure is often exactly
+     zero over the dry ground (a tension cut-off, or no water at all): with the level
+     itself counted as above, the line runs along the edge of the wet region instead
+     of tracing every flat zero triangle, and a field that is zero everywhere has no
+     line. A triangle with a hole in it has no value to interpolate and is skipped. */
+  function isoline(section, values, positions, level) {
+    var at = level || 0;
+    var indices = (section && section.indices) || [];
+    var points = [];
+    var corner = [0, 0, 0], value = [0, 0, 0], below = [false, false, false];
+
+    function cross(a, b) {
+      var t = (at - value[a]) / (value[b] - value[a]);
+      for (var c = 0; c < 3; c++) {
+        var pa = positions[corner[a] * 3 + c], pb = positions[corner[b] * 3 + c];
+        points.push(pa + t * (pb - pa));
+      }
+    }
+
+    for (var i = 0; i + 2 < indices.length; i += 3) {
+      var count = 0, usable = true;
+      for (var k = 0; k < 3; k++) {
+        corner[k] = indices[i + k];
+        value[k] = values[corner[k]];
+        if (value[k] === null || value[k] === undefined || !isFinite(value[k])) {
+          usable = false;
+          break;
+        }
+        below[k] = value[k] < at;
+        if (below[k]) count++;
+      }
+      if (!usable || count === 0 || count === 3) continue;
+      // The corner on its own side of the level; the line cuts the two sides it is on.
+      var lone = below[0] !== below[1] && below[0] !== below[2] ? 0
+               : below[1] !== below[0] && below[1] !== below[2] ? 1 : 2;
+      // A lone corner exactly at the level touches it at a point: no segment.
+      if (value[lone] === at) continue;
+      cross(lone, (lone + 1) % 3);
+      cross(lone, (lone + 2) % 3);
+    }
+    return new Float32Array(points);
+  }
+
+  /* The pieces of the polylines `lines` ([[x, y], ...] each) that lie outside every
+     triangle of `meshes` ({indices, positions}, positions x,y,z as drawn), as line
+     segments x,y,z,x,y,z at height `z`. In the section's plane: x and y only.
+
+     What carries the zero pressure line on past the soil: inside it the calculation
+     found where the water stands, outside it -- over a ditch, a pit, the water against
+     a wall -- the phreatic line the user drew is the water's surface. The line's ends
+     meet the soil's boundary where the boundary's prescribed pressure is nought, which
+     is where the traced line ends too, so the two read as one line.
+
+     A stretch running along the soil's boundary, within `OUTSIDE_TOL` of it, counts as
+     inside: a phreatic line drawn on the ground surface would otherwise flicker in and
+     out of the triangles along it on round-off alone. */
+  var OUTSIDE_TOL = 1e-3;
+
+  function outside(lines, meshes, z) {
+    var triangles = [];
+    (meshes || []).forEach(function (mesh) {
+      var idx = mesh.indices || [], p = mesh.positions || [];
+      for (var i = 0; i + 2 < idx.length; i += 3) {
+        var a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+        var t = [p[a], p[a + 1], p[b], p[b + 1], p[c], p[c + 1]];
+        var area = (t[2] - t[0]) * (t[5] - t[1]) - (t[3] - t[1]) * (t[4] - t[0]);
+        if (!area) continue;
+        triangles.push({ t: t, sign: area > 0 ? 1 : -1,
+                         x0: Math.min(t[0], t[2], t[4]) - OUTSIDE_TOL,
+                         x1: Math.max(t[0], t[2], t[4]) + OUTSIDE_TOL,
+                         y0: Math.min(t[1], t[3], t[5]) - OUTSIDE_TOL,
+                         y1: Math.max(t[1], t[3], t[5]) + OUTSIDE_TOL });
+      }
+    });
+
+    // The stretch [t0, t1] of a + t·d that is inside `tr`, or null: the segment cut by
+    // each side's half-plane in turn.
+    function within(tr, ax, ay, dx, dy) {
+      var lo = 0, hi = 1, t = tr.t;
+      for (var k = 0; k < 3; k++) {
+        var px = t[k * 2], py = t[k * 2 + 1];
+        var ex = t[((k + 1) % 3) * 2] - px, ey = t[((k + 1) % 3) * 2 + 1] - py;
+        var f0 = tr.sign * (ex * (ay - py) - ey * (ax - px))
+               + OUTSIDE_TOL * Math.sqrt(ex * ex + ey * ey);
+        var f1 = tr.sign * (ex * dy - ey * dx);
+        if (f1 === 0) {
+          if (f0 < 0) return null;
+        } else if (f1 > 0) {
+          lo = Math.max(lo, -f0 / f1);
+        } else {
+          hi = Math.min(hi, -f0 / f1);
+        }
+        if (lo >= hi) return null;
+      }
+      return [lo, hi];
+    }
+
+    var points = [];
+    var at = z || 0;
+    (lines || []).forEach(function (line) {
+      for (var k = 0; k + 1 < (line || []).length; k++) {
+        var ax = line[k][0], ay = line[k][1];
+        var dx = line[k + 1][0] - ax, dy = line[k + 1][1] - ay;
+        var length = Math.sqrt(dx * dx + dy * dy);
+        if (!(length > 0)) continue;
+        var x0 = Math.min(ax, ax + dx), x1 = Math.max(ax, ax + dx);
+        var y0 = Math.min(ay, ay + dy), y1 = Math.max(ay, ay + dy);
+        var spans = [];
+        triangles.forEach(function (tr) {
+          if (tr.x1 < x0 || tr.x0 > x1 || tr.y1 < y0 || tr.y0 > y1) return;
+          var span = within(tr, ax, ay, dx, dy);
+          if (span) spans.push(span);
+        });
+        spans.sort(function (p, q) { return p[0] - q[0]; });
+        var free = [], from = 0;
+        spans.forEach(function (span) {
+          if (span[0] > from) free.push([from, span[0]]);
+          from = Math.max(from, span[1]);
+        });
+        if (from < 1) free.push([from, 1]);
+        // The tolerance the triangles were grown by, given back where a piece meets
+        // the soil, so it reaches the boundary the traced line ends on.
+        var grown = OUTSIDE_TOL / length;
+        free.forEach(function (piece) {
+          // Slivers between two triangles that share a side are round-off, not water.
+          if ((piece[1] - piece[0]) * length <= OUTSIDE_TOL) return;
+          var t0 = piece[0] > 0 ? Math.max(0, piece[0] - grown) : 0;
+          var t1 = piece[1] < 1 ? Math.min(1, piece[1] + grown) : 1;
+          points.push(ax + dx * t0, ay + dy * t0, at,
+                      ax + dx * t1, ay + dy * t1, at);
+        });
+      }
+    });
+    return new Float32Array(points);
+  }
+
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  /* How long the longest arrow is, as a fraction of the model's largest span: long
+     enough to read a direction off. */
+  var ARROW_FRACTION = 0.04;
+  var ARROW_HEAD = 0.3;          // the head's length, as a fraction of the arrow's
+  var ARROW_HEAD_ANGLE = 25 * Math.PI / 180;
+  var ARROW_SMALLEST = 1e-3;     // shorter than this fraction of the longest: no arrow
+
+  /* A vector field as arrows: line segments, x,y,z,x,y,z per segment, three per arrow
+     (the shaft and the two sides of its head).
+
+     `vectors` is the server's `{ids, values, max}`, one vector per node id. `placed` is
+     where each node is drawn -- `[{node_ids, positions}]`, the sections with the drawn
+     (possibly deformed) positions -- so an arrow starts at its node on the shading.
+     Each arrow is to the same scale: the longest is `ARROW_FRACTION` of the model's
+     largest span (`bbox`), and the others in proportion, so a length can be compared.
+
+     One arrow at every node the vector was written at -- none thinned out, so what is
+     drawn is what the calculation wrote. A node in no section, or whose vector is
+     shorter than `ARROW_SMALLEST` of the longest (too short to see), has none. The
+     heads lie in the plane of the section, the xy plane, which is the one this program
+     draws. */
+  function arrows(vectors, placed, bbox) {
+    var ids = (vectors && vectors.ids) || [];
+    var values = (vectors && vectors.values) || [];
+    var largest = 0, i;
+    for (i = 0; i < values.length; i++) largest = Math.max(largest, size(values[i]));
+    if (!(largest > 0) || !bbox) return new Float32Array(0);
+    var span = Math.max(bbox[3] - bbox[0], bbox[4] - bbox[1], bbox[5] - bbox[2]);
+    if (!(span > 0)) return new Float32Array(0);
+    var length = ARROW_FRACTION * span;
+    var scale = length / largest;
+
+    // Where each node is drawn: the first section that has it.
+    var where = {};
+    (placed || []).forEach(function (entry) {
+      var nodes = entry.node_ids || [];
+      for (var k = 0; k < nodes.length; k++) {
+        if (where[nodes[k]] === undefined) {
+          where[nodes[k]] = [entry.positions[k * 3], entry.positions[k * 3 + 1],
+                             entry.positions[k * 3 + 2]];
+        }
+      }
+    });
+
+    // One arrow per node the vector was written at, in the order written.
+    var points = [];
+    for (i = 0; i < ids.length; i++) {
+      var p = where[ids[i]], v = values[i];
+      if (!p || !v || size(v) < ARROW_SMALLEST * largest) continue;
+      var tip = [p[0] + v[0] * scale, p[1] + v[1] * scale, p[2] + (v[2] || 0) * scale];
+      points.push(p[0], p[1], p[2], tip[0], tip[1], tip[2]);
+      // The head, back from the tip in the plane of the section.
+      var bx = -v[0], by = -v[1], back = Math.sqrt(bx * bx + by * by);
+      if (!(back > 0)) continue;
+      var head = ARROW_HEAD * size(v) * scale;
+      bx /= back; by /= back;
+      [ARROW_HEAD_ANGLE, -ARROW_HEAD_ANGLE].forEach(function (angle) {
+        var c = Math.cos(angle), s = Math.sin(angle);
+        points.push(tip[0], tip[1], tip[2],
+                    tip[0] + head * (c * bx - s * by), tip[1] + head * (s * bx + c * by),
+                    tip[2]);
+      });
+    }
+    return new Float32Array(points);
+  }
+
+  function size(v) {
+    return Math.sqrt(v[0] * v[0] + v[1] * v[1] + (v[2] || 0) * (v[2] || 0));
   }
 
   /* ── CSV ──────────────────────────────────────────────────────────────── */
@@ -354,10 +621,11 @@ App.ResultsRender = (function () {
 
   return {
     MAPS: MAPS, MAP_LABELS: MAP_LABELS, ABSENT: ABSENT, DEFAULT_MAP: DEFAULT_MAP,
-    AUTO_FRACTION: AUTO_FRACTION,
+    AUTO_FRACTION: AUTO_FRACTION, ARROW_FRACTION: ARROW_FRACTION,
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
     legend: legend, format: format, rangeLines: rangeLines,
-    deform: deform, autoFactor: autoFactor, csv: csv
+    deform: deform, autoFactor: autoFactor, isoline: isoline, outside: outside, arrows: arrows,
+    csv: csv, labelPoints: labelPoints
   };
 })();

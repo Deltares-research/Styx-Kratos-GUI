@@ -405,7 +405,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -760,7 +761,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -1254,7 +1256,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -1732,7 +1735,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -2241,7 +2245,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -2716,7 +2721,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
@@ -3155,7 +3161,8 @@
                                         "nodal_results": [
                                             "DISPLACEMENT",
                                             "TOTAL_DISPLACEMENT",
-                                            "WATER_PRESSURE"
+                                            "WATER_PRESSURE",
+                                            "REACTION"
                                         ],
                                         "gauss_point_results": [
                                             "CAUCHY_STRESS_TENSOR",
