@@ -251,7 +251,7 @@ and adds only the values that are missing
 | `script <file.py>` | Writes the model as a model script |
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
-| `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
+| `water`, `units`, `domain`, `cleargeometry` | Changes the water level, the unit system or the size of the soil block, or removes drawn and imported solids |
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |

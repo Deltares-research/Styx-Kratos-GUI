@@ -1011,6 +1011,21 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* `domain` / `domain --x FROM TO --y BOTTOM TOP --z FROM TO`, typed: show or set the
+     size of the soil block, as File > Project properties… and `kratos-cli domain` do.
+     What to send is App.DomainCommand's (tested headless); `setExtents` sends it.
+     `false` when it is not this command. */
+  function runDomainCommand(text) {
+    if (!App.DomainCommand) return false;
+    var answer = App.DomainCommand.command(text, App.PROJECT);
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    setExtents(answer.body);
+    return true;
+  }
+
   function runUnitsCommand(text) {
     if (!App.Units) return false;
     var answer = App.Units.command(text, App.PROJECT);
@@ -1953,11 +1968,10 @@ App.LivePatches = (function () {
     return update;
   }
 
+  /* PATCH /api/project/domain with `update` ({ x: [from, to], ... }), then the model,
+     the viewport and the explorer are redrawn. Shared by File > Project properties…
+     and the `domain` command. */
   function setExtents(update) {
-    var words = Object.keys(update).map(function (axis) {
-      return '--' + axis + ' ' + update[axis][0] + ' ' + update[axis][1];
-    });
-    if (App.Command && App.Command.write) App.Command.write('echo', '> domain ' + words.join(' '));
     return App.Api.patch('/api/project/domain', update)
       .then(function (result) {
         App.Model.apply(result.project);
@@ -2055,7 +2069,12 @@ App.LivePatches = (function () {
         });
       }
       return put.then(function (done) {
-        return done && resize ? setExtents(extents) : done;
+        if (!done || !resize) return done;
+        // The line the command box takes for the same edit (`runDomainCommand`).
+        if (App.Command && App.Command.write) {
+          App.Command.write('echo', '> ' + App.DomainCommand.line(extents));
+        }
+        return setExtents(extents);
       }).then(function (done) {
         if (!done || !convert) return;
         if (App.Command) {
@@ -4988,6 +5007,8 @@ App.LivePatches = (function () {
       if (runBoundaryCommand(text)) return;
       // `units` / `units <system>`: the project's unit system.
       if (runUnitsCommand(text)) return;
+      // `domain` / `domain --x FROM TO --y BOTTOM TOP`: the size of the soil block.
+      if (runDomainCommand(text)) return;
       // `node <id>`: which SubModelParts a node is in.
       if (runNodeCommand(text)) return;
       // `script <file.py>`: the model written as a Python file that builds it again.

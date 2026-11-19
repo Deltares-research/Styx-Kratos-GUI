@@ -771,6 +771,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
 | `gravity`, `gravity 9.80665` | `kratos-cli gravity P`, `kratos-cli gravity P 9.80665` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
+| `domain`, `domain --x 0 30 --y -20 0` | `kratos-cli domain P`, `kratos-cli domain P --x 0 30 --y -20 0` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |

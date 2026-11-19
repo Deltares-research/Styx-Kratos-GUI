@@ -64,6 +64,8 @@ Click **Calculate** between Staged construction and Results.
   **y min** or **y max** also moves the bottom of the last layer or the top of the first.
   In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli domain FILE --x FROM TO
   --y BOTTOM TOP`, `kratos-cli gravity FILE G` and `kratos-cli units FILE kN` do the same.
+  A new size writes its `domain --x ... --y ...` line in the command log. You can type
+  that line in the command box too, and `domain` alone shows the size.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your

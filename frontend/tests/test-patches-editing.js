@@ -380,6 +380,7 @@
 
   test('Project properties sets the size of the soil block, as kratos-cli domain does', function () {
     return withShell(function (ctx, host) {
+      App.Command.write = function (kind, text) { ctx.lines.push(kind + ':' + text); };
       App.LivePatches.projectProperties();
       var dialog = host.querySelector('.name-dialog-window');
       function input(name) { return dialog.querySelector('input[name=' + name + ']'); }
@@ -406,7 +407,31 @@
              ['PATCH /api/project/domain']);
         T.eq(ctx.requests[0].body, { x: [0, 80], y: [-60, 0] }, 'only the axes that changed');
         T.eq(ctx.refreshed, 1, 'the viewport is redrawn');
+        T.ok(ctx.lines.indexOf('echo:> domain --x 0 80 --y -60 0') >= 0,
+             'the log shows the command that makes the same edit');
         T.ok(ctx.lines.some(function (line) { return /^ok:Size of the soil block: x 0 to/.test(line); }));
+      });
+    });
+  });
+
+  test('the domain command in the command box makes the edit of Project properties', function () {
+    return withShell(function (ctx) {
+      App.Command.write = function (kind, text) { ctx.lines.push(kind + ':' + text); };
+      App.Command.run('domain');
+      T.eq(ctx.requests, [], 'a bare domain sends nothing');
+      T.ok(ctx.lines.indexOf('echo:> domain') >= 0);
+      T.ok(ctx.lines.some(function (line) { return /^note:domain x 0 \.\. 60, y -40 \.\. 0/.test(line); }),
+           ctx.lines.join(' | '));
+      App.Command.run('domain --x 0 30');
+      T.ok(ctx.lines.indexOf('err:x max must be above x min.') < 0);
+      App.Command.run('domain --x 30 0');
+      T.ok(ctx.lines.indexOf('err:x max must be above x min.') >= 0, 'a reversed x is refused');
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/domain'], 'only the valid line is sent');
+        T.eq(ctx.requests[0].body, { x: [0, 30] });
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn');
+        T.ok(ctx.lines.some(function (line) { return /^ok:Size of the soil block/.test(line); }));
       });
     });
   });

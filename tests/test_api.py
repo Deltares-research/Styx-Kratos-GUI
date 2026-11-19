@@ -1278,7 +1278,7 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              # core/model/solver.py, which stages.js resolves.
                              "solver-settings.js",
                              "results-render.js", "results-view.js", "part-colors.js",
-                             "water-command.js", "script-command.js", "node-parts.js",
+                             "water-command.js", "domain-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
                              # The convergence figure, and the window that shows it live
