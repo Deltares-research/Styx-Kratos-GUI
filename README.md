@@ -149,6 +149,15 @@ Styx was designed and developed by **Marjan Fathian** ([@indigocoral](https://gi
 Deltares. It started on 2026-09-05 in a private repository, `indigocoral/Kratos-GUI`, and was
 published here with its commit history: each commit keeps its original author and date.
 
+### Contributors
+
+These people have contributed directly to Styx:
+
+- Aron Noordam
+- Gennady Markelov
+- Wijtze Pieter Kikstra
+- Richard Faasse
+
 To cite Styx, use [CITATION.cff](CITATION.cff), or **Cite this repository** on the GitHub page.
 
 ## Acknowledgments
