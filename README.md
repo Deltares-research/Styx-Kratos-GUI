@@ -100,27 +100,27 @@ Do these steps in this order. Each step has its own guide.
 
 ### For users
 
-| Document | Contents |
+| Guide | Contents |
 |---|---|
-| [INSTALLATION.md](docs/INSTALLATION.md) | What to install on each platform, and how to start Styx with `run.bat` or `run.sh` |
-| [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
-| [GUI tutorials](docs/gui_tutorials/index.md) | Build a model in the GUI step by step, with a screenshot of each step: the CROW excavation wall, from an empty project to the bending moment in the wall. The documentation site, with these screenshots and all the other pages, is published from `main` on GitHub Pages; CI also attaches it to each run as `docs-site`. |
-| [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
-| [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
-| [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
-| [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
-| [Muskat_case.md](docs/cli_tutorials/Muskat_case.md) | A groundwater flow tutorial: the Muskat soil column, saturated, with a Van Genuchten soil, and with a seepage face |
-| [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+| [Installation](docs/INSTALLATION.md) | What to install on Windows, Linux or macOS, and how to start Styx with `run.bat` or `run.sh` |
+| [Kratos setup](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
+| [Usage](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results and use scripts |
+| [GUI tutorials](docs/gui_tutorials/index.md) | The CROW excavation wall, built in the GUI step by step from an empty project to the bending moment in the wall, with a screenshot of each step |
+| [CLI tutorials](docs/cli_tutorials/README.md) | Models built and run with `kratos-cli` in a terminal: a [simple dike](docs/cli_tutorials/README.md), the [CROW excavation wall](docs/cli_tutorials/CROW_case.md) and the [Muskat groundwater flow case](docs/cli_tutorials/Muskat_case.md). [CLI.md](docs/CLI.md) lists every command. |
+| [Features](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+
+All these pages are also on the documentation site. It is published from `main` on GitHub
+Pages, and CI attaches it to each run as `docs-site`.
 
 ### For developers
 
-| Document | Contents |
+| Guide | Contents |
 |---|---|
 | [Developer guide](docs/developer/README.md) | Start here. What Styx, Gmsh and Kratos each do, from a drawn model to its results |
-| [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
-| [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
-| [REVIEWING.md](docs/developer/REVIEWING.md) | How a pull request is reviewed: the issue, correctness, design, GUI and `kratos-cli` parity, tests and documentation |
-| [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
+| [Architecture](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
+| [Testing](docs/developer/TESTING.md) | The test tiers and how to run them |
+| [Reviewing](docs/developer/REVIEWING.md) | How a pull request is reviewed: the issue, correctness, design, GUI and `kratos-cli` parity, tests and documentation |
+| [Project overview](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
 | [Code map](docs/developer/code-map/GRAPH_REPORT.md) | A generated map of the code and a clickable tree of files and functions |
 
 ## Contributing
