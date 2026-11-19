@@ -33,7 +33,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
-from backend.middleware import LOOPBACK_HOSTS, host_name
+from backend.middleware import on_this_computer
 
 router = APIRouter()
 
@@ -99,13 +99,8 @@ def choose_folder(start: Path) -> str:
     return done.stdout.strip()
 
 
-def _on_this_computer(request: Request) -> bool:
-    return (request.client is not None and request.client.host in LOOPBACK_HOSTS
-            and host_name(request.headers.get("host", "")) in LOOPBACK_HOSTS)
-
-
 def _only_this_computer(request: Request) -> None:
-    if not _on_this_computer(request):
+    if not on_this_computer(request):
         raise HTTPException(status_code=403, detail="Only a browser on this computer can do this.")
 
 
@@ -134,7 +129,7 @@ async def open_folder_window(request: Request) -> dict:
     own takes over: that is a normal answer, not a failure of this request. While a window is
     open, `busy` says so and no other opens."""
     global _last_chosen, _window_open
-    if not _on_this_computer(request):
+    if not on_this_computer(request):
         return {"no_window": "The browser is on another computer."}
     if _window_open:
         return {"busy": "A folder window is open already: choose the folder in it, or close it."}

@@ -176,8 +176,8 @@
       T.eq(ctx.frozen, [], 'answered by the live layer, not the mockup');
       T.eq(menu('Help').items.map(function (i) { return i === '-' ? '-' : i.label; }),
            ['Documentation', 'GUI tutorials', 'Command reference', 'Kratos documentation',
-            '-', 'About…'],
-           'the two pages of the site side by side');
+            '-', 'Send feedback…', 'About…'],
+           'the two pages of the site side by side, and Send feedback before About');
     });
   });
 

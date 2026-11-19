@@ -131,8 +131,12 @@ def save(project: Project, path: str | Path) -> Path:
     if path.suffix.lower() != ".json":
         raise ProjectFileError(f"a project is saved as a .json file, not as {path.name}. "
                                "Give a path ending in .json.")
-    text = json.dumps(project.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n"
-    return _write(path, text)
+    return _write(path, dumps(project))
+
+
+def dumps(project: Project) -> str:
+    """The text of `project`'s file, as `save` writes it."""
+    return json.dumps(project.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n"
 
 
 def write_script(project: Project, path: str | Path, *, force: bool = False,

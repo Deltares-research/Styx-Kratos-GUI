@@ -1,10 +1,11 @@
 """The FastAPI app, assembled from its parts.
 
 The routes of the HTTP API live in `backend/routes/`, one module per group of the API
-table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results, files), and
-what they share in `backend/routes/common.py`. The Host/Origin check and the no-cache
+table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results, files,
+feedback), and what they share in `backend/routes/common.py`. The Host/Origin check and the no-cache
 headers are `backend/middleware.py`. This module puts them together: the gmsh worker's
-lifespan, the handler for a crashed worker, the middleware in the order it runs, the
+lifespan, the handlers for a crashed worker and for an error no route answers (both kept
+in the server's log, `backend/server_log.py`), the middleware in the order it runs, the
 routers, the health check, and the frontend.
 
 The frontend lives in `frontend/`, and everything the browser loads is served from there.
@@ -23,13 +24,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import importlib.resources
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.middleware import do_not_cache_sources, only_this_browser_tab
-from backend.routes import decks, files, geometry, mesh, project, results
+from backend import server_log
+from backend.middleware import do_not_cache_sources, keep_api_requests, only_this_browser_tab
+from backend.routes import decks, feedback, files, geometry, mesh, project, results
 from core import gmsh_worker, version
 
 # Try to get frontend path from installed package, fall back to development path
@@ -48,6 +51,7 @@ VERSION_SLOT = '<meta name="styx-version" content="">'
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    server_log.install()
     # Start the gmsh worker eagerly. On Windows the pool spawns a fresh interpreter and
     # imports gmsh in it, which takes a second or two -- better spent now than charged
     # to whoever asks for geometry first.
@@ -65,13 +69,41 @@ app = FastAPI(title="kratos-GUI backend", lifespan=lifespan)
 async def worker_crashed(_request, failure: gmsh_worker.WorkerCrashed):
     """Any route that reaches gmsh: the request that crashed the worker fails with a reason
     the command log can show, and the worker is already being replaced for the next one."""
+    server_log.error(f"{_request.method} {_request.url.path}: the gmsh worker crashed", failure)
     return JSONResponse(status_code=500, content={"detail": str(failure)})
+
+
+@app.exception_handler(HTTPException)
+async def refused(request, failure: HTTPException):
+    """A route's own answer, as FastAPI gives it. One of 500 or more is a failure the route
+    knew about -- a mesh gmsh could not make, a Kratos that would not start -- so its reason
+    goes in the server's log too, for a feedback report."""
+    if failure.status_code >= 500:
+        server_log.LOGGER.error("%s %s -> %s: %s", request.method, request.url.path,
+                                failure.status_code, failure.detail)
+    return await http_exception_handler(request, failure)
+
+
+UNEXPECTED = ("The server met an error it did not expect ({error}). This is a fault "
+              "in Styx, not in the model: save a report so that it can be fixed.")
+
+
+@app.exception_handler(Exception)
+async def unexpected(request, failure: Exception):
+    """An error no route answers: a fault in Styx. Its traceback goes in the server's log,
+    and the answer says what it was in one line, with the `detail` the command log shows,
+    rather than a bare "Internal Server Error"."""
+    server_log.error(f"{request.method} {request.url.path} stopped on an error", failure)
+    said = f"{type(failure).__name__}: {failure}" if str(failure) else type(failure).__name__
+    return JSONResponse(status_code=500, content={"detail": UNEXPECTED.format(error=said)})
+
 
 # The geometry payload is flat arrays of decimal digits: highly repetitive, and roughly
 # an order of magnitude smaller gzipped. This is what makes JSON the right format here.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 # Added last runs first: the Host/Origin check sees every request before anything else
-# does, then the no-cache headers, then gzip.
+# does, then the no-cache headers, then the line kept for each API request, then gzip.
+app.middleware("http")(keep_api_requests)
 app.middleware("http")(do_not_cache_sources)
 app.middleware("http")(only_this_browser_tab)
 
@@ -86,6 +118,7 @@ app.include_router(mesh.router)
 app.include_router(decks.router)
 app.include_router(results.router)
 app.include_router(files.router)
+app.include_router(feedback.router)
 
 
 @app.get("/api/health")

@@ -208,10 +208,12 @@ its geometry and mesh, the Kratos deck written from both, the analysis that runs
 deck, and what the run left behind. A package may import from its own rank or below,
 never above."""
 
-TOP_LEVEL = {"__init__.py", "scripting.py", "gmsh_worker.py", "session.py", "version.py"}
+TOP_LEVEL = {"__init__.py", "scripting.py", "gmsh_worker.py", "session.py", "version.py",
+             "feedback.py"}
 """What stays at core's top level: the modules that send work into several packages
-(`run <file.py>`, the gmsh process pool, and the edits both front ends make), and the
-version both front ends say. They are outside the ranking."""
+(`run <file.py>`, the gmsh process pool, and the edits both front ends make), the
+version both front ends say, and the feedback report both write. They are outside the
+ranking."""
 
 ALLOWED: dict[tuple[str, str], str] = {}
 """The imports that go up anyway, `(file, module): reason`. None now: the last, the mesh

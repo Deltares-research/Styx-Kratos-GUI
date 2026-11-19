@@ -62,6 +62,9 @@ browser.
   Python script.
 - **Command line**: `kratos-cli` builds, meshes, stages, exports, runs and reads a model in
   the terminal, without the browser, on the same project file the GUI saves.
+- **Feedback**: the **Feedback** button, or `kratos-cli feedback`, saves a report with the
+  model, the logs and your own files in one ZIP file per day, ready to send to the Styx team.
+  After an error, Styx offers to save one.
 
 See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each feature, and its
 **Main gaps** section for what is planned next.
