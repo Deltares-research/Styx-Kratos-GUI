@@ -297,22 +297,48 @@ App.MaterialSets = (function () {
     return box;
   }
 
-  /* The presets, below the soils. */
+  /* The presets, below the soils: a soil, and the soil model to add it as -- its own
+     until another is chosen (`kratos-cli material add --preset ID --model M`). */
   function library(onAdded, say) {
     var box = el('div.material-library');
     box.appendChild(el('h3', { text: 'Default soil material library' }));
     box.appendChild(el('p', { text: 'Copy a soil preset into this project. Starting values in ' +
       'the project\'s units; review them.' }));
-    var soils = el('select', { 'aria-label': 'Soil preset' });
-    App.MaterialLibrary.soils().forEach(function (m) {
+    var presets = App.MaterialLibrary.soils();
+    var soils = el('select', { 'aria-label': 'Soil preset', 'data-field': 'preset' });
+    presets.forEach(function (m) {
       soils.appendChild(el('option', { value: m.id, text: m.name }));
     });
+    var model = el('select', { 'aria-label': 'Soil model of the preset', 'data-field': 'preset-model' });
+    S.order().forEach(function (id) {
+      model.appendChild(el('option', { value: id, text: S.label(id) }));
+    });
+    function ownModel() {
+      model.value = presets.filter(function (m) { return m.id === soils.value; })[0].model;
+    }
+    soils.addEventListener('change', ownModel);
+    ownModel();
+    function added(m, notes) {
+      onAdded(m.id);
+      say(['Added ' + m.name + ' (' + S.label(S.modelOf(m.constitutive_law)) + ') from the ' +
+           'default soil material library. Open Properties… to review it.'].concat(notes).join(' '));
+    }
     box.appendChild(el('div.lay-toolbar', null, [el('span', { text: 'Soil' }), soils,
+      el('span', { text: 'Model' }), model,
+      // The preset in the soil's own window, before it is in the project: looked at, or
+      // changed and then added as it stands.
+      el('button.btn.btn-sm', { text: 'Properties…', type: 'button', 'data-action': 'preview-soil-preset',
+        onclick: function () {
+          var notes = [];
+          var m = App.MaterialLibrary.preview(soils.value, model.value, notes);
+          editor(m, null, { notes: notes, onAdd: function () {
+            added(App.MaterialLibrary.add(m), []);
+          } });
+        } }),
       el('button.btn.btn-sm', { text: 'Add to project', type: 'button', 'data-action': 'add-soil-preset',
         onclick: function () {
-          var m = App.MaterialLibrary.addSoil(soils.value);
-          onAdded(m.id);
-          say('Added ' + m.name + ' from the default soil material library. Open Properties… to review it.');
+          var notes = [];
+          added(App.MaterialLibrary.addSoil(soils.value, model.value, notes), notes);
         } })]));
     return box;
   }
@@ -334,12 +360,18 @@ App.MaterialSets = (function () {
 
      A model chosen leaves out what it does not read -- no cohesion for a linear elastic
      soil -- and keeps it aside while the window is open, so choosing the model back
-     brings back the values typed, not its defaults. */
-  function editor(m, changed) {
+     brings back the values typed, not its defaults.
+
+     With `library.onAdd`, `m` is a library soil that is not in the project
+     (App.MaterialLibrary.preview): the window says so, and its Add to project calls
+     `library.onAdd` with the soil as it stands; Close leaves the project as it was. */
+  function editor(m, changed, library) {
     var hint, grid, title;
     var other = S.modelOf(m.constitutive_law) === S.OTHER;
     var aside = {};
-    var DEFAULT = 'In ' + App.Units.title() + '; hover a name for its Kratos variable. A ' +
+    var DEFAULT = (library ? 'Not in the project: Add to project copies this soil in, with ' +
+                             'any change made here. ' : '') +
+                  'In ' + App.Units.title() + '; hover a name for its Kratos variable. A ' +
                   'blank value shows what the export derives in its place; an invalid ' +
                   'entry is refused and put back.';
 
@@ -659,8 +691,10 @@ App.MaterialSets = (function () {
 
     m.variables = m.variables || {};
     return App.Dialogs.open({
-      title: 'Soil material — ' + m.name, width: 600, height: 620,
-      buttons: [{ label: 'Close', primary: true }],
+      title: 'Soil material — ' + m.name + (library ? ' (library)' : ''), width: 600, height: 620,
+      buttons: library ? [{ label: 'Add to project', primary: true, onClick: library.onAdd },
+                          { label: 'Close' }]
+                       : [{ label: 'Close', primary: true }],
       build: function (root, ctx) {
         title = ctx && ctx.dialog ? ctx.dialog.querySelector('.dlg-title') : null;
         var wrap = el('div.dlg-simple', { style: 'display:flex;flex-direction:column;padding:0' });
@@ -670,7 +704,8 @@ App.MaterialSets = (function () {
         wrap.appendChild(hint);
         root.appendChild(wrap);
         draw();
-        say(null);
+        say(library && library.notes && library.notes.length ? library.notes.join(' ') : null,
+            true);
       }
     });
   }

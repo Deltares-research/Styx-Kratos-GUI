@@ -73,7 +73,7 @@ Genuchten soil.
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last. In the GUI: **File** > **Project properties…** |
-| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
+| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset clay_shallow] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
 | `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
@@ -169,8 +169,9 @@ An empty site, built up to a staged excavation. The numbers are in the project's
 kratos-cli new pit.json --name "Pit B"
 kratos-cli domain pit.json --x 0 60 --y -40 0 --z 0 10
 kratos-cli material pit.json presets                      # the library a soil can start from
-kratos-cli material pit.json add clay --preset m3 YOUNG_MODULUS=2e6 K0_NC=0.58
-kratos-cli material pit.json add sand --preset m5 --model mohr-coulomb
+kratos-cli material pit.json presets clay_shallow         # one preset with all its values
+kratos-cli material pit.json add clay --preset clay_shallow YOUNG_MODULUS=2e6 K0_NC=0.58
+kratos-cli material pit.json add sand --preset sand --model linear-elastic
 kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
@@ -192,7 +193,10 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
 - **Materials** start as the GUI's **Create soil** starts them: linear elastic,
   `CONSTANT_PW_FIELD` and saturated below the phreatic level, with nothing else; the command
   lists what is still to fill in before a calculation. Or from a library preset
-  (`--preset`). The law follows the model's dimension, and the values are converted into
+  (`--preset`): the default soils of D-Stability and D-Settlement, each a Mohr-Coulomb
+  soil (Bedrock linear elastic). `--model` adds a preset as the other soil model: a
+  linear elastic soil leaves out the strength, and a Mohr-Coulomb Bedrock takes the
+  model's default strength, which the command names. The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
   units; `get P materials[ID].variables` lists the values a material has.
   `GEO_DRAINAGE_TYPE` is `CONSTANT_PW_FIELD` (the GUI's "Mechanical only") or

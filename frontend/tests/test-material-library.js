@@ -21,6 +21,88 @@
     } finally { App.MATERIALS = saved; }
   });
 
+  test('a library soil is added as either soil model, as with kratos-cli --model', function () {
+    var saved = App.PROJECT, savedMaterials = App.MATERIALS;
+    try {
+      App.MATERIALS = [];
+      App.PROJECT = { unit_system: 'SI', dimension: 2 };
+      var notes = [];
+      var elastic = App.MaterialLibrary.addSoil('clay_shallow', 'linear_elastic', notes);
+      T.eq(elastic.constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
+      T.ok(!('GEO_COHESION' in elastic.variables), 'no strength for a linear elastic soil');
+      T.eq(elastic.variables.YOUNG_MODULUS, 2.9e6, 'the rest is the preset\'s');
+      T.eq(notes, [], 'nothing filled in, nothing said');
+      var rock = App.MaterialLibrary.addSoil('bedrock', 'mohr_coulomb', notes);
+      T.eq(rock.constitutive_law, 'GeoMohrCoulombLawPlaneStrain');
+      T.eq(rock.variables.GEO_COHESION, 1000, 'the Mohr-Coulomb default');
+      T.eq(notes.length, 1);
+      T.ok(notes[0].indexOf('Filled in from the Mohr-Coulomb defaults: ') === 0, notes[0]);
+    } finally { App.PROJECT = saved; App.MATERIALS = savedMaterials; }
+  });
+
+  test('the material window adds a preset as the model chosen, its own by default', function () {
+    var saved = App.MATERIALS, savedLayers = App.LAYERS;
+    var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
+    var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
+    App.MATERIALS = []; App.LAYERS = [];
+    try {
+      App.Dialogs.materials();
+      var soil = host.querySelector('[data-field="preset"]');
+      var model = host.querySelector('[data-field="preset-model"]');
+      T.eq(model.value, 'mohr_coulomb');
+      soil.value = 'bedrock'; soil.dispatchEvent(new Event('change'));
+      T.eq(model.value, 'linear_elastic', 'Bedrock\'s own model');
+      soil.value = 'peat_deep'; soil.dispatchEvent(new Event('change'));
+      model.value = 'linear_elastic';
+      host.querySelector('[data-action="add-soil-preset"]').click();
+      T.eq(App.MATERIALS[0].name, 'Peat, deep');
+      T.eq(App.MATERIALS[0].constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
+      T.ok(/Added Peat, deep \(Linear elastic\)/.test(host.textContent));
+    } finally {
+      if (host.querySelector('.dlg-x')) host.querySelector('.dlg-x').click();
+      host.remove(); tree.remove(); App.MATERIALS = saved; App.LAYERS = savedLayers;
+    }
+  });
+
+  test('library Properties… shows a preset before it is in the project', function () {
+    var saved = App.MATERIALS, savedLayers = App.LAYERS;
+    var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
+    var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
+    App.MATERIALS = []; App.LAYERS = [];
+    function foot(label) {
+      var foots = host.querySelectorAll('.dlg-foot');
+      return Array.from(foots[foots.length - 1].querySelectorAll('button')).find(function (b) {
+        return b.textContent === label;
+      });
+    }
+    try {
+      App.Dialogs.materials();
+      var soil = host.querySelector('[data-field="preset"]');
+      soil.value = 'clay_deep'; soil.dispatchEvent(new Event('change'));
+      host.querySelector('[data-action="preview-soil-preset"]').click();
+      var cohesion = host.querySelector('.material-variables [data-variable="GEO_COHESION"]');
+      T.eq(cohesion.value, '7000', 'the preset\'s own values, to look at');
+      T.ok(/Not in the project/.test(host.querySelector('.material-variables').parentNode.textContent));
+      T.eq(App.MATERIALS.length, 0, 'looking adds nothing');
+      foot('Close').click();
+      T.eq(App.MATERIALS.length, 0, 'closed: still nothing');
+
+      host.querySelector('[data-action="preview-soil-preset"]').click();
+      var edited = host.querySelector('.material-variables [data-variable="GEO_COHESION"]');
+      edited.value = '9000'; edited.dispatchEvent(new Event('change'));
+      foot('Add to project').click();
+      T.eq(App.MATERIALS.length, 1);
+      T.eq(App.MATERIALS[0].name, 'Clay, deep');
+      T.eq(App.MATERIALS[0].variables.GEO_COHESION, 9000, 'added as it was left');
+      T.eq(App.MaterialLibrary.soils().filter(function (s) {
+        return s.id === 'clay_deep';
+      })[0].variables.GEO_COHESION, 7000, 'the library is unchanged');
+    } finally {
+      while (host.querySelector('.dlg-x')) host.querySelector('.dlg-x').click();
+      host.remove(); tree.remove(); App.MATERIALS = saved; App.LAYERS = savedLayers;
+    }
+  });
+
   test('material library rejects missing presets without changing the project', function () {
     var before = JSON.stringify(App.MATERIALS);
     return T.rejects(function () { App.MaterialLibrary.addSoil('missing'); }).then(function () {
@@ -99,19 +181,19 @@
     try {
       App.MATERIALS = [];
       App.PROJECT = { unit_system: 'kN', dimension: 3 };
-      var m = App.MaterialLibrary.addSoil('m2');
+      var m = App.MaterialLibrary.addSoil('sand');
       T.eq(m.constitutive_law, 'GeoMohrCoulombLaw3D', 'a soil with a strength is Mohr-Coulomb');
-      T.near(m.variables.GEO_COHESION, 0.5, 1e-12, 'its own cohesion, in kPa');
+      T.near(m.variables.GEO_COHESION, 1, 1e-12, 'its own cohesion, in kPa');
       T.eq(m.variables.GEO_DILATANCY_ANGLE, 0, 'and the model\'s defaults for the rest');
-      T.near(m.variables.YOUNG_MODULUS, 2.5e4, 1e-6);
-      T.near(m.variables.DENSITY_SOLID, 18 / 9.81, 1e-9);
-      T.eq(m.variables.GEO_FRICTION_ANGLE, 32.0);
+      T.near(m.variables.YOUNG_MODULUS, 3.0e4, 1e-6);
+      T.near(m.variables.DENSITY_SOLID, 20 / 9.81, 1e-9);
+      T.eq(m.variables.GEO_FRICTION_ANGLE, 30);
       App.PROJECT = { unit_system: 'SI', dimension: 2 };
-      var si = App.MaterialLibrary.addSoil('m2');
+      var si = App.MaterialLibrary.addSoil('sand');
       T.eq(si.constitutive_law, 'GeoMohrCoulombLawPlaneStrain');
-      T.eq(App.MaterialLibrary.addSoil('m6').constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw',
+      T.eq(App.MaterialLibrary.addSoil('bedrock').constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw',
            'bedrock has no strength: linear elastic');
-      T.eq(si.variables.YOUNG_MODULUS, 2.5e7);
+      T.eq(si.variables.YOUNG_MODULUS, 3.0e7);
     } finally { App.PROJECT = saved; App.MATERIALS = savedMaterials; }
   });
 })();
