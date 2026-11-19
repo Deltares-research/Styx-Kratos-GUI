@@ -53,7 +53,7 @@ The seepage strategy converges in 20 iterations. It opens the seepage face on th
 slope from an exit point at x = 19.2 m (y = 0.95 m), and the whole polder surface beyond.
 
 - The water that comes in from the river leaves on the polder side: 2.87 m³/day per
-  metre, in and out. 2.03 of it leaves through the seepage face and 0.84 through the
+  meter, in and out. 2.03 of it leaves through the seepage face and 0.84 through the
   right side. None of it goes through the crest.
 
 The water pressures, compared with the reference calculation at its 4007 nodes (in kPa,
@@ -88,7 +88,7 @@ Kratos' sign: suction positive):
   phreatic line Se = 1, and the two agree.
 
 `flow_rate` (**Nodal water flow rate** in Results) is the water each node takes in
-(negative) or lets out (positive), per metre of the section. Kratos' sign for the water
+(negative) or lets out (positive), per meter of the section. Kratos' sign for the water
 pressure is suction positive.
 
 ## In the GUI

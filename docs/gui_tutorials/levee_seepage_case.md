@@ -69,7 +69,7 @@ model have the same values:
 | Field | Sand | Clay |
 |---|---|---|
 | **Identification** | `Sand` | `Clay` |
-| **Colour** | any, for example `#e6c86e` | any, for example `#8fa37a` |
+| **Color** | any, for example `#e6c86e` | any, for example `#8fa37a` |
 | **Soil model** | Linear elastic | Linear elastic |
 | **Drainage type** | Fully coupled | Fully coupled |
 | **Retention law** | VanGenuchtenLaw | VanGenuchtenLaw |
@@ -296,7 +296,7 @@ groundwater flow stage:
 - A Flow (Pw) stage calculates only the water pressures. It has no displacements and no
   stresses.
 - Kratos' seepage strategy opens or closes one node of the seepage face in each
-  iteration. The face has about 55 nodes, so the stage allows 300 iterations to allow for both openening and closing nodes and convergence of the nonlinear flow.
+  iteration. The face has about 55 nodes, so the stage allows 300 iterations to allow for both opening and closing nodes and convergence of the nonlinear flow.
 - The residual criterion is the convergence criterion of Kratos' own seepage tests.
 
 ## 8. Calculate
@@ -351,7 +351,7 @@ largest, about 5 × 10⁻⁶ m/s, in the outer slope just below the river level,
 water enters the levee. Above the phreatic line, in the dry crest, the water hardly moves.
 
 6. In **Arrows**, select **|q|**. This draws the groundwater flux as arrows over the
-   colours: each arrow starts at a node and points in the direction in which the water
+   colors: each arrow starts at a node and points in the direction in which the water
    flows there.
 
 ![The specific discharge with arrows that show the direction of the flow. The Arrows list of the Results explorer is outlined.](images/levee_seepage/09_contours_flux_arrows.png)
@@ -363,7 +363,7 @@ along the sand aquifer under the levee, and up to the seepage face and the polde
 Select **off** in **Arrows** to hide them again.
 
 **Groundwater · Nodal water flow rate** shows the water that each node takes in (negative)
-or lets out (positive), per metre of the section. In total 2.87 m³/day per metre comes in
+or lets out (positive), per meter of the section. In total 2.87 m³/day per meter comes in
 from the river: 2.03 leaves through the seepage face and 0.84 through the right side.
 The seepage strategy converged in 20 iterations.
 

@@ -148,9 +148,9 @@ kratos-cli volume levee.json add polygon --label "Levee outer layer" --material 
 ```
 > <pre>added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json</pre>
 
-`volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's colour
+`volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's color
 and keeps its label in its recipe. The model script names the parts `levee_core` and
-`levee_outer`, draws them grey. These lines make the
+`levee_outer`, draws them gray. These lines make the
 parts the script's:
 
 ```powershell
@@ -365,7 +365,7 @@ kratos-cli results field 1 effective_saturation
   −270 kPa at the bottom left corner. The largest suction, 16.8 kPa, is in the soil of
   the outer layer at the crest's inner corner (4, 6), where the soil is least saturated.
 - `flow_rate` is the water each node takes in (negative) or lets out (positive), per
-  metre of the section. The water comes in from the river and leaves through the seepage
+  meter of the section. The water comes in from the river and leaves through the seepage
   face and the polder side.
 - Kratos calculates the saturation at the Gauss points and extrapolates it to the nodes,
   so it can show a little above 1.
