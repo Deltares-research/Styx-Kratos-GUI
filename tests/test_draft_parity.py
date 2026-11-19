@@ -1,6 +1,6 @@
 """What a new record starts as, said twice and held to one document.
 
-The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the six presets
+The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the presets
 of `App.MaterialLibrary`; its material window fills in a soil model's defaults with
 `App.SoilModels.fill` and refuses what `App.SoilModels.problem` refuses; it starts a new sheet pile, wall, member, anchor, interface or
 load from the Structure mode's own `draft` functions. The command line starts each from
@@ -464,7 +464,7 @@ def soil_model_cases() -> dict:
                     "unread": soil_models.unread(law, variables)}
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")
                    for variables in (
-                       drafts.preset("m1")["variables"],
+                       drafts.preset("embankment")["variables"],
                        {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
                         "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0, "MY_OWN": 2.0,
                         "PERMEABILITY_ZZ": 1e-12})],

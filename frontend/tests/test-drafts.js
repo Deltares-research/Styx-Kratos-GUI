@@ -134,7 +134,7 @@
     });
   });
 
-  T.test('the material library offers the same six presets as the command line', function () {
+  T.test('the material library offers the same presets as the command line', function () {
     var soils = App.MaterialLibrary.soils().map(function (s) {
       return { id: s.id, model: s.model, name: s.name, color: s.color, r_inter: s.rInter,
                interface_permeability: s.interfacePerm, variables: s.variables };

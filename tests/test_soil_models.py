@@ -163,22 +163,25 @@ def test_a_new_soil_of_a_model_is_the_blank_soil_made_that_model_in_the_window()
 
 
 def test_a_preset_with_a_strength_is_a_mohr_coulomb_soil_ready_to_run():
-    material, notes = drafts.soil(blank_project(), "clay", preset="m3")
+    material, notes = drafts.soil(blank_project(), "clay", preset="clay_shallow")
 
     assert material.constitutive_law == MC_2D
-    assert material.variables["GEO_COHESION"] == drafts.preset("m3")["variables"]["GEO_COHESION"]
+    assert material.variables["GEO_COHESION"] == drafts.preset("clay_shallow")["variables"]["GEO_COHESION"]
     assert material.variables["GEO_DILATANCY_ANGLE"] == 0.0
     assert notes == [], "a preset filled from its own model's defaults says nothing"
 
 
 def test_a_preset_made_another_model_says_what_it_took():
-    material, notes = drafts.soil(blank_project(), "rock", preset="m6",
+    material, notes = drafts.soil(blank_project(), "rock", preset="bedrock",
                                   model=soil_models.MOHR_COULOMB)
 
     assert material.constitutive_law == MC_2D
-    assert notes == ["Filled in from the Mohr-Coulomb defaults: RETENTION_LAW, "
-                     "SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_COHESION, "
+    assert notes == ["Filled in from the Mohr-Coulomb defaults: GEO_COHESION, "
                      "GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."]
+    clay, notes = drafts.soil(blank_project(), "clay", preset="clay_shallow",
+                              model=soil_models.LINEAR_ELASTIC)
+    assert "GEO_COHESION" not in clay.variables
+    assert notes == [], "what its own model fills in too is not news"
 
 
 def test_a_soil_model_and_a_law_together_are_refused():
@@ -220,7 +223,7 @@ def test_a_soil_made_linear_elastic_leaves_out_the_strength_it_does_not_read():
     typed = session.update_material(project, "m2", model=soil_models.LINEAR_ELASTIC,
                                     variables={"GEO_COHESION": 5.0})
     assert typed.material("m2").variables["GEO_COHESION"] == 5.0, "typed with it: kept"
-    preset, _ = drafts.soil(project, "x", preset="m1", model=soil_models.LINEAR_ELASTIC)
+    preset, _ = drafts.soil(project, "x", preset="embankment", model=soil_models.LINEAR_ELASTIC)
     assert "GEO_COHESION" not in preset.variables
     assert soil_models.unread("SmallStrainUDSM2DPlaneStrainLaw", {"GEO_COHESION": 1.0}) == []
 
