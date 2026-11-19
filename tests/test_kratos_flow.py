@@ -194,7 +194,7 @@ def test_the_saturation_and_the_flux_are_made_nodal_over_the_soil(case_a):
 def test_it_writes_the_reference_results_and_the_head(case_a):
     output = settings(case_a)["output_processes"]["gid_output"][0]["Parameters"]
     results = output["postprocess_parameters"]["result_file_configuration"]
-    assert results["nodal_results"] == REFERENCE_NODAL_RESULTS
+    assert results["nodal_results"] == [*REFERENCE_NODAL_RESULTS, "REACTION_WATER_PRESSURE"]
     assert results["gauss_point_results"] == ["HYDRAULIC_HEAD"]
 
 
@@ -421,7 +421,8 @@ def test_the_seepage_conditions_run_up_the_right_face_from_the_tail_water(case_c
 def test_a_seepage_stage_writes_the_nodal_flow_rate(case_c):
     output = settings(case_c)["output_processes"]["gid_output"][0]["Parameters"]
     results = output["postprocess_parameters"]["result_file_configuration"]
-    assert results["nodal_results"] == [*REFERENCE_NODAL_RESULTS, "NODAL_WATER_FLOW_RATE"]
+    assert results["nodal_results"] == [*REFERENCE_NODAL_RESULTS, "NODAL_WATER_FLOW_RATE",
+                                        "REACTION_WATER_PRESSURE"]
 
 
 def test_too_few_iterations_for_the_seepage_face_are_said(case_c):

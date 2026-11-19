@@ -214,11 +214,12 @@ def test_the_field_menu_is_exactly_what_this_deck_writes(run):
                for group in catalog.stage_fields(run, 7)["groups"]}
 
     assert offered == {
-        "Deformations": ["u", "ux", "uy", "uz"],
-        "Stage deformations": ["du", "dux", "duy", "duz"],
-        "Effective stresses": ["sxx", "syy", "szz", "sxy", "syz", "sxz",
+        "Deformations": ["u", "ux", "uy"],
+        "Stage deformations": ["du", "dux", "duy"],
+        "Effective stresses": ["sxx", "syy", "szz", "sxy",
                                "p", "q", "s1", "s2", "s3", "tau_max"],
-        "Groundwater": ["pw", "head"],
+        "Water pressure and head": ["pw", "head"],
+        "Nodal forces": ["reaction", "reactionx", "reactiony"],
     }
 
 

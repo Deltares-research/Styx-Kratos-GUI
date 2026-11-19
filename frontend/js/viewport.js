@@ -1190,8 +1190,12 @@ App.Viewport = (function () {
     });
 
     if (spec.label) {
-      group.add(makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
-                          spec.label.at[2], spec.size * 0.8));
+      var label = makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
+                            spec.label.at[2], spec.size * 0.8);
+      // Not over a result: the contours and the legend say what is there (`syncGlyphLabels`).
+      label.userData.glyphLabel = true;
+      label.visible = !(App.state && App.state.mode === 'results');
+      group.add(label);
     }
     // A pressure on a line of its own: the line, thick where the water presses on it,
     // and the diagram of the pressure filled and hatched, without heads -- a condition
@@ -2761,7 +2765,19 @@ App.Viewport = (function () {
     applySoilWaterColors(mode);
     applyImportedVisibility(mode);
     syncSurfaceWater(mode);
+    syncGlyphLabels(mode);
     needsRender = true;
+  }
+
+  /* The text a condition's glyph carries (its level, its value) is drawn in every tab
+     but Results, where it would sit over the contours as a box of text. */
+  function syncGlyphLabels(mode) {
+    conditionIds.forEach(function (key) {
+      if (!groups[key]) return;
+      groups[key].traverse(function (child) {
+        if (child.userData.glyphLabel) child.visible = mode !== 'results';
+      });
+    });
   }
 
   /* ── The water of each soil, in Flow conditions ─────────────────────────

@@ -377,6 +377,210 @@
     T.eq(R.autoFactor(0.01, [0, 0, 0, 0, 0, 0]), 1);
   });
 
+  /* ── Contour lines ────────────────────────────────────────────────────── */
+
+  /* `section()` is a unit square split along its 1-2 diagonal: (0,0) (1,0) (0,1)
+     (1,1). A pressure falling from +1 at the top to -1 at the bottom crosses zero
+     halfway up. */
+  function points(array) {
+    var out = [];
+    for (var i = 0; i < array.length; i += 3) out.push([array[i], array[i + 1], array[i + 2]]);
+    return out;
+  }
+
+  function sorted(segments) {
+    return segments.map(function (p) {
+      return p.map(function (c) { return Math.round(c * 1e6) / 1e6; });
+    }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+  }
+
+  test('the zero line runs where the values cross zero, interpolated along each side',
+       function () {
+    var s = section();
+    var cut = points(R.isoline(s, [-1, -1, 1, 1], s.positions, 0));
+    // Two triangles, one segment each: (0,.5)-(.5,.5) and (.5,.5)-(1,.5).
+    T.eq(cut.length, 4);
+    T.eq(sorted(cut), [[0, 0.5, 0], [0.5, 0.5, 0], [0.5, 0.5, 0], [1, 0.5, 0]]);
+  });
+
+  test('the zero line is not at the midpoint when the values are not symmetric',
+       function () {
+    var s = section();
+    var cut = sorted(points(R.isoline(s, [-3, -3, 1, 1], s.positions, 0)));
+    cut.forEach(function (p) { T.near(p[1], 0.75, 1e-6); });
+  });
+
+  test('the zero line follows the positions it is given, deformed or not', function () {
+    var s = section();
+    var moved = new Float32Array([0, 0, 0, 1, 0, 0, 0, 3, 0, 1, 3, 0]);
+    var cut = sorted(points(R.isoline(s, [-1, -1, 1, 1], moved, 0)));
+    cut.forEach(function (p) { T.near(p[1], 1.5, 1e-6); });
+  });
+
+  test('a field on one side of zero has no zero line', function () {
+    var s = section();
+    T.eq(R.isoline(s, [-1, -2, -3, -4], s.positions, 0).length, 0);
+    T.eq(R.isoline(s, [1, 2, 3, 4], s.positions, 0).length, 0);
+  });
+
+  test('a field that is zero everywhere has no zero line', function () {
+    /* A coupled stage with no water at all writes exactly zero at every node. */
+    var s = section();
+    T.eq(R.isoline(s, [0, 0, 0, 0], s.positions, 0).length, 0);
+  });
+
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  /* A 100 m square of nodes 1 m apart, so an arrow (4 m at most) has many nodes to a
+     square and the thinning shows. Node id = 1000 x + y + 1. */
+  function grid(n) {
+    var ids = [], positions = [];
+    for (var x = 0; x <= n; x++) {
+      for (var y = 0; y <= n; y++) {
+        ids.push(1000 * x + y + 1);
+        positions.push(x, y, 0);
+      }
+    }
+    return { node_ids: ids, positions: positions };
+  }
+
+  var SQUARE = [0, 0, 0, 100, 100, 0];
+
+  function arrowsOf(array) {
+    var segments = points(array), out = [];
+    for (var i = 0; i < segments.length; i += 2) out.push([segments[i], segments[i + 1]]);
+    return out;
+  }
+
+  test('an arrow starts at its node and points along the vector', function () {
+    var placed = [{ node_ids: [7], positions: [10, 20, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [7], values: [[3, 4, 0]] }, placed, SQUARE));
+    T.eq(lines.length, 3, 'a shaft and the two sides of its head');
+    var shaft = lines[0];
+    T.eq(shaft[0], [10, 20, 0]);
+    // The longest arrow is ARROW_FRACTION of the model's span: 4 m, along (3, 4)/5.
+    var length = R.ARROW_FRACTION * 100;
+    T.near(shaft[1][0], 10 + 0.6 * length, 1e-5);
+    T.near(shaft[1][1], 20 + 0.8 * length, 1e-5);
+    // Both sides of the head start at the tip and lean back from it.
+    lines.slice(1).forEach(function (side) {
+      T.near(side[0][0], shaft[1][0], 1e-5);
+      T.near(side[0][1], shaft[1][1], 1e-5);
+      var back = (side[1][0] - side[0][0]) * 0.6 + (side[1][1] - side[0][1]) * 0.8;
+      T.ok(back < 0, 'the head points back along the shaft');
+    });
+  });
+
+  test('arrows are to one scale, the longest set by the model', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 50, 50, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2], values: [[2, 0, 0], [1, 0, 0]] },
+                                  placed, SQUARE));
+    var shafts = [lines[0], lines[3]].map(function (l) { return l[1][0] - l[0][0]; });
+    shafts.sort(function (a, b) { return b - a; });
+    T.near(shafts[0], R.ARROW_FRACTION * 100, 1e-5);
+    T.near(shafts[1], shafts[0] / 2, 1e-5, 'half the vector, half the arrow');
+  });
+
+  test('a fine mesh gets an arrow at every node it was written at', function () {
+    /* Nodes 1 m apart under 4 m arrows: none of them is thinned out. */
+    var placed = [grid(100)];
+    var values = placed[0].node_ids.map(function () { return [1, 0, 0]; });
+    var lines = arrowsOf(R.arrows({ ids: placed[0].node_ids, values: values },
+                                  placed, SQUARE));
+    T.eq(lines.length / 3, placed[0].node_ids.length, 'one arrow per node');
+    var starts = {};
+    for (var k = 0; k < lines.length; k += 3) starts[lines[k][0].join(',')] = true;
+    T.eq(Object.keys(starts).length, placed[0].node_ids.length, 'each at its own node');
+  });
+
+  test('two nodes close together each get their arrow', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 10.5, 10, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2], values: [[1, 0, 0], [0, 1, 0]] },
+                                  placed, SQUARE));
+    T.eq(lines.length, 6);
+    T.eq(lines[0][0], [10, 10, 0]);
+    T.eq(lines[3][0], [10.5, 10, 0]);
+  });
+
+  test('a node with no vector, or nowhere drawn, gets no arrow', function () {
+    var placed = [{ node_ids: [1, 2], positions: [10, 10, 0, 50, 50, 0] }];
+    var lines = arrowsOf(R.arrows({ ids: [1, 2, 3], values: [[1, 0, 0], [0, 0, 0],
+                                                             [1, 1, 0]] },
+                                  placed, SQUARE));
+    T.eq(lines.length, 3, 'node 2 is still, node 3 is in no section');
+    T.eq(lines[0][0], [10, 10, 0]);
+  });
+
+  test('a field with no movement in it has no arrows', function () {
+    var placed = [{ node_ids: [1], positions: [0, 0, 0] }];
+    T.eq(R.arrows({ ids: [1], values: [[0, 0, 0]] }, placed, SQUARE).length, 0);
+    T.eq(R.arrows({ ids: [], values: [] }, placed, SQUARE).length, 0);
+    T.eq(R.arrows(null, placed, SQUARE).length, 0);
+  });
+
+  test('arrows start where the node is drawn, deformed or not', function () {
+    var placed = [{ node_ids: [1], positions: new Float32Array([12, 34, 0]) }];
+    var lines = arrowsOf(R.arrows({ ids: [1], values: [[0, -1, 0]] }, placed, SQUARE));
+    T.eq(lines[0][0], [12, 34, 0]);
+    T.ok(lines[0][1][1] < 34, 'pointing down');
+  });
+
+  test('over dry ground at exactly zero the line is the edge of the wet region',
+       function () {
+    /* A tension cut-off leaves the pressure at exactly 0 above the water: the line runs
+       through the first dry nodes instead of tracing every flat triangle. */
+    var s = section();
+    var cut = sorted(points(R.isoline(s, [-1, -1, 0, 0], s.positions, 0)));
+    // One segment along the top side, and no point-sized one where the first
+    // triangle only touches zero at its corner.
+    T.eq(cut, [[0, 1, 0], [1, 1, 0]]);
+  });
+
+  test('a triangle with a hole in it has no zero line through it', function () {
+    var s = section();
+    // Vertex 3 (1,1) is in the second triangle only, so the first is still cut.
+    var cut = points(R.isoline(s, [-1, -1, 1, null], s.positions, 0));
+    T.eq(cut.length, 2);
+  });
+
+  /* ── The phreatic line outside the soil ───────────────────────────────── */
+
+  test('the phreatic line is kept only where it is outside every triangle', function () {
+    /* The unit square of two triangles, and a level line at y = 0.5 from x = -1 to 3:
+       out on the left from -1 to 0, out on the right from 1 to 3, and not across the
+       diagonal the two triangles share. */
+    var s = section();
+    var out = sorted(points(R.outside([[[-1, 0.5], [3, 0.5]]], [s], 0)));
+    T.eq(out, [[-1, 0.5, 0], [0, 0.5, 0], [1, 0.5, 0], [3, 0.5, 0]]);
+  });
+
+  test('a polyline is cut segment by segment, at the height it is given', function () {
+    var s = section();
+    // Down into the square from above and out again: only the parts above y = 1.
+    var line = [[0.25, 2], [0.5, 0.5], [0.75, 2]];
+    var out = sorted(points(R.outside([line], [s], 4)));
+    T.eq(out.length, 4);
+    T.near(out[0][1], 2, 1e-6);
+    T.near(out[1][1], 1, 1e-3, 'ends on the top side of the square');
+    T.eq(out[0][2], 4);
+  });
+
+  test('a phreatic line along the soil surface is inside, not a row of dashes',
+       function () {
+    var s = section();
+    T.eq(R.outside([[[0, 1], [1, 1]]], [s], 0).length, 0);
+    T.eq(R.outside([[[0, 1.0004], [1, 0.9996]]], [s], 0).length, 0,
+         'round-off either side of the surface');
+  });
+
+  test('a phreatic line wholly inside the soil, or no soil, is all or nothing',
+       function () {
+    var s = section();
+    T.eq(R.outside([[[0.2, 0.5], [0.8, 0.5]]], [s], 0).length, 0);
+    T.eq(points(R.outside([[[0.2, 0.5], [0.8, 0.5]]], [], 0)).length, 2);
+    T.eq(R.outside([], [s], 0).length, 0);
+  });
+
   /* ── CSV ──────────────────────────────────────────────────────────────── */
 
   test('a field exports as csv with a header naming the unit', function () {

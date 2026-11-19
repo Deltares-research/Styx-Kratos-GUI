@@ -82,6 +82,20 @@ def results_stage_displacement(run_id: str, index: int) -> dict:
         raise _results_error(failure) from failure
 
 
+@router.get("/api/results/runs/{run_id}/stages/{index}/vectors/{name}")
+def results_stage_vectors(run_id: str, index: int, name: str) -> dict:
+    """The whole vector behind a field (`flux`, `ux`, ...) at every node: what its
+    arrows are drawn with. 422 for a field that is not part of a vector."""
+    from core.results import fields
+
+    try:
+        return catalog.stage_vectors(run_id, index, name)
+    except fields.UnknownField as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except catalog.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
 @router.get("/api/results/runs/{run_id}/stages/{index}/at/{node}")
 def results_stage_at(run_id: str, index: int, node: int) -> dict:
     """Every field of this stage at one node, in one request.

@@ -272,6 +272,13 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .vp-legend-unit,
 .vp-legend-foot { color: var(--c-ink-soft); font-size: 10px; }
 .vp-legend-foot { margin-top: 4px; }
+/* The key to the zero water pressure line drawn over the shading. */
+.vp-legend-zero { display: flex; align-items: center; gap: 4px; }
+.vp-legend-zero i {
+  display: inline-block;
+  width: 16px;
+  border-top: 3px solid;
+}
 
 /* The ramp and its ticks share one box, so a tick can be positioned as a
    percentage of the ramp's own height and stay beside the colour it names. */

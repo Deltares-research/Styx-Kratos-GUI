@@ -878,13 +878,16 @@ Use the Results explorer, or click **Choose results** in the tool rail:
 | Setting | What it does |
 |---|---|
 | Stage | The construction stage to show |
-| Field | The quantity: displacements, effective stresses, pore pressure, and more |
+| Field | The quantity, in groups: deformations, stresses, water pressure and head, groundwater flow, saturation, nodal forces |
+| Location | Only for a field computed at the integration points (a stress, the hydraulic head): **per element**, as Kratos computed it, or **averaged to the nodes** for a smooth contour. The choice holds for all of them. |
+| Arrows | Only when the stage has a vector (displacement, flux, reaction): off, or one of the stage's vectors as arrows over any field, for example the flux over the hydraulic head |
 | Shading | Smooth colours, or 8 to 48 colour bands |
 | Colours | The colour map, for example Rainbow, Viridis or Greyscale |
 | Limits | The minimum and maximum of the legend. **Auto** uses the range of the field. |
 | Reverse | Turns the colour map around |
 | Mesh | Shows the element edges over the colours |
 | Loads, water | Shows the loads and the water level over the colours (on by default) |
+| Zero pressure | Shows the line where the pore pressure is zero (off by default). Only for a coupled stage: after a groundwater flow stage the line is always shown. |
 | Deformed | Shows the deformed mesh: off, automatic scale, true scale, ×10 or ×100 |
 
 Compression is negative, as Kratos writes it. Each value is in the unit system of the run:
@@ -894,6 +897,25 @@ The loads and the water level are those of the open project, as they are in the 
 screen: a load that the stage switched off is not shown. They are shown only when the run
 was calculated from the open project, with the same stages. They stay where they are in the
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
+
+After a groundwater flow stage a dark line shows where the calculated pore pressure is
+zero: the phreatic surface the flow calculation found. After a coupled (mechanical) stage
+the line is hidden until you tick **Zero pressure**, or type `results zeroline on`. The
+line is drawn only when the stage wrote a pore pressure.
+
+The arrows are black. The longest is 4 % of the model, and the others are to the same
+scale. On a fine mesh one node in each square of that size gets an arrow. The legend
+says which vector they show and its largest value. Type `results arrows flux` to draw the
+flux over any field, `results arrows on` for the vector of the field on screen (or the
+stage's first vector when that field is not part of one), and `results arrows off` to
+hide them.
+
+The nodal water flow rate (**Groundwater flow**) is the water that leaves the model at a
+node, per metre of the section: positive out, negative in. It is not zero only where the
+water pressure is fixed. When you show it, the Session log gives the water that goes out,
+the water that comes in, and the difference: zero in a steady state, and in a transient
+stage the water that the pores stored. The reactions (**Nodal forces**) are added up the
+same way: the sum of R_y is the vertical force the supports carry.
 
 ### Other results
 
