@@ -268,6 +268,33 @@
     T.eq(App.MeshSettings.opensOnModeTab(true), false);
   });
 
+  test('after a calculation the Mesh tab shows its mesh instead of the dialog', function () {
+    T.eq(App.MeshSettings.opensOnModeTab(false, true), false);
+    T.eq(App.MeshSettings.meshesOnModeTab(false, true), true);
+    // A mesh on screen is shown as it is, calculated or not.
+    T.eq(App.MeshSettings.meshesOnModeTab(true, true), false);
+    T.eq(App.MeshSettings.meshesOnModeTab(false, false), false);
+  });
+
+  test('a stage, a material or the name does not change what the mesh is made of', function () {
+    var settings = { element_size: 2 };
+    var project = { name: 'a', stages: [], materials: [], layers: [{ id: 'clay' }] };
+    var key = App.MeshSettings.meshKey(project, settings);
+    var edited = Object.assign({}, project, {
+      name: 'b', stages: [{ id: 's1' }], materials: [{ id: 'm1' }],
+      fluid: { density: 1 }, gravity_acceleration: 9.8
+    });
+    T.eq(App.MeshSettings.meshKey(edited, settings), key);
+  });
+
+  test('the geometry and the mesh settings do change what the mesh is made of', function () {
+    var settings = { element_size: 2 };
+    var project = { name: 'a', layers: [{ id: 'clay' }] };
+    var key = App.MeshSettings.meshKey(project, settings);
+    T.ok(App.MeshSettings.meshKey({ name: 'a', layers: [{ id: 'sand' }] }, settings) !== key);
+    T.ok(App.MeshSettings.meshKey(project, { element_size: 1 }) !== key);
+  });
+
   test('the properties dialog does not name the mesher', function () {
     T.ok(!/gmsh/i.test(App.MeshSettings.TITLE), App.MeshSettings.TITLE);
     App.MeshSettings.optimizationChoices().forEach(function (choice) {

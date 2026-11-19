@@ -4,6 +4,10 @@
    The whole feature is one request. The server meshes the project, writes the same
    three files the export writes, and runs them through Kratos' orchestrator in a
    directory of its own; this asks for that and turns the answer into command-log lines.
+   A model meshed already (Generate mesh, or the last calculation) is not meshed again:
+   the server writes the deck from that mesh (`core/geometry/meshing.py` mesh_project).
+   Without a mesh, the log says first that the run meshes the model with the global
+   mesh settings (`noMesh`).
 
    Nothing else happens in the app. The viewport does not change, nothing is read back
    and no mode is entered: a calculation produces files, and this says where they are.
@@ -131,6 +135,24 @@ App.Calculate = (function () {
     if (App.Command && App.Command[kind]) App.Command[kind](line);
   }
 
+  /* Whether the model as it is now has a mesh: the one on screen, or the one the last
+     calculation made. Both are kept on the server, so the run does not mesh again. */
+  function meshed(viewport) {
+    if (!viewport) return false;
+    if (viewport.hasMesh && viewport.hasMesh()) return true;
+    return !!(viewport.calculatedMeshFits && viewport.calculatedMeshFits());
+  }
+
+  /* Said before a run on a model with no mesh: the run makes one, with the settings
+     of Mesh properties, and the user did not see it first. */
+  function noMesh(settings) {
+    var size = settings && settings.element_size;
+    return 'Warning: the model has no mesh yet. Calculate meshes it first with the '
+         + 'global mesh settings of Mesh properties'
+         + (size ? ' (global element size ' + size + ' m)' : '') + '. '
+         + 'To see the mesh before you calculate, generate it in the Mesh tab.';
+  }
+
   function integer(value) {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
@@ -150,7 +172,21 @@ App.Calculate = (function () {
     return outputs.slice(0, 3).join(', ') + ' and ' + (outputs.length - 3) + ' more';
   }
 
-  function report(result) {
+  /* What the server did about the mesh, when it is not what the line before the run
+     said: `hadMesh` is whether the page saw a mesh for the model when the run began. */
+  function reportMesh(result, hadMesh) {
+    if (!result || !result.stats || result.mesh_reused === undefined) return;
+    if (result.mesh_reused && !hadMesh) {
+      log('note', 'The server still had a mesh of this model, so the deck was written '
+                  + 'from it.');
+    } else if (!result.mesh_reused && hadMesh) {
+      log('note', 'The server no longer had the mesh, so it meshed the model again with '
+                  + 'the same settings.');
+    }
+  }
+
+  function report(result, hadMesh) {
+    reportMesh(result, hadMesh);
     (result.notes || []).concat(result.warnings || []).forEach(function (line) {
       log('note', line);
     });
@@ -204,16 +240,35 @@ App.Calculate = (function () {
       return Promise.resolve();
     }
     setInFlight(true);
-    log('note', 'Meshing, writing the deck and running Kratos…');
+    var viewport = App.Viewport;
+    var deck = !!(App.PROJECT && App.PROJECT.deck);
+    var settings = request();
+    var hadMesh = !deck && meshed(viewport);
+    if (deck) {
+      log('note', 'Running the deck with Kratos…');
+    } else if (hadMesh) {
+      log('note', 'Writing the deck from the existing mesh and running Kratos…');
+    } else {
+      log('note', noMesh(settings));
+      log('note', 'Meshing, writing the deck and running Kratos…');
+    }
+    // The run meshes the model on the server when it has no mesh yet. Its key goes to
+    // the viewport, so the Mesh tab can show that mesh afterwards instead of asking how
+    // to make one. A deck case brings its own mesh, so there is nothing to remember.
+    var meshKey = viewport && viewport.meshKey && !deck ? viewport.meshKey() : null;
 
-    return App.Api.post('/api/calculate', request()).then(function (result) {
+    return App.Api.post('/api/calculate', settings).then(function (result) {
       setInFlight(false, result);
+      // `stats` means the export, and so the mesh, was made -- even when Kratos failed.
+      if (meshKey && result && result.stats && viewport.rememberCalculatedMesh) {
+        viewport.rememberCalculatedMesh(meshKey);
+      }
       /* The run just written becomes the one `results` opens, before anything is
          printed about it. No round trip: the response already carries the run id,
          so pressing Calculate and then typing `results files` works with nothing
          in between. */
       if (App.Results) App.Results.remember(result);
-      report(result);
+      report(result, hadMesh);
       if (done) done(result);
       return result;
     }).catch(function (err) {
@@ -294,7 +349,7 @@ App.Calculate = (function () {
     });
   }
 
-  return { run: run, request: request, results: results,
+  return { run: run, request: request, results: results, meshed: meshed, noMesh: noMesh,
            state: state, running: running, onChange: onChange,
            stop: stop, askStop: askStop, stopping: isStopping, onStop: onStop,
            STOP_TIP: STOP_TIP };

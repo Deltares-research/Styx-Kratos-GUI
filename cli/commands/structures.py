@@ -103,12 +103,12 @@ def _section_fields(parser: argparse.ArgumentParser) -> None:
                              "each side, stretch by stretch)")
     parser.add_argument("--r-inter",
                         help="interface: the factor on the soil's cohesion and tan(phi), 0 "
-                             "to 1, or none for each soil's own; only a Coulomb law reads "
-                             "the strength, the default elastic law reads the stiffnesses "
-                             "only")
+                             "to 1, or none for each soil's own (default: none); only a "
+                             "Coulomb law reads the strength, the default elastic law reads "
+                             "the stiffnesses only")
     parser.add_argument("--virtual-thickness",
-                        help="interface: in metres; a derived stiffness is the soil's shear "
-                             "modulus over it")
+                        help="interface: in metres (default: 1); a derived stiffness is the "
+                             "soil's shear modulus over it")
     parser.add_argument("--permeability", choices=("Neutral", "Drain", "Impermeable"),
                         help="interface")
 

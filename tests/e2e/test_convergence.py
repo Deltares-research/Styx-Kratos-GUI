@@ -61,8 +61,8 @@ def test_the_window_follows_a_run_and_the_results_menu_opens_it_again(app_page, 
     assert box["x"] + box["width"] > dock["x"] - 40, "at the right of the viewport"
     assert box["y"] + box["height"] > viewport["height"] - 120, "at the bottom"
 
-    # Results mode came on with the run, and left Choose results closed: it would lie
-    # over the window and hide how the run ended.
+    # Results mode came on with the run, and left Choose results closed: it never
+    # opens by itself, and here it would also hide how the run ended.
     page.wait_for_function("App.state.mode === 'results'", timeout=LONG)
     assert page.locator(".dlg-results").count() == 0
     window.get_by_role("button", name="Close").click()

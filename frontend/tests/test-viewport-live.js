@@ -81,6 +81,12 @@
     return booted;
   }
 
+  /* The ID labels number the generated mesh where it is drawn: the Mesh tab. */
+  function meshTab() {
+    App.state.mode = 'mesh';
+    App.Viewport.setMode('mesh');
+  }
+
   function until(check, ms) {
     var deadline = Date.now() + (ms || 5000);
     return new Promise(function (resolve, reject) {
@@ -215,6 +221,33 @@
           App.Viewport.setLabels('elements', false);
           T.ok(!App.Viewport.labelsOn());
         });
+    });
+  });
+
+  test('viewport: the numbers show where the mesh is drawn, and not elsewhere', function () {
+    var savedMode = App.state.mode;
+    return boot().then(function () {
+      meshTab();
+      return new Promise(function (resolve) { App.Viewport.setLabels('nodes', true, resolve); });
+    }).then(function (count) {
+      T.ok(count > 0, 'numbered in the Mesh tab');
+      App.state.mode = 'structures';
+      App.Viewport.setMode('structures');
+      T.eq(App.MeshLabels.count('nodes'), 0, 'Structures draws no mesh, so no numbers');
+      T.ok(App.Viewport.labelsOn('nodes'), 'but they stay on');
+      meshTab();
+      return until(function () { return App.MeshLabels.count('nodes') > 0; });
+    }).then(function () {
+      T.ok(App.MeshLabels.count('nodes') > 0, 'back in the Mesh tab, back on screen');
+    }).then(function () {
+      App.Viewport.setLabels('nodes', false);
+      App.state.mode = savedMode;
+      App.Viewport.setMode(savedMode);
+    }, function (error) {
+      App.Viewport.setLabels('nodes', false);
+      App.state.mode = savedMode;
+      App.Viewport.setMode(savedMode);
+      throw error;
     });
   });
 
@@ -418,10 +451,16 @@
       return App.Viewport.refresh();
     }).then(function () {
       var groups = sceneGroups();
+      // A support is shown in Soil, a flow condition in Flow conditions, not the other.
+      function tabOf(record) { return record.kind === 'displacement' ? 'soil' : 'flow'; }
+      function show(mode) { App.state.mode = mode; App.Viewport.setMode(mode); }
       App.PROJECT.boundary_conditions.forEach(function (record) {
         var group = groups[record.id];
         T.ok(group, record.name + ' has a glyph group');
         T.ok(group.children.length > 0);
+        show(tabOf(record) === 'soil' ? 'flow' : 'soil');
+        T.eq(group.visible, false, record.name + ' is not shown in the other tab');
+        show(tabOf(record));
         T.eq(group.visible, true, 'conditions start shown');
         App.Viewport.setVisible(record.id, false);
         T.eq(group.visible, false, 'its eye hides it');
@@ -436,6 +475,8 @@
     }).then(function () {
       var groups = sceneGroups();
       App.PROJECT.boundary_conditions.forEach(function (record) {
+        var mode = record.kind === 'displacement' ? 'soil' : 'flow';
+        App.state.mode = mode; App.Viewport.setMode(mode);
         T.eq(App.Viewport.isVisible(record.id), true, 'a new project shows them again');
         T.eq(groups[record.id].visible, true);
       });
@@ -833,6 +874,7 @@
 
   test('viewport: mesh and label request failures report their cause and hide the progress overlay', function () {
     return boot().then(function () {
+      meshTab();
       return new Promise(function (resolve) { App.Viewport.generateMesh(resolve); });
     }).then(function () {
       App.Api.post = function () { return Promise.reject(new Error('Numbering refused')); };
@@ -925,6 +967,7 @@
       standIns();
     }
     return boot().then(function () {
+      meshTab();
       var post = App.Api.post;
       App.Api.post = function (path, body) {
         if (path === '/api/mesh') {

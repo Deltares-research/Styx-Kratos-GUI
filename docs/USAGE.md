@@ -30,13 +30,8 @@ To learn the GUI by building one model step by step, start with the
 Staged construction mode adds a **Stages explorer**, and Results mode adds a **Results
 explorer**, below the Model explorer.
 
-Some menu items and tools come from the first design of the GUI and do nothing yet. They are
-grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
-says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
-**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
-wells, drains and flow functions, **Select multiple objects**,
-**Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
-**Print…**, and the **Expert** menu (except **Command line**).
+The menus and the tool rail show only the items that work. Plates, beams, wells, drains and
+other tools that Styx does not have yet are not shown.
 
 **Help** → **Documentation** (or F1) opens the Styx documentation site in a new browser tab.
 **Help** → **GUI tutorials** opens the [GUI tutorials](gui_tutorials/index.md).
@@ -60,10 +55,20 @@ Click **Calculate** between Staged construction and Results.
 
 - **New project:** **File** → **New project…** starts an empty site. Type the project name
   in the window. The name shows in the title bar, and **Save** names the file after it.
+  The session starts clean: the command log, the Model history, the commands that the arrow
+  keys bring back, the undo history, the mesh, the results, the node and element ID
+  labels and the **Convergence** window of a finished calculation are cleared.
+  **Open project…** clears them in the same way.
 - **Project properties:** **File** → **Project properties…** changes the name of the open
-  project and the gravitational acceleration g (9.81 m/s² in a new project).
-  In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
-  the same.
+  project, the size of the soil block, the gravitational acceleration g (9.81 m/s² in a
+  new project) and the unit system. The size is **x min**, **x max**, **y min** (the
+  bottom) and **y max** (the ground level), in m. A 3D model also has **z min** and
+  **z max**. A new project is 20 m wide (x 0 to 20) and 15 m deep (y −15 to 0). A new
+  **y min** or **y max** also moves the bottom of the last layer or the top of the first.
+  In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli domain FILE --x FROM TO
+  --y BOTTOM TOP`, `kratos-cli gravity FILE G` and `kratos-cli units FILE kN` do the same.
+  A new size writes its `domain --x ... --y ...` line in the command log. You can type
+  that line in the command box too, and `domain` alone shows the size.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your
@@ -73,8 +78,10 @@ Click **Calculate** between Staged construction and Results.
 - **2D or 3D:** the **2D** button shows a plane-strain section through the model. The **3D**
   button shows the full solid model. When you change between them, Styx converts the loads
   and the walls.
-- **Units:** the project uses one unit system: SI (N, m, kg, s) or kN (kN, m, t, s). Click
-  the units in the status bar, or type `units kN` or `units SI`, to convert all values.
+- **Units:** the project uses one unit system: SI (N, m, kg, s) or kN (kN, m, t, s). For
+  example, a cohesion of 5000 Pa in SI is 5 kPa in kN. To convert all values, choose the
+  **Unit system** in **File** → **Project properties…**, click the units in the status bar,
+  or type `units kN` or `units SI`. Lengths stay in m and g stays in m/s².
 - **A model from a Python script:** type `run <file.py>` in the command box. For an example,
   type `run tests/models/excavation.py`.
 
@@ -265,8 +272,6 @@ narrower than the model in z cannot be made of lines, and the project does not o
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
 | Normal load (2D only) | Click **Create normal load**. Type the points of the line: **Add point** adds one after the last, and **Remove** takes one away. Or click **Pick on model…**, click the points in the viewport and press <kbd>Enter</kbd>. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. A hydrostatic load does not use a pressure. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
 | Support (2D only, along a line or at a point) | Click **Create boundary condition** and select **Line prescribed displacement** or **Point prescribed displacement**. Click the points in the viewport, then select the components to fix. See [Boundary conditions](#boundary-conditions). |
-| Point, line, surface, or box (3D only) | Click the tool, then click the points in the viewport. You can also type `x y` or `x y z` in the command box for each point. Press <kbd>Enter</kbd> to finish a line or a surface, or <kbd>Esc</kbd> to stop. |
-| Solid from a CAD file | Click **Import model…** and select a STEP, IGES, BREP, STL or OBJ file. |
 
 To change an object, select it in the viewport or in the Model explorer, then change its
 properties in the Selection explorer. An object that is not **Active** stays in the project,
@@ -307,14 +312,20 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
    numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
    thickness, and the permeability. A new contact takes the soil each part of the
-   interface runs against (**From the soil it runs against**). The **Elastic** law reads
-   the stiffnesses only. The **Coulomb** law reads a strength too, and slips when the
-   shear stress reaches it: under **Strength**, select **From the soil** (the soil's,
-   reduced by **R_inter**) or **Set on the interface** (type `GEO_COHESION` and
-   `GEO_FRICTION_ANGLE`). **R_inter** is one number for the whole contact; click **Each
-   soil's own R_inter** to use the R_inter of each soil instead. A linear elastic soil has
-   no strength, so against one the contact gets its own, and you set it. The contact takes
-   the saturation of its soil, and a Coulomb contact also takes its tension cut-off.
+   interface runs against (**From the soil it runs against**), the R_inter of each soil,
+   and a virtual thickness of 1 m. Under **Stiffness**, select **From the soil** (the
+   export takes shear G / t and normal 10 G / t from the soil, with t the virtual
+   thickness) or **Set on the interface** (type `INTERFACE_NORMAL_STIFFNESS` and
+   `INTERFACE_SHEAR_STIFFNESS`; they start from the values the soil gives). The
+   **Elastic** law reads the stiffnesses only. The **Coulomb** law reads a strength too,
+   and slips when the shear stress reaches it: under **Strength**, select **From the
+   soil** (the soil's, reduced by **R_inter**) or **Set on the interface** (type
+   `GEO_COHESION` and `GEO_FRICTION_ANGLE`). R_inter reduces the strength only, not the
+   stiffness. Under **R_inter**, select **Each soil's own** (the R_inter of each
+   soil) or **Set on the interface** (type one number for the whole contact in **R_inter
+   value**). A linear elastic soil has no strength, so against one the contact gets its
+   own, and you set it. The contact takes the saturation of its soil, and a Coulomb
+   contact also takes its tension cut-off.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length
@@ -339,21 +350,43 @@ level** in the Model explorer. Then change **Level** or **Specific weight** in t
 explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water off` to
 remove the water. A condition keeps its own level when the water level changes.
 
-**Create water pressure line** draws a water pressure along a line or at a point (2D).
-**Boundary conditions…** opens the window of all conditions. The well, drain and flow
-function tools are not available yet.
+**Create flow boundary condition…** opens the window of one new water pressure or seepage
+face. **Create water pressure line** draws a water pressure along a line or at a point
+(2D). **Flow boundary conditions…** opens the window of all water pressures and seepage
+faces.
 
 ## Boundary conditions
 
-Kratos gets the boundary conditions of the model and no others. Open the **Boundary
-conditions** window from the Structures or Flow conditions tool rail, or from **Flow
-conditions** → **Boundary conditions…**. The Model explorer lists the conditions under
-**Model conditions** → **Boundary conditions**. Select one to change it in the Selection
-explorer.
+Kratos gets the boundary conditions of the model and no others. The conditions are in two
+groups:
 
-To add one condition, click **Create boundary condition** in the Structures tool rail, or
-select **Create boundary condition…** in the **Structures** menu. The
-window asks for the condition and where it acts. For a line, type the points or click **Pick
+| Group | Conditions | Where to set them |
+|---|---|---|
+| Mechanical | Supports | Structures mode |
+| Flow | Water pressures and seepage faces | Flow conditions mode |
+
+Each mode has a window for all conditions of its group: **Mechanical boundary
+conditions…** on the Structures tool rail and in the **Structures** menu, and **Flow
+boundary conditions…** on the Flow conditions tool rail and in the **Flow conditions**
+menu. Each window is a table with one row for each condition of the group in the model:
+
+- **Mechanical boundary conditions**: name, where it acts, the support (Fixed, Roller or
+  Custom), and the components it holds. A 2D section does not hold z, so the table shows x
+  and y only, and leaves out the front and back supports, which are kept for the solid
+  model. **Standard conditions** puts back the bottom fixed and the sides on rollers.
+- **Flow boundary conditions**: name, condition, where it acts, type, level or value,
+  tension cut-off, and if it gives start values only.
+
+Clear **Active** to leave a condition out of the calculation. Click **Edit…** to change a
+condition, or **Delete** to remove it. **Add condition…** adds a condition of the group.
+
+The Model explorer lists all conditions under **Model conditions** → **Boundary
+conditions**. Select one to change it in the Selection explorer.
+
+To add one support, click **Create boundary condition** in the Structures tool rail, or
+select **Create boundary condition…** in the **Structures** menu. To add one water pressure
+or seepage face, click **Create flow boundary condition…** in the Flow conditions tool
+rail or menu. The window asks for the condition and where it acts. For a line, type the points or click **Pick
 on model…** and click them in the viewport; right-click to end the line.
 
 Styx finds a face of the model on the soil: the left face is the soil at the lowest x, and
@@ -407,16 +440,16 @@ it to keep the condition in the project but leave it out of the calculation. The
 of **Boundary conditions** switches all of them. In Staged construction mode, the check box
 of a water pressure condition is for the selected stage.
 
-The viewport shows every condition and the water level. Click a condition or the water level
+Each tab shows the conditions that belong to it. **Soil**, **Structures** and **Mesh** show
+the supports. **Flow conditions** shows the water pressure conditions and the seepage faces,
+and not the supports. **Staged construction** shows both. Click a condition or the water level
 to select it. A click a few pixels away from the line also selects it. To hide a condition,
-right-click its row in the Model explorer and select **Hide**.
-
-The viewport does not show the conditions when a model opens. To show a condition, select it
-in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
-conditions** shows all of them. A condition that you only selected goes away when you select
-something else.
-In 2D, a support that holds x and y has the clamp symbol (a stem on hatched ground), and a
-support that holds one of them has a triangle on rollers. A 2D model does not list its
+right-click its row in the Model explorer and select **Hide**. When you select a condition in
+the Model explorer, the viewport shows it in every tab until you select something else.
+In 2D, a support on a face or a line is drawn from its start to its end. A support that holds
+x and y is hatched ground along the edge. A support that holds one of them (a roller) is a
+row of triangles on two wheels, from one end to the other. A support on a point is a triangle on hatched ground, or a triangle on two wheels for
+a roller. A 2D model does not list its
 front and back supports: the section holds z without them. They stay in the project for the
 solid model, and the calculation files of a 2D model do not contain them.
 
@@ -518,7 +551,14 @@ line off, its soils have the phreatic line in that stage.
 
 ## Mesh mode
 
-When you open Mesh mode, the **Mesh properties** window opens:
+When you open Mesh mode and there is no mesh yet, the **Mesh properties** window opens.
+When there is a mesh, Mesh mode shows it, and the window stays closed. Use the
+**Mesh properties** tool to change the settings and mesh again. A calculation uses this
+mesh and does not mesh again. A calculation on a model with no mesh makes one: after it,
+Mesh mode shows that mesh. A change to the stages, the materials or the
+project name keeps the mesh. Any other change to the model removes it.
+
+The **Mesh properties** window has these settings:
 
 | Setting | What it does |
 |---|---|
@@ -586,7 +626,8 @@ removed, and its value. If the body comes back later, for example when you move 
 boundary back, set its size again, or use undo to get the body and its size back.
 
 To see the numbers of the nodes or the elements, right-click in the viewport and select
-**Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
+**Show labels**. The numbers show on the mesh in the Mesh tab, and on the result mesh in
+Results. The other tabs do not show the mesh, so they do not show the numbers. To show a part of the mesh in its own colour, type `colour <part>`. To see
 the parts that contain a node, type `node <id>`.
 
 ## Staged construction mode
@@ -615,6 +656,10 @@ Use the buttons at the top of the Stages explorer to change the sequence:
 | Duplicate | Makes a copy of the selected stage |
 | Delete | Deletes the selected stage |
 | Stages… | Opens the **Stages** window with the settings of each stage |
+
+The **Stages** window has the same four buttons (Add stage, Insert stage, Duplicate and
+Delete) above its list of stages, so you can change the sequence without closing it. A new
+stage is selected, so you can set it up next.
 
 ### Switch parts on and off
 
@@ -744,9 +789,6 @@ stress initialisation:
 The window also lists the parts that each stage switches on and off, and the result of the
 last calculation for each stage.
 
-The **Activate selection**, **Deactivate selection** and **Preview stage** tools in the tool
-rail are not available yet.
-
 ## Calculate
 
 > [!IMPORTANT]
@@ -754,13 +796,18 @@ rail are not available yet.
 
 Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. Styx then:
 
-1. makes the mesh,
+1. uses the mesh of the model, or makes one if there is no mesh yet,
 2. writes the Kratos input files into a new run folder in `~/KratosGUI/runs`,
 3. runs Kratos, and
 4. opens Results mode when Kratos is done.
 
-While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*, and the
-**Convergence** window shows each iteration of the solver (see
+If you made the mesh in Mesh mode, or an earlier calculation made it, and the model did not
+change since, Calculate uses that mesh and does not mesh again. The log shows *Writing the
+deck from the existing mesh and running Kratos…*. If there is no mesh yet, the log shows a
+warning: Calculate makes the mesh with the global settings of **Mesh properties**. To check
+the mesh before you calculate, make it in Mesh mode first.
+
+While Kratos runs, the **Convergence** window shows each iteration of the solver (see
 [Follow the solver](#follow-the-solver)). You can run one calculation at a time. If a stage
 fails, the log shows which stage failed and why, and the Stages explorer shows which stages
 finished.
@@ -837,9 +884,8 @@ words of the stage name such as `results convergence stage first excavation`, an
 `results convergence stage all`.
 
 When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
-the run stopped. Styx opens Results mode, but it does not open the **Choose results**
-window while the Convergence window is open, because it would cover it. Use the Results
-explorer in the dock, or click **Choose results** in the tool rail.
+the run stopped. Styx opens Results mode and shows the last stage. To choose a different
+result, use the Results explorer in the dock, or click **Choose results** in the tool rail.
 
 If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
 `solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
@@ -882,7 +928,9 @@ an earlier session:
 
 ### Show a result
 
-Use the Results explorer, or click **Choose results** in the tool rail:
+When you open Results mode, Styx shows the result at once: the last stage of the run.
+Styx does not open the **Choose results** window by itself. To change what is shown, use
+the Results explorer, or click **Choose results** in the tool rail:
 
 | Setting | What it does |
 |---|---|
@@ -906,6 +954,10 @@ The loads and the water level are those of the open project, as they are in the 
 screen: a load that the stage switched off is not shown. They are shown only when the run
 was calculated from the open project, with the same stages. They stay where they are in the
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
+
+When you go to a different tab and then back to Results, Styx shows the same result again.
+The wall plot opens again if it was open when you left. The **Choose results** window does
+not: click **Choose results** in the tool rail to open it.
 
 After a groundwater flow stage a wide light blue line shows where the calculated pore
 pressure is zero: the phreatic surface the flow calculation found. After a coupled
@@ -1089,7 +1141,8 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `clear` | Clears the log |
 | `results …` | Works with results. Type `results` alone to see all its forms. |
 
-**Help** → **Command reference** shows the same list in a window.
+**Help** → **Command reference** shows the same list in a window. **Help** → **Kratos
+documentation** opens the Kratos GeoMechanics user documentation in a new browser tab.
 
 [CLI.md](CLI.md#the-guis-command-box-in-the-terminal) gives the `kratos-cli` command that does
 the same as each command of the command box.

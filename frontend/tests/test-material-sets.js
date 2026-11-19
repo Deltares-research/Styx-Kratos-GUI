@@ -106,16 +106,27 @@
     });
   });
 
-  T.test('the table shows only the colour, the name and the Properties button', function () {
+  T.test('the table shows the colour, the name, the soil model and the Properties button', function () {
     withDialog(function (host) {
       var heads = Array.prototype.map.call(host.querySelectorAll('.material-sets th'),
                                            function (th) { return th.textContent; });
-      T.eq(heads, ['', 'Identification', '']);
+      T.eq(heads, ['Colour', 'Name', 'Soil model', 'Properties']);
       var row = host.querySelector('.material-sets tbody tr');
-      T.eq(row.children.length, 3);
+      var m = App.MATERIALS[0];
+      T.eq(row.children.length, 4);
       T.ok(row.children[0].querySelector('.material-swatch'), 'the colour swatch');
-      T.eq(row.children[1].textContent, App.MATERIALS[0].name);
-      T.ok(row.children[2].querySelector('[data-action="material-properties"]'), 'the Properties button');
+      T.eq(row.children[1].textContent, m.name);
+      T.eq(row.children[2].textContent, App.SoilModels.label(App.SoilModels.modelOf(m.constitutive_law)));
+      T.eq(row.children[2].title, m.constitutive_law, 'the law on hover');
+      T.ok(row.children[3].querySelector('[data-action="material-properties"]'), 'the Properties button');
+    });
+  });
+
+  T.test('the soil model column names a law of no model by its own name', function () {
+    withDialog(function (host) {
+      App.MATERIALS[0].constitutive_law = 'MyOwnLaw2D';
+      host.querySelector('.material-sets tbody tr').click();  // a click redraws the rows
+      T.eq(host.querySelector('.material-sets [data-column="soil-model"]').textContent, 'MyOwnLaw2D');
     });
   });
 

@@ -204,7 +204,12 @@ def test_a_new_interface_section_takes_the_soil_each_stretch_runs_against():
 
     assert isinstance(contact, InterfaceSection)
     assert contact.material is None
-    assert (contact.r_inter, contact.virtual_thickness) == (0.7, 0.01)
+    # Each soil's own Rinter, and stiffnesses of G and 10 G: the contact a model
+    # script gets from `InterfaceSection` alone.
+    assert (contact.r_inter, contact.virtual_thickness) == (None, 1.0)
+    written = InterfaceSection(id="contact", name="Interface")
+    assert (contact.r_inter, contact.virtual_thickness) == \
+        (written.r_inter, written.virtual_thickness)
 
 
 def test_a_new_wall_section_is_a_shell_of_forty_centimetres():

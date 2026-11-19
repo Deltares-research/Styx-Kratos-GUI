@@ -34,11 +34,12 @@ var App = window.App || {};
 
 App.Interfaces = (function () {
 
-  /* Steel against a medium sand: the reduction factor an engineer starts from,
-     and a virtual thickness the stiffness is derived over. The factor reduces the
-     strength of the soil each stretch runs against (`sectionsFor`). */
+  /* A new contact, as `drafts.SECTION_DEFAULTS_SI` and `InterfaceSection` have it: no
+     R_inter of its own, so each stretch takes the Rinter of the soil it runs against
+     (`sectionsFor`), and a virtual thickness of 1 m, so the derived stiffnesses are the
+     soil's G and 10 G, as in the reference deck. */
   function defaultSection() {
-    return Object.assign({ name: 'Interface', r_inter: 0.7, virtual_thickness: 0.01,
+    return Object.assign({ name: 'Interface', r_inter: null, virtual_thickness: 1,
                            permeability: 'Neutral' }, App.PropertySets.defaults('interface'));
   }
 
@@ -119,7 +120,70 @@ App.Interfaces = (function () {
     STRENGTH.forEach(function (name) { delete (section.variables || {})[name]; });
   }
 
-  var SIDES = ['both', 'left', 'right', 'below', 'above'];
+  /* The two stiffnesses: left out, the export derives them from the soil the contact
+     runs against (core/kratos/materials.py `_interface_variables`): shear = G / t and
+     normal = 10 x shear, with G = E / 2(1 + nu) and t the virtual thickness. */
+  var STIFFNESS = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
+  var NORMAL_TO_SHEAR = 10;
+
+  /* Whether the contact carries a stiffness of its own, rather than its soil's. */
+  function ownStiffness(section) {
+    return STIFFNESS.some(function (name) { return holds(section, name); });
+  }
+
+  function shearModulus(variables) {
+    var nu = typeof variables.POISSON_RATIO === 'number' ? variables.POISSON_RATIO : 0;
+    return variables.YOUNG_MODULUS / (2 * (1 + nu));
+  }
+
+  function hasModulus(soil) {
+    return !!soil && typeof (soil.variables || {}).YOUNG_MODULUS === 'number';
+  }
+
+  /* The soil a contact's own stiffness starts from: the one it names, or else the
+     softest soil of the project -- with no soil named, each stretch takes the soil it
+     runs against, and only the export knows which that is. Null when no soil has a
+     Young's modulus. */
+  function stiffnessSoil(section) {
+    var named = soilOf(section);
+    if (hasModulus(named)) return named;
+    return (App.MATERIALS || []).filter(hasModulus).sort(function (a, b) {
+      return shearModulus(a.variables) - shearModulus(b.variables);
+    })[0] || null;
+  }
+
+  /* Give the contact a stiffness of its own, starting from what the export would
+     derive: G / t and 10 G / t. What it already holds is kept. Returns the soil it
+     started from, or null when it started from the Mohr-Coulomb defaults. */
+  function setOwnStiffness(section) {
+    section.variables = section.variables || {};
+    var soil = stiffnessSoil(section);
+    var given = soil ? soil.variables : {};
+    if (!soil) {
+      var units = App.Units.current();
+      ['YOUNG_MODULUS', 'POISSON_RATIO'].forEach(function (name) {
+        given[name] = App.SoilModels.defaultIn(App.SoilModels.find('mohr_coulomb', name),
+                                               units);
+      });
+    }
+    var v = section.variables;
+    if (!holds(section, 'INTERFACE_SHEAR_STIFFNESS')) {
+      v.INTERFACE_SHEAR_STIFFNESS = Number(
+        (shearModulus(given) / section.virtual_thickness).toPrecision(6));
+    }
+    if (!holds(section, 'INTERFACE_NORMAL_STIFFNESS')) {
+      v.INTERFACE_NORMAL_STIFFNESS = Number(
+        (NORMAL_TO_SHEAR * v.INTERFACE_SHEAR_STIFFNESS).toPrecision(6));
+    }
+    return soil;
+  }
+
+  /* Leave the stiffness out, for the export to derive from the soil. */
+  function soilStiffness(section) {
+    STIFFNESS.forEach(function (name) { delete (section.variables || {})[name]; });
+  }
+
+  var SIDES =['both', 'left', 'right', 'below', 'above'];
 
   var STRETCH_SNAP = 0.5;   // metres a typed From or To may be off the pile
 
@@ -896,6 +960,8 @@ App.Interfaces = (function () {
     coulomb: coulomb, ownStrength: ownStrength, noStrength: noStrength,
     strengthProblem: strengthProblem,
     setOwnStrength: setOwnStrength, soilStrength: soilStrength,
+    STIFFNESS: STIFFNESS, ownStiffness: ownStiffness, setOwnStiffness: setOwnStiffness,
+    soilStiffness: soilStiffness,
     nearest: nearest, between: between, faces: faces, snap: snap, stretchOn: stretchOn,
     pileOf: pileOf,
     available: available, unavailableMessage: unavailableMessage,

@@ -130,6 +130,31 @@ def test_post_project_new_starts_an_empty_project(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
+def test_patch_domain_sets_the_extents_as_kratos_cli_domain_does(client):
+    """File > Project properties…: a new size for the soil block. The new bottom and top
+    move the last layer's bottom and the first layer's top with them."""
+    seed = seed_project()
+    try:
+        body = client.patch("/api/project/domain", json={"x": [-5, 60], "y": [-40, 1]}).json()
+
+        domain = body["project"]["domain"]
+        assert (domain["x0"], domain["x1"], domain["y_bottom"], domain["y_top"]) == (-5, 60, -40, 1)
+        assert (domain["z0"], domain["z1"]) == (seed.domain.z0, seed.domain.z1)
+        layers = body["project"]["layers"]
+        assert layers[0]["top"] == 1 and layers[-1]["bottom"] == -40
+        assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    finally:
+        client.put("/api/project", json=seed.model_dump())
+
+
+@pytest.mark.parametrize("body", [{"x": [30, 0]}, {"y": [0, 0]}])
+def test_patch_domain_refuses_a_reversed_or_empty_extent(client, body):
+    before = client.get("/api/project").json()
+
+    assert client.patch("/api/project/domain", json=body).status_code == 422
+    assert client.get("/api/project").json() == before
+
+
 def test_the_project_the_server_opens_on_is_plane_strain(client):
     """The app is a 2D modeller first: the document it comes up on is the section, so
     the client never has to switch into it -- and never shows a 3D view it is about to
@@ -1241,6 +1266,11 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              # The Rename and project name window, in place of
                              # the browser's prompt.
                              "name-dialog.js",
+                             # Windows with help text open wide enough to read it.
+                             "dialog-fit.js",
+                             # The bars that resize the panels, in place of the frozen
+                             # App.UI.splitter, which jumped on the first drag.
+                             "splitters.js",
                              "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
@@ -1248,7 +1278,7 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              # core/model/solver.py, which stages.js resolves.
                              "solver-settings.js",
                              "results-render.js", "results-view.js", "part-colors.js",
-                             "water-command.js", "script-command.js", "node-parts.js",
+                             "water-command.js", "domain-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
                              # Help > Documentation and GUI tutorials.

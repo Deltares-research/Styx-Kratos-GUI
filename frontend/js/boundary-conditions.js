@@ -48,6 +48,21 @@ App.BoundaryConditions = (function () {
   var TARGETS = [['domain', 'Whole soil'], ['face', 'Face'], ['part', 'Part'],
                  ['line', 'Line'], ['point', 'Point']];
   var AXES = ['x', 'y', 'z'];
+  /* The two groups of conditions, each with its own windows: the mechanical ones
+     (supports) in Structures mode, the flow ones (water pressure, seepage face) in
+     Flow conditions mode. */
+  var GROUPS = {
+    mechanical: { kinds: ['displacement'], title: 'Mechanical boundary conditions' },
+    flow: { kinds: ['water_pressure', 'seepage'], title: 'Flow boundary conditions' }
+  };
+  var KIND_CHOICES = [['displacement', 'Support'], ['water_pressure', 'Water pressure'],
+                      ['seepage', 'Seepage face']];
+
+  /* The group a condition of `kind` belongs to. */
+  function groupOf(kind) { return kind === 'displacement' ? 'mechanical' : 'flow'; }
+
+  /* Whether a condition of `kind` is shown in the windows of `group` (all, with none). */
+  function inGroup(kind, group) { return !GROUPS[group] || groupOf(kind) === group; }
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -1070,8 +1085,10 @@ App.BoundaryConditions = (function () {
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
      on parts, lines and points, and the water each soil takes. Save writes them all in
-     one request. */
-  function open() {
+     one request. `group` 'mechanical' or 'flow' opens the table of that group's
+     conditions instead (`openList`). */
+  function open(group) {
+    if (GROUPS[group]) return openList(group);
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var rows = grid(project);
@@ -1291,14 +1308,204 @@ App.BoundaryConditions = (function () {
     return shell;
   }
 
+  /* ── The tables of the mechanical and the flow conditions ─────────────── */
+
+  var NO_VALUE = '—';
+
+  function plain(value) { return String(Number(value)); }
+
+  /* Where a condition acts, as a table cell: "Whole soil", "Left face", "Part soil_L1",
+     "Line (4, 6) → (22, 0)", "Point (8, -4)". */
+  function whereCell(record, project) {
+    if (record.on === 'domain') return 'Whole soil';
+    if (record.on === 'face') {
+      var face = record.face[0].toUpperCase() + record.face.slice(1) + ' face';
+      return project && project.dimension === 2 && SECTION_FACES.indexOf(record.face) < 0
+        ? face + ' (solid model only)' : face;
+    }
+    if (record.on === 'part') return 'Part ' + record.part;
+    return (record.on === 'point' ? 'Point ' : 'Line ')
+      + (record.points || []).map(xy).join(' → ');
+  }
+
+  /* One flow condition as the cells of its table row: the words a user reads, with
+     units, and a dash where a column does not apply. */
+  function flowRow(record, project) {
+    var stress = ' ' + App.Units.label('stress');
+    var row = { id: record.id, name: record.name, active: record.active !== false,
+                where: whereCell(record, project) };
+    if (record.kind === 'seepage') {
+      return Object.assign(row, { condition: 'Seepage face', type: NO_VALUE,
+                                  value: NO_VALUE, cutoff: NO_VALUE, initial: NO_VALUE });
+    }
+    var type = record.fluid_pressure_type;
+    var level = record.reference_coordinate;
+    row.condition = 'Water pressure';
+    row.type = type === 'Phreatic_Multi_Line' ? 'Phreatic line' : type;
+    if (type === 'Uniform') row.value = plain(record.value) + stress;
+    else if (type === 'Hydrostatic') {
+      row.value = level === null || level === undefined ? 'the water level'
+        : 'y = ' + plain(level) + ' m';
+    } else {
+      row.value = (record.x_coordinates || []).map(function (x, i) {
+        return xy([x, record.y_coordinates[i]]);
+      }).join(' → ');
+    }
+    row.cutoff = type === 'Uniform' ? NO_VALUE
+      : plain(record.pressure_tension_cut_off || 0) + stress;
+    row.initial = record.is_fixed === false ? 'Yes' : 'No';
+    return row;
+  }
+
+  /* What a support holds, as table cells: its kind (Fixed: every component the model
+     has; Roller: the one normal to its face or line; else Custom) and the components.
+     A 2D section never holds z, so z is left out there. */
+  function supportRow(record, project) {
+    var axes = project && project.dimension === 2 ? [0, 1] : [0, 1, 2];
+    var held = axes.filter(function (i) { return record.fixed[i]; });
+    var roller = null;
+    try { roller = normal(record.on, record.face, record.points); } catch (error) {
+      roller = null;
+    }
+    var kind = held.length === axes.length ? 'Fixed'
+      : held.length === 1 && held[0] === roller ? 'Roller'
+      : held.length ? 'Custom' : 'Free';
+    return { id: record.id, name: record.name, active: record.active !== false,
+             where: whereCell(record, project), support: kind,
+             fixed: held.length ? held.map(function (i) { return AXES[i]; }).join(', ')
+                                : NO_VALUE };
+  }
+
+  /* The conditions of `group` the model has, in the order they were added, as table
+     rows. The front and back supports of a 2D section are left out, as
+     `kratos-cli boundary list` leaves them out. */
+  function groupRows(project, group) {
+    return records(project).filter(function (record) {
+      return groupOf(record.kind) === group && !heldBySection(record, project);
+    }).map(function (record) {
+      return group === 'mechanical' ? supportRow(record, project) : flowRow(record, project);
+    });
+  }
+
+  function flowRows(project) { return groupRows(project, 'flow'); }
+
+  function mechanicalRows(project) { return groupRows(project, 'mechanical'); }
+
+  var LIST_COLUMNS = {
+    mechanical: [['name', 'Name'], ['where', 'Where'], ['support', 'Support'],
+                 ['fixed', 'Fixed in']],
+    flow: [['name', 'Name'], ['condition', 'Condition'], ['where', 'Where'],
+           ['type', 'Type'], ['value', 'Level / value'], ['cutoff', 'Tension cut-off'],
+           ['initial', 'Initial only']]
+  };
+
+  var LIST_HELP = {
+    mechanical: 'A support holds the displacement at zero in the components of Fixed in. '
+      + 'Fixed: all components. Roller: the component normal to its face or line. '
+      + 'Standard conditions puts back the bottom fixed and the sides on rollers.',
+    flow: 'Level / value: where a hydrostatic pressure is zero, the points of a phreatic '
+      + 'line, or a uniform pressure (compression negative). Initial only: start values, '
+      + 'which the calculation then changes. Seepage face: water may leave the soil there, '
+      + 'in a groundwater flow calculation.'
+  };
+
+  var LIST_EMPTY = {
+    mechanical: 'The model has no supports yet. Click Add condition… to add one, or '
+      + 'Standard conditions for the bottom fixed and the sides on rollers.',
+    flow: 'The model has no flow conditions yet. Click Add condition… to add a water '
+      + 'pressure or a seepage face.'
+  };
+
+  /* The window of one group's conditions: a table with one row for each condition of
+     the model, an Active check box, Edit… and Delete; Add condition… opens a new one.
+     The supports' window also puts back the standard supports. */
+  function openList(group) {
+    if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
+    var project = App.PROJECT;
+    var rows = groupRows(project, group);
+    var columns = LIST_COLUMNS[group];
+    var shell;
+    var buttons = [
+      { label: 'Add condition…', keepOpen: true, onClick: function () {
+        shell.close();
+        openRecord(null, group);
+      } },
+      { label: 'Close' }
+    ];
+    if (group === 'mechanical') {
+      buttons.unshift({ label: 'Standard conditions', keepOpen: true, onClick: function () {
+        shell.close();
+        return applyStandard().then(function () { return openList(group); });
+      } });
+    }
+    shell = App.Dialogs.open({
+      title: GROUPS[group].title,
+      width: group === 'flow' ? 900 : 700, height: 480,
+      buttons: buttons,
+      build: function (host) {
+        var body = el('div.mesh-settings-body.boundary-conditions');
+        host.appendChild(body);
+        if (!rows.length) {
+          body.appendChild(el('div.mesh-setting-help', { text: LIST_EMPTY[group] }));
+          return;
+        }
+        var table = el('table.bc-grid.bc-list');
+        var head = el('tr');
+        columns.map(function (column) { return column[1]; }).concat(['Active', ''])
+          .forEach(function (text) { head.appendChild(el('th', { text: text })); });
+        table.appendChild(head);
+        rows.forEach(function (row) {
+          var tr = el('tr');
+          columns.forEach(function (column) {
+            tr.appendChild(el('td', { text: row[column[0]] }));
+          });
+          var active = el('input.bc-active', { type: 'checkbox' });
+          active.checked = row.active;
+          active.addEventListener('change', function () {
+            setActive([row.id], active.checked);
+          });
+          tr.appendChild(el('td', null, active));
+          var actions = el('td.bc-actions');
+          var edit = el('button.btn.btn-sm', { type: 'button', text: 'Edit…' });
+          edit.addEventListener('click', function () {
+            shell.close();
+            openRecord(find(row.id), group);
+          });
+          var del = el('button.btn.btn-sm', { type: 'button', text: 'Delete' });
+          del.addEventListener('click', function () { shell.close(); remove(row.id); });
+          actions.appendChild(edit);
+          actions.appendChild(del);
+          tr.appendChild(actions);
+          table.appendChild(tr);
+        });
+        body.appendChild(table);
+        var notes = [LIST_HELP[group]];
+        if (group === 'mechanical') {
+          if (records(project).some(function (record) { return heldBySection(record, project); })) {
+            notes.push(SECTION_NOTE);
+          }
+          if (records(project).some(function (record) { return unusedInFlow(record, project); })) {
+            notes.push(FLOW_NOTE);
+          }
+        }
+        body.appendChild(el('div.mesh-setting-help', { text: notes.join(' ') }));
+      }
+    });
+    return shell;
+  }
+
   /* One condition, asked in the dialog's two steps: where (Whole soil / Face / Part /
      Line / Point, then which one) and what (a support, or a water pressure with the
-     fields of its type). `null` makes a new one. */
-  function openRecord(source) {
+     fields of its type). `null` makes a new one. `group` ('mechanical' or 'flow')
+     offers only that group's kinds; a given condition keeps to its own group. */
+  function openRecord(source, group) {
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var record = source ? copy(source) : null;
     var known = !!(source && find(source.id));
+    if (source) group = groupOf(source.kind);
+    if (!GROUPS[group]) group = null;
+    var kinds = KIND_CHOICES.filter(function (choice) { return inGroup(choice[0], group); });
     var c = {};
     var message, shell;
     // The phreatic line last filled in from the points: while the field still holds it
@@ -1419,7 +1626,7 @@ App.BoundaryConditions = (function () {
               next.z_coordinates = null;
             }
           }
-          openRecord(Object.assign(blank(kind, on), next));
+          openRecord(Object.assign(blank(kind, on), next), group);
         }
       });
     }
@@ -1440,7 +1647,11 @@ App.BoundaryConditions = (function () {
       }
     }
 
-    if (!record) record = blank('displacement', 'face');
+    // A new flow condition opens as a water pressure on the whole soil.
+    if (!record) {
+      record = group === 'flow' ? blank('water_pressure', 'domain')
+        : blank('displacement', 'face');
+    }
 
     shell = App.Dialogs.open({
       title: (known ? 'Edit' : 'Create') + ' boundary condition',
@@ -1472,12 +1683,16 @@ App.BoundaryConditions = (function () {
 
         c.name = el('input.mesh-setting-control', { type: 'text', value: record.name });
         row('name', 'Name', c.name, 'Shown in the Model explorer and the deck.');
-        c.kind = options(el('select.mesh-setting-control'), [['displacement', 'Support'],
-          ['water_pressure', 'Water pressure'], ['seepage', 'Seepage face']], record.kind);
-        c.kind.disabled = known;
-        row('kind', 'Condition', c.kind, 'A support holds displacements at zero. A '
-            + 'seepage face, on a face or a line along the soil\'s outer boundary, lets '
-            + 'water leave the soil in a groundwater flow calculation.');
+        c.kind = options(el('select.mesh-setting-control'), kinds, record.kind);
+        c.kind.disabled = known || kinds.length < 2;
+        var supportHelp = 'A support holds displacements at zero.';
+        var flowHelp = 'A water pressure sets the pore pressure. A seepage face, on a '
+          + 'face or a line along the soil\'s outer boundary, lets water leave the soil '
+          + 'in a groundwater flow calculation.';
+        row('kind', 'Condition', c.kind, group === 'mechanical' ? supportHelp
+            : group === 'flow' ? flowHelp
+            : supportHelp + ' A seepage face, on a face or a line along the soil\'s outer '
+              + 'boundary, lets water leave the soil in a groundwater flow calculation.');
         c.on = options(el('select.mesh-setting-control'), TARGETS, record.on);
         row('on', 'Where', c.on, 'Lines and points are drawn in the 2D section.');
         c.face = options(el('select.mesh-setting-control'), facesOf(project).map(function (f) {
@@ -1635,7 +1850,7 @@ App.BoundaryConditions = (function () {
 
   return {
     FACES: FACES, SECTION_FACES: SECTION_FACES, FACE_NORMALS: FACE_NORMALS,
-    PRESSURE_TYPES: PRESSURE_TYPES, TARGETS: TARGETS,
+    PRESSURE_TYPES: PRESSURE_TYPES, TARGETS: TARGETS, GROUPS: GROUPS, groupOf: groupOf,
     draftDisplacement: draftDisplacement, draftWaterPressure: draftWaterPressure,
     draftSeepage: draftSeepage,
     standardConditions: standardConditions, withStandard: withStandard,
@@ -1644,6 +1859,7 @@ App.BoundaryConditions = (function () {
     line: line, listedLines: listedLines, label: label,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
+    flowRows: flowRows, mechanicalRows: mechanicalRows,
     phreaticPoints: phreaticPoints,
     INTERPOLATE: INTERPOLATE, waterLines: waterLines, phreaticLine: phreaticLine,
     headLines: headLines,

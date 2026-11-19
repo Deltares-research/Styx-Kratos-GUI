@@ -669,6 +669,25 @@
     });
   });
 
+  test('the sheet pile tool and its flyout have a glyph of their own', function () {
+    var tool = (App.RAILS.structures || []).filter(function (item) {
+      return item && item.action === 'createSheetPile';
+    })[0];
+    T.ok(tool, 'the sheet pile tool exists');
+    [tool].concat(tool.flyout || []).forEach(function (item) {
+      T.ok(App.ICONS[item.icon], (item.label || item.tip) + ' needs an icon in App.ICONS');
+    });
+    T.ok(App.ICONS.wall !== App.ICONS.info, 'not the info glyph');
+  });
+
+  test('the sheet pile and anchor icons both draw the faded ground line', function () {
+    T.ok(/<path d="M[^"]*H2[23]" opacity="\.32"\/>/.test(App.ICONS.wall),
+         'the sheet pile icon has the ground');
+    T.ok(/<path d="M[^"]*H2[23]" opacity="\.32"\/>/.test(App.ICONS.anchor),
+         'the anchor icon has the ground');
+    T.ok(App.ICONS.wall !== App.ICONS.anchor, 'and each draws its own part over it');
+  });
+
   test('each mode maps to the patch body the server expects', function () {
     T.eq(App.LivePatches.patchFor('2d'), { dimension: 2 });
     T.eq(App.LivePatches.patchFor('3d'), { dimension: 3 });

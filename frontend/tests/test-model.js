@@ -345,7 +345,8 @@
     withProject(coulombProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
       var reduction = rows.filter(function (row) {
-        return row[0] === 'R_inter'; })[0];
+        return row[0] === 'R_inter value'; })[0];
+      T.eq(reduction[4].kind, 'number', 'the value set on the interface is typed');
       T.eq(reduction[4].set(0.55), null);
       T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.55);
       T.ok(reduction[4].set(1.4), 'a contact stronger than the soil is refused');
@@ -353,13 +354,25 @@
     });
   });
 
-  test('a contact with no Rinter of its own says it takes each soil’s, and can be given one', function () {
+  test('R_inter is a choice: each soil’s own, or set on the interface and typed', function () {
     var p = coulombProject();
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
-      T.eq(contactRow('R_inter').slice(0, 4), ['R_inter', 'each soil’s own', '', false]);
-      T.eq(contactRow('R_inter')[4].set(0.6), null);
-      T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.6);
+      var choice = contactRow('R_inter');
+      T.eq(choice.slice(0, 4), ['R_inter', 'Each soil’s own', '', false]);
+      T.eq(choice[4].kind, 'select', 'chosen, not typed: no words in a number field');
+      T.eq(choice[4].options().map(function (o) { return o.text; }),
+           ['Each soil’s own', 'Set on the interface']);
+      T.ok(contactLabels().indexOf('R_inter value') < 0, 'no number to type');
+      T.eq(choice[4].set('own'), null);
+      T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.7, 'the sand has none of its own: a new soil’s');
+      App.Model.rebuildDerived();
+      T.eq(contactRow('R_inter')[1], 'Set on the interface');
+      T.eq(contactRow('R_inter value')[1], '0.7');
+      T.eq(contactRow('R_inter')[4].set('own'), null, 'choosing it again keeps the value');
+      T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.7);
+      T.eq(contactRow('R_inter')[4].set('soil'), null);
+      T.eq(App.INTERFACE_SECTIONS[0].r_inter, null, 'each soil’s own again');
     });
   });
 
@@ -425,38 +438,71 @@
     });
   });
 
-  test('the contact stiffnesses come first and are typed in place', function () {
-    /* The two numbers a user comes to set. Left out they read "derived", and the export
-       takes them from the soil; typed, a button puts them back to that. The CLI's way
-       to the same is `section set ID INTERFACE_NORMAL_STIFFNESS=...`. */
+  test('the contact stiffness is a choice: from the soil, or set on the interface', function () {
+    /* From the soil, the export derives G / t and 10 G / t; nothing is typed. Set on the
+       interface, the two numbers start from that and are typed in their own rows. The
+       CLI's way to the same is `section set ID INTERFACE_NORMAL_STIFFNESS=...`. */
     withProject(contactedProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows.slice(0, 3).map(function (row) { return row.slice(0, 2); }),
-           [['Law', 'GeoIncrementalLinearElasticInterfaceLaw'],
-            ['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
-      rows = rows.slice(1);
-      T.eq(rows[0][3], false, 'editable while derived');
-      T.ok(!rows.some(function (row) { return row[0] === 'Stiffness'; }),
-           'nothing to put back while both are derived');
-      T.eq(rows[0][4].set(2e9), null);
-      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_NORMAL_STIFFNESS, 2e9);
-      T.ok(rows[1][4].set(-1), 'a stiffness at or below zero is refused');
-      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_SHEAR_STIFFNESS, undefined);
+      T.eq(rows.slice(0, 2).map(function (row) { return row.slice(0, 2); }),
+           [['Law', 'GeoIncrementalLinearElasticInterfaceLaw'], ['Stiffness', 'From the soil']]);
+      T.eq(rows[1][4].kind, 'select', 'chosen, not typed: no words in a number field');
+      T.eq(rows[1][4].options().map(function (o) { return o.text; }),
+           ['From the soil', 'Set on the interface']);
+      T.ok(contactLabels().indexOf('INTERFACE_NORMAL_STIFFNESS') < 0, 'nothing to type');
+      T.eq(rows[1][4].set('soil'), null, 'choosing the same changes nothing');
+      T.eq(App.INTERFACE_SECTIONS[0].variables, {});
+      T.eq(rows[1][4].set('own'), null);
+      // The sand: G = 2.5e7 / 2(1 + 0.28), over t = 0.01 m.
+      var given = App.INTERFACE_SECTIONS[0].variables;
+      T.eq(given.INTERFACE_SHEAR_STIFFNESS, 976563000);
+      T.eq(given.INTERFACE_NORMAL_STIFFNESS, 9765630000);
+      App.Model.rebuildDerived();
+      T.eq(contactRow('Stiffness')[1], 'Set on the interface');
+      T.eq(contactRow('INTERFACE_NORMAL_STIFFNESS')[4].set(2e9), null);
+      T.eq(given.INTERFACE_NORMAL_STIFFNESS, 2e9);
+      T.ok(contactRow('INTERFACE_SHEAR_STIFFNESS')[4].set(-1),
+           'a stiffness at or below zero is refused');
+      T.eq(given.INTERFACE_SHEAR_STIFFNESS, 976563000);
+      T.eq(contactRow('Stiffness')[4].set('soil'), null);
+      T.eq(App.INTERFACE_SECTIONS[0].variables, {}, 'derived from the soil again');
     });
   });
 
-  test('typed stiffnesses can be put back to the derived ones', function () {
+  test('a contact that names no soil starts its own stiffness from the softest one', function () {
+    var p = contactedProject();
+    p.interface_sections[0].material = null;
+    withProject(p, function () {
+      T.eq(contactRow('Stiffness')[4].set('own'), null);
+      // The clay: G = 1.2e7 / 2(1 + 0.33), over t = 0.01 m.
+      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_SHEAR_STIFFNESS, 451128000);
+    });
+  });
+
+  test('with no soil to start from, its own stiffness starts from the Mohr-Coulomb defaults', function () {
+    var p = contactedProject();
+    p.interface_sections[0].material = null;
+    p.materials.forEach(function (m) { delete m.variables.YOUNG_MODULUS; });
+    withProject(p, function () {
+      T.eq(contactRow('Stiffness')[4].set('own'), null);
+      T.ok(App.INTERFACE_SECTIONS[0].variables.INTERFACE_SHEAR_STIFFNESS > 0);
+    });
+  });
+
+  test('typed stiffnesses read as set on the interface, and a missing one is filled in', function () {
     var p = contactedProject();
     p.interface_sections[0].variables = { INTERFACE_NORMAL_STIFFNESS: 2e9,
                                           INTERFACE_SHEAR_STIFFNESS: 2e8 };
     withProject(p, function () {
-      var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows[1].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
-      var reset = rows.filter(function (row) { return row[0] === 'Stiffness'; })[0];
-      var committed = App.commitSelectionEdit;
-      App.commitSelectionEdit = function () {};
-      try { reset[4].run(); } finally { App.commitSelectionEdit = committed; }
-      T.eq(App.INTERFACE_SECTIONS[0].variables, {});
+      T.eq(contactRow('Stiffness')[1], 'Set on the interface');
+      T.eq(contactRow('INTERFACE_NORMAL_STIFFNESS').slice(0, 2),
+           ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
+      T.eq(contactRow('Stiffness')[4].set('own'), null, 'choosing it again keeps them');
+      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_SHEAR_STIFFNESS, 2e8);
+      delete App.INTERFACE_SECTIONS[0].variables.INTERFACE_NORMAL_STIFFNESS;
+      T.eq(contactRow('Stiffness')[4].set('own'), null);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_NORMAL_STIFFNESS, 2e9,
+           'ten times the shear typed on the command line');
     });
   });
 

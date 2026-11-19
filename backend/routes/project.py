@@ -17,7 +17,8 @@ from backend import store
 from backend.routes.common import refusals, stored
 from core import session
 from core.model import migration, stages
-from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
+from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, DomainUpdate,
+                                LayersUpdate,
                                 LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterUpdate)
@@ -265,6 +266,17 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # frontend prints them under the mode-switch line (frontend/js/patches.js).
     return stored(project) | {"notes": notes,
             "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.patch("/api/project/domain")
+async def patch_domain(update: DomainUpdate) -> dict:
+    """The model's extents, as `kratos-cli domain --x --y --z` sets them
+    (`session.set_domain`): File > Project properties… in the GUI. A new bottom or top
+    moves the bottom of the last layer or the top of the first with it."""
+    with refusals():
+        project, notes = session.set_domain(store.get(), x=update.x, y=update.y, z=update.z)
+    return stored(project) | {"notes": notes,
+                              "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/units")

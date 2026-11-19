@@ -822,16 +822,20 @@ App.Viewport = (function () {
   /* ── The boundary conditions ─────────────────────────────────────────────
      Each condition drawn from its own record, client side, like the water line.
 
-     2D: a support is a row of symbols along its face or line, or one at its point --
-     the clamp of a fixed support (a stem on hatched ground) when it holds x and y, a
-     triangle on rollers when it holds one of them, pointing along the one it holds --
-     and a water pressure is its own level or phreatic line, dashed, with "h = ..."
-     beside it (a uniform one: its target outlined, "p = ..."). 3D: the face outline in
-     the condition's colour, and a level as the outline of its plane.
+     2D: a fixed support on a face or a line (x and y held) is hatched ground on the
+     edge itself, drawn without a break from its start to its end. A roller on a face
+     or a line (one of them held) is a row of the point's roller symbol along it,
+     pointing along the one it holds. A support at a point is one symbol: a triangle on
+     hatched ground, or a triangle on two wheels for a roller. A water pressure is its
+     own level or phreatic line, dashed, with no words beside it (a uniform one: its
+     target outlined); on a line, the pressure diagram with its deepest value. 3D: the
+     face outline in the condition's colour, and a level as the outline of its plane.
 
      Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
-     can reach. `lines` are polylines of [x, y, z]; `symbols` are where a support
-     symbol stands, the outward direction it points from, and whether it is a roller. */
+     can reach. `lines` are polylines of [x, y, z]; `strips` are the straight pieces of
+     a fixed face or line support, from, to and the side they stand out to; `symbols`
+     are where a single symbol stands, the outward direction it points from, and
+     whether it is a roller. */
   var SUPPORT_COLOR = 0x2e7d32;
   var WATER_COLOR = 0x1f6fb0;
   // A water pressure on a line or a face of its own: indigo, apart from the phreatic
@@ -864,6 +868,31 @@ App.Viewport = (function () {
     var faceOut = face && OUTWARD[face];
     if (faceOut && faceOut[held] !== 0) return faceOut;
     return held === 0 ? [-1, 0] : [0, -1];
+  }
+
+  /* A fixed face or line support as strips, one per straight piece of `points`
+     ([x, y]), each standing out on the side of `outward`; a piece along `outward`
+     stands out to -x (or -y) instead. A line with no length (a face the soil only
+     touches at a corner) is the one symbol. */
+  function supportStrips(points, outward, z) {
+    var out = { strips: [], symbols: [] };
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length < 1e-9) continue;
+      var dir = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+      var normal = [dir[1], -dir[0]];
+      var side = normal[0] * outward[0] + normal[1] * outward[1];
+      if (Math.abs(side) < 1e-9) side = normal[0] !== 0 ? -normal[0] : -normal[1];
+      if (side < 0) normal = [-normal[0], -normal[1]];
+      out.strips.push({ from: [a[0], a[1], z], to: [b[0], b[1], z],
+                        outward: [normal[0] + 0, normal[1] + 0] });
+    }
+    if (!out.strips.length && points.length) {
+      out.symbols.push({ at: [points[0][0], points[0][1], z], outward: outward,
+                         roller: false });
+    }
+    return out;
   }
 
   /* The faces of the soil as the build drew it. The export finds a face on the meshed
@@ -978,7 +1007,7 @@ App.Viewport = (function () {
   }
 
   function conditionGlyphSpec(record, project, outlines) {
-    var spec = { kind: record.kind, lines: [], symbols: [], dashed: false, label: null,
+    var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
                  active: record.active !== false };
     var d = project.domain;
     var two = project.dimension === 2;
@@ -1000,18 +1029,25 @@ App.Viewport = (function () {
       var face = record.on === 'face' ? record.face : null;
       var outward = roller ? rollerOutward(heldX ? 0 : 1, face)
         : (face ? OUTWARD[face] : [0, -1]);
+      var path = null;
       if (record.on === 'face') {
         var outline = faceOutline(project, record.face, outlines);
         if (!outline) return spec;
-        alongLine([outline[0], outline[1]], SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
-        });
+        path = [outline[0], outline[1]];
       } else if (record.on === 'line') {
-        var points = record.points || [];
-        spec.lines.push(points.map(function (p) { return [p[0], p[1], z]; }));
-        alongLine(points, SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
+        path = record.points || [];
+        spec.lines.push(path.map(function (p) { return [p[0], p[1], z]; }));
+      }
+      if (path && roller) {
+        // A row of triangles on two wheels, tips on the face or line, pointing along
+        // the component it holds.
+        alongLine(path, SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: true });
         });
+      } else if (path) {
+        var drawn = supportStrips(path, outward, z);
+        spec.strips = drawn.strips;
+        spec.symbols = drawn.symbols;
       } else if (record.on === 'point') {
         var p = (record.points || [[0, 0]])[0];
         spec.symbols.push({ at: [p[0], p[1], z], outward: outward, roller: roller });
@@ -1019,7 +1055,7 @@ App.Viewport = (function () {
       return spec;
     }
 
-    // A seepage face: its edge or line, with arrows out of the soil, and the word.
+    // A seepage face: its edge or line, with arrows out of the soil.
     if (record.kind === 'seepage') {
       var path = record.on === 'face'
         ? faceOutline(project, record.face, outlines)
@@ -1043,19 +1079,17 @@ App.Viewport = (function () {
           spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
         });
       }
-      var mid = path[Math.floor(path.length / 2)];
-      spec.label = { text: 'seepage', at: [mid[0], mid[1], z] };
       return spec;
     }
 
-    // A water pressure: its level or line, dashed, and what it is.
+    // A water pressure: its level or line, dashed. The symbol carries no words: the
+    // name and the value are in the Model explorer.
     spec.dashed = true;
     var type = record.fluid_pressure_type;
     if (type === 'Hydrostatic' && typeof record.reference_coordinate === 'number') {
       var y = record.reference_coordinate;
       spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
         : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
-      spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
       // On a line or a face (2D), the pressure is on that line only: the line, solid,
       // and the pressure along it, as a diagram that grows with the depth below the
       // level, with the deepest pressure beside it.
@@ -1081,13 +1115,10 @@ App.Viewport = (function () {
         return [x, record.y_coordinates[k], two ? z : (zs ? zs[k] : z)];
       });
       spec.lines.push(waterPath);
-      var last = record.x_coordinates.length - 1;
-      var h = 'h = ' + record.y_coordinates[last].toFixed(2) + ' m';
-      spec.label = { text: h, at: [record.x_coordinates[last], record.y_coordinates[last], z] };
       // A water line the soils take (`App.BoundaryConditions.waterLines`): in the colour
       // its soils are filled with in Flow conditions. The phreatic line solid, with the
-      // water-table mark (an inverted triangle) where it starts; a head line dashed, and
-      // named, so the two never read as one another.
+      // water-table mark (an inverted triangle) where it starts; a head line dashed, so
+      // the two never read as one another.
       var BC = App.BoundaryConditions;
       var list = project.boundary_conditions || [];
       var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list) : null;
@@ -1098,10 +1129,8 @@ App.Viewport = (function () {
           spec.dashed = false;
           var mark = alongPath(waterPath, 0.15);
           if (two && mark) spec.symbols.push({ at: mark, outward: [0, 1], waterTable: true });
-          spec.label.text = 'Phreatic · ' + h;
         } else {
           spec.waterLine = 'head';
-          spec.label.text = record.name + ' · ' + h;
         }
       }
     } else if (type === 'Uniform') {
@@ -1110,8 +1139,6 @@ App.Viewport = (function () {
           ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
           : null;
       if (where) spec.lines.push(where);
-      var at = where ? where[0] : [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2, z];
-      spec.label = { text: 'p = ' + record.value, at: at };
     }
     return spec;
   }
@@ -1143,60 +1170,80 @@ App.Viewport = (function () {
       group.add(line);
     });
 
-    spec.symbols.forEach(function (symbol) {
-      var s = spec.size;
-      var o = symbol.outward, side = [-o[1], o[0]];
-      var at = symbol.at;
-      function p(along, out) {
+    var s = spec.size;
+    function stroke(points, segments) {
+      var geometry = new THREE.BufferGeometry().setFromPoints(points);
+      var material = new THREE.LineBasicMaterial({ color: color });
+      group.add(segments ? new THREE.LineSegments(geometry, material)
+                         : new THREE.Line(geometry, material));
+    }
+    // A point `along` the side direction and `out` along `o`, from `at`.
+    function frame(at, side, o) {
+      return function (along, out) {
         return new THREE.Vector3(at[0] + side[0] * along + o[0] * out,
                                  at[1] + side[1] * along + o[1] * out, at[2]);
+      };
+    }
+    /* Ground from `from` to `to` at `out`: its line and parallel slashes beyond it,
+       evenly spaced and leaning back, so none sticks out past either end. */
+    function hatchedGround(p, from, to, out) {
+      var count = Math.max(1, Math.round((to - from) / (0.3 * s)));
+      var step = (to - from) / count;
+      var pairs = [p(from, out), p(to, out)];
+      for (var k = 1; k <= count; k += 1) {
+        var u = from + step * k;
+        pairs.push(p(u, out), p(u - step, out + 0.35 * s));
       }
-      function stroke(points, segments) {
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
-        var material = new THREE.LineBasicMaterial({ color: color });
-        group.add(segments ? new THREE.LineSegments(geometry, material)
-                           : new THREE.Line(geometry, material));
+      stroke(pairs, true);
+    }
+    function wheel(p, along, out, radius) {
+      var ring = [];
+      for (var k = 0; k <= 16; k += 1) {
+        var angle = (k / 16) * Math.PI * 2;
+        ring.push(p(along + Math.cos(angle) * radius, out + Math.sin(angle) * radius));
       }
+      stroke(ring);
+    }
+
+    spec.strips.forEach(function (strip) {
+      var a = strip.from, b = strip.to;
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!(length > 0)) return;
+      var p = frame(a, [(b[0] - a[0]) / length, (b[1] - a[1]) / length], strip.outward);
+      // Hatched ground on the edge itself, end to end.
+      hatchedGround(p, 0, length, 0);
+    });
+
+    spec.symbols.forEach(function (symbol) {
+      var o = symbol.outward;
+      var p = frame(symbol.at, [-o[1], o[0]], o);
       if (symbol.waterTable) {
         // The water table: an inverted triangle standing on the line, and two short
         // strokes under it.
         stroke([p(0, 0), p(-0.5 * s, 0.85 * s), p(0.5 * s, 0.85 * s), p(0, 0)]);
         stroke([p(-0.4 * s, -0.25 * s), p(0.4 * s, -0.25 * s),
                 p(-0.22 * s, -0.5 * s), p(0.22 * s, -0.5 * s)], true);
-      } else if (symbol.arrow) {
+        return;
+      }
+      if (symbol.arrow) {
         // Water leaving the soil: a short arrow pointing out of it.
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
                 p(0.25 * s, 0.7 * s)]);
-      } else if (symbol.roller) {
-        // A triangle on three rollers.
-        stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
-        [-0.34, 0, 0.34].forEach(function (along) {
-          var ring = [];
-          for (var k = 0; k <= 16; k += 1) {
-            var angle = (k / 16) * Math.PI * 2;
-            ring.push(p((along + Math.cos(angle) * 0.14) * s,
-                        (0.94 + Math.sin(angle) * 0.14) * s));
-          }
-          stroke(ring);
-        });
+        return;
+      }
+      // A triangle with its tip on the point.
+      stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
+      if (symbol.roller) {
+        // On two wheels, on hatched ground.
+        wheel(p, -0.25 * s, 0.94 * s, 0.14 * s);
+        wheel(p, 0.25 * s, 0.94 * s, 0.14 * s);
+        hatchedGround(p, -0.7 * s, 0.7 * s, 1.08 * s);
       } else {
-        // The clamp: a stem out to hatched ground.
-        var clamp = [p(0, 0), p(0, 0.7 * s), p(-0.6 * s, 0.7 * s), p(0.6 * s, 0.7 * s)];
-        for (var h = -0.6; h <= 0.31; h += 0.3) {
-          clamp.push(p(h * s, 0.7 * s), p((h + 0.3) * s, 1.05 * s));
-        }
-        stroke(clamp, true);
+        // On hatched ground.
+        hatchedGround(p, -0.7 * s, 0.7 * s, 0.8 * s);
       }
     });
 
-    if (spec.label) {
-      var label = makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
-                            spec.label.at[2], spec.size * 0.8);
-      // Not over a result: the contours and the legend say what is there (`syncGlyphLabels`).
-      label.userData.glyphLabel = true;
-      label.visible = !(App.state && App.state.mode === 'results');
-      group.add(label);
-    }
     // A pressure on a line of its own: the line, thick where the water presses on it,
     // and the diagram of the pressure filled and hatched, without heads -- a condition
     // the soil is held to, not a load.
@@ -1222,8 +1269,12 @@ App.Viewport = (function () {
       var away = spec.diagram.glyph.deepestInward;
       if (spec.diagram.text && deep && away) {
         var off = spec.size * 1.6 + spec.size * 1.2;
-        group.add(makeLabel(spec.diagram.text, deep[0] - away[0] * off,
-                            deep[1] - away[1] * off, zd, spec.size * 0.7));
+        var label = makeLabel(spec.diagram.text, deep[0] - away[0] * off,
+                              deep[1] - away[1] * off, zd, spec.size * 0.7);
+        // Not over a result: the contours and the legend say what is there (`syncGlyphLabels`).
+        label.userData.glyphLabel = true;
+        label.visible = !(App.state && App.state.mode === 'results');
+        group.add(label);
       }
     }
     group.traverse(function (child) {
@@ -1610,10 +1661,13 @@ App.Viewport = (function () {
   function modeLayout(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                       normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
-    // The boundary conditions' symbols: in every mode, each one hidden until it is
-    // shown (the explorer's Show) or selected.
-    var conditions = ((conditionKeys && conditionKeys.supports) || [])
-      .concat((conditionKeys && conditionKeys.water) || []);
+    // The boundary conditions' symbols, each in the tabs it belongs to: the supports
+    // in Soil, Structures and Mesh, the flow conditions (water pressures, seepage
+    // faces) in Flow conditions, both in Staged construction. A row's Hide in the
+    // explorer still hides one, and selecting a row still shows it in any tab.
+    var supports = (conditionKeys && conditionKeys.supports) || [];
+    var flowConditions = (conditionKeys && conditionKeys.water) || [];
+    var conditions = supports.concat(flowConditions);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
     // :112-126), so their keys need to be listed in the modes that show structures.
@@ -1643,11 +1697,11 @@ App.Viewport = (function () {
       // out of structures/mesh so those keep reading as they did.
       return {
         groups: {
-          soil: visibleKeys.concat(conditions, soilFaded),
-          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+          soil: visibleKeys.concat(supports, soilFaded),
+          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, supports),
           // The loads solid, not faded: the mesh is read against where it is loaded.
-          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, conditions),
-          flow: visibleKeys.concat(['water'], conditions, flowFaded),
+          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, supports),
+          flow: visibleKeys.concat(['water'], flowConditions, flowFaded),
           // Loads too: Staged construction is where a load is switched on and
           // off, so it has to be on screen there (`stageHidden` still hides one
           // the selected stage has switched off).
@@ -1662,12 +1716,12 @@ App.Viewport = (function () {
     flowFaded = ['struts', 'anchors', 'piles'].concat(loadKeys, memberKeys, contactKeys);
     return {
       groups: {
-        soil:       soilKeys.concat(conditions, soilFaded),
+        soil:       soilKeys.concat(supports, soilFaded),
         structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                    loadKeys, memberKeys, contactKeys, customKeys, conditions),
+                                    loadKeys, memberKeys, contactKeys, customKeys, supports),
         mesh:       ['mesh', 'wall'].concat(loadKeys, memberKeys, contactKeys, customKeys,
-                                            conditions),
-        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions,
+                                            supports),
+        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, flowConditions,
                                     flowFaded),
         staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
                       .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
@@ -2071,10 +2125,16 @@ App.Viewport = (function () {
         rebuildFrame(payload.bbox);
         buildGroups(payload);
         rebuildHome(payload.bbox);
+        // An edit the mesher never sees (a stage, a material, the name) leaves the mesh
+        // as it was, so it is drawn again and the Mesh tab still shows it. Any other
+        // edit drops it: a mesh of the old model would be a wrong picture of this one.
+        var keepMesh = meshBuilt && meshShown !== null && meshShown.key === currentMeshKey();
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
         forgetNodeParts();
+        if (keepMesh) drawMesh(meshShown.result);
+        else meshShown = null;
         refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -2084,6 +2144,8 @@ App.Viewport = (function () {
              + triangles.toLocaleString('en-GB') + ' display triangles.');
 
         ui.hide();
+        // A kept mesh is numbered again, after this overlay: see generateMesh.
+        if (keepMesh && App.MeshLabels && App.MeshLabels.anyActive()) renumberLabels();
         // Re-mounts the tree and the property grid against the new layer list.
         App.setMode(App.state.mode);
         setProjection(dimension === 2 ? false : App.state.projection !== false);
@@ -2766,8 +2828,21 @@ App.Viewport = (function () {
     applyImportedVisibility(mode);
     syncSurfaceWater(mode);
     syncGlyphLabels(mode);
+    // The numbers follow what this tab draws: gone where the mesh is not, back where
+    // it is. Only a change of tab asks the server for a missing numbering: a redraw
+    // in the same tab comes from generateMesh or a rebuild, which ask for it
+    // themselves once their own progress overlay is down.
+    var tabChanged = mode !== labelledMode;
+    labelledMode = mode;
+    if (labelsOn()) {
+      if (tabChanged) renumberLabels();
+      else refreshLabels();
+    }
     needsRender = true;
   }
+
+  /* The tab the labels were last gathered for (setMode). */
+  var labelledMode = null;
 
   /* The text a condition's glyph carries (its level, its value) is drawn in every tab
      but Results, where it would sit over the contours as a box of text. */
@@ -2960,11 +3035,17 @@ App.Viewport = (function () {
   /* Everything currently on screen that has a number, for one kind of label. An
      imported deck brings its own numbering with it, section by section, so a part the
      eye is closed on is not labelled; a generated mesh's has to be asked for, so it only
-     joins in once `generatedLabels` has arrived. */
+     joins in once `generatedLabels` has arrived, and only while that mesh is drawn --
+     Structures and the other tabs that draw the geometry show no numbers for a mesh
+     they do not show. Results numbers the result mesh it draws (App.ResultsView). */
   function labelledPoints(kind) {
     var list = [];
     if (!App.MeshLabels) return list;
-    if (importedMeshGroup) {
+    if (App.state && App.state.mode === 'results') {
+      return App.ResultsView && App.ResultsView.labelPoints
+        ? App.ResultsView.labelPoints(kind) : list;
+    }
+    if (importedMeshGroup && importedMeshGroup.visible) {
       var sections = Object.keys(importedSectionLabels)
         .filter(function (key) {
           var group = importedSectionGroups[key];
@@ -2975,10 +3056,15 @@ App.Viewport = (function () {
         ? App.MeshLabels.elementsFromSections(sections)
         : App.MeshLabels.nodesFromSections(sections));
     }
-    if (generatedLabels && meshBuilt && visible.mesh !== false) {
+    if (generatedLabels && meshDrawn()) {
       list = list.concat(App.MeshLabels.pointsFromTable(generatedLabels[kind]));
     }
     return list;
+  }
+
+  /* The generated mesh is on screen: built, its eye open, and drawn by this tab. */
+  function meshDrawn() {
+    return meshBuilt && visible.mesh !== false && !!groups.mesh && groups.mesh.visible;
   }
 
   /* Re-gather without re-asking the server: called whenever what is drawn changes. Only
@@ -2996,7 +3082,7 @@ App.Viewport = (function () {
      needs asking, and only once: the numbering costs a full export pass, and nothing but
      a new mesh can change it. */
   function needsNumbering() {
-    return meshBuilt && visible.mesh !== false && !generatedLabels;
+    return meshDrawn() && !generatedLabels;
   }
 
   /* Fetch both tables at once. They come out of one export pass on the server, so asking
@@ -3108,55 +3194,43 @@ App.Viewport = (function () {
     });
   }
 
+  /* The mesh on screen, as the server sent it, with the key of what it was made from
+     (`App.MeshSettings.meshKey`). refresh() draws it again when the key still fits. */
+  var meshShown = null;
+  /* The key of the mesh the last calculation made on the server, or null. */
+  var calculatedKey = null;
+
+  function currentMeshKey() {
+    if (!App.MeshSettings || !App.MeshSettings.meshKey) return null;
+    return App.MeshSettings.meshKey(App.PROJECT, meshSettings());
+  }
+
+  /* A calculation meshes the model on the server. Its key is kept so the Mesh tab can
+     show that mesh later without asking for settings (js/calculate.js). */
+  function rememberCalculatedMesh(key) { calculatedKey = key || null; }
+
+  /* True when there is no mesh on screen, but the last calculation made one for the
+     model as it is now. */
+  function calculatedMeshFits() {
+    return !meshBuilt && calculatedKey !== null && calculatedKey === currentMeshKey();
+  }
+
   function generateMesh(done) {
     var ui = overlay();
     ui.show('Meshing with gmsh…', 20);
 
     var settings = meshSettings();
+    var key = currentMeshKey();
     App.Api.post('/api/mesh', settings).then(function (result) {
       ui.show('Uploading mesh…', 90);
-
-      disposeGroup(groups.mesh);
-      groups.mesh = new THREE.Group();
-      groups.mesh.name = 'mesh';
-      result.sections.forEach(function (section) {
-        var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
-          color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
-          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-        }));
-        mesh.material.userData = { base: mesh.material.emissive.clone() };
-        mesh.userData.key = 'mesh';
-        groups.mesh.add(mesh);
-
-        var wire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(mesh.geometry),
-          new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
-        );
-        wire.userData.noPick = true;
-        groups.mesh.add(wire);
-      });
-      buildPartColors(result.parts || []);
-      scene.add(groups.mesh);
-      if (!(('mesh') in visible)) visible.mesh = true;
-
-      meshBuilt = true;
-      // Different mesh, different nodes: whatever was numbered before is now numbering
-      // a mesh that no longer exists.
-      generatedLabels = null;
-      forgetNodeParts();
-      App.MESH_STATS = result.stats;
-      if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+      drawMesh(result);
+      meshShown = { key: key, result: result };
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
         .slice(-5).forEach(function (line) {
           if (/error/i.test(line) && App.Command.err) App.Command.err(line);
           else note(line);
         });
       ui.hide();
-      setMode(App.state.mode);
-      // The Model explorer's colour toggles are only drawn for parts that have mesh
-      // elements, so the tree is mounted again now that there are some.
-      if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
-      needsRender = true;
       // Last, and only if the numbers are on screen: re-numbering means a second trip
       // to the server with its own progress overlay, which must not start under this
       // one's.
@@ -3169,6 +3243,45 @@ App.Viewport = (function () {
     });
   }
 
+  /* Put a mesh from `POST /api/mesh` on screen, in place of the one there was. */
+  function drawMesh(result) {
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    result.sections.forEach(function (section) {
+      var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
+        color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+      }));
+      mesh.material.userData = { base: mesh.material.emissive.clone() };
+      mesh.userData.key = 'mesh';
+      groups.mesh.add(mesh);
+
+      var wire = new THREE.LineSegments(
+        new THREE.WireframeGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
+      );
+      wire.userData.noPick = true;
+      groups.mesh.add(wire);
+    });
+    buildPartColors(result.parts || []);
+    scene.add(groups.mesh);
+    if (!(('mesh') in visible)) visible.mesh = true;
+
+    meshBuilt = true;
+    // Different mesh, different nodes: whatever was numbered before is now numbering
+    // a mesh that no longer exists.
+    generatedLabels = null;
+    forgetNodeParts();
+    App.MESH_STATS = result.stats;
+    if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are only drawn for parts that have mesh
+    // elements, so the tree is mounted again now that there are some.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+  }
+
   function hasMesh() { return meshBuilt; }
 
   /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
@@ -3177,6 +3290,10 @@ App.Viewport = (function () {
      the local sizes stay in the project, so Generate mesh makes the same mesh again.
      False when there was no mesh to clear. */
   function clearMesh() {
+    // A mesh cleared on purpose stays cleared: the Mesh tab must not bring back the
+    // calculation's one.
+    meshShown = null;
+    calculatedKey = null;
     if (!meshBuilt) return false;
     disposeGroup(groups.mesh);
     groups.mesh = new THREE.Group();
@@ -4032,7 +4149,8 @@ App.Viewport = (function () {
     WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, meshRefinements: meshRefinements,
     hasMesh: hasMesh, resize: resize,
-    meshSettings: meshSettings,
+    meshSettings: meshSettings, meshKey: currentMeshKey,
+    rememberCalculatedMesh: rememberCalculatedMesh, calculatedMeshFits: calculatedMeshFits,
     setLabels: setLabels, labelsOn: labelsOn,
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,

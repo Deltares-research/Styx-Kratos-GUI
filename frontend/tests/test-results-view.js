@@ -337,4 +337,41 @@
     });
   });
 
+  test('results view: the legend data is what the legend on screen says', function () {
+    stage(function () {
+      T.eq(V.legendData(), null, 'nothing drawn, no legend');
+      V.draw(payload());
+      var legend = V.legendData();
+      T.eq(legend.title, 'u_y');
+      T.eq(legend.unit, 'm');
+      T.eq(legend.stage, 3);
+      T.eq(legend.options.bands, 32);
+      T.eq(legend.range, ['Maximum value = 0 m (node 1)', 'Minimum value = -1.00 m (node 3)']);
+      V.clear();
+      T.eq(V.legendData(), null, 'cleared with the contour');
+    });
+  });
+
+  test('results view: the node labels list each shown node once, at its drawn place', function () {
+    stage(function (ctx) {
+      var clay = section({ key: 'results:Clay', part: 'Clay', node_ids: [2, 4, 5],
+                           positions: [2, 0, 0, 4, 0, 0, 2, 2, 0] });
+      var mesh = { dimension: 2, bbox: [0, 0, 0, 4, 2, 0], sections: [section(), clay] };
+      var field = Object.assign({}, payload().field, {
+        ids: [1, 2, 3, 4, 5], values: [0, -0.5, -1, -0.2, -0.4] });
+      V.draw(payload({ mesh: mesh, field: field }));
+      var points = V.labelPoints('nodes');
+      T.eq(points.map(function (p) { return p.id; }), [1, 2, 3, 4, 5],
+           'node 2 is in both parts and listed once');
+      T.eq([points[3].x, points[3].y, points[3].z], [4, 0, 0]);
+      // A part whose eye is closed has no labels.
+      App.Viewport.importedEye = function () { return true; };
+      App.Deck = { resultShown: function (part) { return part !== 'Clay'; } };
+      V.syncVisibility();
+      T.eq(V.labelPoints('nodes').map(function (p) { return p.id; }), [1, 2, 3]);
+      V.clear();
+      T.eq(V.labelPoints('nodes'), [], 'nothing drawn, no labels');
+    });
+  });
+
 })();

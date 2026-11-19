@@ -178,14 +178,14 @@
     T.eq(BC().label(record), 'exit  ·  seepage');
   });
 
-  test('a seepage face draws its line, arrows out of the soil and the word', function () {
+  test('a seepage face draws its line and arrows out of the soil, without words', function () {
     var spec = App.Viewport.conditionGlyphSpec(
       seepage('exit', 'line', { points: [[20, -1], [20, -6]] }), section());
     T.eq(spec.lines[0], [[20, -1, 5], [20, -6, 5]]);
     T.ok(spec.symbols.length > 1 && spec.symbols.every(function (s) {
       return s.arrow && s.outward[0] === 1 && s.outward[1] === 0;
     }), 'every arrow points out of the right side');
-    T.eq(spec.label.text, 'seepage');
+    T.eq(spec.label, undefined, 'no word beside the symbol');
     var top = App.Viewport.conditionGlyphSpec(seepage('top', 'face', { face: 'top' }),
                                               section());
     T.eq(top.symbols[0].outward, [0, 1]);
@@ -404,18 +404,21 @@
     T.eq(conditions.children[3].label, 'pore  ·  h = -2.00 m', 'the water is written');
   });
 
-  test('a support is a row of symbols along its face; front and back draw nothing in 2D',
+  test('a support is one strip along its whole face; front and back draw nothing in 2D',
        function () {
     var project = section();
     var bottom = App.Viewport.conditionGlyphSpec(standard()[0], project);
-    T.ok(bottom.symbols.length >= 2);
-    T.eq(bottom.symbols[0].outward, [0, -1]);
-    T.eq(bottom.symbols[0].roller, false, 'x and y held: the clamp');
-    T.eq([bottom.symbols[0].at[0], bottom.symbols[bottom.symbols.length - 1].at[0]],
-         [0, 20], 'from one end of the face to the other');
+    T.eq(bottom.symbols.length, 0);
+    T.eq(bottom.strips.length, 1);
+    T.eq([bottom.strips[0].from[0], bottom.strips[0].to[0]], [0, 20],
+         'from one end of the face to the other');
+    T.eq(bottom.strips[0].outward, [0, -1], 'x and y held: hatched ground');
     var left = App.Viewport.conditionGlyphSpec(standard()[1], project);
+    T.eq(left.strips.length, 0, 'a roller is no strip');
+    T.ok(left.symbols.length > 1, 'but a row of the point roller symbol');
     T.eq([left.symbols[0].roller, left.symbols[0].outward], [true, [-1, 0]]);
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[3], project).symbols.length, 0);
+    var none = App.Viewport.conditionGlyphSpec(standard()[3], project);
+    T.eq([none.symbols.length, none.strips.length], [0, 0]);
   });
 
   test('a face is where the soil is, not where the domain is', function () {
@@ -431,56 +434,85 @@
     T.eq([left.symbols[0].at[1], left.symbols[left.symbols.length - 1].at[1]], [-10, 0]);
     T.eq(App.Viewport.soilFaceOutlines([other], ['soil_L1'], project), null,
          'nothing to measure with no soil drawn');
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[1], project, {}).symbols.length, 0,
+    var bare = App.Viewport.conditionGlyphSpec(standard()[1], project, {});
+    T.eq([bare.symbols.length, bare.strips.length], [0, 0],
          'and then no face to draw a support on');
   });
 
 
-  test('a support line has symbols along it, a face met at a corner has one', function () {
+  test('a support line is a strip per straight piece, a face met at a corner one symbol',
+       function () {
     var project = section();
     var slope = App.Viewport.conditionGlyphSpec(support('slope', null, [true, true, false],
       { on: 'line', points: [[0, 0], [3, 3], [9, 3]] }), project);
-    T.ok(slope.symbols.length > 3, 'between the corners too');
-    T.eq(slope.symbols[0].at.slice(0, 2), [0, 0]);
-    T.eq(slope.symbols[slope.symbols.length - 1].at.slice(0, 2), [9, 3]);
+    T.eq(slope.symbols.length, 0);
+    T.eq(slope.strips.map(function (strip) {
+      return [strip.from.slice(0, 2), strip.to.slice(0, 2)]; }),
+      [[[0, 0], [3, 3]], [[3, 3], [9, 3]]], 'without a break from start to end');
+    var h = Math.SQRT1_2;
+    T.ok(Math.abs(slope.strips[0].outward[0] - h) < 1e-12
+         && Math.abs(slope.strips[0].outward[1] + h) < 1e-12,
+         'square to the piece, on the lower side: ' + slope.strips[0].outward);
+    T.eq(slope.strips[1].outward, [0, -1]);
+    var wall = App.Viewport.conditionGlyphSpec(support('wall', null, [true, true, false],
+      { on: 'line', points: [[2, 0], [2, -5]] }), project);
+    T.eq(wall.strips[0].outward, [-1, 0], 'an upright line stands out to -x');
     var corner = { left: [[0, 0, 5], [0, 0, 5]] };
-    T.eq(App.Viewport.conditionGlyphSpec(standard()[1], project, corner).symbols.length, 1);
+    var touch = App.Viewport.conditionGlyphSpec(standard()[1], project, corner);
+    T.eq([touch.symbols.length, touch.strips.length], [1, 0]);
   });
 
-  test('a roller points along the component it holds', function () {
+  test('a roller stands out along the component it holds', function () {
     var project = section();
     var bottomY = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [false, true, false]), project);
+    T.eq(bottomY.strips.length, 0);
     T.eq([bottomY.symbols[0].roller, bottomY.symbols[0].outward], [true, [0, -1]]);
     var bottomX = App.Viewport.conditionGlyphSpec(
       support('b', 'bottom', [true, false, false]), project);
-    T.eq(bottomX.symbols[0].outward, [-1, 0]);
+    T.eq(bottomX.strips.length, 0, 'a face along the held component cannot roll on it');
+    T.ok(bottomX.symbols.length > 1);
+    T.eq([bottomX.symbols[0].roller, bottomX.symbols[0].outward], [true, [-1, 0]]);
+    var line = App.Viewport.conditionGlyphSpec(
+      support('l', null, [false, true, false], { on: 'line', points: [[0, -2], [20, -2]] }),
+      project);
+    T.eq(line.strips.length, 0, 'a roller on a line is no strip');
+    T.ok(line.symbols.length > 1, 'but a row of the point roller symbol');
+    T.eq([line.symbols[0].at.slice(0, 2), line.symbols[line.symbols.length - 1].at.slice(0, 2)],
+         [[0, -2], [20, -2]], 'from one end of the line to the other');
+    T.eq([line.symbols[0].roller, line.symbols[0].outward], [true, [0, -1]]);
     var point = App.Viewport.conditionGlyphSpec(
       support('p', null, [true, false, true], { on: 'point', points: [[3, -4]] }), project);
     T.eq([point.symbols.length, point.symbols[0].roller, point.symbols[0].outward],
          [1, true, [-1, 0]], 'z does not count in a section');
   });
 
-  test('a water pressure draws its own level, with h beside it', function () {
+  test('a water pressure draws its own level, without words beside it', function () {
     var spec = App.Viewport.conditionGlyphSpec(pressure('pore', 'domain'), section());
     T.eq(spec.lines[0], [[0, -2, 5], [20, -2, 5]]);
-    T.eq(spec.label.text, 'h = -2.00 m');
+    T.eq(spec.label, undefined, 'no h = beside the level');
     T.eq(spec.dashed, true);
     var phreatic = App.Viewport.conditionGlyphSpec(pressure('line', 'domain', {
       fluid_pressure_type: 'Phreatic_Multi_Line', x_coordinates: [0, 20],
       y_coordinates: [-1, -3] }), section());
     T.eq(phreatic.lines[0], [[0, -1, 5], [20, -3, 5]]);
+    T.eq(phreatic.label, undefined, 'no h = beside the phreatic line');
   });
 
-  test('the conditions may be shown in every mode; Results shows only the water',
+  test('each condition is shown in its own tabs; Results shows only the water',
        function () {
     [true, false].forEach(function (layered) {
       var groups = App.Viewport.computeModeGroups(['soil_L1'], [], layered, [], [], [],
                                                   { supports: ['fixed_bottom'], water: ['pore'] });
-      ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
-        T.ok(groups[mode].indexOf('fixed_bottom') >= 0 && groups[mode].indexOf('pore') >= 0,
-             mode);
+      var tag = layered ? ' (layered soil)' : '';
+      ['soil', 'structures', 'mesh'].forEach(function (mode) {
+        T.ok(groups[mode].indexOf('fixed_bottom') >= 0, mode + ' shows the support' + tag);
+        T.eq(groups[mode].indexOf('pore'), -1, mode + ' hides the flow condition' + tag);
       });
+      T.ok(groups.flow.indexOf('pore') >= 0, 'flow shows the flow condition' + tag);
+      T.eq(groups.flow.indexOf('fixed_bottom'), -1, 'flow hides the support' + tag);
+      T.ok(groups.staged.indexOf('fixed_bottom') >= 0 && groups.staged.indexOf('pore') >= 0,
+           'staged shows both' + tag);
       T.eq(groups.results.indexOf('fixed_bottom'), -1, 'no supports over the contour');
       T.ok(groups.results.indexOf('pore') >= 0, 'the water pressure over the contour');
     });
@@ -685,7 +717,7 @@
     T.eq(project.soil_water, { soil_L1: 'aq', soil_L1__c: 'interpolate' }, 'not changed');
   });
 
-  test('the phreatic line is drawn solid with its mark, a head line dashed and named',
+  test('the phreatic line is drawn solid with its mark, a head line dashed, no words',
        function () {
     var pl = phreatic('pl', { y_coordinates: [-1, -3] });
     var aq = head('aq', { name: 'Aquifer' });
@@ -694,11 +726,11 @@
     T.eq([line.waterLine, line.dashed, line.color], ['phreatic', false, BC().PHREATIC_COLOR]);
     T.eq(line.symbols.length, 1);
     T.eq(line.symbols[0].waterTable, true);
-    T.eq(line.label.text, 'Phreatic · h = -3.00 m');
+    T.eq(line.label, undefined, 'no words beside the phreatic line');
     var other = App.Viewport.conditionGlyphSpec(aq, project);
     T.eq([other.waterLine, other.dashed], ['head', true]);
     T.eq(other.color, BC().waterLineColor(aq, project.boundary_conditions));
-    T.eq(other.label.text, 'Aquifer · h = 3.00 m');
+    T.eq(other.label, undefined, 'no words beside the head line');
     T.eq(App.Viewport.alongPath([[0, 0, 5], [10, 0, 5], [10, 10, 5]], 0.75), [10, 5, 5]);
   });
 

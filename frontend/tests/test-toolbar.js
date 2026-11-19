@@ -49,7 +49,7 @@
        no room for. A sheet pile is not among them: that tool makes the wall of
        whichever dimension is open. */
     T.eq(App.LivePatches.THREE_D_ONLY.slice().sort(), [
-      'createMember', 'drawBox', 'drawCylinder', 'navRotate', 'toggleProjection',
+      'createMember', 'navRotate', 'toggleProjection',
       'viewFront', 'viewIso', 'viewSide', 'viewTop'
     ]);
     T.eq(App.LivePatches.availableIn2D('zoomFit'), true);
@@ -380,25 +380,94 @@
     } finally { Object.assign(App, saved); }
   });
 
+  test('turned on in a tab that does not draw the mesh, the IDs stay on for one that does',
+       function () {
+    var saved = { Viewport: App.Viewport, Command: App.Command, state: App.state };
+    var notes = [], changes = [], on = false;
+    App.Command = { note: function (text) { notes.push(text); } };
+    App.Viewport = {
+      hasMesh: function () { return true; },
+      labelsOn: function () { return on; },
+      setLabels: function (kind, value, done) {
+        changes.push(value); on = value;
+        if (done) done(0);                        // nothing drawn here to number
+      }
+    };
+    try {
+      App.state = { mode: 'structures' };
+      App.LivePatches.toggleLabels('nodes');
+      T.eq(changes, [true], 'left on');
+      T.ok(/Mesh tab and in Results/.test(notes[0]), notes[0]);
+      on = false;
+      App.state = { mode: 'results' };
+      App.LivePatches.toggleLabels('nodes');
+      T.eq(changes, [true, true, false], 'Results with no result: off again');
+      T.eq(notes[1], 'Nothing to label — open a result first.');
+    } finally { Object.assign(App, saved); }
+  });
+
   /* ── Structures rail order ─────────────────────────────────────── */
 
   /* Every live tool was appended to the frozen rail, so sheet piles, anchors and
-     the import tools ended up after "Tunnel designer" instead of beside the
-     members they belong with. The rail is composed in build order now. */
+     the import tools ended up after the frozen tools instead of beside the members
+     they belong with. The rail is composed in build order now; the tools with
+     nothing behind them are taken out. */
   test('the Structures rail is ordered by how a model is built', function () {
     withInstall(function () {});
     var keys = (App.RAILS.structures || []).map(function (tool) {
       return tool === '-' ? '-' : (tool.action || tool.icon);
     });
     T.eq(keys, [
-      'select', 'selectmulti',
-      '-', 'drawPoint', 'drawLine', 'drawPolygon', 'drawBox',
-      '-', 'plate', 'beam', 'embedded', 'createSheetPile', 'createMember',
-      'createAnchor', 'interface',
-      '-', 'createLoad', 'createBoundaryCondition',
-      '-', 'tunnel',
-      '-', 'importModel'
+      'select',
+      '-', 'drawLine',
+      '-', 'createSheetPile', 'createMember', 'createAnchor', 'interface',
+      '-', 'createLoad', 'createBoundaryCondition', 'mechanicalConditions'
     ]);
+  });
+
+  /* The mechanical conditions are set in Structures mode, the flow ones in Flow
+     conditions mode: each mode has a button for one new condition of its group and one
+     for the window of the whole group, in its rail and its menu. */
+  test('each mode opens the boundary condition windows of its own group', function () {
+    withInstall(function () {
+      var flow = (App.RAILS.flow || []).map(function (tool) {
+        return tool === '-' ? '-' : (tool.action || tool.icon);
+      });
+      var create = flow.indexOf('createFlowCondition');
+      T.ok(create > 0, 'the Flow conditions rail has a Create flow boundary condition button');
+      T.eq(flow.slice(create, create + 3),
+           ['createFlowCondition', 'createWaterPressureLine', 'flowConditions']);
+      function actions(label) {
+        var menu = App.MENUS.filter(function (m) { return m.label === label; })[0];
+        return menu.items.map(function (item) { return item && item.action; });
+      }
+      T.ok(actions('Flow conditions').indexOf('createFlowCondition') >= 0);
+      T.ok(actions('Flow conditions').indexOf('flowConditions') >= 0);
+      T.eq(actions('Flow conditions').indexOf('boundaryConditions'), -1);
+      T.ok(actions('Structures').indexOf('createBoundaryCondition') >= 0);
+      T.ok(actions('Structures').indexOf('mechanicalConditions') >= 0);
+      T.eq(actions('Structures').indexOf('boundaryConditions'), -1);
+      var tool = App.RAILS.structures.filter(function (t) {
+        return t && t.action === 'createBoundaryCondition';
+      })[0];
+      T.eq(tool.flyout.map(function (item) { return item.action; }).indexOf('boundaryConditions'),
+           -1, 'the Structures flyout opens the mechanical window, not the window of all');
+
+      var saved = App.BoundaryConditions;
+      var calls = [];
+      App.BoundaryConditions = {
+        open: function (group) { calls.push(['open', group]); },
+        openRecord: function (record, group) { calls.push(['record', record, group]); }
+      };
+      try {
+        ['mechanicalConditions', 'flowConditions', 'boundaryConditions',
+         'createBoundaryCondition', 'createFlowCondition'].forEach(function (action) {
+          App.runAction({ action: action });
+        });
+      } finally { App.BoundaryConditions = saved; }
+      T.eq(calls, [['open', 'mechanical'], ['open', 'flow'], ['open', 'all'],
+                   ['record', null, 'mechanical'], ['record', null, 'flow']]);
+    });
   });
 
   test('the frozen node-to-node anchor tool gives way to the live anchor tool', function () {
@@ -436,8 +505,7 @@
     withInstall(function () {});
     var soil = App.MENUS.filter(function (m) { return m.label === 'Soil'; })[0];
     var keys = soil.items.map(function (item) { return item === '-' ? '-' : item.action; });
-    T.eq(keys, ['materials', 'soilLayers', '-', 'importSoilLayers', '-',
-      'createSoilVolume']);
+    T.eq(keys, ['materials', 'soilLayers', '-', 'createSoilVolume']);
   });
 
   test('Flow conditions comes before Mesh, on the mode tabs and in the menu bar', function () {
@@ -494,6 +562,70 @@
       T.eq(applied, { name: 'Untitled project' });
       T.eq(App.History.canUndo(), false, 'a new document starts with an empty history');
     }).then(restore, function (err) { restore(); throw err; });
+  });
+
+  test('a new project starts with a clean session', function () {
+    var saved = { post: App.Api.post, command: App.Command, model: App.Model,
+                  viewport: App.Viewport, select: App.selectObject,
+                  selection: App.state.selection, convergence: App.ConvergenceWindow,
+                  calculate: App.Calculate };
+    var calls = [];
+    var boxes = ['cmd-log', 'cmd-history', 'cmd-entry'].map(function (id) {
+      var box = document.getElementById(id);
+      var made = !box;
+      if (made) {
+        box = document.createElement(id === 'cmd-entry' ? 'input' : 'div');
+        box.id = id;
+        document.body.appendChild(box);
+      }
+      return { box: box, made: made };
+    });
+    boxes[0].box.appendChild(document.createElement('div')).textContent = '> mesh';
+    boxes[1].box.appendChild(document.createElement('div')).textContent = '> mesh';
+    boxes[2].box.value = 'calculate';
+    App.Api.post = function () { return Promise.resolve({ project: { name: 'Untitled project' } }); };
+    App.Command = { note: function () {}, ok: function () {}, err: function () {},
+                    write: function () {}, run: function () {} };
+    App.Model = { apply: function (p) { return p; } };
+    App.Viewport = {
+      refresh: function () { return Promise.resolve(); },
+      setLabels: function (kind, on) { calls.push('labels ' + kind + ' ' + on); },
+      clearMesh: function () { calls.push('clear mesh'); }
+    };
+    App.state.selection = 'soil:clay';
+    App.selectObject = function (key) { calls.push('select ' + key); };
+    App.Calculate = { running: function () { return false; } };
+    App.ConvergenceWindow = { close: function () { calls.push('close convergence'); } };
+    function restore() {
+      App.Api.post = saved.post; App.Command = saved.command; App.Model = saved.model;
+      App.Viewport = saved.viewport; App.selectObject = saved.select;
+      App.state.selection = saved.selection;
+      App.ConvergenceWindow = saved.convergence; App.Calculate = saved.calculate;
+      boxes.forEach(function (b) { if (b.made) b.box.remove(); });
+    }
+    return App.LivePatches.newProject().then(function () {
+      T.eq(boxes[0].box.textContent, '', 'the command log is empty');
+      T.eq(boxes[1].box.textContent, '', 'the Model history tab is empty');
+      T.eq(boxes[2].box.value, '', 'the command box is empty');
+      T.eq(calls, ['labels nodes false', 'labels elements false', 'clear mesh',
+                   'select null', 'close convergence']);
+    }).then(restore, function (err) { restore(); throw err; });
+  });
+
+  test('run <file.py> keeps the commands typed in this session', function () {
+    var log = document.getElementById('cmd-log');
+    var made = !log;
+    if (made) { log = document.createElement('div'); log.id = 'cmd-log'; document.body.appendChild(log); }
+    var saved = App.Viewport;
+    App.Viewport = {};
+    log.appendChild(document.createElement('div')).textContent = '> run model.py';
+    try {
+      App.LivePatches.wipeSession(true);
+      T.ok(/run model\.py/.test(log.textContent), 'the log keeps the run: ' + log.textContent);
+    } finally {
+      App.Viewport = saved;
+      if (made) log.remove(); else log.lastChild.remove();
+    }
   });
 
   test('a saved project is named after the project, not after the page', function () {

@@ -1538,22 +1538,31 @@ App.Model = (function () {
     };
   }
 
-  /* R_inter: one number for the whole contact, or none, which is each soil's own
-     (`Material.r_inter`) along the stretch that runs against it. None reads as words;
-     writing those words back changes nothing, as a derived stiffness does. */
-  var EACH_SOIL = 'each soil’s own';
+  /* R_inter: none, which is each soil's own (`Material.r_inter`) along the stretch that
+     runs against it, or one number for the whole contact. Which of the two is a choice,
+     as the strength is (`contactStrengthEditor`); only the number is typed, in a row of
+     its own. One set on the interface starts from the R_inter of the soil the contact
+     names, or else from a new soil's (`Material.r_inter`). */
+  var EACH_SOIL = 'Each soil’s own', ON_INTERFACE = 'Set on the interface';
+  var EACH_SOIL_R = 'soil', OWN_R = 'own', NEW_SOIL_R_INTER = 0.7;
 
-  function contactRInter(section) {
-    return section.r_inter === null || section.r_inter === undefined
-      ? EACH_SOIL : section.r_inter;
+  function ownRInter(section) {
+    return section.r_inter !== null && section.r_inter !== undefined;
   }
 
-  function contactRInterEditor(section) {
-    var number = contactNumberEditor(section, 'r_inter', '', 2);
+  function contactRInterChoice(section) {
     return {
-      kind: 'number', decimals: 2, unit: '',
-      get: function () { return contactRInter(section); },
-      set: function (value) { return value === EACH_SOIL ? null : number.set(value); }
+      kind: 'select',
+      options: function () {
+        return [{ value: EACH_SOIL_R, text: EACH_SOIL }, { value: OWN_R, text: ON_INTERFACE }];
+      },
+      get: function () { return ownRInter(section) ? OWN_R : EACH_SOIL_R; },
+      set: function (value) {
+        if ((value === OWN_R) === ownRInter(section)) return null;
+        var soil = App.matById && section.material ? App.matById(section.material) : null;
+        section.r_inter = value === OWN_R ? (soil && soil.rInter) || NEW_SOIL_R_INTER : null;
+        return null;
+      }
     };
   }
 
@@ -1642,6 +1651,39 @@ App.Model = (function () {
     };
   }
 
+  /* The two stiffnesses, chosen as the strength is: derived from the soil -- G / t and
+     10 G / t at export -- or set on the interface, starting from what the export would
+     derive, and then typed in their own rows. */
+  function contactStiffnessChoice(section) {
+    var I = App.Interfaces;
+    return {
+      kind: 'select',
+      options: function () {
+        return [{ value: FROM_SOIL, text: 'From the soil' },
+                { value: OWN_STRENGTH, text: 'Set on the interface' }];
+      },
+      get: function () { return I.ownStiffness(section) ? OWN_STRENGTH : FROM_SOIL; },
+      set: function (value) {
+        // Nothing to do when it is so already; one stiffness typed on the command line
+        // and not the other is filled in.
+        var both = I.STIFFNESS.every(function (name) { return name in (section.variables || {}); });
+        if (value === OWN_STRENGTH ? both : !I.ownStiffness(section)) return null;
+        var before = JSON.parse(JSON.stringify(section.variables || {}));
+        var soil = null;
+        if (value === OWN_STRENGTH) soil = I.setOwnStiffness(section);
+        else I.soilStiffness(section);
+        var problem = I.validateSection(section);
+        if (problem) { section.variables = before; return problem; }
+        if (value === OWN_STRENGTH && App.Command && App.Command.note) {
+          App.Command.note('The interface stiffness starts from '
+            + (soil ? soil.name + ': G / t and 10 G / t' : 'the Mohr-Coulomb defaults')
+            + '. Change the two numbers as needed.');
+        }
+        return null;
+      }
+    };
+  }
+
   function contactPermeabilityEditor(section) {
     return {
       kind: 'select',
@@ -1690,25 +1732,21 @@ App.Model = (function () {
     // The law first: it says what else is listed.
     var properties = I ? [['Law', contact.constitutive_law || I.ELASTIC_LAW, '', false,
                            contactLawEditor(contact)]] : [];
-    // The two stiffnesses, typed in place: what a user comes here to set. Left out
-    // they read "derived" -- the soil's own shear modulus over the virtual thickness
-    // supplies them at export -- and the button puts them back to that.
-    var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
-    properties = properties.concat(stiffnesses.map(function (name) {
-      return App.PropertySets.typedRow('interface', contact, name, check);
-    }));
-    var typed = stiffnesses.filter(function (name) {
-      return (contact.variables || {})[name] !== undefined;
-    });
-    if (typed.length) {
-      properties.push(['Stiffness', '', '', false, { kind: 'button',
-        text: 'Derive from the soil', run: function () {
-          typed.forEach(function (name) {
-            App.PropertySets.assign(contact, name, undefined, check);
-          });
-          // The same write a typed value makes: the whole section library with it.
-          if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
-        } }]);
+    var strength = I ? I.STRENGTH : [];
+    var stiffnesses = I ? I.STIFFNESS : [];
+    var rows = App.PropertySets.rows('interface', contact,
+                                     App.PROJECT && App.PROJECT.dimension, check);
+    // The two stiffnesses: from the soil -- its shear modulus over the virtual thickness
+    // at export -- or set on the interface, and then typed in their own rows.
+    if (I) {
+      var ownStiff = I.ownStiffness(contact);
+      properties.push(['Stiffness', ownStiff ? 'Set on the interface' : 'From the soil', '',
+                       false, contactStiffnessChoice(contact)]);
+      if (ownStiff) {
+        properties = properties.concat(rows.filter(function (row) {
+          return stiffnesses.indexOf(row[0]) >= 0;
+        }));
+      }
     }
     properties.push(
       ['Soil', (App.matById && contact.material
@@ -1719,9 +1757,6 @@ App.Model = (function () {
     // reduce one (`kratos-cli section add --help` says the same). Any other law -- a
     // Coulomb one, or one typed on the command line -- lists the strength: the soil's,
     // reduced by R_inter, or the contact's own, typed.
-    var strength = I ? I.STRENGTH : [];
-    var rows = App.PropertySets.rows('interface', contact,
-                                     App.PROJECT && App.PROJECT.dimension, check);
     if (I && (contact.constitutive_law || I.ELASTIC_LAW) !== I.ELASTIC_LAW) {
       var own = I.ownStrength(contact);
       properties.push(['Strength', own ? 'Set on the interface' : 'From the soil', '', false,
@@ -1731,16 +1766,12 @@ App.Model = (function () {
           return strength.indexOf(row[0]) >= 0;
         }));
       } else {
-        // One number for the whole contact, typed in place; or none, which reads
-        // "each soil's own", and the button goes back to that.
-        properties.push(['R_inter', contactRInter(contact) === EACH_SOIL
-          ? EACH_SOIL : String(contact.r_inter), '', false, contactRInterEditor(contact)]);
-        if (contactRInter(contact) !== EACH_SOIL) {
-          properties.push(['R_inter', '', '', false, { kind: 'button',
-            text: 'Each soil’s own R_inter', run: function () {
-              contact.r_inter = null;
-              if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
-            } }]);
+        // Each soil's own R_inter, or one number for the whole contact, typed below.
+        properties.push(['R_inter', ownRInter(contact) ? ON_INTERFACE : EACH_SOIL, '', false,
+                         contactRInterChoice(contact)]);
+        if (ownRInter(contact)) {
+          properties.push(['R_inter value', String(contact.r_inter), '', false,
+                           contactNumberEditor(contact, 'r_inter', '', 2)]);
         }
       }
     }

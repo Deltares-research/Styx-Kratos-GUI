@@ -588,6 +588,9 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
                           if any(stage.prestressed for stage in kratos_stages) else {}),
         "stats": mesh.stats.to_dict(),
         "meshed_keys": mesh.meshed_keys,
+        # True when the deck is written from the mesh made before for the same model
+        # and settings (`meshing.mesh_project`), not from a new one.
+        "mesh_reused": mesh.reused,
         "warnings": warnings,
         "notes": notes,
         "log": mesh.log,
