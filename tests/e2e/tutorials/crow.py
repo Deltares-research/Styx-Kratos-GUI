@@ -15,7 +15,7 @@ from __future__ import annotations
 from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
                                          field, fill, mode, project, rail, rail_tool,
                                          rename, selection_row,
-                                         set_in_selection, tool, tree_row, tree_rows, type_command,
+                                         tool, tree_row, tree_rows, type_command,
                                          window, window_fits)
 from tests.models import crow
 

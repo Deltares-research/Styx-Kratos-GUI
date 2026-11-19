@@ -826,10 +826,10 @@ App.Viewport = (function () {
      edge itself, drawn without a break from its start to its end. A roller on a face
      or a line (one of them held) is a row of the point's roller symbol along it,
      pointing along the one it holds. A support at a point is one symbol: a triangle on
-     hatched ground, or a triangle on two wheels for a roller. A water pressure is its own level or phreatic
-     line, dashed, with "h = ..." beside it (a uniform one: its target outlined,
-     "p = ..."). 3D: the face outline in the condition's colour, and a level as the
-     outline of its plane.
+     hatched ground, or a triangle on two wheels for a roller. A water pressure is its
+     own level or phreatic line, dashed, with no words beside it (a uniform one: its
+     target outlined); on a line, the pressure diagram with its deepest value. 3D: the
+     face outline in the condition's colour, and a level as the outline of its plane.
 
      Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
      can reach. `lines` are polylines of [x, y, z]; `strips` are the straight pieces of
