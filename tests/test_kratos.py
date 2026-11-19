@@ -1086,6 +1086,92 @@ def test_the_anchor_support_is_pinned(anchored):
     assert pinned["value"] == [0.0, 0.0, 0.0]
 
 
+# ── A free tail: a node of the soil mesh ────────────────────────────────────
+
+def free_anchored_project(tail=(20.0, -8.0)):
+    project = anchored_project()
+    anchor = project.anchors[0].model_copy(update={"tail_end": "free", "tail": tail})
+    return project.model_copy(update={"anchors": [anchor]})
+
+
+@pytest.fixture(scope="module")
+def free_anchored(session):
+    return writer.export_project(free_anchored_project(),
+                                 MeshRequest(element_size=3.0, order=2))
+
+
+def test_a_free_anchor_tail_is_a_node_of_the_soil_mesh(free_anchored):
+    deck = deck_of(free_anchored)
+    head, tail = next(iter(truss_of(deck).entries.values()))
+    soil = {n for block in deck.elements if block.name not in
+            ("LinearTrussElement2D2N",) and "Beam" not in block.name
+            for nodes in block.entries.values() for n in nodes}
+
+    assert deck.nodes[tail][:2] == pytest.approx((20.0, -8.0), abs=1e-6)
+    assert tail in soil, "the tie pulls on the soil at its tail"
+
+
+def test_a_free_anchor_tail_has_no_support(free_anchored):
+    deck = deck_of(free_anchored)
+    constraints = _stage_settings(free_anchored)["processes"]["constraints_process_list"]
+
+    assert "Anchor_1_Support" not in deck.parts
+    assert not any(p["Parameters"]["model_part_name"].endswith("_Support")
+                   for p in constraints)
+
+
+def test_a_free_anchor_tail_outside_the_soil_is_refused(session):
+    """In a section a tail may sit above the ground; a free one has no soil there."""
+    with pytest.raises(writer.ExportError, match="free tail that is not in the soil"):
+        writer.export_project(free_anchored_project(tail=(20.0, 1.0)),
+                              MeshRequest(element_size=3.0, order=1))
+
+
+# ── An anchor with no structure: both ends in the soil ──────────────────────
+
+@pytest.mark.parametrize("tail_end", ["free", "fixed"])
+def test_an_anchor_needs_no_sheet_pile(session, tail_end):
+    from core.model.schemas import Project
+    payload = seed_project().model_dump()
+    payload.update(dimension=2, section_offset=20.0)
+    payload["anchor_sections"] = [TENDON]
+    payload["anchors"] = [{"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
+                           "section": "strand", "head": [10.0, -2.0],
+                           "tail": [18.0, -8.0], "tail_end": tail_end}]
+    deck = deck_of(writer.export_project(Project.model_validate(payload),
+                                         MeshRequest(element_size=3.0, order=1)))
+    block = truss_of(deck)
+    head, tail = next(iter(block.entries.values()))
+    soil = {n for other in deck.elements if other is not block
+            for nodes in other.entries.values() for n in nodes}
+
+    assert deck.nodes[head][:2] == pytest.approx((10.0, -2.0), abs=1e-6)
+    assert head in soil, "a head on no structure is a node of the soil mesh"
+    assert (tail in soil) == (tail_end == "free")
+    assert ("Anchor_1_Support" in deck.parts) == (tail_end == "fixed")
+
+
+# ── A fixed head: its own pinned node, on the pile or in the air ────────────
+
+@pytest.mark.parametrize("head", [(12.0, -2.0), (16.0, 1.0)])
+def test_a_fixed_anchor_head_is_its_own_pinned_node(session, head):
+    """A fixed head is in no other element, even where it sits on the pile, and its own
+    node group holds it together with a fixed tail."""
+    project = anchored_project(order=1)
+    anchor = project.anchors[0].model_copy(update={"head_end": "fixed", "head": head})
+    deck = deck_of(writer.export_project(project.model_copy(update={"anchors": [anchor]}),
+                                         MeshRequest(element_size=3.0, order=1)))
+    block = truss_of(deck)
+    head_node, tail_node = next(iter(block.entries.values()))
+    others = {n for other in deck.elements if other is not block
+              for nodes in other.entries.values() for n in nodes}
+
+    assert deck.nodes[head_node][:2] == pytest.approx(head, abs=1e-6)
+    assert head_node not in others, "a fixed head shares no node with the pile or soil"
+    assert set(deck.parts["Anchor_1_Support"].nodes) == {head_node, tail_node}
+
+
+
 # -- Gravity -----------------------------------------------------------------
 # `VOLUME_ACCELERATION` on the computational model part, which is what gives the
 # continuum elements their self weight. Every reference deck in the repo carries it in

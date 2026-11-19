@@ -651,7 +651,8 @@ ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "spacing": 2.5,
                   "tension_limit": 900_000.0, "compression_limit": None, "variables": {
                       "YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006, "DENSITY": 7850.0}}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
-          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0, "active": True}
+          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0,
+          "head_end": "free", "tail_end": "free", "active": True}
 
 
 def test_patch_structures_creates_an_anchor_on_a_sheet_pile(client):
@@ -1252,6 +1253,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
                              # How a sheet pile, an anchor and an interface are drawn.
                              "structure-glyphs.js",
+                             # The water on the ground Staged construction draws.
+                             "surface-water.js",
                              # The Modify soil layers window, in place of the frozen one in
                              # js/dialogs.js, which drew the stack once per borehole.
                              "soil-layers-dialog.js",

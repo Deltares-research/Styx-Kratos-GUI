@@ -279,18 +279,24 @@ STRUT_SECTION = _by_id(MODEL.anchor_sections, STRUT.section)
 def strut(tour: Tour) -> None:
     page = tour.page
     rail(tour, "createAnchor")
+    typed = [("Name", STRUT.name),
+             ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
+             ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1]),
+             *STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing)]
+    for label, value in typed:
+        field(page, label).fill(value if isinstance(value, str) else f"{value:g}")
+    # The strut's head is a node of the wall; its far end is a fixed support, not a node
+    # of the soil.
+    assert field(page, "Head end").input_value() == STRUT.head_end == "free"
+    field(page, "Tail end").select_option(STRUT.tail_end)
+    window_fits(tour)
+    tour.picture(mark=rail_tool("createAnchor"))
+    window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.anchors || []).length === 1")
     tour.settle()
-    typed = [*STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing),
-             ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
-             ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1])]
-    for label, value in typed:
-        set_in_selection(tour, label, f"{value:g}")
     page.locator("#grid-selection button", has_text="No tension limit").click()
     tour.settle()
-    tour.picture(mark=[rail_tool("createAnchor"), selection_row(page, "Tension limit"),
-                       *(selection_row(page, label) for label, _ in typed)])
-    rename(tour, page.evaluate("App.PROJECT.anchors[0].name"), STRUT.name)
+    tour.picture("limits", mark=selection_row(page, "Tension limit"))
 
 
 def one_strut(tour: Tour) -> None:
@@ -298,6 +304,9 @@ def one_strut(tour: Tour) -> None:
     (anchor,) = got["anchors"]
     assert anchor["name"] == STRUT.name
     assert tuple(anchor["head"]) == STRUT.head and tuple(anchor["tail"]) == STRUT.tail
+    assert anchor["head_end"] == STRUT.head_end == "free"
+    assert anchor["tail_end"] == STRUT.tail_end == "fixed"
+
     (section,) = got["anchor_sections"]
     assert section["variables"] == STRUT_SECTION.variables
 

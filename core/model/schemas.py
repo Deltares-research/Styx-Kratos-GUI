@@ -683,14 +683,20 @@ class AnchorSection(KratosPropertySet):
     """Left None for a tendon, which takes no compression at all."""
 
 
-class Anchor(Base):
-    """One anchor: a two-node tie from a sheet pile to a restrained point.
+AnchorEnd = Literal["free", "fixed"]
+"""What an anchor end is joined to: the mesh ("free") -- for a head the structure it is
+on, or else the soil; for a tail the soil -- or nothing, held in place ("fixed")."""
 
-    The formulation is the one Kratos' reference decks write -- a single
-    `LinearTrussElement2D2N` whose head node is shared with the beam and whose tail node
-    belongs to no other element, held by its own node group. The tail is therefore *not*
-    coupled to the soil continuum: the grouted body is idealised as a fixed point, which
-    is the standard plane-strain treatment.
+
+class Anchor(Base):
+    """One anchor: a two-node tie from its head to its tail.
+
+    A single `LinearTrussElement2D2N`. What each end is joined to is `head_end` and
+    `tail_end`. A free head on a sheet pile shares the beam's node; a free head on no
+    pile is a node of the soil mesh (`Project.anchor_on_structure`). A free tail is a
+    node of the soil mesh, so the tie pulls on the soil there. A fixed end belongs to no
+    other element and is held by its own node group, the formulation Kratos' reference
+    decks write for the tail, which idealises the grouted body as a fixed point.
 
     Dimension-native `(x, y)` like every other 2D record.
     """
@@ -705,6 +711,17 @@ class Anchor(Base):
     positive in tension (smeared by the tendon's spacing in 2D, like its area). Per
     anchor rather than per section: two anchors of the same tendon are routinely
     stressed differently, and each anchor is its own property set in the deck."""
+    head_end: AnchorEnd = "free"
+    """"free": the head is a node of the structure it is on, or of the soil mesh.
+    "fixed": the head is in no element and held in place, and is not snapped onto a
+    structure. A record that does not say is free, which is what every head was before
+    the choice existed."""
+    tail_end: AnchorEnd = "fixed"
+    """"free": the tail is a node of the soil mesh. "fixed": the tail is in no element
+    and held in place. A new anchor is free (`core.model.drafts.anchor`,
+    `App.Anchors.draft`); a record that does not say is fixed, which is what every
+    anchor was before the choice existed, so a project saved then gives the same
+    results."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -1080,11 +1097,11 @@ class Member(Base):
 
 
 class SpaceAnchor(Base):
-    """One 3D anchor: a two-node tie in space, from a wall or member to a fixed point.
+    """One 3D anchor: a two-node tie in space, from its head to its tail.
 
-    The same formulation as the 2D `Anchor` -- head shared with the structure it hangs
-    from, tail in no element at all and pinned by its own node group -- one dimension
-    up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
+    The same formulation as the 2D `Anchor` -- a free head shared with the wall or member
+    it is on, or a node of the soil mesh; a free tail a node of the soil mesh; a fixed end
+    held by its own node group (`head_end`, `tail_end`) -- one dimension up. The tendon library is shared with the 2D anchors; `spacing` is a plane-strain
     smear and means nothing here, where every anchor is a discrete member.
     """
     id: Ident
@@ -1094,6 +1111,10 @@ class SpaceAnchor(Base):
     head: tuple[float, float, float]
     tail: tuple[float, float, float]
     prestress: float = 0.0
+    head_end: AnchorEnd = "free"
+    """As `Anchor.head_end`."""
+    tail_end: AnchorEnd = "fixed"
+    """As `Anchor.tail_end`."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -1205,9 +1226,25 @@ asks. The second -- which face, which part, where -- is the field it names (`fac
 `part`, `points`). Two fields rather than one overloaded value, so the record holds the
 dialog's two answers as they are and nothing has to guess what kind a value is."""
 
-PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"]
+PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line", "Head_Line"]
 """How a water pressure condition gives each node its pressure: Kratos'
-`fluid_pressure_type`, under its own names (`WaterPressureCondition`)."""
+`fluid_pressure_type`, under its own names (`WaterPressureCondition`) -- except
+`"Head_Line"`, the head of the water in one soil, which Kratos is given as a
+`"Phreatic_Multi_Line"` too."""
+
+LINE_TYPES = ("Phreatic_Multi_Line", "Head_Line")
+"""The pressure types of a water line: a polyline through points, hydrostatic below it.
+On the whole soil or drawn on a line, a condition of one of these is a water line
+(`Project.water_lines`): the phreatic line, or a head line a soil takes
+(`Project.soil_water`)."""
+
+LINE_TARGETS = ("domain", "line")
+"""Where a water line is: on the whole soil, or drawn on a line, which is only where it
+was drawn. On a face, a part or a point it is a boundary condition like any other."""
+
+INTERPOLATE = "interpolate"
+"""What `Project.soil_water` says for a soil whose water pressure is interpolated between
+the pressures of the soils above and below it: Kratos' `Interpolate_Line`."""
 
 TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
@@ -1232,7 +1269,23 @@ class WaterPressureCondition(Base):
     *   `"Hydrostatic"`: zero at the horizontal level `reference_coordinate`, growing with
         depth below it.
     *   `"Phreatic_Multi_Line"`: hydrostatic below the phreatic line through
-        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`).
+        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`). On the whole soil
+        or drawn on a line it is a phreatic line (`Project.phreatic_lines`), one a stage.
+    *   `"Head_Line"`: the same, through the points of a head line -- the head of the
+        water in a soil, an aquifer's. Any number. Written to Kratos as a
+        `Phreatic_Multi_Line`; no water stands on the ground for it.
+
+    On the whole soil or drawn on a line, a phreatic or head line is a water line
+    (`Project.water_lines`): the phreatic line is the water of every soil, and a head line
+    of the soils that take it (`Project.soil_water`), wherever it was drawn.
+
+    As start values (`is_fixed=False`), a water line is the soils' initial water
+    pressure: the deck writes it in the stage it comes on, and a stage that keeps it on
+    carries on from what the calculation before it made of the pressure, so a flow or a
+    coupled stage can move the water inside the soil. Where a phreatic line stands above
+    the ground, the deck fixes the pressure on the soil surface under its water, stage by
+    stage (`core.kratos.writer._water_surface_loads`): the boundary a flow calculation
+    needs. Fixed, a water line holds every node of its soils in every stage it is on.
 
     Above the level Kratos' formula gives suction, which is positive in its sign
     convention; `pressure_tension_cut_off` is the most it may reach, and the Kratos
@@ -1270,12 +1323,11 @@ class WaterPressureCondition(Base):
     x_coordinates: list[float] | None = None
     y_coordinates: list[float] | None = None
     z_coordinates: list[float] | None = None
-    """The phreatic line, m, x increasing; `z_coordinates` may be left out, which is all
-    zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"`; the line may
-    start and end outside the domain."""
+    """The phreatic or head line, m, x increasing; `z_coordinates` may be left out, which
+    is all zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"` or
+    `"Head_Line"`; the line may start and end outside the domain."""
     pressure_tension_cut_off: float = Field(default=0.0, ge=0)
-    """A stress in the project's units. Read by `"Hydrostatic"` and
-    `"Phreatic_Multi_Line"`."""
+    """A stress in the project's units. Read by every type but `"Uniform"`."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -1307,9 +1359,9 @@ class WaterPressureCondition(Base):
             if any(second <= first for first, second in zip(xs, xs[1:])):
                 raise ValueError(f"{noun}: the x coordinates of the phreatic line must "
                                  "increase")
-        elif self.fluid_pressure_type == "Phreatic_Multi_Line":
-            raise ValueError(f"{noun} is a Phreatic_Multi_Line, which needs the points of "
-                             "the line (x_coordinates and y_coordinates)")
+        elif self.fluid_pressure_type in LINE_TYPES:
+            raise ValueError(f"{noun} is a {self.fluid_pressure_type}, which needs the "
+                             "points of the line (x_coordinates and y_coordinates)")
         return self
 
 def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition,
@@ -1764,6 +1816,14 @@ class ConditionsUpdate(Base):
     (`core.session.replace_conditions`). Left out, they stay as they are."""
     boundary_conditions: list[BoundaryCondition] | None = None
     gravity_acceleration: float | None = Field(default=None, gt=0)
+    soil_water: dict[str, str] | None = None
+    """The water each soil takes (`Project.soil_water`), as a whole. Edited in the same
+    window as the conditions, whose lines it names."""
+    stages: list[Stage] | None = None
+    """The construction sequence, as a whole, with the conditions it switches: a
+    phreatic line made in a later stage is off before it and the one it replaces off
+    from it, which neither list says alone (`Project.phreatic_lines_together`). Checked
+    as `replace_stages` checks it."""
 
 
 class LinesUpdate(Base):
@@ -1974,6 +2034,11 @@ class Project(Base):
     """How the document reads an interface's `side`: as the face on the screen. A
     document without it was saved before 2026-10-25 and read it walking the line; its
     one-side interfaces are converted when it loads (`migration.screen_sides`)."""
+    drawn_phreatic_lines: Literal["whole_soil"] = "whole_soil"
+    """How the document reads a phreatic line drawn on a line: as the water of the whole
+    soil (`phreatic_lines`). A document without it was saved before 2026-11-18 and read
+    it as a pressure on that line only; its phreatic lines drawn on a line are converted
+    when it loads (`migration.drawn_water_lines`)."""
     # Its own collection, not folded into `loads[]`: a normal load is dimension-native
     # like a free interface (an arbitrary polyline, no 3D translation), not a
     # translated x/y vector like the three kinds `loads[]` already holds.
@@ -1989,6 +2054,19 @@ class Project(Base):
     fluid: Fluid = Field(default_factory=Fluid)
     """The water in every soil's pores: its bulk modulus and viscosity. Its weight is
     `water`'s (`water_specific_weight`)."""
+    soil_water: dict[str, str] = Field(default_factory=dict)
+    """The water each soil takes, for an aquifer under an aquitard: a soil part key
+    (`soil_part_keys`: a layer, a body cut off one, or a custom soil part) to the id of a
+    head line (`head_lines`), or `INTERPOLATE`.
+
+    A soil that is not in it takes the phreatic line its stage has on (`phreatic_lines`),
+    which is the water of the whole soil wherever it was drawn. A head line acts only on the soils
+    that take it. A soil takes its own entry, else its layer's (`water_of_bodies`). An
+    interpolated soil gets the pressure of its boundary, which the soils around it set,
+    interpolated down through it (Kratos' `ApplyConstantInterpolateLinePressureProcess`);
+    2D only.
+
+    An entry whose soil or line is gone goes with it, as a body's mesh size does."""
     boundary_conditions: list[BoundaryCondition] = Field(
         default_factory=standard_conditions)
     """The conditions the user prescribes on the model's boundaries and soil. The deck
@@ -2023,7 +2101,9 @@ class Project(Base):
         (`migration.screen_sides`). One saved before 2026-11-02 has no `fluid`: its soils
         carry the water themselves (`migration.lift_water`). One saved before 2026-11-03
         switches gravity itself (`migration.drop_gravity`), and one saved before 2026-11
-        has flow stages with no absolute tolerance (`migration.flow_tolerance`)."""
+        has flow stages with no absolute tolerance (`migration.flow_tolerance`). One
+        saved before 2026-11-18 sets a phreatic line drawn on a line on that line only
+        (`migration.drawn_water_lines`)."""
         return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
@@ -2163,6 +2243,72 @@ class Project(Base):
                                                            self.dimension)
         return self
 
+    def water_lines(self) -> list[WaterPressureCondition]:
+        """The phreatic line and the head lines (`LINE_TYPES`) on the whole soil or drawn
+        on a line (`LINE_TARGETS`), in the order of the list: the water the soils take.
+        Where one was drawn is not where it acts (`on_the_whole_soil`, `soil_water`)."""
+        return [c for c in self.boundary_conditions
+                if isinstance(c, WaterPressureCondition) and c.on in LINE_TARGETS
+                and c.fluid_pressure_type in LINE_TYPES]
+
+    def phreatic_lines(self) -> list[WaterPressureCondition]:
+        """The phreatic lines, the water of every soil that takes no other
+        (`soil_water`). One a stage at most (`phreatic_lines_together`): a later stage
+        may switch to another, a lower one for a pit pumped dry. A Phreatic_Multi_Line on
+        a face, a part or a point is a boundary condition like any other, not one."""
+        return [c for c in self.water_lines()
+                if c.fluid_pressure_type == "Phreatic_Multi_Line"]
+
+    def phreatic_lines_together(self) -> tuple[str | None, list[str]] | None:
+        """Two phreatic lines that are on together, as (the stage's name, or None in a
+        model with no stages, and their names), or None.
+
+        Unstaged, every active line is on in the one stage there is. Staged, the first
+        stage that has two on is named; a stage tree that does not linearise is the
+        stages' own error to say, so it is let through here."""
+        from core.model import stages        # which imports this module
+
+        lines = [c for c in self.phreatic_lines() if c.active]
+        if len(lines) < 2:
+            return None
+        if not self.stages:
+            return None, [c.name for c in lines]
+        try:
+            order = stages.linearise(self)
+        except stages.StageError:
+            return None
+        for stage in order:
+            on = stages.active_parts(self, stage)
+            both = [c.name for c in lines if c.id in on]
+            if len(both) > 1:
+                return stage.name, both
+        return None
+
+    def head_lines(self) -> list[WaterPressureCondition]:
+        """The head lines a soil can take its water from (`soil_water`)."""
+        return [c for c in self.water_lines() if c.fluid_pressure_type == "Head_Line"]
+
+    def on_the_whole_soil(self, condition: WaterPressureCondition) -> bool:
+        """Whether `condition` acts on the whole soil: a phreatic line, wherever it was
+        drawn, and anything else on the whole soil but a head line, which acts only on
+        the soils that take it (`soil_water`)."""
+        if condition.on == "domain":
+            return condition.fluid_pressure_type != "Head_Line"
+        return any(condition is line for line in self.phreatic_lines())
+
+    def water_of_bodies(self) -> dict[str, str]:
+        """Each soil body that takes water of its own (`soil_water`), to the id of its line
+        or `INTERPOLATE`: a body's own entry, else its layer's. The bodies are the keys
+        `soil_bodies` and the custom soil parts have, which the deck writes."""
+        bodies = [key for key, *_ in self.soil_bodies()]
+        bodies += [part.key for part in self.custom_parts if part.mat is not None]
+        out = {}
+        for key in bodies:
+            water = self.soil_water.get(key, self.soil_water.get(key.partition("__")[0]))
+            if water is not None:
+                out[key] = water
+        return out
+
     @property
     def water_specific_weight(self) -> float:
         """The water's specific weight in the project's units: the project's own, or
@@ -2290,6 +2436,23 @@ class Project(Base):
                     f"boundary condition {condition.id!r} is on part {condition.part!r}, "
                     "which is not a soil part of this project; the soil parts are "
                     + (", ".join(soil) or "none"))
+        together = self.phreatic_lines_together()
+        if together is not None:
+            stage, names = together
+            where = (f"in stage {stage!r}" if stage is not None
+                     else "in this model, which has no stages")
+            raise ValueError(
+                "a stage has one phreatic line, and "
+                + " and ".join(repr(name) for name in names) + f" are both on {where}: "
+                "switch one off there, or make it a head line (Head_Line) and give it to "
+                "its soils in Soil water")
+        if any(c.id == INTERPOLATE for c in self.boundary_conditions):
+            raise ValueError(f"a boundary condition cannot be called {INTERPOLATE!r}: a "
+                             "soil's water says that for interpolated")
+        # What the soil or the line it named took with it goes too.
+        lines = {line.id for line in self.head_lines()}
+        self.soil_water = {key: water for key, water in self.soil_water.items()
+                           if key in soil and (water == INTERPOLATE or water in lines)}
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a
@@ -2393,33 +2556,22 @@ class Project(Base):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at ({x}, {y})"
                     )
-            # The head becomes a node the beam shares, so it has to be on a live pile.
-            # Only checked while the anchor is active: deleting a pile under a disabled
-            # anchor must not make the saved project unopenable.
-            if anchor.active and not any(
-                point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
-                for beam in self.sheet_piles if beam.active
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a sheet pile"
-                )
+            # An end joined to the soil has to be where soil can be: a head that is on no
+            # pile, and a free tail. Only checked while the anchor is active, as a
+            # disabled anchor is not built.
+            if anchor.active:
+                for end, (x, y) in self.anchor_soil_ends(anchor):
+                    if y > extent.y_top:
+                        raise ValueError(
+                            f"anchor {anchor.id!r} {end} at ({x}, {y}) is joined to the "
+                            "soil but lies above it"
+                        )
         for anchor in self.space_anchors:
             for point in (anchor.head, anchor.tail):
                 if not extent.contains(*point):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at {point}"
                     )
-            # The 3D head hangs from whatever structure is there: the swept surface of a
-            # panel, or the polyline of a member. Same rule as 2D, two shapes to test.
-            if anchor.active and not (
-                any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
-                    for panel in self.panels if panel.active)
-                or any(point_on_polyline(anchor.head, member.points, ATTACHMENT_TOLERANCE)
-                       for member in self.members if member.active)
-            ):
-                raise ValueError(
-                    f"anchor {anchor.id!r} head at {anchor.head} is not on a wall or member"
-                )
 
         sections = {s.id for s in self.beam_sections}
         for beam in self.sheet_piles:
@@ -2758,6 +2910,34 @@ class Project(Base):
     @property
     def space_anchors(self) -> list[SpaceAnchor]:
         return [a for a in self.anchors if isinstance(a, SpaceAnchor)]
+
+    def anchor_on_structure(self, anchor: Anchor | SpaceAnchor) -> bool:
+        """Whether the head of `anchor` is on a live structure, whose node it then
+        shares: a sheet pile for a 2D anchor, a wall or a member for a 3D one. A head
+        on none is a node of the soil mesh instead -- an anchor needs no structure. A
+        fixed head shares no node, so it is on no structure wherever it is."""
+        if anchor.head_end == "fixed":
+            return False
+        if isinstance(anchor, SpaceAnchor):
+            return (any(point_on_panel(anchor.head, panel, ATTACHMENT_TOLERANCE)
+                        for panel in self.panels if panel.active)
+                    or any(point_on_polyline(anchor.head, member.points,
+                                             ATTACHMENT_TOLERANCE)
+                           for member in self.members if member.active))
+        return any(point_on_polyline(anchor.head, beam.points, ATTACHMENT_TOLERANCE)
+                   for beam in self.sheet_piles if beam.active)
+
+    def anchor_soil_ends(self, anchor: Anchor | SpaceAnchor
+                         ) -> list[tuple[str, tuple[float, ...]]]:
+        """The ends of `anchor` that are nodes of the soil mesh, as ("head" | "tail",
+        point): a free head when it is on no structure, the tail when it is free."""
+        ends: list[tuple[str, tuple[float, ...]]] = []
+        if anchor.head_end == "free" and not self.anchor_on_structure(anchor):
+
+            ends.append(("head", anchor.head))
+        if anchor.tail_end == "free":
+            ends.append(("tail", anchor.tail))
+        return ends
 
     def structures_for(self, dimension: int) -> list[Beam | Panel | Member]:
         """The structures this dimension builds, in `beams[]` order.

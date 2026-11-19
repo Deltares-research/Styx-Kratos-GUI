@@ -255,7 +255,7 @@ narrower than the model in z cannot be made of lines, and the project does not o
 | Sheet pile (2D) | Click **Create sheet pile…**. Type the two end points and the section properties, then click **Save**. |
 | Wall panel (3D) | Click **Create wall panel…**. Type the corners of the footprint, the **Top level** and the **Toe level**. |
 | Member (3D): a bored pile, a king post or a strut | Click **Create member…**. |
-| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
+| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). A window opens, as for a sheet pile. Type the name, the head, the tail, the prestress and the tendon properties, then click **Save**. An anchor does not need a structure. When the head is less than 1 m from a sheet pile, wall panel or member, Styx moves it onto that structure, and the anchor shares its node. A head further away is a node of the soil mesh, so it must be in the soil. With no structure in the model, a new anchor starts 2 m below the top of the soil, in the middle of the model. **Head end** and **Tail end** set what each end is joined to. **Free (attached to the mesh)** is the default for a new anchor: a free head is a node of the structure it is on, or of the soil mesh; a free tail is a node of the soil mesh, so the anchor pulls on the soil. **Fixed (held in place)** holds the end in place and joins it to nothing, as for a strut to a fixed point. Styx does not move a fixed head onto a structure. A free end on no structure must be in the soil: in the air, or in soil that a stage removes, use **Fixed**. A new anchor goes 8 m across and 6 m down from its head, with the tail on whole metres. To change an anchor later, click **Edit anchor…** in the Selection explorer, or **Properties…** in the Model explorer, or change the values in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
 | Interface (2D only) | Click **Create interface…**. Select the sheet pile in **Along**, or **Own coordinates**, then click **Save**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
 | Normal load (2D only) | Click **Create normal load**. Type the points of the line: **Add point** adds one after the last, and **Remove** takes one away. Or click **Pick on model…**, click the points in the viewport and press <kbd>Enter</kbd>. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. A hydrostatic load does not use a pressure. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
@@ -389,7 +389,33 @@ components to hold.
 | Support | Holds the displacement at zero in x, y or z. **Fixed** holds all components. **Roller** holds the component normal to the face, or to a vertical or horizontal line. A 2D model does not hold z. |
 | Water pressure, Uniform | One pressure at each node of the target, compression negative |
 | Water pressure, Hydrostatic | Zero at its **Reference level**, growing with depth below it. **Tension cut-off** is the most suction above the level; 0 holds the pressure at zero there. |
-| Water pressure, Phreatic line | Hydrostatic below a line through points that you type, x increasing |
+| Water pressure, Phreatic line | Hydrostatic below a line through points, x increasing. On a drawn line, the points of the line are filled in for you, in order of x. Type other points to use a different line. A phreatic line on the whole soil or on a line is the water of every soil, wherever it is drawn. A stage can have one on, so a later stage can switch to a lower one. A new phreatic line is **Initial only**: it gives the soil its starting pressures, and a flow or coupled calculation can change them. |
+| Water pressure, Head line | As a phreatic line, for the soils that take it under **Soil water** (see [The water of each soil](#the-water-of-each-soil)). |
+
+Water above the ground also presses on it. When the phreatic line is above the soil, the
+calculation adds the weight of that water on the ground below it, on the floor and the sides
+of a pit, and on the face of a wall (2D). A head line or a hydrostatic level is the water in
+a soil, not water that stands on the ground, so it adds no load. This is so whatever the
+phreatic line is on; a phreatic line on a soil part puts its water on that part only. This
+is done for each stage, with the soil that the stage has, and the water always pushes on the
+soil or the wall. You do not draw this load. Where you drew a normal load yourself, your load is used
+there instead. The export notes say where the water was added. In **Staged construction**,
+the water standing on the ground in the selected stage is filled in light blue up to the
+phreatic line. Small light blue arrows press into the soil (longer where the water is
+deeper), and the pressure where the water is deepest is shown, for example "p = 10000 Pa"
+under 1 m of water. **Flow conditions** shows the same for the model
+as built. The other tabs do not show it. In the Model explorer, a phreatic line with water on the ground has a
+**Water on the ground** row under it, which says in which stages. A 3D model does not add
+this load, and the export warns when the phreatic line is above the ground.
+
+Under open water, the water pressure on the soil surface is the water's. So where an
+**Initial only** phreatic line stands above the ground, the calculation also fixes the
+water pressure on the wet soil surface under it, stage by stage (2D). This is the boundary
+that a flow or a coupled calculation needs. Inside the soil the line gives only the
+starting pressures. The phreatic line is written in the stage that switches it on, and the
+stages after it continue from the pressures that the stage before left. When a stage leaves
+part of the surface dry (it lowers the water, or switches it off), that part is no longer
+fixed.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
@@ -420,8 +446,9 @@ select the support and the water pressure, and type the level or the value. **Mo
 the full form of the water pressure, and **Add condition…** makes a condition on a part, a
 line or a point. In the water pressure column of a face, **Seepage face** makes that face a
 seepage face (see below). **Standard conditions** sets the bottom to fixed and the sides to rollers.
-**Clear** removes the conditions on the faces and on the whole soil. Click **Save** to keep
-the changes.
+**Clear** removes the conditions on the faces and on the whole soil. Under **Soil water**,
+select the water of each soil (see [The water of each soil](#the-water-of-each-soil)). Click
+**Save** to keep the changes.
 
 A new project has the standard supports and no water pressure condition. For a dry model
 whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE`
@@ -454,6 +481,61 @@ face as a line with arrows that point out of the soil. Kratos opens or closes on
 the face for each iteration, so give the stage enough iterations: the calculation warns
 when the stage allows fewer iterations than the face has nodes. A deformation calculation
 leaves a seepage face out, and warns.
+
+### The water of each soil
+
+The phreatic line is the water of every soil. To model an aquifer under an aquitard, draw
+a head line for the aquifer and give a soil other water under **Soil water** in the
+Boundary conditions window. Each soil (a layer, a piece of a layer, or a soil part) takes
+one of these:
+
+| Soil water | What it does |
+|---|---|
+| Phreatic line (the default) | Hydrostatic below the phreatic line |
+| Head line | Hydrostatic below the head line, for example the head of an aquifer. A head line acts only on the soils that take it. |
+| Interpolated between the soils above and below | The pressure of the soil above and of the soil below, interpolated over the depth of this soil, for an aquitard. Kratos' `Interpolate_Line` reads the pressures that the other soils set on the edges of this soil. 2D only; a 3D model gives the soil the phreatic line, and the export says so. |
+
+The phreatic line and the head lines are water pressures of the type **Phreatic line** and
+**Head line**: polylines through points, x increasing, which can slope. Draw one on a line
+(**Pick on model…**), and its points are filled in from the line, or put it on the whole
+soil and type its points. Where it is drawn is only where it is: the phreatic line acts on
+every soil, and a head line on the soils that take it. A stage has one phreatic line on, and
+any number of head lines. To change the phreatic line in a later stage (a pit pumped dry),
+select that stage in **Staged construction** and then create the new phreatic line: it is
+switched off in the initial stage and on from the selected stage, and the phreatic line
+that was on there is switched off from that stage on. The status line names the stage.
+With the initial stage selected, a second phreatic line is refused. For a pressure on a line only, use a **Hydrostatic** condition on
+that line. In 2D the viewport draws it in indigo on that line: the line is thick where it
+is below the level, a filled diagram grows with the depth, and the deepest pressure is
+shown. The same applies to a
+Hydrostatic condition on a face.
+
+A project saved before 2026-11-18 read a phreatic line drawn on a line as a pressure on
+that line only. When you open it, a level one becomes a Hydrostatic condition on the same
+line, which sets the same pressure there. A sloping one becomes the water of the whole soil
+(or a head line, if the project has another phreatic line), and a note says so. A head line that no soil takes acts nowhere, and the export warns
+about it.
+
+You can also right-click a soil in Flow conditions mode, in the viewport or in the Model
+explorer, and choose its water under **Water**. The tick shows the water it takes now.
+
+In Flow conditions mode each soil is filled with the colour of the water it takes, and a
+legend in the viewport says which colour is which:
+
+| Water | Colour | How the line is drawn |
+|---|---|---|
+| Phreatic line | Always blue | A solid line, with the water table mark (▽) near its start |
+| Head line | A colour for each head line: red, purple, teal, pink, brown or olive, in list order | A dashed line, labelled with its name |
+| Interpolated | Always amber | No line of its own |
+| No water line | Grey: a soil on the phreatic line in a project that has none | — |
+
+A project with no phreatic line, no head line and no soil water keeps the soils in their
+own colours. The other modes show the soils in their material colours.
+
+Kratos gets a head line as a `Phreatic_Multi_Line`, written on the soils that take it after
+the phreatic line, so it replaces the phreatic line there. A Hydrostatic level, a face, a
+part or a point condition acts on its own target, as before. When a stage switches a head
+line off, its soils have the phreatic line in that stage.
 
 ## Mesh mode
 
@@ -507,7 +589,8 @@ at once, and the object stays selected, so you can click the tool again.
 Some objects use the size of another object:
 
 - An anchor is one element. Its size applies at its head, where it connects to the
-  structure. The tail is a fixed point outside the soil mesh.
+  structure. A free tail is a node of the soil mesh; a fixed end is a point outside
+  the mesh.
 - A condition on a face uses the size of that face. All conditions on the same face share
   one size, because the Kratos input file has one node group for each face. The Mesh group
   of the condition shows **Size of** with the name of the face. The faces are also in the

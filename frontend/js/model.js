@@ -516,15 +516,54 @@ App.Model = (function () {
   /* A condition's own row: what it is, in the words `boundary list` uses. */
   /* A support in a groundwater flow project says it is left out, as an inactive
      condition says it is inactive (`App.BoundaryConditions.unusedInFlow`). */
-  function conditionChild(record) {
+  /* A phreatic line with water on the ground has a row under it that says in which
+     stages (`surfaceWaterStages`): the export adds its weight on the ground there and
+     fixes the water pressure on the wet surface, and nothing else in the tree shows
+     it. `onGround` is that line's stage names, `[null]` for a model with no stages. */
+  function conditionChild(record, onGround) {
     var conditions = App.BoundaryConditions;
     var label = conditions ? conditions.label(record) : record.name;
     var note = record.active === false ? '  (inactive)'
       : conditions && conditions.unusedInFlow(record, App.PROJECT)
         ? '  (unused in flow)' : '';
-    return { label: label + note,
-             icon: record.kind === 'displacement' ? 'prescribed' : 'water',
-             leaf: true, eye: true, obj: record.id };
+    var node = { label: label + note,
+                 icon: record.kind === 'displacement' ? 'prescribed' : 'water',
+                 leaf: true, eye: true, obj: record.id };
+    if (onGround && onGround.length) {
+      var named = onGround.filter(function (name) { return name !== null; });
+      node.leaf = false;
+      node.expanded = false;
+      node.children = [{
+        label: 'Water on the ground' + (named.length
+          ? '  ·  ' + (named.length === 1 ? 'stage ' : 'stages ') + named.join(', ') : ''),
+        icon: 'water', leaf: true
+      }];
+    }
+    return node;
+  }
+
+  /* `{phreatic line id: [stage name, ...]}`: the stages in which the water of the
+     line stands on the ground (`App.SurfaceWater.stagesWithWater`), read off the
+     viewport's last build. Empty without one, in 3D and with a branching stage tree.
+     The last answer is kept on the function, so the viewport can tell whether a new
+     build changed it (viewport.js `refreshSurfaceWaterRows`). */
+  function surfaceWaterStages() {
+    var project = App.PROJECT;
+    var sections = App.Viewport && App.Viewport.builtSections
+      ? App.Viewport.builtSections() : null;
+    var out = {};
+    var order = project && App.Stages ? App.Stages.order(project) : null;
+    if (project && sections && App.SurfaceWater && order !== null && !project.deck) {
+      out = App.SurfaceWater.stagesWithWater(project, sections, order, function (id) {
+        var hidden = {};
+        App.Stages.hiddenKeys(project, id, 'staged').forEach(function (key) {
+          hidden[key] = true;
+        });
+        return hidden;
+      });
+    }
+    surfaceWaterStages.last = out;
+    return out;
   }
 
   function yesNo(get, set) {
@@ -1264,6 +1303,44 @@ App.Model = (function () {
     return rows;
   }
 
+  /* Head end and Tail end: free (attached to the mesh) or fixed (held in place), as in
+     the anchor's window. A record that does not say has a free head and a fixed tail
+     (core/model/schemas.py). */
+  var ANCHOR_END_DEFAULTS = { head_end: 'free', tail_end: 'fixed' };
+
+  function anchorEndKindEditor(anchor, key) {
+    return {
+      kind: 'select',
+      options: function () {
+        var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+        return ['free', 'fixed'].map(function (value) {
+          return { value: value, text: labels[value] || value };
+        });
+      },
+      get: function () { return anchor[key] || ANCHOR_END_DEFAULTS[key]; },
+      set: function (value) {
+        var was = anchor[key];
+        anchor[key] = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor[key] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function anchorEndKindRow(anchor, key) {
+    var value = anchor[key] || ANCHOR_END_DEFAULTS[key];
+    var labels = App.Anchors ? App.Anchors.END_LABELS : {};
+    return [key === 'head_end' ? 'Head end' : 'Tail end', labels[value] || value, '', false,
+            anchorEndKindEditor(anchor, key)];
+  }
+
+
+  function anchorEditRow(anchor) {
+    return ['Edit', '', '', false, { kind: 'button', text: 'Edit anchor…',
+      run: function () { if (App.Anchors) App.Anchors.edit(anchor.id); } }];
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1286,10 +1363,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
@@ -1315,10 +1395,13 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
+          anchorEndKindRow(anchor, 'head_end'),
+          anchorEndKindRow(anchor, 'tail_end'),
           ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
            anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
                               App.PropertySets.decimals(anchor.prestress))],
-          ['Active', anchor.active !== false, '', true]
+          ['Active', anchor.active !== false, '', true],
+          anchorEditRow(anchor)
         ],
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,
@@ -2172,7 +2255,10 @@ App.Model = (function () {
       return !(App.BoundaryConditions && App.BoundaryConditions.heldBySection(record, App.PROJECT));
     });
     boundaryNode.count = listed.length;
-    boundaryNode.children = listed.map(conditionChild);
+    var onGround = surfaceWaterStages();
+    boundaryNode.children = listed.map(function (record) {
+      return conditionChild(record, onGround[record.id]);
+    });
     // No "Boundary conditions [0]" row, nor an empty "Model conditions", for a model
     // without any.
     conditionsNode.children = listed.length ? [boundaryNode] : [];
@@ -2295,6 +2381,7 @@ App.Model = (function () {
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    surfaceWaterStages: surfaceWaterStages,
     clearMeshStats: clearMeshStats,
     setImportedParts: setImportedParts,
     domain: function () { return domain; }

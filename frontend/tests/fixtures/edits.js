@@ -270,6 +270,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -300,6 +302,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -381,6 +384,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -828,6 +832,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -858,6 +864,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -939,6 +946,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1442,6 +1450,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -1472,6 +1482,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -1553,6 +1564,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2001,6 +2013,7 @@ window.EDITS_FIXTURE =
       ],
       "interfaces": [],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2082,6 +2095,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2525,6 +2539,8 @@ window.EDITS_FIXTURE =
             -1.0
           ],
           "prestress": 0.0,
+          "head_end": "free",
+          "tail_end": "fixed",
           "active": true
         }
       ],
@@ -2555,6 +2571,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "interface_sides": "screen",
+      "drawn_phreatic_lines": "whole_soil",
       "normal_loads": [
         {
           "id": "water_1",
@@ -2636,6 +2653,7 @@ window.EDITS_FIXTURE =
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
+      "soil_water": {},
       "boundary_conditions": [
         {
           "id": "fixed_bottom",

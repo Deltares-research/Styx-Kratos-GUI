@@ -421,23 +421,142 @@
     });
   });
 
-  test('anchor start uses the tendon editor and edit saves the existing anchor', function () {
-    var initial = project();
-    initial.beams = [{ id: 'pile', kind: 'beam', points: [[12, 0], [12, -20]], active: true }];
-    return withEnvironment(initial, function (ctx) {
-      var proposed, tendons;
-      App.Dialogs.anchor = function (anchor, sections) { proposed = anchor; tendons = sections; };
+  function anchoredProject(dimension) {
+    var initial = project(dimension);
+    initial.beams = dimension === 3
+      ? [{ id: 'wall', kind: 'panel', footprint: [[12, 4], [12, 20]], y_top: 0, y_toe: -20,
+           active: true }]
+      : [{ id: 'pile', kind: 'beam', points: [[12, 0], [12, -20]], active: true }];
+    return initial;
+  }
+
+  test('anchor start opens the anchor window and saves nothing until Save', function () {
+    return withEnvironment(anchoredProject(2), function (ctx) {
       App.Anchors.start();
-      T.eq(proposed.head[0], 12);
-      T.eq(ctx.requests, [], 'opening the editor must not save the draft');
-      initial.anchors = [proposed]; initial.anchor_sections = tendons;
-      App.ANCHORS = initial.anchors; App.ANCHOR_SECTIONS = tendons;
-      return App.Anchors.edit(proposed.id).then(function () {
-        T.eq(ctx.requests[0].body.anchors, [proposed]);
-        T.eq(ctx.requests[0].body.anchor_sections, tendons);
-        T.eq(ctx.requests[0].body.beams, undefined, 'an anchor edit does not replace the piles');
-        T.eq(ctx.selected, [proposed.id]);
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Create anchor');
+      T.eq(ctx.requests, [], 'opening the window must not save the draft');
+      T.eq(field(dialog, 'Head x').value, '12');
+      T.eq(field(dialog, 'Tail end').value, 'free', 'a new anchor is joined to the soil');
+      T.eq(field(dialog, 'Head end').value, 'free', 'a new head is attached to the mesh');
+      T.eq(field(dialog, 'Tail x').value, '20', 'the drafted tail is on whole metres');
+      T.eq(field(dialog, 'Tail y').value, '-11');
+      T.ok(/attached to the mesh/.test(field(dialog, 'Head end').textContent));
+      field(dialog, 'Name').value = 'Ground anchor';
+      field(dialog, 'Head x').value = '12.4';      // within a metre: moved onto the pile
+      field(dialog, 'Head y').value = '-3';
+      field(dialog, 'Tail x').value = '20';
+      field(dialog, 'Tail y').value = '-9';
+      field(dialog, 'TRUSS_PRESTRESS_PK2').value = '150';
+      field(dialog, 'YOUNG_MODULUS').value = '195000000000';
+      field(dialog, 'Spacing').value = '3';
+      button(dialog, 'Save');
+      return drain().then(function () {
+        T.ok(dialog.closed);
+        var body = ctx.requests[0].body;
+        var saved = body.anchors[0];
+        T.eq(saved.name, 'Ground anchor');
+        T.eq(saved.head, [12, -3]);
+        T.eq(saved.tail, [20, -9]);
+        T.eq(saved.tail_end, 'free');
+        T.eq(saved.head_end, 'free');
+        T.eq(saved.prestress, 150);
+        T.eq(body.anchor_sections[0].variables.YOUNG_MODULUS, 195000000000);
+        T.eq(body.anchor_sections[0].spacing, 3);
+        T.eq(body.beams, undefined, 'an anchor edit does not replace the piles');
+        T.eq(ctx.selected, [saved.id]);
+      });
+    });
+  });
+
+  test('the anchor window makes a tail fixed, and Edit opens the saved anchor', function () {
+    return withEnvironment(anchoredProject(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Tail end'), 'fixed');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.tail_end, 'fixed');
+        App.Anchors.edit(saved.id);
+        var again = latest(ctx);
+        T.eq(again.options.title, 'Edit anchor');
+        T.eq(field(again, 'Tail end').value, 'fixed');
         T.eq(App.Anchors.edit('missing'), undefined);
+      });
+    });
+  });
+
+  test('the anchor window makes a head fixed, which is not snapped and may be in the air',
+    function () {
+      return withEnvironment(anchoredProject(2), function (ctx) {
+        App.Anchors.start();
+        var dialog = latest(ctx);
+        change(field(dialog, 'Head end'), 'fixed');
+        field(dialog, 'Head x').value = '12.4';    // within a metre, but held in place
+        field(dialog, 'Head y').value = '1';
+        button(dialog, 'Save');
+        return drain().then(function () {
+          T.ok(dialog.closed);
+          var saved = ctx.requests[0].body.anchors[0];
+          T.eq(saved.head_end, 'fixed');
+          T.eq(saved.head, [12.4, 1]);
+          App.Anchors.edit(saved.id);
+          T.eq(field(latest(ctx), 'Head end').value, 'fixed');
+        });
+      });
+    });
+
+  test('the anchor window refuses a free tail or a soil head in the air', function () {
+
+    return withEnvironment(anchoredProject(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      field(dialog, 'Tail y').value = '2';
+      button(dialog, 'Save');
+      T.ok(/free anchor tail must be in the soil/.test(dialog.form.textContent));
+      T.eq(ctx.requests, []);
+      change(field(dialog, 'Tail end'), 'fixed');
+      field(dialog, 'Head x').value = '20';
+      field(dialog, 'Head y').value = '1';
+      button(dialog, 'Save');
+      T.ok(/head on no structure must be in the soil/.test(dialog.form.textContent));
+      T.eq(ctx.requests, []);
+      T.ok(!dialog.closed);
+    });
+  });
+
+  test('the anchor window makes an anchor with no sheet pile', function () {
+    return withEnvironment(project(2), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Create anchor');
+      T.eq(field(dialog, 'Head x').value, '25');
+      T.eq(field(dialog, 'Head y').value, '-2');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        T.ok(dialog.closed);
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.head, [25, -2]);
+        T.eq(saved.tail_end, 'free');
+      });
+    });
+  });
+
+  test('the 3D anchor window has a z for each end and no spacing', function () {
+    return withEnvironment(anchoredProject(3), function (ctx) {
+      App.Anchors.start();
+      var dialog = latest(ctx);
+      T.ok(field(dialog, 'Head z'));
+      T.ok(field(dialog, 'Tail z'));
+      var threw = false;
+      try { field(dialog, 'Spacing'); } catch (e) { threw = true; }
+      T.ok(threw, 'a 3D anchor is not smeared');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        var saved = ctx.requests[0].body.anchors[0];
+        T.eq(saved.kind, 'anchor3d');
+        T.eq(saved.tail_end, 'free');
       });
     });
   });
@@ -849,6 +968,110 @@
         T.eq(saved.is_fixed, false);
         T.eq(saved.id, record.id);
         T.ok(dialog.closed);
+      });
+    });
+  });
+
+  test('a phreatic line on a drawn line takes its points until one is typed', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.draw('water_pressure', 'line');
+      ctx.drawn.options.onComplete([[50, -4, 0], [25, -3, 0], [0, -2, 0]]);
+      var dialog = latest(ctx);
+      T.eq(field(dialog, 'Phreatic line').value, '', 'a new line has no phreatic line');
+      change(field(dialog, 'Type'), 'Phreatic_Multi_Line');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -2, 25 -3, 50 -4',
+           'filled in from the drawn points, x increasing');
+      change(field(dialog, 'Points'), '0 -1, 50 -5');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -1, 50 -5', 'it follows the points');
+      button(dialog, 'Pick on model…');
+      ctx.drawn.options.onComplete([[0, -6, 0], [50, -7, 0]]);
+      dialog = latest(ctx);
+      T.eq(field(dialog, 'Type').value, 'Phreatic_Multi_Line', 'picking keeps the type');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -6, 50 -7', 'and follows the new line');
+      field(dialog, 'Phreatic line').value = '0 -2, 50 -2';
+      change(field(dialog, 'Points'), '0 -8, 50 -9');
+      T.eq(field(dialog, 'Phreatic line').value, '0 -2, 50 -2', 'a typed line is kept');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq(saved.points, [[0, -8], [50, -9]]);
+        T.eq([saved.x_coordinates, saved.y_coordinates], [[0, 50], [-2, -2]]);
+      });
+    });
+  });
+
+  function aquiferProject() {
+    var p = project();
+    p.boundary_conditions = [
+      App.BoundaryConditions.draftWaterPressure(p, 'domain', {
+        id: 'pl', name: 'Phreatic', fluid_pressure_type: 'Phreatic_Multi_Line',
+        x_coordinates: [0, 50], y_coordinates: [-1, -1] }),
+      App.BoundaryConditions.draftWaterPressure(p, 'line', {
+        id: 'head', name: 'Head', fluid_pressure_type: 'Head_Line',
+        points: [[0, 1], [50, 3]], x_coordinates: [0, 50], y_coordinates: [1, 3] })];
+    p.soil_water = { soil_L2: 'head' };
+    return p;
+  }
+
+  test('each soil takes its water in the boundary conditions window', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.open();
+      var dialog = latest(ctx);
+      var selects = dialog.form.querySelectorAll('select.bc-soil-water-choice');
+      T.eq(selects.length, 2, 'a row for each soil');
+      T.eq(selects[0].getAttribute('aria-label'), 'Water of Upper');
+      T.eq([selects[0].value, selects[1].value], ['', 'head']);
+      T.eq(Array.prototype.map.call(selects[0].options, function (o) { return o.value; }),
+           ['', 'head', 'interpolate']);
+      change(selects[0], 'interpolate');
+      return button(dialog, 'Save').then(function () {
+        var body = ctx.requests[0].body;
+        T.eq(body.soil_water, { soil_L1: 'interpolate', soil_L2: 'head' });
+        T.eq(body.boundary_conditions.map(function (c) { return c.id; }), ['pl', 'head']);
+      });
+    });
+  });
+
+  test('a soil whose line the grid takes away takes the whole soil water', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.open();
+      var dialog = latest(ctx);
+      realButton(dialog.form.querySelector('.bc-other'), 'Delete').click();
+      return drain().then(function () {
+        T.eq(ctx.requests[0].body.boundary_conditions.map(function (c) { return c.id; }),
+             ['pl']);
+        App.PROJECT.soil_water = {};
+        App.BoundaryConditions.open();
+        var again = latest(ctx);
+        T.eq(again.form.querySelectorAll('select.bc-soil-water-choice')[1].value, '');
+      });
+    });
+  });
+
+  test('the record dialog refuses a second phreatic line, saying what to do', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      App.BoundaryConditions.openRecord(App.BoundaryConditions.find('head'));
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Phreatic_Multi_Line');
+      field(dialog, 'Phreatic line').value = '0 -3, 50 -3';
+      var result = button(dialog, 'Save');
+      T.eq(result, null);
+      T.eq(ctx.requests.length, 0);
+      T.ok(/one phreatic line, Phreatic\. Switch Head off, or make it a head line/.test(
+        dialog.form.querySelector('.mesh-settings-message').textContent));
+    });
+  });
+
+  test('a head line drawn on a line takes its points, as a phreatic line does', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.draw('water_pressure', 'line');
+      ctx.drawn.options.onComplete([[50, 2, 0], [0, 0, 0]]);
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Head_Line');
+      T.eq(field(dialog, 'Head line').value, '0 0, 50 2', 'its row says head line');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.fluid_pressure_type, saved.x_coordinates, saved.y_coordinates],
+             ['Head_Line', [0, 50], [0, 2]]);
       });
     });
   });

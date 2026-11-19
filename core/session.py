@@ -37,7 +37,8 @@ from core import scripting
 from core.kratos import materials
 from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
-from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
+from core.model.schemas import (INTERPOLATE, ConditionsUpdate, CustomPart, DimensionUpdate,
+                                LayersUpdate,
                                 Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
@@ -1435,13 +1436,56 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
     """The boundary conditions, as one list: what `PATCH /api/project/conditions`
     sends. Left out, they stay."""
     payload = project.model_dump()
+    if update.stages is not None:
+        _stages_of_a_deck_are_read_only(project)
+        payload["stages"] = [stage.model_dump() for stage in update.stages]
     if update.boundary_conditions is not None:
-        _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
+        # Against the stages as they will be: the same request may take it out of them.
+        staged = (project if update.stages is None
+                  else project.model_copy(update={"stages": update.stages}))
+        _refuse_staged_conditions(staged, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
     if update.gravity_acceleration is not None:
         payload["gravity_acceleration"] = update.gravity_acceleration
-    return _edited(project, payload)
+    if update.soil_water is not None:
+        payload["soil_water"] = dict(update.soil_water)
+    edited = _edited(project, payload)
+    if update.stages is not None:
+        stages.linearise(edited)
+        stages.check_settings(edited)
+    if update.soil_water is not None:
+        _refuse_unknown_soil_water(edited, update.soil_water)
+    return edited
+
+
+def _refuse_unknown_soil_water(edited: Project, asked: dict[str, str]) -> None:
+    """Refuse a soil's water that names no soil or no head line: the project lets go of
+    one whose soil or line an edit took away (`Project.soil_water`), but one asked for
+    by name is a mistake to say."""
+    soils = edited.soil_part_keys()
+    lines = [line.id for line in edited.head_lines()]
+    for soil, water in asked.items():
+        if soil not in soils:
+            raise EditRefused(f"{soil!r} is not a soil of this project; the soils are "
+                              + (", ".join(soils) or "none"))
+        if water != INTERPOLATE and water not in lines:
+            raise EditRefused(
+                f"{water!r} is not a head line: a soil takes the phreatic line, a head "
+                "line (" + (", ".join(lines) or "there is none") + "), or "
+                f"{INTERPOLATE!r}")
+
+
+def set_soil_water(project: Project, soil: str, water: str | None) -> Project:
+    """`project` with the soil `soil` taking its water from the head line `water`, or
+    `INTERPOLATE`; None gives it the phreatic line again (`Project.soil_water`)."""
+    payload = project.model_dump()
+    chosen = dict(payload.get("soil_water") or {})
+    if water is None:
+        chosen.pop(soil, None)
+    else:
+        chosen[soil] = water
+    return replace_conditions(project, ConditionsUpdate(soil_water=chosen))
 
 
 def find_condition(project: Project, id: str):

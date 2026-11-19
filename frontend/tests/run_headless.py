@@ -63,6 +63,12 @@ SUITES = {
         [JS / "structure-glyphs.js"],
         TESTS / "test-structure-glyphs.js",
     ),
+    # The water the export puts on the ground, for the stage on screen: which stretch
+    # of the soil's boundary it presses on, and the arrows. Drawing them is viewport.js's.
+    "surface-water": (
+        [JS / "surface-water.js"],
+        TESTS / "test-surface-water.js",
+    ),
     # `water <level>` / `water off`: what was asked and what to send. The request and
     # the redraw are patches.js's.
     "water": (
