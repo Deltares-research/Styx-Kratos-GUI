@@ -47,7 +47,8 @@ def test_the_deck_is_kratos_own(gmsh_session, case):
     theirs = reference.reference_view(case)
     (stage,), (wanted,) = ours["stages"], theirs["stages"]
 
-    assert {key: stage["solver"].get(key) for key in wanted["solver"]} == wanted["solver"]
+    solver = reference.solver_as_written(wanted["solver"])
+    assert {key: stage["solver"].get(key) for key in solver} == solver
     for group in reference.GROUPS:
         assert stage[group] == wanted[group], group
     # Kratos' own list, and then the reaction it does not ask for: the nodal water flow

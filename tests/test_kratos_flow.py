@@ -28,6 +28,7 @@ from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Stage,
                                 SeepageCondition, WaterPressureCondition,
                                 standard_conditions)
 from tests import mdpa
+from tests.muskat_reference import solver_as_written
 from tests.models import muskat as muskat_model
 from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, WIDTH, head, muskat
 from tests.models.muskat import SOIL as REFERENCE_SOIL
@@ -82,16 +83,6 @@ REFERENCE_SOLVER_B = {
     "increase_factor": 1.0,
 }
 """Its `solver_settings`, less what names its own mesh and files."""
-
-
-def solver_as_written(reference: dict) -> dict:
-    """A reference deck's solver block as this exporter writes it: where it iterates,
-    with Kratos' own smallest step written out, 1e-4 of the stage (`core.model.solver`),
-    which the deck leaves to Kratos."""
-    out = dict(reference)
-    if "number_cycles" in out and "time_stepping" in out:
-        out["time_stepping"] = {**out["time_stepping"], "minimum_allowable_value": 1e-4}
-    return out
 
 
 REFERENCE_CONSTRAINTS_B = [
