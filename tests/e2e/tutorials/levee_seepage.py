@@ -326,6 +326,9 @@ def calculate(tour: Tour) -> None:
 CONTOURS = (("pw", "pressure"), ("head", "head"), ("effective_saturation", "saturation"),
             ("flux", "flux"))
 """The fields the page shows on the mesh, and the name of each screenshot."""
+ARROWS = "flux"
+"""The vector the page draws as arrows over the last field, the specific discharge."""
+
 
 
 def contours(tour: Tour) -> None:
@@ -339,6 +342,11 @@ def contours(tour: Tour) -> None:
         tour.settle()
         tour.picture(part, mark=[panel.locator('select[data-res="stage"]'),
                                  panel.locator('select[data-res="field"]')])
+    # The direction of the flow: the flux as arrows over its own size.
+    panel.locator('select[data-res="arrows"]').select_option(ARROWS)
+    tour.until(f"App.Results.state().arrowsOf === {ARROWS!r}", timeout=LONG)
+    tour.settle()
+    tour.picture(f"{ARROWS}_arrows", mark=panel.locator('select[data-res="arrows"]'))
 
 
 STEPS = [

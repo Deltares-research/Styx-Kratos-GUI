@@ -350,6 +350,18 @@ and comes out through the seepage face and the right side. The specific discharg
 largest, about 5 × 10⁻⁶ m/s, in the outer slope just below the river level, where the
 water enters the levee. Above the phreatic line, in the dry crest, the water hardly moves.
 
+6. In **Arrows**, select **|q|**. This draws the groundwater flux as arrows over the
+   colours: each arrow starts at a node and points in the direction in which the water
+   flows there.
+
+![The specific discharge with arrows that show the direction of the flow. The Arrows list of the Results explorer is outlined.](images/levee_seepage/09_contours_flux_arrows.png)
+
+All arrows are drawn to the same scale: the longest arrow is the largest specific
+discharge, and the other arrows are shorter in proportion. A node where the water hardly
+moves has no arrow that you can see. The arrows go down into the soil under the river,
+along the sand aquifer under the levee, and up to the seepage face and the polder.
+Select **off** in **Arrows** to hide them again.
+
 **Groundwater · Nodal water flow rate** shows the water that each node takes in (negative)
 or lets out (positive), per metre of the section. In total 2.87 m³/day per metre comes in
 from the river: 2.03 leaves through the seepage face and 0.84 through the right side.
