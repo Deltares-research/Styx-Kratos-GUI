@@ -62,7 +62,8 @@ A new project has a soil block 20 m wide and 15 m deep. The CROW model is 80 m w
 1. Click **File** > **Project properties…**.
 2. Type `80` in **x max** and `-60` in **y min**. Keep `0` in **x min** and in **y max**:
    the ground is at y = 0.
-3. Keep the gravitational acceleration g = 9.81 m/s².
+3. Keep **Gravity** at 9.81 m/s² and **Unit system** at **SI (N, m, kg, s)**. All values
+   in this tutorial are in SI units.
 4. Click **OK**.
 
 ![The Project properties window with the new size of the soil block. The x max and y min fields are outlined.](images/crow/01_project_properties.png)
@@ -485,11 +486,14 @@ After the last stage, the Stages explorer shows seven stages:
 
 ## 13. Calculate and look at the wall
 
-1. On the toolbar, click **Calculate**. Styx writes the Kratos input files and runs Kratos.
-   The calculation takes a few minutes, because the Mohr-Coulomb soil yields in the
-   excavation stages.
-2. When the calculation is complete, Styx opens Results mode.
-3. On the tool rail, click **Plot along the wall**.
+1. On the toolbar, click **Calculate**. Styx writes the Kratos input files from the mesh of
+   step 11 and runs Kratos. The calculation takes a few minutes, because the Mohr-Coulomb
+   soil yields in the excavation stages.
+2. The **Convergence** window opens at the bottom right. It shows how the solver converges
+   in each stage, iteration by iteration. Leave it open.
+3. When the calculation is complete, Styx opens Results mode. The Convergence window stays
+   open and gives the time that the calculation took.
+4. On the tool rail, click **Plot along the wall**.
 
 ![The Plot along the wall window with the bending moment in the wall for stages 3 to 7. The Plot along the wall tool is outlined.](images/crow/13_results_plot.png)
 
@@ -526,7 +530,8 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
-1. Click **Close** in the Plot along the wall window.
+1. Click **Close** in the Plot along the wall window, then click **Close** in the
+   Convergence window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
    excavation**.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal

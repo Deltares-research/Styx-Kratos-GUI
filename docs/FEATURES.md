@@ -278,8 +278,8 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`
 | Item | Detail |
 |---|---|
 | Benchmarks | Analytical and self-consistency checks in `benchmarks/`: K0 columns, weight above and below the water, hydrostatic column, symmetric excavation, 2D against 3D, mesh convergence, order 1 against order 2, saturated block, building pit, line loads in stages, balance of reactions, the three Muskat groundwater flow cases. They need Kratos. |
-| Server tests | pytest, 150 test files in `tests/`. Run them with `python tools/test.py quick`. |
-| JavaScript tests | 77 test files in `frontend/tests/`, run in a browser with Playwright (`python tools/test.py browser`). The files that do not use the DOM also run without a browser under quickjs. |
+| Server tests | pytest, 151 test files in `tests/`. Run them with `python tools/test.py quick`. |
+| JavaScript tests | 80 test files in `frontend/tests/`, run in a browser with Playwright (`python tools/test.py browser`). The files that do not use the DOM also run without a browser under quickjs. |
 
 ## Main gaps
 
