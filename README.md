@@ -153,16 +153,16 @@ Project link: <https://github.com/Deltares-research/Styx-Kratos-GUI>
 
 ## Authors
 
-Styx was developed by Marjan Fathian ([@indigocoral](https://github.com/indigocoral)), Deltares,
-first in the private repository `indigocoral/Kratos-GUI`. To cite Styx, use
-[CITATION.cff](CITATION.cff).
+The following people have contributed directly to the development of Styx:
 
-The following individuals have contributed directly to the development of Styx:
-
-- Aron Noordam ([@anoordam](https://github.com/anoordam))
+- Marjan Fathian ([@indigocoral](https://github.com/indigocoral)), author and lead developer
+- Aron Noordam ([@anoordam](https://github.com/anoordam)) 
 - Gennady Markelov ([@markelov208](https://github.com/markelov208))
 - Wijtze Pieter Kikstra ([@WPK4FEM](https://github.com/WPK4FEM))
 - Richard Faasse ([@rfaasse](https://github.com/rfaasse))
+
+Styx first started in the private repository `indigocoral/Kratos-GUI`. To cite Styx, use
+[CITATION.cff](CITATION.cff).
 
 ## Acknowledgments
 
