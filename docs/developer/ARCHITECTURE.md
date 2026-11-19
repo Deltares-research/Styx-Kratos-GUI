@@ -44,7 +44,7 @@ Module paths are relative to `core/`.
 | 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
 | 2. Build | `geometry/solid_model.py` | A solid for each soil piece (`model/regions.py` finds the pieces), then a boolean fragment, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
-| 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
+| 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made from the geometry. `mesh_project` keeps the last mesh in its own gmsh model (`solid_model.MESH_MODEL`) and uses it again while the model and the mesh settings stay the same |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
 | 6. Stages | `model/stages.py` | Makes the stage tree into the list of Kratos stages |
 | 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one Kratos stage for each stage, with GiD and JSON output) |

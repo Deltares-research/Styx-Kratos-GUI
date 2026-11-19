@@ -25,6 +25,8 @@ uses `.venv-windows`, as `kratos-cli.bat` does, so a shell script of commands ru
 
 `kratos-cli <command> --help` lists what each command takes. `kratos-cli --version` says
 which version of Styx you have, as **Help > About** does in the GUI. Give it in a bug report.
+`kratos-cli --help` ends with the address of the Kratos GeoMechanics user documentation,
+the page that **Help > Kratos documentation** opens in the GUI.
 
 ## From an empty site to results
 
