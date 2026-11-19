@@ -110,9 +110,12 @@ App.Feedback = (function () {
     return notice(what, (result && result.error) || 'Kratos exited without saying why.');
   }
 
-  /* An `error` or `unhandledrejection` event of the page. */
+  /* An `error` or `unhandledrejection` event of the page. A server answer that no caller
+     caught is not one: it has a `status` (api.js), a refusal is the server's own words,
+     and an answer of 500 or more was offered already by `serverError`. */
   function uncaught(event) {
     var reason = event && event.reason;
+    if (reason && reason.status) return null;
     var text = reason ? (reason.message || String(reason))
                       : ((event && event.message) || 'Unknown error');
     var where = event && event.filename

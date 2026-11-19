@@ -26,8 +26,9 @@ A report is added by writing the whole ZIP file again beside the old one, and th
 in the old one's place: a save that fails half-way leaves the reports saved before it as
 they were.
 
-Only the standard library and `core.analysis.calculation` (for the runs folder): the server
-and the command line both import this.
+Only the standard library, `core.analysis.calculation` (for the runs folder) and
+`core.kratos.deck_files` (for the names of the run's files): the server and the command line
+both import this.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -74,6 +76,10 @@ MAX_ATTACHMENT_BYTES = 15_000_000
 """The largest file a writer may add: a screenshot, a document or a model, not a video."""
 
 _RUN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+_ADDING = threading.Lock()
+"""Held while a report is added to a ZIP file: the server saves two reports in two threads,
+and each reads the old file before it puts the new one in its place."""
 
 
 class FeedbackError(ValueError):
@@ -208,6 +214,11 @@ def write(report: Report, into: Path | None = None, now: datetime | None = None)
     except OSError as failure:
         raise FeedbackError(f"The folder {target_folder} could not be made: {failure}. Set "
                             f"{FOLDER_ENV} to a folder that can be written to.") from failure
+    with _ADDING:
+        return _add(report, now, target_folder)
+
+
+def _add(report: Report, now: datetime, target_folder: Path) -> Saved:
     target = _day_file(target_folder / file_name(report, now))
     earlier = _reports_in(target)
     name = report_folder(report, now, set(earlier))

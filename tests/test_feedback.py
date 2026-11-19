@@ -5,6 +5,9 @@ tests/api/test_feedback_routes.py and tests/cli/test_feedback_command.py."""
 from __future__ import annotations
 
 import json
+import math
+import re
+import threading
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -238,3 +241,42 @@ def test_a_report_after_an_error_needs_no_words(tmp_path):
 def test_a_name_in_a_file_name_keeps_letters_and_digits_only():
     assert feedback.slug("  Jo O'Brien / Team 2 ") == "jo-o-brien-team-2"
     assert feedback.slug("***") == ""
+
+
+# ── The browser's copy ──────────────────────────────────────────────────────
+
+FEEDBACK_JS = Path(__file__).resolve().parents[1] / "frontend" / "js" / "feedback.js"
+
+
+def test_the_window_offers_the_kinds_and_limits_the_server_takes():
+    """frontend/js/feedback.js keeps its own copy of the kinds and the file limits, so the
+    window can refuse a file before it is sent. The copy must match core/feedback.py."""
+    source = FEEDBACK_JS.read_text(encoding="utf-8")
+    kinds = dict(re.findall(r"\{ id: '(\w+)', label: '([^']+)'", source))
+    assert kinds == feedback.KINDS
+    assert re.search(r"var MAX_FILES = (\d+);", source).group(1) == str(feedback.MAX_ATTACHMENTS)
+    factors = re.search(r"var MAX_FILE_BYTES = ([\d *]+);", source).group(1).split("*")
+    assert math.prod(int(factor) for factor in factors) == feedback.MAX_ATTACHMENT_BYTES
+
+
+def test_reports_saved_at_the_same_time_are_all_kept(tmp_path):
+    """The server saves in parallel threads: each report must reach the day's file."""
+    count = 8
+    start = threading.Barrier(count)
+
+    def save(i: int) -> None:
+        start.wait()
+        feedback.write(feedback.Report(kind="bug", message=f"report {i}", name="Anna"),
+                       tmp_path, NOW)
+
+    threads = [threading.Thread(target=save, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    (day,) = tmp_path.glob("*.zip")
+    messages = sorted(json.loads(data)["message"] for name, data in files_of(day).items()
+                      if name.endswith("/report.json"))
+    assert messages == sorted(f"report {i}" for i in range(count))
+

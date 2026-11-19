@@ -84,7 +84,7 @@ async def refused(request, failure: HTTPException):
     return await http_exception_handler(request, failure)
 
 
-UNEXPECTED = ("The server stopped on an error it did not expect ({error}). This is a fault "
+UNEXPECTED = ("The server met an error it did not expect ({error}). This is a fault "
               "in Styx, not in the model: save a report so that it can be fixed.")
 
 

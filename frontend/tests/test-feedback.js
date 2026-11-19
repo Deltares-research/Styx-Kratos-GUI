@@ -71,6 +71,18 @@
     F.forgetForTests();
   });
 
+  test('feedback: a server answer nobody caught is not a script error', function () {
+    F.forgetForTests();
+    var refused = new Error('The layer name is in use.');
+    refused.status = 422;
+    T.eq(F.uncaught({ reason: refused }), null);
+    var failed = new Error('gmsh could not mesh it');
+    failed.status = 500;
+    T.eq(F.uncaught({ reason: failed }), null);
+    T.eq(F.seen(), []);
+    F.forgetForTests();
+  });
+
   test('feedback: the payload puts the error it is about first, once', function () {
     F.forgetForTests();
     var first = F.notice('first', 'a', 1000).entry;
