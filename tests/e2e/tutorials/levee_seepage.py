@@ -193,7 +193,7 @@ def _points(points) -> str:
 
 def _condition(tour: Tour, record, picture: str = "") -> None:
     page = tour.page
-    rail(tour, "createBoundaryCondition", "Create boundary condition…")
+    rail(tour, "createFlowCondition")
     field(page, "Name").fill(record.name)
     field(page, "Condition").select_option(record.kind)
     field(page, "Where").select_option(record.on)
@@ -209,7 +209,7 @@ def _condition(tour: Tour, record, picture: str = "") -> None:
         field(page, "Tension cut-off").fill(f"{record.pressure_tension_cut_off:g}")
         field(page, "Initial only").set_checked(not record.is_fixed)
     if picture:
-        tour.picture(picture, mark=rail_tool("createBoundaryCondition"))
+        tour.picture(picture, mark=rail_tool("createFlowCondition"))
     count = len(project(tour)["boundary_conditions"])
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.length === {count + 1}")
@@ -217,7 +217,7 @@ def _condition(tour: Tour, record, picture: str = "") -> None:
 
 
 def water(tour: Tour) -> None:
-    mode(tour, "structures")
+    mode(tour, "flow")
     _condition(tour, RIVER, "river")
     _condition(tour, POLDER)
     _condition(tour, SEEPAGE, "seepage")

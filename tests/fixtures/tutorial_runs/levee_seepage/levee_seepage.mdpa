@@ -16027,3 +16027,42 @@ Begin SubModelPart Seepage_face
            51
     End SubModelPartConditions
 End SubModelPart
+
+Begin SubModelPart Start_values_wet_surface
+    Begin SubModelPartNodes
+           10
+           11
+          217
+          218
+          219
+          220
+          221
+          222
+          223
+          224
+          225
+          226
+          227
+          228
+          229
+          230
+          231
+          232
+          233
+          237
+          238
+          239
+          240
+          241
+          242
+          243
+          244
+          245
+          246
+          247
+          248
+          249
+          250
+          251
+    End SubModelPartNodes
+End SubModelPart

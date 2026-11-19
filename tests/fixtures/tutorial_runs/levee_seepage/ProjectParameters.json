@@ -75,6 +75,7 @@
                         "Levee_outer_layer"
                     ],
                     "processes_sub_model_part_list": [
+                        "Start_values_wet_surface",
                         "River_head",
                         "Polder_head",
                         "Seepage_face"
@@ -98,6 +99,45 @@
                                 "model_part_name": "PorousDomain",
                                 "variable_name": "WATER_PRESSURE",
                                 "is_fixed": false,
+                                "table": [
+                                    0,
+                                    0,
+                                    0,
+                                    0
+                                ],
+                                "fluid_pressure_type": "Phreatic_Multi_Line",
+                                "gravity_direction": 1,
+                                "out_of_plane_direction": 2,
+                                "x_coordinates": [
+                                    -36.0,
+                                    -2.0,
+                                    15.0,
+                                    54.0
+                                ],
+                                "y_coordinates": [
+                                    5.0,
+                                    5.0,
+                                    -0.5,
+                                    -0.5
+                                ],
+                                "z_coordinates": [
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    0.0
+                                ],
+                                "specific_weight": 10000.0,
+                                "pressure_tension_cut_off": 100000.0
+                            }
+                        },
+                        {
+                            "python_module": "apply_scalar_constraint_table_process",
+                            "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+                            "process_name": "ApplyScalarConstraintTableProcess",
+                            "Parameters": {
+                                "model_part_name": "PorousDomain.Start_values_wet_surface",
+                                "variable_name": "WATER_PRESSURE",
+                                "is_fixed": true,
                                 "table": [
                                     0,
                                     0,
@@ -243,7 +283,8 @@
                                             "WATER_PRESSURE",
                                             "EFFECTIVE_SATURATION",
                                             "FLUID_FLUX_VECTOR",
-                                            "NODAL_WATER_FLOW_RATE"
+                                            "NODAL_WATER_FLOW_RATE",
+                                            "REACTION_WATER_PRESSURE"
                                         ],
                                         "gauss_point_results": [
                                             "HYDRAULIC_HEAD"

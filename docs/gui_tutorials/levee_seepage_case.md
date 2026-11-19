@@ -224,9 +224,8 @@ holds the water pressure on its line; it is hydrostatic about its reference leve
 
 For each condition:
 
-1. Click the **Structures** tab.
-2. On the tool rail, click the small arrow in the corner of **Create boundary condition**,
-   then click **Create boundary condition…**.
+1. Click the **Flow conditions** tab.
+2. On the tool rail, click **Create flow boundary condition…**.
 3. In **Name**, type the name.
 4. In **Condition**, select the condition, and in **Where**, select **Line**.
 5. In **Points**, type the points as in the table: x and y of each point, the points
@@ -237,7 +236,7 @@ For each condition:
 
 The window of the river head:
 
-![The Create boundary condition window of the river head. The Create boundary condition tool is outlined.](images/levee_seepage/05_water_river.png)
+![The Create boundary condition window of the river head. The Create flow boundary condition tool is outlined.](images/levee_seepage/05_water_river.png)
 
 The window of the seepage face:
 
