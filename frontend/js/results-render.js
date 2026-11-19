@@ -318,6 +318,53 @@ App.ResultsRender = (function () {
     return out;
   }
 
+  /* ── ID labels ────────────────────────────────────────────────────────── */
+
+  /* Where the node and element numbers of one drawn section go, as `{id, x, y, z}`
+     (frontend/js/mesh-labels.js). `positions` are the ones on screen -- deformed when
+     the mesh is -- so a number stays on its node at any deformation factor.
+
+     A node goes at its vertex. An element goes at the mean of the vertices it is drawn
+     with: the triangles it makes (`triangle_elements`) and its line work
+     (`edge_elements`). For the simplices a deck holds that is its centroid, as
+     `writer._element_labels` places it -- a quadratic element's extra nodes are edge
+     midpoints. A 3D section draws only its skin, so a solid's number sits on the face
+     that is seen. */
+  function labelPoints(section, positions, kind) {
+    var at = positions || section.positions || [];
+    function point(id, i) {
+      return { id: id, x: at[3 * i], y: at[3 * i + 1], z: at[3 * i + 2] };
+    }
+    var nodeIds = section.node_ids || [];
+    if (kind !== 'elements') {
+      return nodeIds.map(function (id, i) { return point(id, i); });
+    }
+    var vertices = {}, order = [];
+    function take(element, vertex) {
+      if (element === undefined || element === null || vertex === undefined) return;
+      if (!vertices[element]) { vertices[element] = {}; order.push(element); }
+      vertices[element][vertex] = true;
+    }
+    var indices = section.indices || [];
+    (section.triangle_elements || []).forEach(function (element, t) {
+      for (var k = 0; k < 3; k++) take(element, indices[3 * t + k]);
+    });
+    var edges = section.edge_indices || [];
+    (section.edge_elements || []).forEach(function (element, e) {
+      take(element, edges[2 * e]);
+      take(element, edges[2 * e + 1]);
+    });
+    return order.map(function (element) {
+      var list = Object.keys(vertices[element]);
+      var sum = [0, 0, 0];
+      list.forEach(function (v) {
+        for (var axis = 0; axis < 3; axis++) sum[axis] += at[3 * v + axis];
+      });
+      return { id: element, x: sum[0] / list.length, y: sum[1] / list.length,
+               z: sum[2] / list.length };
+    });
+  }
+
   /* The factor that makes the largest movement a readable fraction of the model.
 
      A ceiling, not a normalisation: a model that has already moved further than that
@@ -578,6 +625,7 @@ App.ResultsRender = (function () {
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
     legend: legend, format: format, rangeLines: rangeLines,
-    deform: deform, autoFactor: autoFactor, isoline: isoline, outside: outside, arrows: arrows, csv: csv
+    deform: deform, autoFactor: autoFactor, isoline: isoline, outside: outside, arrows: arrows,
+    csv: csv, labelPoints: labelPoints
   };
 })();

@@ -165,7 +165,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Architecture | A browser front end (three.js, no build step) and a local FastAPI server. Gmsh runs in its own worker process, so a Gmsh crash does not stop the server. | Tested |
-| Start | `run.bat` or `run.sh` makes its own Python environment and starts the server. `run.bat` also opens the browser. `--check` only checks the setup. | Tested on Windows, Linux and macOS |
+| Start | `run.bat` or `run.sh` makes its own Python environment and starts the server. `run.bat` also opens the browser when the server is ready. `--check` only checks the setup. | Tested on Windows, Linux and macOS |
 | Project files | New, Open, Save, Save as (a project JSON file). The server keeps the open project in memory only. | Tested |
 | Undo and redo | Up to 40 steps, each a copy of the full project | Tested |
 | Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |
@@ -176,7 +176,6 @@ and adds only the values that are missing
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
 | Navigation | Iso, top, front and side views; zoom to fit; rotate; rulers on all four edges in 2D | Tested |
-| Placeholder items | Some menu items and tools of the first design do nothing. They show *"…" is not available in Styx yet*. | — |
 
 ### B2. Geometry and soil
 
@@ -187,8 +186,8 @@ and adds only the values that are missing
 | Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens). In 2D also `kratos-cli surface`. | Tested |
 | Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer or a soil surface from edge to edge, it becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. In 3D a line splits a soil volume only when the volume is a polygon extruded along z, or a box; an imported solid or a cylinder stays whole. | Tested |
 | Old saved excavations | A project saved with an excavation pit opens with lines and soil bodies in its place. | Tested |
-| Drawing tools | Point, surface, box and cylinder (box and cylinder in 3D only). These make display geometry. | Tested |
-| CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) | Tested |
+| Drawn solids | Box, cylinder and extruded polygon with `kratos-cli volume add`; with `--material` they are soil. The GUI has no tool for them. | Limited |
+| CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) with `kratos-cli volume import`; with `--material` the solid is soil. Not in the GUI. | Limited |
 | Kratos `.mdpa` import | View only: a preview with a list of parts. You cannot change the mesh. | Tested |
 
 ### B3. Structures, loads and water
@@ -219,7 +218,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Export | **File** → **Export model…** writes the Kratos input files in one ZIP file, and lists each assumption and warning | Tested |
-| Calculate (F9) | Makes the mesh, writes the files, and runs Kratos in a new run folder | Tested |
+| Calculate (F9) | Uses the mesh of the model (makes one if there is none), writes the files, and runs Kratos in a new run folder | Tested |
 | Stop a calculation | While Kratos runs, Calculate is a **Stop** button (also in the Convergence window and the Stages menu, and `calculate stop`). Kratos stops at once; the model does not change, and the run folder keeps the results of the stages that finished. <kbd>Ctrl</kbd>+<kbd>C</kbd> does the same in `kratos-cli`. | Tested |
 | Kratos location | `kratos.local.json` or environment variables: Python of Kratos, build folder, runs folder, time limit (default 3600 s) | Tested |
 | Failed runs | The log names the stage that failed | Tested |
@@ -252,7 +251,7 @@ and adds only the values that are missing
 | `script <file.py>` | Writes the model as a model script |
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
-| `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
+| `water`, `units`, `domain`, `cleargeometry` | Changes the water level, the unit system or the size of the soil block, or removes drawn and imported solids |
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |

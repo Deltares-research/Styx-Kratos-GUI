@@ -579,7 +579,8 @@
     var ctx = rig(true);
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
       App.setMode('results');
-      T.ok(dialogTitled(ctx, 'Choose results'), 'entering Results opens the chooser');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'entering Results does not ask');
+      App.runAction({ action: 'chooseResults' });
       App.setCoords(12, -3, 0);
       T.eq(dock.querySelector('#sb-hint').textContent, 'Probe x=12');
       dock.querySelector('[data-cmd="results range auto"]').click();
@@ -598,24 +599,72 @@
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 
-  test('results: with the Convergence window open, entering Results leaves the chooser closed', function () {
+  test('results: coming back to Results shows the same result, and never asks again', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    var drawn = [];
+    App.ResultsView.draw = function (payload) { drawn.push(payload.field.field); };
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.state.mode = 'soil';
+      drawn.length = 0;
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'the first visit shows, not asks');
+      return settle(30);
+    }).then(function () {
+      T.ok(drawn.length > 0, 'the first visit draws the result the run opened on');
+      return resultsCommand('results field uy');
+    }).then(function () {
+      App.runAction({ action: 'chooseResults' });
+      App.runAction({ action: 'plotResults' });
+      return settle(60);
+    }).then(function () {
+      App.setMode('mesh');
+      App.setMode('soil');
+      drawn.length = 0;
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined,
+           'a chooser open when leaving does not come back by itself');
+      T.ok(dialogTitled(ctx, 'Plot along the wall'), 'the plot open when leaving comes back');
+      return settle(30);
+    }).then(function () {
+      T.eq(drawn, ['uy'], 'the same field is drawn again');
+      // A redraw of the same tab -- a part switched off in the Model explorer, or any
+      // edit that rebuilds the geometry -- calls setMode with the mode already on.
+      App.runAction({ action: 'chooseResults' });
+      button(dialogTitled(ctx, 'Choose results'), 'Close').click();
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined,
+           'a redraw in Results does not open the chooser');
+      App.runAction({ action: 'chooseResults' });
+      App.setMode('results');
+      T.eq(ctx.layer.querySelectorAll('.dlg-results').length, 1,
+           'nor close or duplicate one that is open');
+      App.setMode('soil');
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
+
+    function resultsCommand(text) {
+      return Promise.resolve(App.Results.handleCommand(text)).then(function () { return settle(30); });
+    }
+  });
+
+  test('results: the rail opens the chooser from any tab', function () {
     var dock = document.createElement('div');
     dock.id = 'dock';
     dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div><span id="sb-hint"></span>';
     document.body.appendChild(dock);
     var ctx = rig(true);
-    var real = App.ConvergenceWindow;
-    App.ConvergenceWindow = { state: function () { return { open: true }; } };
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
-      App.setMode('results');
-      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'it would hide how the run ended');
-      T.eq(dock.querySelector('#panel-results').hidden, false, 'the dock panel has the controls');
+      App.setMode('soil');
       App.runAction({ action: 'chooseResults' });
+      T.eq(App.state.mode, 'results');
       T.ok(dialogTitled(ctx, 'Choose results'), 'the rail opens it');
+      T.eq(dock.querySelector('#panel-results').hidden, false, 'the dock panel is there too');
       App.setMode('soil');
       T.eq(dialogTitled(ctx, 'Choose results'), undefined);
-    }).then(function () { App.ConvergenceWindow = real; dock.remove(); },
-            function (error) { App.ConvergenceWindow = real; dock.remove(); throw error; }));
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 
 })();

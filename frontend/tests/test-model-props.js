@@ -203,25 +203,19 @@
       // The law says what else is listed: the rows are drawn again, as a save does.
       App.Model.rebuildDerived();
 
-      var rInter = row('R_inter');
-      T.eq(rInter[4].get(), section.r_inter);
-      T.eq(rInter[4].set(0.5), null);
+      var value = row('R_inter value');
+      T.eq(value[4].get(), section.r_inter);
+      T.eq(value[4].set(0.5), null);
       T.eq(section.r_inter, 0.5);
-      T.ok(rInter[4].set(1.5), 'above 1 is refused');
+      T.ok(value[4].set(1.5), 'above 1 is refused');
+      T.eq(row('R_inter')[4].set('soil'), null);
+      T.eq(section.r_inter, null, "each soil's own");
       App.Model.rebuildDerived();
-      var saved = App.commitSelectionEdit, committed = [];
-      App.commitSelectionEdit = function (key) { committed.push(key); };
-      try {
-        rows().filter(function (r) {
-          return r[4] && r[4].kind === 'button' && r[4].text === 'Each soil’s own R_inter';
-        })[0][4].run();
-        T.eq(section.r_inter, null, "each soil's own");
-        T.eq(committed, [contact.id]);
-      } finally { App.commitSelectionEdit = saved; }
+      T.ok(!row('R_inter value'), 'nothing to type');
     });
   });
 
-  test("an R_inter left to each soil reads so, and a number typed in sets one", function () {
+  test("an R_inter left to each soil reads so, and choosing one gives a number to type", function () {
     var project = mohrCoulombInterface();
     project.interface_sections.forEach(function (s) {
       s.r_inter = null;
@@ -231,12 +225,14 @@
       var contact = App.INTERFACES[0];
       var rInter = App.OBJECT_PROPS[contact.id].groups.Contact.filter(function (r) {
         return r[0] === 'R_inter'; })[0];
-      T.eq(rInter[1], 'each soil\u2019s own');
-      T.eq(rInter[4].set(rInter[4].get()), null, 'writing back what it read changes nothing');
-      T.eq(rInter[4].set(0.6), null);
+      T.eq(rInter[1], 'Each soil\u2019s own');
+      T.eq(rInter[4].kind, 'select');
+      T.eq(rInter[4].set(rInter[4].get()), null, 'choosing the same changes nothing');
       var section = App.INTERFACE_SECTIONS.filter(function (s) {
         return s.id === contact.section; })[0];
-      T.eq(section.r_inter, 0.6);
+      T.eq(section.r_inter, null);
+      T.eq(rInter[4].set('own'), null);
+      T.ok(section.r_inter > 0 && section.r_inter <= 1, 'a number to start from');
     });
   });
 

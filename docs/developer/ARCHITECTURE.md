@@ -44,7 +44,7 @@ Module paths are relative to `core/`.
 | 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
 | 2. Build | `geometry/solid_model.py` | A solid for each soil piece (`model/regions.py` finds the pieces), then a boolean fragment, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
-| 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
+| 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made from the geometry. `mesh_project` keeps the last mesh in its own gmsh model (`solid_model.MESH_MODEL`) and uses it again while the model and the mesh settings stay the same |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
 | 6. Stages | `model/stages.py` | Makes the stage tree into the list of Kratos stages |
 | 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one Kratos stage for each stage, with GiD and JSON output) |
@@ -115,7 +115,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/domain`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder); `POST /api/calculate/stop` (stop the run: Kratos is killed, the run answers `stopped`) |
@@ -155,10 +155,10 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 
 | Role | Modules in `frontend/js/` |
 |---|---|
-| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
+| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `dialog-fit.js` (a window with help text opens wide enough to read it), `splitters.js` (the bars that resize the panels, in place of the shell's own), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `surface-water.js` (the water on the ground that Staged construction draws), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `boundary-conditions.js` (the boundary conditions window, and the `boundary` and `gravity` commands), `point-list.js` (the list of points in the Line and normal load windows), `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
+| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `boundary-conditions.js` (the boundary conditions window, and the `boundary` and `gravity` commands), `point-list.js` (the list of points in the Line and normal load windows), `water-command.js`, `domain-command.js` (the `domain` command), `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Soil materials | `material-sets.js` (the **Soil materials** window: the soils, and the project's water under **Water**), `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |

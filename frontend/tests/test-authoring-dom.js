@@ -1135,4 +1135,215 @@
       });
     });
   });
+
+  /* A support on the bottom, a hydrostatic pressure on the left face with no level of
+     its own (the project has no water level), and one condition of each group on a
+     line: the grid of either window used to send them all back. */
+  function mixedConditions() {
+    var p = project();
+    var BC = App.BoundaryConditions;
+    var support = BC.draftDisplacement(p, 'face', { face: 'bottom', fixed: [true, true, true] });
+    p.boundary_conditions = [support];
+    var water = BC.draftWaterPressure(p, 'face', { face: 'left',
+                                                   fluid_pressure_type: 'Hydrostatic',
+                                                   reference_coordinate: -2 });
+    water.reference_coordinate = null;
+    p.boundary_conditions.push(water);
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'line', { points: [[10, 0], [10, -5]] }));
+    p.boundary_conditions.push(BC.draftSeepage(p, 'line', { points: [[50, 0], [50, -5]] }));
+    return p;
+  }
+
+  function headings(dialog) {
+    return Array.prototype.map.call(dialog.form.querySelectorAll('.bc-grid th'),
+                                    function (th) { return th.textContent; });
+  }
+
+  function values(select) {
+    return Array.prototype.map.call(select.options, function (o) { return o.value; });
+  }
+
+  function cells(tr, count) {
+    return Array.prototype.slice.call(tr.querySelectorAll('td'), 0, count)
+      .map(function (td) { return td.textContent; });
+  }
+
+  /* mixedConditions, with a roller on the left face, a support on the front face (kept
+     for the solid model) and one on a sloping line that holds y only. */
+  function supportConditions() {
+    var p = mixedConditions();
+    var BC = App.BoundaryConditions;
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'left',
+                                                                 fixed: [true, false, false] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'front',
+                                                                 fixed: [false, false, true] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'line', {
+      points: [[0, 0], [5, -5]], fixed: [false, true, false] }));
+    return p;
+  }
+
+  test('the mechanical window is a table of the supports the model has', function () {
+    return withEnvironment(supportConditions(), function (ctx) {
+      var before = JSON.parse(JSON.stringify(App.PROJECT.boundary_conditions));
+      App.BoundaryConditions.open('mechanical');
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Mechanical boundary conditions');
+      T.eq(headings(dialog), ['Name', 'Where', 'Support', 'Fixed in', 'Active', '']);
+      T.eq(dialog.form.querySelectorAll('select').length, 0, 'no face rows to fill in');
+      var rows = dialog.form.querySelectorAll('.bc-grid tr');
+      T.eq(Array.prototype.slice.call(rows, 1).map(function (tr) { return cells(tr, 4); }), [
+        [before[0].name, 'Bottom face', 'Fixed', 'x, y'],
+        [before[2].name, 'Line (10, 0) → (10, -5)', 'Fixed', 'x, y'],
+        [before[4].name, 'Left face', 'Roller', 'x'],
+        [before[6].name, 'Line (0, 0) → (5, -5)', 'Custom', 'y']
+      ], 'no water condition, no front support; z is not held in a 2D section');
+      T.ok(dialog.form.textContent.indexOf('kept for the solid model') >= 0,
+           'a note says where the front support went');
+      T.eq(dialog.options.buttons.map(function (b) { return b.label; }),
+           ['Standard conditions', 'Add condition…', 'Close']);
+      realButton(rows[3], 'Edit…').click();
+      T.ok(dialog.closed);
+      T.eq(field(latest(ctx), 'Name').value, before[4].name);
+      App.BoundaryConditions.open('mechanical');
+      button(latest(ctx), 'Add condition…');
+      var condition = field(latest(ctx), 'Condition');
+      T.eq(values(condition), ['displacement']);
+      T.ok(condition.disabled);
+      App.BoundaryConditions.open('mechanical');
+      dialog = latest(ctx);
+      return Promise.resolve(button(dialog, 'Standard conditions')).then(function () {
+        T.ok(dialog.closed);
+        var sent = ctx.requests[0].body.boundary_conditions;
+        T.ok(sent.some(function (r) { return r.id === before[1].id; }), 'the water stays');
+        T.eq(latest(ctx).options.title, 'Mechanical boundary conditions',
+             'the window opens again on the standard supports');
+        T.ok(latest(ctx).form.textContent.indexOf('Roller') >= 0);
+      });
+    });
+  });
+
+  test('the mechanical table names each support in 3D by the components it holds', function () {
+    var p = project(3);
+    var BC = App.BoundaryConditions;
+    p.boundary_conditions = [
+      BC.draftDisplacement(p, 'face', { face: 'bottom', fixed: [true, true, false] })];
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'face', { face: 'front',
+                                                                 fixed: [false, false, true] }));
+    p.boundary_conditions.push(BC.draftDisplacement(p, 'part', { part: 'soil_L1' }));
+    T.eq(BC.mechanicalRows(p).map(function (row) { return [row.where, row.support, row.fixed]; }), [
+      ['Bottom face', 'Custom', 'x, y'],
+      ['Front face', 'Roller', 'z'],
+      ['Part soil_L1', 'Fixed', 'x, y, z']
+    ]);
+  });
+
+  test('the mechanical window of a model with no supports says how to add them', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.open('mechanical');
+      var dialog = latest(ctx);
+      T.eq(dialog.form.querySelectorAll('.bc-grid').length, 0);
+      T.ok(/no supports yet/.test(dialog.form.textContent));
+    });
+  });
+
+  test('the flow window is a table of the flow conditions the model has', function () {
+    return withEnvironment(mixedConditions(), function (ctx) {
+      var before = JSON.parse(JSON.stringify(App.PROJECT.boundary_conditions));
+      App.BoundaryConditions.open('flow');
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Flow boundary conditions');
+      T.eq(headings(dialog), ['Name', 'Condition', 'Where', 'Type', 'Level / value',
+                              'Tension cut-off', 'Initial only', 'Active', '']);
+      T.eq(dialog.form.querySelectorAll('select').length, 0, 'no face rows to fill in');
+      var rows = dialog.form.querySelectorAll('.bc-grid tr');
+      T.eq(rows.length, 3, 'a heading and the two flow conditions; no support');
+      function cells(tr) {
+        return Array.prototype.slice.call(tr.querySelectorAll('td'), 0, 7)
+          .map(function (td) { return td.textContent; });
+      }
+      T.eq(cells(rows[1]), [before[1].name, 'Water pressure', 'Left face', 'Hydrostatic',
+                            'the water level', '0 Pa', 'No']);
+      T.eq(cells(rows[2]), [before[3].name, 'Seepage face', 'Line (50, 0) → (50, -5)',
+                            '—', '—', '—', '—']);
+      T.eq(dialog.options.buttons.map(function (b) { return b.label; }),
+           ['Add condition…', 'Close']);
+      var active = rows[2].querySelector('.bc-active');
+      T.ok(active.checked);
+      active.checked = false;
+      active.dispatchEvent(new Event('change', { bubbles: true }));
+      return drain().then(function () {
+        var sent = ctx.requests[0].body.boundary_conditions;
+        T.eq(sent[3].active, false, 'the check box switches the condition off');
+        T.eq(sent.slice(0, 3), before.slice(0, 3), 'and leaves the others');
+        realButton(rows[1], 'Edit…').click();
+        T.ok(dialog.closed);
+        T.eq(latest(ctx).options.title, 'Edit boundary condition');
+        T.eq(field(latest(ctx), 'Name').value, before[1].name);
+        App.BoundaryConditions.open('flow');
+        dialog = latest(ctx);
+        realButton(dialog.form.querySelectorAll('.bc-grid tr')[1], 'Delete').click();
+        return drain();
+      }).then(function () {
+        var sent = ctx.requests[ctx.requests.length - 1].body.boundary_conditions;
+        T.eq(sent.map(function (r) { return r.id; }), [before[0].id, before[2].id, before[3].id]);
+        button(latest(ctx), 'Add condition…');
+        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage']);
+      });
+    });
+  });
+
+  test('the flow table says each kind of water pressure in words and units', function () {
+    var p = project();
+    p.water = { y: -1 };
+    var BC = App.BoundaryConditions;
+    p.boundary_conditions = [
+      BC.draftWaterPressure(p, 'domain', { reference_coordinate: -1.5,
+                                           pressure_tension_cut_off: 100000 })];
+    p.boundary_conditions.push(BC.draftWaterPressure(p, 'point', {
+      points: [[8, -4]], fluid_pressure_type: 'Uniform', value: -125, is_fixed: false }));
+    p.boundary_conditions.push(BC.draftWaterPressure(p, 'part', {
+      part: 'soil_L1', fluid_pressure_type: 'Phreatic_Multi_Line',
+      x_coordinates: [0, 50], y_coordinates: [-2, -4] }));
+    p.boundary_conditions.push(BC.draftSeepage(p, 'face', { face: 'front' }));
+    var rows = BC.flowRows(p).map(function (row) {
+      return [row.where, row.type, row.value, row.cutoff, row.initial];
+    });
+    T.eq(rows, [
+      ['Whole soil', 'Hydrostatic', 'y = -1.5 m', '100000 Pa', 'No'],
+      ['Point (8, -4)', 'Uniform', '-125 Pa', '—', 'Yes'],
+      ['Part soil_L1', 'Phreatic line', '(0, -2) → (50, -4)', '0 Pa', 'No'],
+      ['Front face (solid model only)', '—', '—', '—', '—']
+    ]);
+  });
+
+  test('the flow window of a model with no flow conditions says how to add one', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.open('flow');
+      var dialog = latest(ctx);
+      T.eq(dialog.form.querySelectorAll('.bc-grid').length, 0);
+      T.ok(/no flow conditions yet/.test(dialog.form.textContent));
+    });
+  });
+
+  test('a new flow condition offers water pressure and seepage face, on the whole soil', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openRecord(null, 'flow');
+      var dialog = latest(ctx);
+      var condition = field(dialog, 'Condition');
+      T.eq(values(condition), ['water_pressure', 'seepage']);
+      T.eq(condition.disabled, false);
+      T.eq(field(dialog, 'Where').value, 'domain');
+      T.eq(field(dialog, 'Name').value, 'Water pressure 1');
+      change(field(dialog, 'Type'), 'Hydrostatic');
+      field(dialog, 'Reference level').value = '-1.5';
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.kind, saved.on, saved.fluid_pressure_type, saved.reference_coordinate],
+             ['water_pressure', 'domain', 'Hydrostatic', -1.5]);
+        App.BoundaryConditions.edit(saved.id);
+        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage'],
+             'a water condition is edited among the flow kinds');
+      });
+    });
+  });
 })();

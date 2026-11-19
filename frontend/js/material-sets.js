@@ -155,7 +155,12 @@ App.MaterialSets = (function () {
       App.MATERIALS.forEach(function (m) {
         var swatch = el('span.tree-swatch.material-swatch');
         swatch.style.background = m.color;
-        var cells = [el('td', null, swatch), el('td', { text: m.name })];
+        // The soil model, as the editor's drop-down names it; a law of no model by its
+        // own name. The law itself on hover, as `kratos-cli material list` gives both.
+        var model = S.modelOf(m.constitutive_law);
+        var cells = [el('td', null, swatch), el('td', { text: m.name }),
+                     el('td', { text: model === S.OTHER ? m.constitutive_law : S.label(model),
+                                title: m.constitutive_law, 'data-column': 'soil-model' })];
         cells.push(el('td', null, el('button.btn.btn-sm', {
           text: 'Properties…', type: 'button', 'data-action': 'material-properties',
           onclick: function (event) {
@@ -224,7 +229,7 @@ App.MaterialSets = (function () {
           text: 'Create soil', type: 'button', 'data-action': 'create-soil', onclick: create })]));
         table = el('table.mat-table.selectable.material-sets');
         var head = el('tr');
-        ['', 'Identification', ''].forEach(function (h) {
+        ['Colour', 'Name', 'Soil model', 'Properties'].forEach(function (h) {
           head.appendChild(el('th', { text: h }));
         });
         table.appendChild(el('thead', null, head));

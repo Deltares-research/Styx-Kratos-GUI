@@ -111,6 +111,25 @@ def initialize() -> None:
         signal.signal(signal.SIGPIPE, previous)
 
 
+# The gmsh model the finite element mesh is built in (`core.geometry.meshing`). It is
+# kept when another model is made -- the display tessellation of every edit, for one --
+# so a calculation can write its deck from the mesh the user already made.
+MESH_MODEL = "fe-mesh"
+
+
+def new_model(name: str) -> None:
+    """Make an empty current gmsh model called `name`.
+
+    The same as `gmsh.clear()` and `gmsh.model.add(name)`, except that the mesh model
+    (`MESH_MODEL`) stays, unless it is the one being made again.
+    """
+    for existing in gmsh.model.list():
+        if existing != MESH_MODEL or name == MESH_MODEL:
+            gmsh.model.setCurrent(existing)
+            gmsh.model.remove()
+    gmsh.model.add(name)
+
+
 @contextmanager
 def session():
     """Own a gmsh instance for the duration of a block.
@@ -158,14 +177,14 @@ def bounding_box(tags: list[int], dim: int = 3,
     )
 
 
-def build_geometry(project: Project) -> BuildResult:
-    """Rebuild the current gmsh model from the project. Returns tags per part key."""
+def build_geometry(project: Project, model: str = "model") -> BuildResult:
+    """Rebuild the project as a new current gmsh model called `model`. Returns tags per
+    part key. Every other model goes, except the mesh model (`new_model`)."""
     if project.layered_soil:
-        return _build_layered_soil(project)
+        return _build_layered_soil(project, model)
     gmsh.logger.start()
     try:
-        gmsh.clear()
-        gmsh.model.add("model")
+        new_model(model)
 
         notes: list[str] = []
         owners, overlays = _build_solids(project, notes)
@@ -233,7 +252,7 @@ def build_geometry(project: Project) -> BuildResult:
         gmsh.logger.stop()
 
 
-def _build_layered_soil(project: Project) -> BuildResult:
+def _build_layered_soil(project: Project, model: str) -> BuildResult:
     """Soil as the layer stack itself, plus whatever the user drew.
 
     One solid per body of each layer, the drawn beams/anchors/interfaces/custom
@@ -245,8 +264,7 @@ def _build_layered_soil(project: Project) -> BuildResult:
     """
     gmsh.logger.start()
     try:
-        gmsh.clear()
-        gmsh.model.add("simple-cube")
+        new_model(model)
         d = project.domain
         owners = {}
         pieces = project.split_soil()

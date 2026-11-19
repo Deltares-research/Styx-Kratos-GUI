@@ -128,6 +128,7 @@ the same answers.
 | `tests/test_draft_parity.py` | What a new soil, structure or load starts as: `core/model/drafts.py` and the GUI's drafts | `frontend/tests/fixtures/drafts.js` |
 | `tests/test_soil_model_table.py` | The soil models and their parameters: `core/model/soil_models.py` | `frontend/js/soil-model-table.js` |
 | `tests/test_unit_table.py` | The unit systems: `core/model/units.py` | `frontend/js/unit-table.js` |
+| `tests/test_mesh_reuse.py` | The mesh settings that do not change the mesh, so a change to them keeps it: `meshing.NOT_MESHED` and `NOT_MESHED` in `frontend/js/mesh-settings.js` | None: change both lists |
 
 After a deliberate change to one of these rules, run the test with `--write` to rewrite
 its files, for example:

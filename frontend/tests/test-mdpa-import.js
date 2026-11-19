@@ -62,13 +62,10 @@ test('the File menu offers Import mesh (.mdpa)…', function () {
   T.eq(item.label, 'Import mesh (.mdpa)…');
 
   // Grouped with the other file-format buttons, right after Export model, not tacked
-  // on after Exit.
+  // on at the end of the menu.
   var exportAt = fileMenu.items.findIndex(function (i) { return i && i.action === 'exportModel'; });
   var importAt = fileMenu.items.indexOf(item);
   T.eq(importAt, exportAt + 1, 'Import mesh sits directly after Export model');
-
-  var exitAt = fileMenu.items.findIndex(function (i) { return i && i.label === 'Exit'; });
-  T.ok(importAt < exitAt, 'Import mesh comes before the Exit separator');
 });
 
 /* ── The per-part checklist ──────────────────────────────────────────── */

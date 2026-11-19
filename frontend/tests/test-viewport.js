@@ -87,7 +87,8 @@
           T.ok(faded[mode].indexOf(key) >= 0, mode + ' draws ' + key + ' solid' + tag);
         });
         T.eq(groups[mode].indexOf('mesh'), -1, mode + ' leaves the mesh to its tab' + tag);
-        ['soil_L1', 'fixed_bottom', 'pore'].forEach(function (key) {
+        // The supports in Soil, the flow conditions in Flow conditions.
+        ['soil_L1', mode === 'soil' ? 'fixed_bottom' : 'pore'].forEach(function (key) {
           T.ok(groups[mode].indexOf(key) >= 0, mode + ' omits ' + key + tag);
           T.eq(faded[mode].indexOf(key), -1, mode + ' fades ' + key + tag);
         });

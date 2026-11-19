@@ -25,6 +25,8 @@ uses `.venv-windows`, as `kratos-cli.bat` does, so a shell script of commands ru
 
 `kratos-cli <command> --help` lists what each command takes. `kratos-cli --version` says
 which version of Styx you have, as **Help > About** does in the GUI. Give it in a bug report.
+`kratos-cli --help` ends with the address of the Kratos GeoMechanics user documentation,
+the page that **Help > Kratos documentation** opens in the GUI.
 
 ## From an empty site to results
 
@@ -70,7 +72,7 @@ Genuchten soil.
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
-| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
+| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last. In the GUI: **File** > **Project properties…** |
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset clay_shallow] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
@@ -769,6 +771,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
 | `gravity`, `gravity 9.80665` | `kratos-cli gravity P`, `kratos-cli gravity P 9.80665` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
+| `domain`, `domain --x 0 30 --y -20 0` | `kratos-cli domain P`, `kratos-cli domain P --x 0 30 --y -20 0` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |

@@ -54,8 +54,18 @@ How the GUI takes the values that you type:
 ![The New project window with the project name typed in. The New project button on the toolbar is outlined.](images/crow/01_project.png)
 
 The title bar shows the project name. A new project is a 2D section, so the **2D** button
-on the toolbar is already selected. **File** > **Project properties…** shows the
-gravitational acceleration g = 9.81 m/s². Keep that value.
+on the toolbar is already selected.
+
+A new project has a soil block 20 m wide and 15 m deep. The CROW model is 80 m wide and
+60 m deep. Set its size in the project properties:
+
+1. Click **File** > **Project properties…**.
+2. Type `80` in **x max** and `-60` in **y min**. Keep `0` in **x min** and in **y max**:
+   the ground is at y = 0.
+3. Keep the gravitational acceleration g = 9.81 m/s².
+4. Click **OK**.
+
+![The Project properties window with the new size of the soil block. The x max and y min fields are outlined.](images/crow/01_project_properties.png)
 
 ## 2. Make the two soils
 
@@ -120,7 +130,7 @@ The sand, from the top of its window:
 
 ![The Soil material window of the sand, from its top.](images/crow/02_soils_sand.png)
 
-## 3. Add the soil layers and set the width
+## 3. Add the soil layers
 
 The layers are stacked from the ground surface down. The clay is split at −8 m, so that the
 floor of the third lift is on a layer boundary.
@@ -139,14 +149,7 @@ floor of the third lift is on a layer boundary.
 
 ![The Modify soil layers window with the three layers. The Modify soil layers tool is outlined.](images/crow/03_layers.png)
 
-No window sets the width of the model. Set it in the Selection explorer of a layer:
-
-1. In the Model explorer, click **Soil_Top**.
-2. In the Selection explorer, type `80` in **x max** and press Enter.
-
-![The model after x max is set to 80 m. The Soil_Top row in the Model explorer and the x max row in the Selection explorer are outlined.](images/crow/03_layers_width.png)
-
-All layers are now 80 m wide.
+The layers are 80 m wide, the width of the soil block from step 1.
 
 ## 4. Give the soil its water pressure
 
@@ -154,16 +157,15 @@ The water table is at y = −1.5 m in all stages. Below the water table the pore
 hydrostatic: it is zero at the water table and grows by 10 kPa per metre of depth. Above
 the water table the pore pressure is zero.
 
-1. Click the **Structures** tab.
-2. On the tool rail, click the small arrow in the corner of **Create boundary condition**,
-   then click **Create boundary condition…**.
+1. Click the **Flow conditions** tab.
+2. On the tool rail, click **Create flow boundary condition…**.
 3. In **Name**, type `Pore pressure`.
 4. In **Condition**, select **Water pressure**.
 5. In **Where**, select **Whole soil**.
 6. In **Type**, select **Hydrostatic**, and in **Reference level**, type `-1.5`.
 7. Click **Save**.
 
-![The Create boundary condition window for the water pressure. The Create boundary condition tool is outlined.](images/crow/04_water.png)
+![The Create boundary condition window for the water pressure. The Create flow boundary condition tool is outlined.](images/crow/04_water.png)
 
 A new project already has the displacement conditions: the bottom is fixed, and the left
 and right sides are fixed in the horizontal direction only. The Model explorer now shows
@@ -193,9 +195,10 @@ pile. For that reason, the density is low: ρ · A = 298.36 × 0.4924 ≈ 147 kg
 wall, close to the mass of a steel sheet pile. The values are those of Kratos' own CROW
 test.
 
-1. On the tool rail, click **Create sheet pile…**.
-2. Type the values from the table. Scroll down to see all fields.
-3. Click **Save**.
+1. Click the **Structures** tab.
+2. On the tool rail, click **Create sheet pile…**.
+3. Type the values from the table. Scroll down to see all fields.
+4. Click **Save**.
 
 ![The Create sheet pile window. The Create sheet pile tool is outlined.](images/crow/05_wall.png)
 
@@ -328,20 +331,21 @@ by the soil's own **Rinter** from step 2.
 
    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
-5. In the Selection explorer of the interface, set **Virtual thickness** to `1` and press
-   Enter. With a virtual thickness of 1 m, the stiffness of the interface comes directly
-   from the shear modulus of the soil, as the next paragraph shows.
-6. In **Law**, select **Coulomb**.
-7. In the **R_inter** row, click **Each soil's own R_inter**.
+5. In the Selection explorer of the interface, in **Law**, select **Coulomb**.
+6. Keep the other values of a new interface. **Stiffness** shows **From the soil** and
+   **R_inter** shows **Each soil's own**, so each part of the interface uses the
+   stiffness and the Rinter of its soil. **Virtual thickness** is 1 m, so the stiffness of
+   the interface comes directly from the shear modulus of the soil, as the next paragraph
+   shows.
 
-![The Selection explorer of the interface. The Law and Virtual thickness rows and the Each soil's own R_inter button are outlined.](images/crow/09_interface_contact.png)
+![The Selection explorer of the interface. The Law, Stiffness, R_inter and Virtual thickness rows are outlined.](images/crow/09_interface_contact.png)
 
 A Coulomb interface slips when the shear stress reaches the reduced strength of the soil.
 Styx derives the stiffness of the interface from the soil: the shear stiffness is G / t
 and the normal stiffness is 10 G / t, where G is the shear modulus of the soil and t is
-the virtual thickness. For the clay, G = 375 kPa, so the shear stiffness is 375 kPa/m and
-the normal stiffness is 3 750 kPa/m. The factor 10 makes the interface much stiffer across
-the wall than along it: the soil can slip along the wall, but it does not go into the wall
+the virtual thickness. R_inter reduces the strength only, not the stiffness. For the clay,
+G = 375 kPa, so the shear stiffness is 375 kPa/m and the normal stiffness is 3 750 kPa/m.
+The factor 10 makes the interface much stiffer across the wall than along it: the soil can slip along the wall, but it does not go into the wall
 or come away from it. Kratos' reference interface materials use the same factor.
 
 ## 10. Add the surcharge and the water loads
@@ -522,11 +526,7 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
-When the calculation was complete, Styx also opened the **Choose results** window. It is
-under the plot window, and it covers the model.
-
-1. Click **Close** in the Plot along the wall window, then click **Close** in the Choose
-   results window.
+1. Click **Close** in the Plot along the wall window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
    excavation**.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal

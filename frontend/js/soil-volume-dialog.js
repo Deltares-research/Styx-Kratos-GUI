@@ -383,6 +383,7 @@ App.SoilVolumeDialog = (function () {
 
     layer.appendChild(scrim);
     layer.appendChild(dialog);
+    if (App.DialogFit) App.DialogFit.fit(dialog);
 
     function close() {
       if (scrim.parentNode) scrim.remove();

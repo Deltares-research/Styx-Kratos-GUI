@@ -302,7 +302,8 @@
                      { name: 'Pit B', gravity_acceleration: '9.81' }];
       App.NameDialog = { form: function (options) {
         T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
-             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81]]);
+             [['name', App.PROJECT.name], ['x0', 0], ['x1', 60], ['y0', -40], ['y1', 0],
+              ['gravity_acceleration', 9.81], ['unit_system', App.Units.current()]]);
         return Promise.resolve(answers.shift());
       } };
       return App.LivePatches.projectProperties().then(function () {
@@ -344,6 +345,128 @@
         T.eq(ctx.requests[0].body.gravity_acceleration, 9.80665);
         T.eq(App.PROJECT.gravity_acceleration, 9.80665);
         T.ok(ctx.lines.indexOf('ok:Gravity: g = 9.80665 m/s².') >= 0);
+      });
+    });
+  });
+
+  test('Project properties converts the unit system, as the units command does', function () {
+    return withShell(function (ctx, host) {
+      var now = App.Units.current();
+      var other = App.Units.systems().filter(function (s) { return s.name !== now; })[0];
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      var select = dialog.querySelector('select[name=unit_system]');
+      T.ok(select, 'the unit system is a drop-down list');
+      T.eq(Array.prototype.map.call(select.options, function (o) { return o.value; }),
+           App.Units.systems().map(function (s) { return s.name; }));
+      T.eq(select.value, now, 'the project\'s own system is chosen');
+      T.ok(dialog.textContent.indexOf(App.Units.title(other.name)) >= 0);
+      select.value = other.name;
+      dialog.querySelector('input[name=name]').value = 'Pit C';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PUT /api/project', 'PATCH /api/project/units']);
+        T.eq(ctx.requests[1].body, { unit_system: other.name });
+        T.eq(App.PROJECT.name, 'Pit C');
+        T.eq(App.PROJECT.unit_system, other.name);
+        T.ok(ctx.lines.indexOf('note:Converted library values') >= 0, 'the notes are shown');
+        T.ok(ctx.lines.indexOf('ok:The project is now in ' + other.title + '.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sets the size of the soil block, as kratos-cli domain does', function () {
+    return withShell(function (ctx, host) {
+      App.Command.write = function (kind, text) { ctx.lines.push(kind + ':' + text); };
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      function input(name) { return dialog.querySelector('input[name=' + name + ']'); }
+      function ok() {
+        Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+          return button.textContent === 'OK';
+        })[0].click();
+      }
+      T.eq(['x0', 'x1', 'y0', 'y1'].map(function (n) { return input(n).value; }),
+           ['0', '60', '-40', '0'], 'the fields start at the project\'s size');
+      T.ok(!input('z0') && !input('z1'), 'a 2D model has no z extent to set');
+      input('x1').value = '-5';
+      ok();
+      T.ok(host.querySelector('.name-dialog-window'), 'a reversed x keeps the window open');
+      T.ok(dialog.textContent.indexOf('x max must be above x min.') >= 0);
+      input('x1').value = 'wide';
+      ok();
+      T.ok(dialog.textContent.indexOf('Type a number, in m.') >= 0);
+      input('x1').value = '80';
+      input('y0').value = '-60';
+      ok();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/domain']);
+        T.eq(ctx.requests[0].body, { x: [0, 80], y: [-60, 0] }, 'only the axes that changed');
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn');
+        T.ok(ctx.lines.indexOf('echo:> domain --x 0 80 --y -60 0') >= 0,
+             'the log shows the command that makes the same edit');
+        T.ok(ctx.lines.some(function (line) { return /^ok:Size of the soil block: x 0 to/.test(line); }));
+      });
+    });
+  });
+
+  test('the domain command in the command box makes the edit of Project properties', function () {
+    return withShell(function (ctx) {
+      App.Command.write = function (kind, text) { ctx.lines.push(kind + ':' + text); };
+      App.Command.run('domain');
+      T.eq(ctx.requests, [], 'a bare domain sends nothing');
+      T.ok(ctx.lines.indexOf('echo:> domain') >= 0);
+      T.ok(ctx.lines.some(function (line) { return /^note:domain x 0 \.\. 60, y -40 \.\. 0/.test(line); }),
+           ctx.lines.join(' | '));
+      App.Command.run('domain --x 0 30');
+      T.ok(ctx.lines.indexOf('err:x max must be above x min.') < 0);
+      App.Command.run('domain --x 30 0');
+      T.ok(ctx.lines.indexOf('err:x max must be above x min.') >= 0, 'a reversed x is refused');
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/domain'], 'only the valid line is sent');
+        T.eq(ctx.requests[0].body, { x: [0, 30] });
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn');
+        T.ok(ctx.lines.some(function (line) { return /^ok:Size of the soil block/.test(line); }));
+      });
+    });
+  });
+
+  test('Project properties shows z in 3D, and a refused size is reported', function () {
+    return withShell(function (ctx, host) {
+      App.PROJECT.dimension = 3;
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      T.eq(dialog.querySelector('input[name=z1]').value, '10');
+      dialog.querySelector('input[name=z1]').value = '20';
+      ctx.failure = new Error('The bottom -60 is above the top of the last layer');
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests[0].body, { z: [0, 20] });
+        T.ok(ctx.lines.indexOf('err:Could not change the size: The bottom -60 is above the '
+                               + 'top of the last layer') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sends only the units request when only the system changes', function () {
+    return withShell(function (ctx) {
+      var now = App.Units.current();
+      var other = App.Units.systems().filter(function (s) { return s.name !== now; })[0];
+      App.NameDialog = { form: function () {
+        return Promise.resolve({ name: App.PROJECT.name, gravity_acceleration: '9.81',
+                                 unit_system: other.name });
+      } };
+      return App.LivePatches.projectProperties().then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/units']);
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn after the conversion');
       });
     });
   });

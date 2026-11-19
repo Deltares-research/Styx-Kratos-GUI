@@ -75,6 +75,12 @@ SUITES = {
         [JS / "unit-table.js", JS / "units.js", JS / "water-command.js"],
         TESTS / "test-water-command.js",
     ),
+    # `domain` / `domain --x FROM TO --y BOTTOM TOP`: what was asked, what to send, and
+    # the line Project properties writes. The request and the redraw are patches.js's.
+    "domain": (
+        [JS / "domain-command.js"],
+        TESTS / "test-domain-command.js",
+    ),
     # `script <file.py>`: what was asked and what to send. The request and what is said
     # once it is written are patches.js's.
     "script": (
