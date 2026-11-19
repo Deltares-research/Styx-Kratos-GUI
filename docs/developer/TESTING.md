@@ -112,7 +112,7 @@ the `quickjs` package: see [Options](#options). The other cases of `test-edits.j
 a window, the stage list, the model tree or the command box, so they run in the browser
 suite only (the `browser` tier and up).
 
-## Tests that keep the GUI and the command line together
+## Tests that keep the server and the browser together
 
 Some rules run twice: on the server, which the command line and the export use, and in
 the browser, which needs the answer while the user edits. These tests hold the two to

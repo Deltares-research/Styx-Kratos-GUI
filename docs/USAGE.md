@@ -738,8 +738,8 @@ stress initialisation:
 - The calculation uses the soil only. It leaves out sheet piles, anchors, interfaces and
   loads, and says so. It also leaves out the supports: the Model explorer marks them
   "(unused in flow)", and **Reset displacements to zero** is greyed out.
-- The results are the water pressure, the hydraulic head, the effective saturation and the
-  flux `q` (the specific discharge, in m/s).
+- The results are the water pressure, the hydraulic head, the effective saturation, the
+  flux `q` (the specific discharge, in m/s) and the nodal water flow rate.
 
 The window also lists the parts that each stage switches on and off, and the result of the
 last calculation for each stage.
@@ -929,8 +929,8 @@ same way: the sum of R_y is the vertical force the supports carry.
 ### Other results
 
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
-  bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
-  (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
+  bending moment (M), the shear force (Q), the normal force (N), the displacements (ux, uy)
+  and the interface tractions (tn, ts) against depth, with one line for each stage.
   Each face of the wall has its own tractions. They show only where the contact is on in
   that stage, so the face a pit is dug against starts at the pit floor.
   Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
@@ -1103,6 +1103,7 @@ the same as each command of the command box.
 | <kbd>Ctrl</kbd>+<kbd>N</kbd> | Start a new project |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Redo |
+| <kbd>F1</kbd> | Open the documentation site |
 | <kbd>F5</kbd> | Zoom to fit |
 | <kbd>F9</kbd> | In Mesh mode: make the mesh. In all other modes: calculate. |
 | <kbd>Esc</kbd> | Clear the selection, or stop a drawing tool |

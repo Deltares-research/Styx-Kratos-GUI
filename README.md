@@ -43,17 +43,21 @@ browser.
 
 - **Geometry**: soil layers, excavations, sheet pile walls, anchors, struts and interfaces, in
   2D plane strain and 3D.
-- **Materials**: Kratos constitutive laws and their parameters, entered directly in SI or kN
-  units. A default library covers sand, clay, fill and bedrock.
+- **Materials**: linear elastic and Mohr-Coulomb soils, or any other Kratos law, with their
+  parameters entered directly in SI or kN units. A library holds the 12 default soils of
+  D-Stability and D-Settlement, from embankment, clay and peat to sand and bedrock.
+- **Water**: a phreatic line, head lines, hydrostatic and uniform water pressures, and
+  seepage faces, switched on and off per stage. Groundwater flow stages calculate the water
+  pressure alone, in 2D.
 - **Meshing**: Gmsh, with element size, element order, algorithm and optimisation settings,
   and local refinement.
-- **Construction stages**: activate and deactivate parts stage by stage, with a K0 initial
-  stage.
+- **Construction stages**: activate and deactivate parts stage by stage, with the K0
+  procedure or gravity loading in the initial stage.
 - **Calculate**: one click writes the deck and runs it through Kratos' multistage
-  orchestrator.
+  orchestrator. A live plot shows how the solver converges, and a Stop button ends the run.
 - **Results**: contour plots per stage, a deformed mesh, values at a node, plots along the
-  wall (bending moment, shear force, normal force and displacements), and CSV, SVG and ZIP
-  export.
+  wall (bending moment, shear force, normal force and displacements), pictures as PNG, PDF
+  or SVG, and CSV and ZIP export.
 - **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a
   Python script.
 - **Command line**: `kratos-cli` builds, meshes, stages, exports, runs and reads a model in
@@ -112,6 +116,7 @@ Do these steps in this order. Each step has its own guide.
 | [Developer guide](docs/developer/README.md) | Start here. What Styx, Gmsh and Kratos each do, from a drawn model to its results |
 | [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
 | [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
+| [REVIEWING.md](docs/developer/REVIEWING.md) | How a pull request is reviewed: the issue, correctness, design, GUI and `kratos-cli` parity, tests and documentation |
 | [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
 | [Code map](docs/developer/code-map/GRAPH_REPORT.md) | A generated map of the code and a clickable tree of files and functions |
 

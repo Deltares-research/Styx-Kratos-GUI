@@ -2,7 +2,7 @@
 
 This page lists what Styx can do, the status of each feature, and the code that does it.
 Use it to find out if a feature works before you rely on its results. The page describes
-the code on 2026-10-21.
+the code on 2026-11-19.
 
 Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cli` do. The
 [Main gaps](#main-gaps) section lists the most important missing features.
@@ -24,8 +24,8 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 - **Only 2D is proven.** Each reference deck that the export is checked against is a 2D
   plane-strain model. The 3D element and law names follow the Kratos naming rules, but no
   3D model has run in a test.
-- **Only linear elastic soil is tested.** The GUI suggests only the linear elastic soil
-  laws. Styx writes any other law name as you type it, but no test runs it.
+- **Only linear elastic and Mohr-Coulomb soil are tested.** The GUI offers these two soil
+  models. Styx writes any other law name as you type it, but no test runs it.
 - **No safety analysis.** Styx has no φ–c reduction, so it gives no factor of safety.
 
 ## Part A: What Styx sends to Kratos
@@ -168,7 +168,8 @@ and adds only the values that are missing
 | Start | `run.bat` or `run.sh` makes its own Python environment and starts the server. `run.bat` also opens the browser. `--check` only checks the setup. | Tested on Windows, Linux and macOS |
 | Project files | New, Open, Save, Save as (a project JSON file). The server keeps the open project in memory only. | Tested |
 | Undo and redo | Up to 40 steps, each a copy of the full project | Tested |
-| Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |
+| Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F1 (the documentation site), F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |
+| Help | **Help** → **Documentation** (F1) and **GUI tutorials** open the documentation site, published from `main` on GitHub Pages, in a new browser tab ([documentation.js](../frontend/js/documentation.js)) | Tested |
 | Checks | The server checks the full project at each edit | Tested |
 | Display | WebGL, with a CPU renderer when no GPU is available | Tested |
 | Pictures | The view as PNG, PDF or SVG at 300 dpi, in a width that you select, from the camera button, the File menu or a right click. Copy to the clipboard. Every stage and every result field into one folder, with the field values as CSV. `kratos-cli picture` makes the same pictures with Chrome or Edge. SVG and PDF are vector, except contour colours and 3D faces, which are an image at 300 dpi. | Tested. Opening in Word, Adobe Reader and Inkscape is checked by hand. |
@@ -176,7 +177,7 @@ and adds only the values that are missing
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
 | Navigation | Iso, top, front and side views; zoom to fit; rotate; rulers on all four edges in 2D | Tested |
-| Placeholder items | Some menu items and tools of the first design do nothing. They show *"…" is not available in Styx yet*. | — |
+| Placeholder items | Some menu items and tools of the first design do nothing. They are grey, and the tip of a grey tool says *not available yet*. | — |
 
 ### B2. Geometry and soil
 
@@ -256,7 +257,7 @@ and adds only the values that are missing
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
-| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `convergence`, `csv`, `files`, `get`, `zip` |
+| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `location`, `arrows`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `zeroline`, `plot`, `convergence`, `csv`, `files`, `get`, `zip` |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
@@ -278,8 +279,8 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`
 | Item | Detail |
 |---|---|
 | Benchmarks | Analytical and self-consistency checks in `benchmarks/`: K0 columns, weight above and below the water, hydrostatic column, symmetric excavation, 2D against 3D, mesh convergence, order 1 against order 2, saturated block, building pit, line loads in stages, balance of reactions, the three Muskat groundwater flow cases. They need Kratos. |
-| Server tests | pytest, 105 test files in `tests/`. Run them with `python tools/test.py quick`. |
-| JavaScript tests | 54 test files in `frontend/tests/`, run in a browser with Playwright (`python tools/test.py browser`). The files that do not use the DOM also run without a browser under quickjs. |
+| Server tests | pytest, 150 test files in `tests/`. Run them with `python tools/test.py quick`. |
+| JavaScript tests | 77 test files in `frontend/tests/`, run in a browser with Playwright (`python tools/test.py browser`). The files that do not use the DOM also run without a browser under quickjs. |
 
 ## Main gaps
 
