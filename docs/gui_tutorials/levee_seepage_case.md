@@ -48,7 +48,7 @@ How the GUI takes the values that you type:
 - The Styx server keeps the project in its memory. Save it at the end (step 10), or at any
   time with **File** > **Save**.
 
-## 1. Start a new project
+## Step 1. Start a new project
 
 1. On the toolbar, click **New project** (the first button).
 2. In **Project name**, type `levee_seepage`.
@@ -60,7 +60,7 @@ The project name also names the files that Styx writes for Kratos, such as
 `levee_seepage.mdpa`. A new project is a 2D section, so the **2D** button on the toolbar is
 already selected.
 
-## 2. Make the two soils and the water
+## Step 2. Make the two soils and the water
 
 A soil in Styx is a Kratos material: a constitutive law (the soil model) and its variables.
 A groundwater flow calculation uses only the flow properties of a soil. Both soils of this
@@ -142,7 +142,7 @@ of a soil. Set it in the Soil materials window, under **Water**:
 The **Unit weight** of the water is 10 kN/m³. Kratos gets the density of the water from it:
 10 000 / 9.81 = 1019.37 kg/m³.
 
-## 3. Add the soil layers and set the width
+## Step 3. Add the soil layers and set the width
 
 The layers are stacked from the ground surface down. The top of the first layer is the
 ground surface, y = 0.
@@ -170,7 +170,7 @@ No window sets the width of the model. Set it in the Selection explorer of a lay
 
 Both layers now run from x = −36 m to x = 54 m.
 
-## 4. Draw the levee
+## Step 4. Draw the levee
 
 The levee is two soil surfaces of clay, drawn on top of the layers. A drawn surface takes
 the place of the layer that it overlaps, so the core replaces the cover where it reaches
@@ -199,7 +199,7 @@ The Model explorer now shows the two parts of the levee under the soil layers:
 
 ![The model with the levee. The two levee rows in the Model explorer are outlined.](images/levee_seepage/04_levee_after.png)
 
-## 5. Add the water conditions
+## Step 5. Add the water conditions
 
 A new project already has the displacement conditions: a fixed bottom and rollers on the
 sides. A groundwater flow calculation does not use them, so you can leave them.
@@ -258,7 +258,7 @@ level to the polder level. These are start values only: the calculation changes 
 
 ![The Create boundary condition window of the start values, with the phreatic line and Initial only.](images/levee_seepage/05_water_start.png)
 
-## 6. Make the mesh
+## Step 6. Make the mesh
 
 The mesh has linear triangles of 1 m. The seepage face then has about 55 nodes.
 
@@ -276,7 +276,7 @@ little.
 
 ![The mesh of the levee section.](images/levee_seepage/06_mesh_mesh.png)
 
-## 7. Make the stage a groundwater flow stage
+## Step 7. Make the stage a groundwater flow stage
 
 A new project has one stage, the initial stage. It is a mechanical stage. Make it a
 groundwater flow stage:
@@ -299,7 +299,7 @@ groundwater flow stage:
   iteration. The face has about 55 nodes, so the stage allows 300 iterations to allow for both opening and closing nodes and convergence of the nonlinear flow.
 - The residual criterion is the convergence criterion of Kratos' own seepage tests.
 
-## 8. Calculate
+## Step 8. Calculate
 
 1. On the toolbar, click **Calculate**. Styx writes the Kratos input files and runs
    Kratos. The calculation takes about half a minute.
@@ -310,7 +310,7 @@ groundwater flow stage:
 
 3. Click **Close** in the Choose results window.
 
-## 9. Look at the water pressure and the flow
+## Step 9. Look at the water pressure and the flow
 
 1. In the Results explorer, at the bottom right, in **Stage**, select **1 Flow**.
 2. In **Field**, select **Groundwater · Pore pressure**.
@@ -367,7 +367,7 @@ or lets out (positive), per meter of the section. In total 2.87 m³/day per mete
 from the river: 2.03 leaves through the seepage face and 0.84 through the right side.
 The seepage strategy converged in 20 iterations.
 
-## 10. Save the project
+## Step 10. Save the project
 
 1. Click **File** > **Save**.
 2. In the save window of your browser, select a folder and click **Save**.
