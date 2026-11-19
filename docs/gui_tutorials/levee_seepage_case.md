@@ -296,7 +296,7 @@ groundwater flow stage:
 - A Flow (Pw) stage calculates only the water pressures. It has no displacements and no
   stresses.
 - Kratos' seepage strategy opens or closes one node of the seepage face in each
-  iteration. The face has about 55 nodes, so the stage allows 300 iterations.
+  iteration. The face has about 55 nodes, so the stage allows 300 iterations to allow for both openening and closing nodes and convergence of the nonlinear flow.
 - The residual criterion is the convergence criterion of Kratos' own seepage tests.
 
 ## 8. Calculate
@@ -328,7 +328,7 @@ x = 19.2 m, y = 0.95 m: the exit point of the seepage face.
 
 ![The hydraulic head. The Stage and Field lists are outlined.](images/levee_seepage/09_contours_head.png)
 
-The head goes from 5.0 m at the river to −0.5 m at the polder. Most of the head is lost
+The head goes from 5.0 m at the river to −0.5 m at the polder. Most of the head drop is naturally located
 under and in the levee.
 
 4. In **Field**, select **Groundwater · Effective saturation**.
