@@ -262,6 +262,32 @@ def test_the_fallback_orders_stages_by_their_leading_number(runs_root):
     assert found == stages
 
 
+
+def test_a_stage_says_whether_it_was_a_flow_or_a_mechanical_calculation(runs_root):
+    """Read off each stage's `solution_type`: the Results view draws the zero water
+    pressure line by itself after a flow stage, and only on request after a coupled one."""
+    directory = make_run(runs_root, "Test_model_2026-09-22_00-49",
+                         stages=["1_Flow", "2_Dig", "3_Old"])
+    deck = json.loads((directory / calculation.PARAMETERS_NAME).read_text(encoding="utf-8"))
+    deck["stages"]["1_Flow"]["stage_settings"]["solver_settings"] = {
+        "solution_type": "Steady_State_Groundwater_Flow"}
+    deck["stages"]["2_Dig"]["stage_settings"]["solver_settings"] = {
+        "solution_type": "Quasi-Static"}
+    (directory / calculation.PARAMETERS_NAME).write_text(json.dumps(deck), encoding="utf-8")
+
+    stages = catalog.describe("Test_model_2026-09-22_00-49")["stages"]
+
+    assert [stage["calculation"] for stage in stages] == ["flow", "mechanical", None]
+
+
+def test_a_stage_from_an_unreadable_deck_has_no_calculation_type(runs_root):
+    directory = make_run(runs_root, "Test_model_2026-09-22_00-49")
+    (directory / calculation.PARAMETERS_NAME).write_text("{ not json", encoding="utf-8")
+
+    stages = catalog.describe("Test_model_2026-09-22_00-49")["stages"]
+
+    assert [stage["calculation"] for stage in stages] == [None, None, None]
+
 # ── Files ───────────────────────────────────────────────────────────────────
 
 def test_files_are_listed_with_their_sizes(runs_root):

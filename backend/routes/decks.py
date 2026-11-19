@@ -37,6 +37,10 @@ async def export_mdpa(settings: ExportRequest) -> dict:
 async def calculate_project(settings: ExportRequest) -> dict:
     """Mesh the project, write its deck to a directory of its own, and run it.
 
+    A model meshed already -- Generate mesh, or the last calculation -- is not meshed
+    again: when the model and the mesh settings are the same, the deck is written from
+    that mesh (`meshing.mesh_project`), and `mesh_reused` says so.
+
     The deck is exported here rather than taken from whatever the client last
     downloaded: an export is the only thing that knows the mesh it was made from, and a
     calculation run against a stale one would answer a question nobody asked. The
@@ -86,6 +90,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
     # spell a path separator differently and the client would have to know which.
     return result | {"stats": export["stats"], "warnings": export["warnings"],
                      "notes": export.get("notes", []),
+                     "mesh_reused": export.get("mesh_reused", False),
                      "run": Path(result["directory"]).name}
 
 

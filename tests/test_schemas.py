@@ -863,10 +863,22 @@ def test_project_rejects_an_anchor_pointing_at_an_unknown_section():
         schemas.Project.model_validate(_with_anchors([_anchor(section="bar")]))
 
 
-def test_an_anchor_head_must_sit_on_a_sheet_pile():
-    """The head node is shared with the beam, so it has to be on one to begin with."""
-    with pytest.raises(ValidationError, match="sheet pile"):
-        schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, -2.0])]))
+def test_an_anchor_head_off_the_pile_is_a_soil_node():
+    """An anchor needs no structure: a head on no pile is joined to the soil."""
+    project = schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, -2.0])]))
+
+    assert not project.anchor_on_structure(project.anchors[0])
+    assert [end for end, _ in project.anchor_soil_ends(project.anchors[0])] == ["head"]
+
+
+def test_an_anchor_end_joined_to_the_soil_may_not_be_above_it():
+    with pytest.raises(ValidationError, match="head at .* is joined to the soil"):
+        schemas.Project.model_validate(_with_anchors([_anchor(head=[5.0, 3.0])]))
+    with pytest.raises(ValidationError, match="tail at .* is joined to the soil"):
+        schemas.Project.model_validate(
+            _with_anchors([_anchor(tail=[20.0, 3.0], tail_end="free")]))
+    # A fixed tail in the air is a strut's: no soil has to hold it.
+    schemas.Project.model_validate(_with_anchors([_anchor(tail=[20.0, 3.0])]))
 
 
 def test_an_anchor_head_on_a_pile_segment_is_accepted():
@@ -876,10 +888,11 @@ def test_an_anchor_head_on_a_pile_segment_is_accepted():
     assert "anchor_1" in project.part_keys()
 
 
-def test_an_anchor_head_must_sit_on_an_active_pile():
+def test_an_anchor_head_on_an_inactive_pile_is_a_soil_node():
     beams = [_beam(points=[[12.0, 0.0], [12.0, -14.0]], active=False)]
-    with pytest.raises(ValidationError, match="sheet pile"):
-        schemas.Project.model_validate(_with_anchors([_anchor()], beams=beams))
+    project = schemas.Project.model_validate(_with_anchors([_anchor()], beams=beams))
+
+    assert not project.anchor_on_structure(project.anchors[0])
 
 
 def test_an_inactive_anchor_is_not_required_to_be_attached():
@@ -1095,17 +1108,12 @@ def test_a_space_anchor_head_must_be_on_a_panel_or_a_member():
     )
     assert ok.space_anchors[0].head == (20.0, -4.0, 10.0)
 
-    # Beside the wall, in mid-air.
-    with pytest.raises(ValidationError, match="not on a wall or member"):
-        schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[13.0, -2.0, 10.0])])
-        )
-    # On the footprint in plan, but below the toe.
-    with pytest.raises(ValidationError, match="not on a wall or member"):
-        schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[12.0, -20.0, 10.0],
-                                                tail=[18.0, -22.0, 10.0])])
-        )
+    # Beside the wall, or on its footprint below the toe: in the soil instead.
+    for head, tail in (([13.0, -2.0, 10.0], [18.0, -8.0, 10.0]),
+                       ([12.0, -20.0, 10.0], [18.0, -22.0, 10.0])):
+        beside = schemas.Project.model_validate(
+            _with_3d([_panel()], [_space_anchor(head=head, tail=tail)]))
+        assert not beside.anchor_on_structure(beside.space_anchors[0])
 
 
 def test_an_inactive_space_anchor_is_not_required_to_be_attached():
@@ -1525,16 +1533,17 @@ def test_a_load_cannot_take_a_staged_body_s_name():
         schemas.Project.model_validate(p)
 
 
-def test_each_soil_body_has_a_label_saying_which_part_of_its_layer_it_is():
+def test_each_soil_body_has_a_label_with_the_name_it_was_given():
     """The Model explorer lists bodies, and three keys that differ only by a `__lift2`
-    suffix are not something to put in front of a user."""
+    suffix are not something to put in front of a user. A named body is called by its
+    name alone."""
     p = _layered_pit()
     labels = p.soil_body_labels
     assert set(labels) == set(p.soil_body_keys)
-    assert labels["soil_L1__outside"] == "Soil_1 · outside the pit"
-    assert labels["soil_L1__lift1"] == "Soil_1 · lift 1"
-    assert labels["soil_L1__lift3"] == "Soil_1 · lift 3"
-    assert labels["soil_L2__pit"] == "Soil_2 · below the pit"
+    assert labels["soil_L1__outside"] == "outside the pit"
+    assert labels["soil_L1__lift1"] == "lift 1"
+    assert labels["soil_L1__lift3"] == "lift 3"
+    assert labels["soil_L2__pit"] == "below the pit"
 
 
 def test_an_unstaged_layer_is_labelled_with_nothing_but_its_name():

@@ -572,7 +572,7 @@ App.PictureDraw = (function () {
       var key = colorKey(color);
       if (!byColor[key]) {
         byColor[key] = { t: 'line', segs: [], color: color, alpha: object.alpha,
-                         width: LINE_MM, dash: dash };
+                         width: LINE_MM * (object.weight || 1), dash: dash };
       }
       var pieces = hide ? visiblePieces(buffer, segment, bias) : [0, 1];
       for (var p = 0; p < pieces.length; p += 2) {

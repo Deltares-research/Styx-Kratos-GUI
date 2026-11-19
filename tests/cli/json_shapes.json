@@ -3,12 +3,14 @@
   {
    "active": "boolean",
    "head": "array",
+   "head_end": "string",
    "id": "string",
    "kind": "string",
    "name": "string",
    "prestress": "number",
    "section": "string",
-   "tail": "array"
+   "tail": "array",
+   "tail_end": "string"
   }
  ],
  "beam list": [
@@ -317,6 +319,7 @@
    "tolerated_error": "number"
   }
  ],
+ "surface list": [],
  "volume list": [],
  "wall list": []
 }

@@ -8,9 +8,11 @@ brings the GUI's default section with it, and `section set` changes that section
 numbers -- Kratos' variables, `NAME=VALUE` in the project's units, as a material's are.
 
 What is a sheet pile in a section is a wall or a member in the solid model, so `beam`
-works in 2D and `wall` and `member` in 3D. An anchor head is snapped onto the nearest
-structure, within a metre, because it becomes one of that structure's nodes. A strut is
-an anchor: its head on the wall and its tail a pinned support.
+works in 2D and `wall` and `member` in 3D. An anchor needs no structure: a head within a
+metre of one is snapped onto it, because it becomes one of that structure's nodes, and a
+head further away is a node of the soil mesh. Its tail is free, a node of the soil mesh,
+unless `--tail-end fixed` makes it a pinned support. A strut is an anchor with a fixed
+tail end: its head on the wall.
 """
 
 from __future__ import annotations
@@ -101,12 +103,12 @@ def _section_fields(parser: argparse.ArgumentParser) -> None:
                              "each side, stretch by stretch)")
     parser.add_argument("--r-inter",
                         help="interface: the factor on the soil's cohesion and tan(phi), 0 "
-                             "to 1, or none for each soil's own; only a Coulomb law reads "
-                             "the strength, the default elastic law reads the stiffnesses "
-                             "only")
+                             "to 1, or none for each soil's own (default: none); only a "
+                             "Coulomb law reads the strength, the default elastic law reads "
+                             "the stiffnesses only")
     parser.add_argument("--virtual-thickness",
-                        help="interface: in metres; a derived stiffness is the soil's shear "
-                             "modulus over it")
+                        help="interface: in metres (default: 1); a derived stiffness is the "
+                             "soil's shear modulus over it")
     parser.add_argument("--permeability", choices=("Neutral", "Drain", "Impermeable"),
                         help="interface")
 
@@ -259,8 +261,9 @@ def _register_anchors(commands, common) -> None:
     listed = action(actions, common, "list", list_structures, writes=False)
     listed.set_defaults(kinds=("anchor", "anchor3d"))
     add = action(actions, common, "add", add_structure,
-                 help="an anchor: the head snapped onto the nearest structure, the tail a "
-                      "fixed point (default: 10 m back and down at 35 degrees)")
+                 help="an anchor: the head snapped onto a structure within 1 m, else "
+                      "in the soil; the tail 10 m back and down at 35 degrees unless "
+                      "given, and free unless --tail-end fixed")
     add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _anchor_fields(add)
     add.set_defaults(kinds=("anchor", "anchor3d"))
@@ -278,8 +281,17 @@ def _anchor_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--section", help="its tendon (default: the first there is)")
     parser.add_argument("--head", nargs="+", metavar="N",
-                        help="on a pile, a wall or a member: x y in 2D, x y z in 3D")
-    parser.add_argument("--tail", nargs="+", metavar="N", help="the fixed end")
+                        help="x y in 2D, x y z in 3D: on a pile, a wall or a member "
+                             "(snapped within 1 m), or in the soil")
+    parser.add_argument("--tail", nargs="+", metavar="N", help="the far end")
+    parser.add_argument("--head-end", choices=drafts.ANCHOR_ENDS,
+                        help="free: the head is attached to the mesh, a node of the "
+                             "structure it is on or of the soil (a new anchor's); fixed: "
+                             "the head is held in place, joined to nothing and not snapped")
+    parser.add_argument("--tail-end", choices=drafts.ANCHOR_ENDS,
+                        help="free: the tail is attached to the mesh, a node of the soil "
+                             "(a new anchor's); fixed: the tail is held in place and "
+                             "joined to nothing")
     parser.add_argument("--prestress", type=float,
                         help="TRUSS_PRESTRESS_PK2, a stress, positive in tension")
 
@@ -491,7 +503,9 @@ def _drafted(project: Project, args: argparse.Namespace):
         width = _width(project)
         return drafts.anchor(project, _point(args.head, width, "--head"),
                              _point(args.tail, width, "--tail"), section=args.section,
-                             prestress=args.prestress or 0.0, **named)
+                             prestress=args.prestress or 0.0,
+                             head_end=args.head_end or "free",
+                             tail_end=args.tail_end or "free", **named)
     if kind == "interface":
         return drafts.interface(project, args.structure, _points(args.points, 2),
                                 side=args.side, section=args.section,
@@ -525,11 +539,19 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
                        (("y_top", args.top), ("y_toe", args.toe)) if value is not None})
     if kind in ("anchor", "anchor3d"):
         width = 2 if kind == "anchor" else 3
+        fields.update(given(args, "prestress", "head_end", "tail_end"))
+        head_end = fields.get("head_end", record.head_end)
         if args.head is not None:
-            fields["head"] = drafts.anchor_head(project, _point(args.head, width, "--head"))
+            fields["head"] = drafts.anchor_head(project, _point(args.head, width, "--head"),
+                                                head_end)
         if args.tail is not None:
             fields["tail"] = _point(args.tail, width, "--tail")
-        fields.update(given(args, "prestress"))
+        problem = (drafts.head_problem(project, fields.get("head", record.head), head_end)
+                   or drafts.tail_end_problem(project,
+                                              fields.get("tail_end", record.tail_end),
+                                              fields.get("tail", record.tail)))
+        if problem:
+            raise CommandError(problem)
     if kind == "interface":
         if args.structure is not None:
             fields.update(structure=args.structure, points=None, stretch=None)
@@ -621,7 +643,9 @@ def _line(record) -> str:
         where = (" -> ".join(_xy(point) for point in record.footprint)
                  + f", {record.y_top:g} .. {record.y_toe:g}")
     elif kind in ("anchor", "anchor3d"):
-        where = f"{_xy(record.head)} -> {_xy(record.tail)}"
+        where = (f"{_xy(record.head)} -> {_xy(record.tail)}, head {record.head_end}, "
+                 f"tail {record.tail_end}")
+
     elif kind == "interface":
         where = f"along {record.structure}"
         if record.stretch is not None:

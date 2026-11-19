@@ -12,6 +12,6 @@ The screenshots are made from the GUI each time the code changes, so they show t
 it is.
 
 To install Styx and connect Kratos, see the
-[README](https://github.com/Deltares-research/Styx-Kratos-GUI#getting-started). Every
+[README](../../README.md#getting-started). Every
 mode and tool of the GUI is described in
-[USAGE.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/USAGE.md).
+[USAGE.md](../USAGE.md).

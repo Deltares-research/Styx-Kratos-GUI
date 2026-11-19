@@ -15,11 +15,16 @@ import sys
 from cli.terminal import output, style
 from core import session
 from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
-                          meshing, picture, stages, project, results, structures, volumes)
+                          meshing, picture, stages, project, results, structures, surfaces,
+                          volumes)
 
-GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stages, inspection,
-          analysis, results, picture, interactive)
+GROUPS = (project, edit, ground, surfaces, volumes, structures, conditions, meshing, stages,
+          inspection, analysis, results, picture, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
+
+KRATOS_DOCS_URL = ("https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/"
+                   "user_documentation/")
+"""The Kratos GeoMechanics user documentation, named at the foot of `--help`."""
 
 REMOVED = {
     "excavation": "excavation is gone: split the soil with `line add`.",
@@ -52,8 +57,12 @@ class Parser(argparse.ArgumentParser):
 def parser() -> argparse.ArgumentParser:
     top = Parser(
         prog="kratos-cli",
-        description="Build, mesh, stage, export, run and read a Kratos geotechnical "
-                    "model in the terminal. The project file is the one the GUI saves.")
+        description="Build, mesh, stage, export, run and read a Kratos geotechnical model\n"
+                    "in the terminal. The project file is the one the GUI saves.",
+        # The GUI's Help > Kratos documentation opens the same page. Raw, so the
+        # address is printed on one line, whole, for a terminal to make a link of.
+        epilog=f"Kratos documentation:\n  {KRATOS_DOCS_URL}",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     top.add_argument("--json", action="store_true", help="answer in JSON, for a script to read")
     top.add_argument("--version", action="store_true",
                      help="say which version of Styx this is, as the GUI's About box does")

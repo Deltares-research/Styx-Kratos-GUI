@@ -269,27 +269,6 @@ App.PropertySets = (function () {
     });
   }
 
-  /* A row for a variable the set may leave out, typed in place: "derived" until a
-     number is typed, the number after. What an interface section's stiffnesses need,
-     which have no editor dialog of their own; `section set ID NAME=VALUE` is the CLI's
-     way to the same. */
-  function typedRow(kindName, set, name, check) {
-    set.variables = set.variables || {};
-    var unit = App.Units.variableLabel(name);
-    var value = set.variables[name];
-    return [name, value === undefined ? 'derived' : String(value), unit, false, {
-      kind: 'number', decimals: 0, unit: unit,
-      get: function () {
-        return set.variables[name] === undefined ? 'derived' : set.variables[name];
-      },
-      set: function (number) {
-        // Writing back what `get` read leaves a derived value derived.
-        if (number === 'derived') return null;
-        return assign(set, name, number, check);
-      }
-    }];
-  }
-
   function assign(set, name, value, check) {
     var had = Object.prototype.hasOwnProperty.call(set.variables, name);
     var was = set.variables[name];
@@ -304,6 +283,6 @@ App.PropertySets = (function () {
 
   return { KINDS: KINDS, CHOICES: CHOICES, FLAGS: FLAGS, lawFor: lawFor, defaults: defaults,
            validate: validate, parse: parse, format: format, decimals: decimals,
-           derivable: derivable, names: names, rows: rows, typedRow: typedRow,
+           derivable: derivable, names: names, rows: rows,
            assign: assign };
 })();

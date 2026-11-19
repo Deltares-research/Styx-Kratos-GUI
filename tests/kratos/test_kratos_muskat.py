@@ -50,7 +50,9 @@ def test_the_deck_is_kratos_own(gmsh_session, case):
     assert {key: stage["solver"].get(key) for key in wanted["solver"]} == wanted["solver"]
     for group in reference.GROUPS:
         assert stage[group] == wanted[group], group
-    assert stage["nodal_results"] == wanted["nodal_results"]
+    # Kratos' own list, and then the reaction it does not ask for: the nodal water flow
+    # rate (`core.kratos.parameters.REACTION_RESULTS`).
+    assert stage["nodal_results"] == [*wanted["nodal_results"], "REACTION_WATER_PRESSURE"]
     assert without_water_density(ours["materials"]) == without_water_density(
         theirs["materials"])
     for (_, mine), (_, kratos) in zip(ours["materials"], theirs["materials"]):

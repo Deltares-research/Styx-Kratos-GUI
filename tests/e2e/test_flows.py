@@ -80,8 +80,7 @@ def test_the_page_boots_cleanly_with_the_live_layer_installed(app_page):
 def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     run_model(app_page)
     calculate(app_page)
-    # The Convergence window is open, so Results mode leaves the chooser closed; the
-    # rail's Choose results opens it.
+    # Results mode never opens the chooser by itself; the rail's Choose results does.
     window = app_page.locator(".dlg-results")
     assert window.count() == 0
     app_page.evaluate("App.runAction({ action: 'chooseResults' })")
@@ -253,8 +252,10 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
                                ".indexOf('fixed_bottom') >= 0", timeout=LONG)
 
     app_page.evaluate("App.runAction({action: 'boundaryConditions'})")
-    rows = app_page.locator(".boundary-conditions table.bc-grid tr")
-    soil = rows.last
+    # The window's Soil water grid is a bc-grid too: take the Whole soil row of the
+    # conditions grid by its name, not as the last row of every grid.
+    soil = app_page.locator(".boundary-conditions table.bc-grid:not(.bc-soil-water) tr").filter(
+        has=app_page.locator("td:first-child", has_text="Whole soil"))
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
@@ -340,10 +341,12 @@ def panel_button(page, text: str):
 
 
 def rename_body(page, row: str, name: str) -> None:
-    """Select the body's row and rename it with the button in its panel."""
+    """Select the body's row and rename it with the button in its panel. The window starts
+    with the name the row shows."""
     tree_row(page, row).click()
     panel_button(page, "Rename…").click()
     window = page.locator("#modal-layer .name-dialog-window")
+    assert window.locator("input[name=name]").input_value() == row
     window.locator("input[name=name]").fill(name)
     window.get_by_role("button", name="OK").click()
     window.wait_for(state="detached")
@@ -365,12 +368,14 @@ def test_a_soil_part_is_renamed_in_its_panel(app_page, live_server):
     rename_body(app_page, "Top · Part 1", "Pit")
 
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
-    tree_row(app_page, "Top · Pit").wait_for(state="visible")
-    assert "Top · Pit" in app_page.locator("#grid-selection .pgrid-header").inner_text()
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
+    tree_row(app_page, "Pit").wait_for(state="visible")
+    app_page.wait_for_function(
+        "document.querySelector('#grid-selection .pgrid-header').innerText.trim() === 'Pit'",
+        timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     mdpa = app_page.request.post(url + "/api/export/mdpa", data={}).json()["mdpa"]
     assert "Begin SubModelPart Top_Pit" in mdpa.splitlines()
     assert "Top_Part_1" not in mdpa
@@ -488,7 +493,7 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     rename_body(app_page, "Top · Part 1", "Pit")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
 
     press(app_page, "Control+z")
     app_page.wait_for_function(
@@ -497,10 +502,10 @@ def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_se
 
     press(app_page, "Control+y")
     app_page.wait_for_function(
-        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Pit'", timeout=LONG)
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_keys"] == keys
-    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Pit"
     assert app_page.errors == []
 
 

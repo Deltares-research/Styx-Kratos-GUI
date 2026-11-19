@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
                                          field, fill, mode, project, rail, rail_tool,
-                                         rename, select_in_tree, selection_row,
-                                         set_in_selection, tool, tree_row, type_command,
+                                         rename, selection_row,
+                                         tool, tree_row, tree_rows, type_command,
                                          window, window_fits)
 from tests.models import crow
 
@@ -38,12 +38,25 @@ def new_project(tour: Tour) -> None:
     tour.until(f"App.PROJECT.name === {MODEL.name!r}")
     # A new project is a 2D section already: no need to press 2D.
     tour.until("App.PROJECT.dimension === 2 && App.state.modelMode === '2d'")
+    # The size of the soil block is a project property.
+    tour.settle()
+    page.locator("#menubar").get_by_text("File", exact=True).click()
+    page.locator(".menu-item", has_text="Project properties…").click()
+    d = MODEL.domain
+    window(page).locator("input[name=x1]").fill(f"{d.x1:g}")
+    window(page).locator("input[name=y0]").fill(f"{d.y_bottom:g}")
+    tour.picture("properties", mark=[field(page, "x max"), field(page, "y min")])
+    window(page).get_by_role("button", name="OK").click()
+    tour.until(f"App.PROJECT.domain.x1 === {d.x1} && App.PROJECT.domain.y_bottom === {d.y_bottom}")
 
 
 def project_is_new(tour: Tour) -> None:
     got = project(tour)
     assert got["name"] == MODEL.name and got["dimension"] == 2
     assert got["gravity_acceleration"] == MODEL.gravity_acceleration
+    d = got["domain"]
+    assert (d["x0"], d["x1"], d["y_bottom"], d["y_top"]) == \
+        (MODEL.domain.x0, MODEL.domain.x1, MODEL.domain.y_bottom, MODEL.domain.y_top)
 
 
 # ── 2. The soils ───────────────────────────────────────────────────────────
@@ -112,7 +125,7 @@ def two_soils(tour: Tour) -> None:
         assert abs(got[soil.name]["r_inter"] - soil.r_inter) < 1e-12
 
 
-# ── 3. The layers and the width ────────────────────────────────────────────
+# ── 3. The layers ──────────────────────────────────────────────────────────
 
 def layers(tour: Tour) -> None:
     page = tour.page
@@ -132,12 +145,6 @@ def layers(tour: Tour) -> None:
     dialog.locator(".dlg-foot .btn-primary").click()
     tour.until(f"App.PROJECT.layers.length === {len(MODEL.layers)}")
     tour.settle()
-    # No window sets the width: the Selection explorer of a layer does.
-    select_in_tree(tour, MODEL.layers[0].name)
-    set_in_selection(tour, "x max", f"{MODEL.domain.x1:g}")
-    tour.until(f"App.PROJECT.domain.x1 === {MODEL.domain.x1}")
-    tour.picture("width", mark=[tree_row(page, MODEL.layers[0].name),
-                                selection_row(page, "x max")])
 
 
 def three_layers(tour: Tour) -> None:
@@ -154,15 +161,15 @@ WATER = _by_id(MODEL.boundary_conditions, "pore_pressure")
 
 def water(tour: Tour) -> None:
     page = tour.page
-    mode(tour, "structures")
-    rail(tour, "createBoundaryCondition", "Create boundary condition…")
+    mode(tour, "flow")
+    rail(tour, "createFlowCondition")
     field(page, "Name").fill(WATER.name)
     field(page, "Condition").select_option("Water pressure")
     field(page, "Where").select_option(label="Whole soil")
     field(page, "Type").select_option(WATER.fluid_pressure_type)
     field(page, "Reference level").fill(f"{WATER.reference_coordinate:g}")
     window_fits(tour)
-    tour.picture(mark=rail_tool("createBoundaryCondition"))
+    tour.picture(mark=rail_tool("createFlowCondition"))
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.some(b => b.name === {WATER.name!r})")
 
@@ -181,6 +188,7 @@ WALL_SECTION = _by_id(MODEL.beam_sections, WALL.section)
 
 def wall(tour: Tour) -> None:
     page = tour.page
+    mode(tour, "structures")
     rail(tour, "createSheetPile")
     (x1, y1), (x2, y2) = WALL.points
     for label, value in [("Name", WALL.name), ("x1", x1), ("y1", y1), ("x2", x2),
@@ -248,8 +256,9 @@ def name_the_bodies(tour: Tour) -> None:
     tour.picture("before", mark=[tree_row(page, label) for label, _ in BODY_NAMES])
     for index, (label, name) in enumerate(BODY_NAMES):
         rename(tour, label, name, picture="rename" if index == 0 else "")
-    tour.picture("after", mark=[tree_row(page, f"{label.split(' · ')[0]} · {name}")
-                                for label, name in BODY_NAMES])
+    # A renamed part is shown by its name alone; both parts called `retained` are marked.
+    tour.picture("after", mark=[tree_rows(page, name)
+                                for name in dict.fromkeys(name for _, name in BODY_NAMES)])
 
 
 def bodies_named(tour: Tour) -> None:
@@ -270,18 +279,24 @@ STRUT_SECTION = _by_id(MODEL.anchor_sections, STRUT.section)
 def strut(tour: Tour) -> None:
     page = tour.page
     rail(tour, "createAnchor")
+    typed = [("Name", STRUT.name),
+             ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
+             ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1]),
+             *STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing)]
+    for label, value in typed:
+        field(page, label).fill(value if isinstance(value, str) else f"{value:g}")
+    # The strut's head is a node of the wall; its far end is a fixed support, not a node
+    # of the soil.
+    assert field(page, "Head end").input_value() == STRUT.head_end == "free"
+    field(page, "Tail end").select_option(STRUT.tail_end)
+    window_fits(tour)
+    tour.picture(mark=rail_tool("createAnchor"))
+    window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.anchors || []).length === 1")
     tour.settle()
-    typed = [*STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing),
-             ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
-             ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1])]
-    for label, value in typed:
-        set_in_selection(tour, label, f"{value:g}")
     page.locator("#grid-selection button", has_text="No tension limit").click()
     tour.settle()
-    tour.picture(mark=[rail_tool("createAnchor"), selection_row(page, "Tension limit"),
-                       *(selection_row(page, label) for label, _ in typed)])
-    rename(tour, page.evaluate("App.PROJECT.anchors[0].name"), STRUT.name)
+    tour.picture("limits", mark=selection_row(page, "Tension limit"))
 
 
 def one_strut(tour: Tour) -> None:
@@ -289,6 +304,9 @@ def one_strut(tour: Tour) -> None:
     (anchor,) = got["anchors"]
     assert anchor["name"] == STRUT.name
     assert tuple(anchor["head"]) == STRUT.head and tuple(anchor["tail"]) == STRUT.tail
+    assert anchor["head_end"] == STRUT.head_end == "free"
+    assert anchor["tail_end"] == STRUT.tail_end == "fixed"
+
     (section,) = got["anchor_sections"]
     assert section["variables"] == STRUT_SECTION.variables
 
@@ -309,14 +327,13 @@ def interface(tour: Tour) -> None:
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.interfaces || []).length === 1")
     tour.settle()
-    set_in_selection(tour, "Virtual thickness", f"{CONTACT_SECTION.virtual_thickness:g}")
+    # A new contact already has the CROW values: the stiffness from the soil, each soil's
+    # own R_inter and a virtual thickness of 1 m. Only the law is chosen.
     choose_in_selection(tour, "Law", "Coulomb")
-    # The button goes once it is used: the screenshot shows it before.
-    own = page.locator("#grid-selection button", has_text="Each soil’s own R_inter")
     tour.picture("contact", mark=[selection_row(page, "Law"),
-                                  selection_row(page, "Virtual thickness"), own])
-    own.click()
-    tour.settle()
+                                  selection_row(page, "Stiffness"),
+                                  selection_row(page, "R_inter"),
+                                  selection_row(page, "Virtual thickness")])
 
 
 def one_interface(tour: Tour) -> None:
@@ -325,6 +342,9 @@ def one_interface(tour: Tour) -> None:
     assert section["constitutive_law"] == CONTACT_SECTION.constitutive_law
     assert section["virtual_thickness"] == CONTACT_SECTION.virtual_thickness
     assert section.get("r_inter") is None and section.get("material") is None
+    # Both stiffnesses left to the export, which derives G / t and 10 G / t.
+    assert "INTERFACE_NORMAL_STIFFNESS" not in section["variables"]
+    assert "INTERFACE_SHEAR_STIFFNESS" not in section["variables"]
 
 
 # ── 9. The loads ───────────────────────────────────────────────────────────
@@ -408,10 +428,10 @@ SWITCHES = [
     # (what the stage switches on, what it switches off), by Model explorer label
     ([], []),
     ([WALL.name, CONTACT.name, SURCHARGE.name], []),
-    (["WaterLoad_Stage1"], ["Soil_Top · lift 1"]),
+    (["WaterLoad_Stage1"], ["lift 1"]),
     ([STRUT.name], []),
-    (["WaterLoad_Stage2"], ["Soil_Top · lift 2", "WaterLoad_Stage1"]),
-    (["WaterLoad_Stage3"], ["Soil_Top · lift 3", "WaterLoad_Stage2"]),
+    (["WaterLoad_Stage2"], ["lift 2", "WaterLoad_Stage1"]),
+    (["WaterLoad_Stage3"], ["lift 3", "WaterLoad_Stage2"]),
 ]
 """For each stage after the initial one: the null step switches nothing."""
 
@@ -513,7 +533,7 @@ def calculate(tour: Tour) -> None:
     tour.page.locator("#modal-layer .dialog").last.wait_for()
     tour.settle()
     tour.picture("plot", mark=rail_tool("plotResults"))
-    # The plot window, then the Choose results window that Results mode opened under it.
+    # The plot window, then the Convergence window that Calculate opened under it.
     for _ in range(2):
         window(tour.page).locator(".dlg-foot").get_by_role("button", name="Close").click()
         tour.settle()
@@ -545,7 +565,7 @@ def contours(tour: Tour) -> None:
 STEPS = [
     Step("01_project", "Start a new project", new_project, project_is_new),
     Step("02_soils", "Make the two soils", soils, two_soils),
-    Step("03_layers", "Add the soil layers and set the width", layers, three_layers),
+    Step("03_layers", "Add the soil layers", layers, three_layers),
     Step("04_water", "Give the soil its water pressure", water, water_condition),
     Step("05_wall", "Add the sheet pile wall", wall, one_wall),
     Step("06_lines", "Draw the floors of the first two lifts", lines),

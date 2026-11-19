@@ -30,7 +30,11 @@ App.NameDialog = (function () {
 
   /* options: title, text (a paragraph above the fields), fields: a list of
      { name (the input's name and the answer's key), label, value, help, unit (shown
-     after the field), empty (the note for an empty field), check (as for `ask`) }. */
+     after the field), empty (the note for an empty field), check (as for `ask`),
+     choices (a list of { value, label }: the field is a drop-down list of them, and
+     the answer is the chosen value) }, check (a function of the answer object, run
+     after each field passes its own check, that answers a note when the values do not
+     go together, or null). */
   function form(options) {
     var opts = options || {};
     var fields = opts.fields || [];
@@ -57,6 +61,11 @@ App.NameDialog = (function () {
           }
           values[field.name] = text;
         }
+        var together = opts.check ? opts.check(values) : null;
+        if (together) {
+          message.textContent = together;
+          return;
+        }
         answer(values);
         shell.close();
       }
@@ -77,9 +86,14 @@ App.NameDialog = (function () {
           fields.forEach(function (field) {
             var value = field.value === null || field.value === undefined ? ''
                                                                            : String(field.value);
-            var input = el('input.mesh-setting-control.name-dialog-input', {
-              type: 'text', name: field.name, value: value
-            });
+            var input = field.choices
+              ? el('select.mesh-setting-control.name-dialog-input', { name: field.name },
+                   field.choices.map(function (choice) {
+                     return el('option', { value: choice.value, text: choice.label });
+                   }))
+              : el('input.mesh-setting-control.name-dialog-input', {
+                type: 'text', name: field.name, value: value
+              });
             input.value = value;
             input.addEventListener('keydown', function (event) {
               if (event.key === 'Enter') { event.preventDefault(); submit(); }
@@ -102,7 +116,7 @@ App.NameDialog = (function () {
       shell.dialog.classList.add('name-dialog-window');
       if (inputs.length) {
         inputs[0].focus();
-        inputs[0].select();
+        if (inputs[0].select) inputs[0].select();
       }
     });
   }

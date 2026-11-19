@@ -1,9 +1,9 @@
-"""The pieces a soil layer falls into when lines cut it.
+"""The pieces a soil layer or a drawn soil surface falls into when lines cut it.
 
-A layer is a rectangle in the section, and what cuts it is any number of polylines: the
-lines a user draws and the sheet piles. This module takes the two and answers with the
-closed pieces, the one thing `Project.soil_bodies`, the geometry and the deck all have to
-agree on. Pure Python: the project is validated outside the gmsh worker, and the browser
+A layer is a rectangle in the section, a drawn soil surface a polygon (`polygon_pieces`),
+and what cuts them is any number of polylines: the lines a user draws and the sheet piles.
+This module takes the two and answers with the closed pieces, the one thing
+`Project.soil_bodies`, the geometry and the deck all have to agree on. Pure Python: the project is validated outside the gmsh worker, and the browser
 reads the answer off the project.
 
 The cut is a small planar graph. Every segment is clipped to the rectangle and split where
@@ -69,7 +69,31 @@ def pieces(x0: float, x1: float, bottom: float, top: float,
     if not segments:
         return whole
     rectangle = [(corners[i], corners[(i + 1) % 4]) for i in range(4)]
-    nodes, edges = _graph(rectangle + segments)
+    return _cut(corners, rectangle, segments, whole)
+
+
+@lru_cache(maxsize=256)
+def polygon_pieces(outline: Polyline, cutters: tuple[Polyline, ...]) -> tuple[Piece, ...]:
+    """The pieces of the simple polygon `outline` that `cutters` make, in the same order as
+    `pieces`. One piece, the polygon, when nothing cuts it.
+
+    The outline of a drawn soil surface: any number of corners, either way round, convex or
+    not. Each cutter is clipped at the polygon's edges and keeps what lies inside, so a line
+    that leaves the polygon and comes back cuts it twice."""
+    corners = _counter_clockwise(outline)
+    whole = (Piece(corners, (), _point_inside(corners, [])),)
+    edges = [(corners[i], corners[(i + 1) % len(corners)]) for i in range(len(corners))]
+    segments = [part for line in cutters for a, b in zip(line, line[1:])
+                for part in _clipped_to_polygon(a, b, corners, edges)]
+    if not segments:
+        return whole
+    return _cut(corners, edges, segments, whole)
+
+
+def _cut(corners: Polyline, boundary: list[tuple[Point, Point]],
+         segments: list[tuple[Point, Point]], whole: tuple[Piece, ...]) -> tuple[Piece, ...]:
+    """The pieces the clipped `segments` cut the region with this `boundary` into."""
+    nodes, edges = _graph(boundary + segments)
     faces, outers = _faces(nodes, edges)
     if len(faces) < 2 and not outers[1:]:
         return whole
@@ -87,6 +111,34 @@ def pieces(x0: float, x1: float, bottom: float, top: float,
     out = [Piece(piece.outline, tuple(held), _point_inside(piece.outline, held))
            for piece, held in zip(found, holes)]
     return tuple(sorted(out, key=lambda piece: (-piece.top, piece.left, -piece.bottom)))
+
+
+def _counter_clockwise(outline: Polyline) -> Polyline:
+    """The outline as `Piece.outline` holds one: counter-clockwise, the first point not
+    repeated at the end."""
+    points = tuple((float(x), float(y)) for x, y in outline)
+    if len(points) > 1 and _same(points[0], points[-1]):
+        points = points[:-1]
+    return points if _area(points) > 0.0 else points[::-1]
+
+
+def _clipped_to_polygon(a: Point, b: Point, outline: Polyline,
+                        edges: list[tuple[Point, Point]]) -> list[tuple[Point, Point]]:
+    """The parts of a segment inside the polygon: split where it meets an edge, keeping
+    each part whose middle is inside or on the edge. A point within the tolerance of an
+    edge meets it, so a line typed to end on the edge reaches it."""
+    stops = [a, b] + [point for edge in edges for point in _meeting(a, b, *edge)]
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    stops.sort(key=lambda p: (p[0] - a[0]) * dx + (p[1] - a[1]) * dy)
+    out: list[tuple[Point, Point]] = []
+    for start, end in zip(stops, stops[1:]):
+        if _same(start, end):
+            continue
+        middle = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        if _inside(outline, middle) or any(_distance(middle, *edge) <= TOLERANCE
+                                           for edge in edges):
+            out.append((start, end))
+    return out
 
 
 def _same(a: Point, b: Point) -> bool:

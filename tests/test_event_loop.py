@@ -23,8 +23,8 @@ SOURCES = [BACKEND / "main.py", *sorted((BACKEND / "routes").glob("*.py"))]
 CHEAP = {
     "health", "get_project", "put_project", "reset_project", "new_project",
     "patch_layers", "put_water", "patch_materials", "patch_structures", "patch_conditions",
-    "patch_stages", "patch_lines", "patch_body",
-    "patch_dimension", "clear_custom_parts", "delete_geometry_part",
+    "patch_stages", "patch_lines", "patch_body", "delete_body",
+    "patch_dimension", "patch_domain", "clear_custom_parts", "delete_geometry_part",
     "index",
 }
 """Validation and a store write. `patch_dimension` translates loads and walls, which is

@@ -8,7 +8,6 @@ and `tests/test_draft_parity.py` holds the two to one document.
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
@@ -48,13 +47,15 @@ def test_every_soil_added_takes_a_colour_no_other_soil_has():
     own colour while it is free, and every soil after another free one."""
     project = blank_project()
     colours = []
-    for id, preset in (("a", None), ("b", None), ("c", "m1"), ("d", "m1"), ("e", "m2")):
+    for id, preset in (("a", None), ("b", None), ("c", "clay_shallow"), ("d", "clay_shallow"),
+                        ("e", "sand")):
         material, _ = drafts.soil(project, id, preset=preset)
         project = session.add_material(project, material)
         colours.append(material.color)
 
-    # The palette's first two; Fill's own is the first, so taken; Sand's own, free.
-    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#c4a86a"]
+    # The palette's first two; shallow clay's own is the second, so taken; Sand's own,
+    # free.
+    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#e3cf8b"]
     given, _ = drafts.soil(project, "f", color="#123456")
     assert given.color == "#123456"
 
@@ -62,18 +63,18 @@ def test_every_soil_added_takes_a_colour_no_other_soil_has():
 def test_a_preset_in_a_kn_project_is_stated_in_kn():
     project = blank_project().model_copy(update={"unit_system": "kN"})
 
-    material, _ = drafts.soil(project, "sand", preset="m2")
+    material, _ = drafts.soil(project, "sand", preset="sand")
 
-    expected, _ = units.convert_variables(drafts.preset("m2")["variables"], "SI", "kN")
+    expected, _ = units.convert_variables(drafts.preset("sand")["variables"], "SI", "kN")
     assert {name: material.variables[name] for name in expected} == expected
     assert material.variables["YOUNG_MODULUS"] == pytest.approx(
-        drafts.preset("m2")["variables"]["YOUNG_MODULUS"] / 1000)
+        drafts.preset("sand")["variables"]["YOUNG_MODULUS"] / 1000)
 
 
 def test_a_soil_can_start_from_a_library_preset():
-    material, _ = drafts.soil(blank_project(), "clay", preset="m3")
+    material, _ = drafts.soil(blank_project(), "clay", preset="clay_shallow")
 
-    preset = drafts.preset("m3")
+    preset = drafts.preset("clay_shallow")
     assert material.name == preset["name"]
     assert material.color == preset["color"]
     assert {name: material.variables[name] for name in preset["variables"]} ==         preset["variables"]
@@ -85,13 +86,42 @@ def test_a_soil_can_start_from_a_library_preset():
 
 
 def test_an_unknown_preset_says_which_there_are():
-    with pytest.raises(drafts.DraftError, match="m1, m2, m3, m4, m5, m6"):
+    with pytest.raises(drafts.DraftError, match="embankment, clay_shallow, .*, bedrock"):
         drafts.soil(blank_project(), "clay", preset="m9")
 
 
-def test_the_library_is_the_gui_s_six_soils_in_si():
-    assert [p["id"] for p in drafts.LIBRARY] == ["m1", "m2", "m3", "m4", "m5", "m6"]
-    assert drafts.preset("m6")["variables"]["YOUNG_MODULUS"] == 2.0e9
+def test_the_library_is_the_d_geo_suite_soils_in_si():
+    assert [p["name"] for p in drafts.LIBRARY] == [
+        "Embankment", "Clay, shallow", "Clay, deep", "Organic clay",
+        "Peat, shallow", "Peat, deep", "Clay with silt", "Sand with clay", "Sand",
+        "Sand, permeable", "Sand, less permeable", "Bedrock"]
+    assert drafts.preset("bedrock")["variables"]["YOUNG_MODULUS"] == 2.0e9
+    sand = drafts.preset("sand")["variables"]
+    assert sand["DENSITY_SOLID"] * 9.81 == pytest.approx(20_000)
+    assert (sand["YOUNG_MODULUS"], sand["GEO_COHESION"], sand["GEO_FRICTION_ANGLE"]) == \
+        (3.0e7, 1000, 30)
+    assert sand["PERMEABILITY_XX"] == pytest.approx(30 * drafts.PER_M_PER_DAY)
+
+
+def test_every_library_soil_can_carry_a_model_and_has_what_it_needs():
+    """One Poisson's ratio, no unit weight under 11 kN/m3, and a drainage type and
+    interface that follow from k."""
+    for entry in drafts.LIBRARY:
+        variables = entry["variables"]
+        assert variables["POISSON_RATIO"] == drafts.LIBRARY_POISSON_RATIO
+        assert variables["DENSITY_SOLID"] * 9.81 >= 11_000 - 1e-9, entry["name"]
+        if entry["model"] == soil_models.MOHR_COULOMB:
+            coupled = variables["PERMEABILITY_XX"] <= drafts.COUPLED_UP_TO * drafts.PER_M_PER_DAY * (1 + 1e-12)
+            assert variables["GEO_DRAINAGE_TYPE"] == (
+                "FULLY_COUPLED" if coupled else "CONSTANT_PW_FIELD"), entry["name"]
+            assert entry["interface_permeability"] == (
+                "Impermeable" if coupled else "Neutral"), entry["name"]
+            assert variables["GEO_COHESION"] >= 1000, entry["name"]
+        for model in soil_models.MODELS:
+            material, _ = drafts.soil(blank_project(), "x", preset=entry["id"], model=model)
+            assert material.constitutive_law == soil_models.law(model, 2)
+            assert soil_models.missing(material.constitutive_law, material.variables) == [], \
+                f"{entry['name']} as {model}"
 
 
 def test_a_new_layer_goes_below_the_last_one():
@@ -174,7 +204,12 @@ def test_a_new_interface_section_takes_the_soil_each_stretch_runs_against():
 
     assert isinstance(contact, InterfaceSection)
     assert contact.material is None
-    assert (contact.r_inter, contact.virtual_thickness) == (0.7, 0.01)
+    # Each soil's own Rinter, and stiffnesses of G and 10 G: the contact a model
+    # script gets from `InterfaceSection` alone.
+    assert (contact.r_inter, contact.virtual_thickness) == (None, 1.0)
+    written = InterfaceSection(id="contact", name="Interface")
+    assert (contact.r_inter, contact.virtual_thickness) == \
+        (written.r_inter, written.virtual_thickness)
 
 
 def test_a_new_wall_section_is_a_shell_of_forty_centimetres():
@@ -244,11 +279,36 @@ def test_a_strut_may_hang_from_a_pile_above_the_ground():
     project = project.model_copy(update={
         "beams": [pile], "beam_sections": [drafts.section_for(project, pile)]})
 
-    strut = drafts.anchor(project, (12.3, 4), (16, 4))
+    strut = drafts.anchor(project, (12.3, 4), (16, 4), tail_end="fixed")
 
-    assert (strut.head, strut.tail) == ((12, 4), (16, 4))
+    assert (strut.head, strut.tail, strut.tail_end) == ((12, 4), (16, 4), "fixed")
     with pytest.raises(drafts.DraftError, match="inside the model domain"):
-        drafts.anchor(project, (12, 4), (16, -40))
+        drafts.anchor(project, (12, 4), (16, -40), tail_end="fixed")
+    # A free tail is a node of the soil mesh, and there is no soil in the air.
+    with pytest.raises(drafts.DraftError, match="free anchor tail must be in the soil"):
+        drafts.anchor(project, (12.3, 4), (16, 4))
+
+
+def test_a_new_anchor_has_a_free_tail_unless_told_otherwise():
+    project = _plane_strain()
+    pile = drafts.sheet_pile(project, [(12, 0), (12, -14)])
+    project = project.model_copy(update={
+        "beams": [pile], "beam_sections": [drafts.section_for(project, pile)]})
+
+    assert drafts.anchor(project).tail_end == "free"
+    assert drafts.anchor(project, tail_end="fixed").tail_end == "fixed"
+    with pytest.raises(drafts.DraftError, match="free or fixed"):
+        drafts.anchor(project, tail_end="loose")
+
+
+def test_an_anchor_saved_without_a_tail_end_keeps_its_fixed_tail():
+    """A project saved before the choice existed gives the same results as before."""
+    from core.model.schemas import Anchor
+
+    old = Anchor.model_validate({"id": "a", "name": "A", "section": "s",
+                                 "head": [0, 0], "tail": [1, -1]})
+
+    assert old.tail_end == "fixed"
 
 
 def test_a_new_wall_is_swept_from_the_ground_to_half_the_depth():
@@ -271,15 +331,15 @@ def test_a_new_member_stands_vertical_in_the_middle_of_the_site():
 
 
 def test_a_new_anchor_rakes_back_from_a_quarter_down_the_pile():
-    """anchors.js `draft`: 10 m at 35 degrees, into the longer side of the domain."""
+    """anchors.js `draft`: 8 m back and 6 m down, into the longer side of the domain, with
+    the tail on whole metres."""
     project = excavation_project(staged=False)
 
     anchor = drafts.anchor(project)
 
     assert isinstance(anchor, Anchor)
     assert anchor.head == (6.0, -3.0)
-    assert anchor.tail == pytest.approx((6 + 10 * math.cos(math.radians(35)),
-                                         -3 - 10 * math.sin(math.radians(35))), abs=1e-6)
+    assert anchor.tail == (14.0, -9.0)
     assert (anchor.id, anchor.section) == ("anchor_1", "strand")
 
 
@@ -294,15 +354,66 @@ def test_an_anchor_head_near_a_pile_is_snapped_onto_it():
 def test_an_anchor_head_given_alone_takes_the_usual_rake():
     anchor = drafts.anchor(excavation_project(staged=False), head=(6.0, -2.0))
 
-    assert anchor.tail == pytest.approx((6 + 10 * math.cos(math.radians(35)),
-                                         -2 - 10 * math.sin(math.radians(35))), abs=1e-6)
+    assert anchor.tail == (14.0, -8.0)
 
 
-def test_an_anchor_head_far_from_any_pile_or_with_no_pile_is_refused():
-    with pytest.raises(drafts.DraftError, match="placed on a sheet pile"):
-        drafts.anchor(excavation_project(staged=False), head=(10.0, -2.0), tail=(20, -8))
-    with pytest.raises(drafts.DraftError, match="create one first"):
-        drafts.anchor(_plane_strain())
+def test_a_new_anchor_tail_is_on_whole_metres_below_a_head_that_is_not():
+    anchor = drafts.anchor(excavation_project(staged=False), head=(6.0, -2.75))
+
+    assert anchor.tail == (14.0, -9.0)
+
+
+def test_a_fixed_anchor_head_is_not_snapped_and_may_be_in_the_air():
+    project = excavation_project(staged=False)
+    top = project.extent().y_top
+
+    near = drafts.anchor(project, head=(6.4, -2.0), tail=(20.0, -8.0), head_end="fixed")
+    high = drafts.anchor(project, head=(20.0, top + 1.0), tail=(25.0, -8.0),
+                         head_end="fixed")
+
+    assert (near.head, near.head_end) == ((6.4, -2.0), "fixed")
+    assert not project.anchor_on_structure(near)
+    assert high.head == (20.0, top + 1.0)
+    with pytest.raises(drafts.DraftError, match="head end is free or fixed"):
+        drafts.anchor(project, head_end="loose")
+
+
+def test_an_anchor_saved_without_a_head_end_keeps_its_free_head():
+    old = Anchor.model_validate({"id": "a", "name": "A", "section": "s",
+                                 "head": [6.0, -2.0], "tail": [14.0, -8.0]})
+
+    assert (old.head_end, old.tail_end) == ("free", "fixed")
+
+
+
+def test_an_anchor_head_far_from_any_pile_stays_in_the_soil():
+    """An anchor needs no structure: a head further than a metre from a pile is a node
+    of the soil mesh, where it was put."""
+    project = excavation_project(staged=False)
+
+    anchor = drafts.anchor(project, head=(10.0, -2.0), tail=(20, -8))
+
+    assert anchor.head == (10.0, -2.0)
+    assert not project.anchor_on_structure(anchor)
+
+
+def test_an_anchor_with_no_pile_starts_in_the_middle_of_the_soil():
+    project = _plane_strain()
+    d = project.domain
+
+    anchor = drafts.anchor(project)
+
+    assert anchor.head == ((d.x0 + d.x1) / 2, d.y_top - 2.0)
+    assert anchor.tail[1] < anchor.head[1], "it rakes down"
+    assert anchor.tail_end == "free"
+
+
+def test_an_anchor_head_on_no_structure_must_be_in_the_soil():
+    project = _plane_strain()
+    top = project.extent().y_top
+
+    with pytest.raises(drafts.DraftError, match="head on no structure must be in the soil"):
+        drafts.anchor(project, head=(20.0, top + 1.0), tail=(25.0, -8.0), tail_end="fixed")
 
 
 def test_a_3d_anchor_hangs_from_a_wall():
@@ -432,9 +543,14 @@ def test_an_anchor_cannot_collapse_when_its_head_snaps_onto_the_wall():
         drafts.anchor(project, head=(6.2, -2), tail=(6, -2))
 
 
-def test_an_anchor_in_an_empty_3d_site_asks_for_a_wall_or_member():
-    with pytest.raises(drafts.DraftError, match="wall or a member; create one first"):
-        drafts.anchor(seed_project())
+def test_an_anchor_in_an_empty_3d_site_is_drawn_in_space():
+    project = seed_project()
+    d = project.domain
+
+    anchor = drafts.anchor(project)
+
+    assert anchor.kind == "anchor3d"
+    assert anchor.head == ((d.x0 + d.x1) / 2, d.y_top - 2.0, (d.z0 + d.z1) / 2)
 
 
 def test_an_interface_cannot_follow_a_pile_that_was_switched_off():

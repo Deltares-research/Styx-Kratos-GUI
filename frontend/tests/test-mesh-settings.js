@@ -36,8 +36,8 @@
         mesh: { element_size: 2.5, body_sizes: { soil_L1: 1.0, soil_L2: 4.0 } } }
     );
     T.eq(rows, [
-      { key: 'soil_L1', label: 'Upper', size: 1.0, follows: false },
-      { key: 'soil_L2', label: 'Lower', size: 4.0, follows: false }
+      { key: 'soil_L1', owner: 'soil_L1', label: 'Upper', size: 1.0, follows: false },
+      { key: 'soil_L2', owner: 'soil_L2', label: 'Lower', size: 4.0, follows: false }
     ]);
   });
 
@@ -45,7 +45,7 @@
     var rows = App.MeshSettings.bodyControls(
       { layers: [{ id: 'L1', name: 'Upper' }], mesh: { element_size: 2.5, body_sizes: {} } }
     );
-    T.eq(rows, [{ key: 'soil_L1', label: 'Upper', size: 2.5, follows: true }]);
+    T.eq(rows, [{ key: 'soil_L1', owner: 'soil_L1', label: 'Upper', size: 2.5, follows: true }]);
   });
 
   test('the window keeps a size it has no row for', function () {
@@ -118,6 +118,47 @@
       { key: 'sheetpile', size: null, band: null }, { key: 'floor', size: 0.25, band: 5 },
       { key: 'pin', size: 1, band: 0 }]),
          { body_sizes: { soil_L1: 2, floor: 0.25, pin: 1 }, size_bands: { floor: 5 } });
+  });
+
+  /* Issue #125: a line splits a layer or a soil surface into parts, and each part is its
+     own SubModelPart, so the window has a row for each part, named as in the explorer. */
+  function cutProject(sizes) {
+    return {
+      layers: [{ id: 'L1', name: 'Clay' }],
+      custom_parts: [{ key: 'drawn_0', label: 'Embankment', mat: 'sand' }],
+      soil_body_keys: ['soil_L1__part1', 'soil_L1__part2', 'drawn_0__part1', 'drawn_0__part2'],
+      soil_body_labels: { soil_L1__part1: 'Clay · Part 1', soil_L1__part2: 'Clay · Part 2',
+                          drawn_0__part1: 'Embankment · Part 1',
+                          drawn_0__part2: 'Embankment · Part 2' },
+      mesh: { element_size: 2.5, body_sizes: sizes || {} }
+    };
+  }
+
+  test('a layer or soil surface cut by a line has a row for each part', function () {
+    var rows = App.MeshSettings.bodyControls(cutProject());
+    T.eq(rows.map(function (row) { return [row.key, row.label, row.owner]; }), [
+      ['soil_L1__part1', 'Clay · Part 1', 'soil_L1'],
+      ['soil_L1__part2', 'Clay · Part 2', 'soil_L1'],
+      ['drawn_0__part1', 'Embankment · Part 1', 'drawn_0'],
+      ['drawn_0__part2', 'Embankment · Part 2', 'drawn_0']
+    ]);
+  });
+
+  test('a size set on a layer before a line cut it shows on each part', function () {
+    var project = cutProject({ soil_L1: 1.5, wall: 0.5 });
+    var rows = App.MeshSettings.bodyControls(project);
+    T.eq([rows[0].size, rows[0].follows, rows[1].size, rows[1].follows], [1.5, false, 1.5, false]);
+    T.eq([rows[2].size, rows[2].follows], [2.5, true]);
+    T.eq(App.MeshSettings.savedBodySizes(project, rows), { soil_L1: 1.5, wall: 0.5 },
+         'saved as it was while no part shows another size');
+  });
+
+  test('a part given another size splits the layer size over the parts', function () {
+    var project = cutProject({ soil_L1: 1.5, wall: 0.5 });
+    var rows = App.MeshSettings.bodyControls(project);
+    rows[0].size = 1;
+    T.eq(App.MeshSettings.savedBodySizes(project, rows),
+         { wall: 0.5, soil_L1__part1: 1, soil_L1__part2: 1.5 });
   });
 
   test('a band needs a size, and neither may be negative', function () {
@@ -225,6 +266,33 @@
   test('the Mesh tab opens the properties dialog only while there is no mesh', function () {
     T.eq(App.MeshSettings.opensOnModeTab(false), true);
     T.eq(App.MeshSettings.opensOnModeTab(true), false);
+  });
+
+  test('after a calculation the Mesh tab shows its mesh instead of the dialog', function () {
+    T.eq(App.MeshSettings.opensOnModeTab(false, true), false);
+    T.eq(App.MeshSettings.meshesOnModeTab(false, true), true);
+    // A mesh on screen is shown as it is, calculated or not.
+    T.eq(App.MeshSettings.meshesOnModeTab(true, true), false);
+    T.eq(App.MeshSettings.meshesOnModeTab(false, false), false);
+  });
+
+  test('a stage, a material or the name does not change what the mesh is made of', function () {
+    var settings = { element_size: 2 };
+    var project = { name: 'a', stages: [], materials: [], layers: [{ id: 'clay' }] };
+    var key = App.MeshSettings.meshKey(project, settings);
+    var edited = Object.assign({}, project, {
+      name: 'b', stages: [{ id: 's1' }], materials: [{ id: 'm1' }],
+      fluid: { density: 1 }, gravity_acceleration: 9.8
+    });
+    T.eq(App.MeshSettings.meshKey(edited, settings), key);
+  });
+
+  test('the geometry and the mesh settings do change what the mesh is made of', function () {
+    var settings = { element_size: 2 };
+    var project = { name: 'a', layers: [{ id: 'clay' }] };
+    var key = App.MeshSettings.meshKey(project, settings);
+    T.ok(App.MeshSettings.meshKey({ name: 'a', layers: [{ id: 'sand' }] }, settings) !== key);
+    T.ok(App.MeshSettings.meshKey(project, { element_size: 1 }) !== key);
   });
 
   test('the properties dialog does not name the mesher', function () {

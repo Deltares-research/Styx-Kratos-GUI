@@ -59,7 +59,7 @@ decide if a problem is in scope:
 - A model script that you wrote, or that you chose to run. Styx runs it like any other
   Python file.
 - Access by other people when you start the server on a network address with `--host`.
-  The server has no login, and [INSTALLATION.md](docs/INSTALLATION.md#use-styx-from-another-computer)
+  The server has no login, and [INSTALLATION.md](docs/INSTALLATION.md#launcher-options)
   warns about this.
 - A problem in Kratos Multiphysics or in Gmsh. Report it to that project. If you do not know
   whether the problem is in Styx, report it here, and the maintainers send it on.

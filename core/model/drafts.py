@@ -2,7 +2,7 @@
 
 The GUI's dialogs fill in a new layer, soil, soil volume or structure before the user
 types anything: the soil dialog's Add puts a 5 m layer under the stack, a new soil is a loose drained sand, the material library
-offers six presets, a 2D soil volume is an outline swept across the model, and a new
+offers twelve presets, a 2D soil volume is an outline swept across the model, and a new
 sheet pile, wall, member, anchor, interface or load is put where the Structure mode's
 tools put one, with the section they give it. The
 command line adds the same records without those dialogs, so the same starting points
@@ -44,48 +44,73 @@ LAYER_THICKNESS = 5.0
 PER_M_PER_DAY = soil_models.PERMEABILITY_SI
 """The intrinsic permeability, m2, of a soil that conducts water at 1 m/day."""
 
+LIBRARY_POISSON_RATIO = 0.3
+"""Every library soil's Poisson's ratio: a guess, so one value for all."""
+
+COUPLED_UP_TO = 0.1
+"""m/day: a library soil this permeable or less is `FULLY_COUPLED`, with an impermeable
+interface; a more permeable one is mechanical only, with a neutral interface."""
+
+
+def _library_soil(id: str, name: str, color: str, weight: float, young: float,
+                  cohesion: float, friction: float, conductivity: float) -> dict[str, Any]:
+    """A Mohr-Coulomb library soil from its engineering numbers: unit weight in kN/m3,
+    E and c' in Pa, phi' in degrees, the conductivity k in m/day. Porosity 0, so the
+    soil weighs `weight` above and below the water alike. Its drainage type, R_inter and
+    interface permeability follow from k (`COUPLED_UP_TO`)."""
+    coupled = conductivity <= COUPLED_UP_TO
+    return {"id": id, "model": soil_models.MOHR_COULOMB, "name": name, "color": color,
+            "r_inter": 0.5 if coupled else 0.67,
+            "interface_permeability": "Impermeable" if coupled else "Neutral",
+            "variables": {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED" if coupled else "CONSTANT_PW_FIELD",
+                          "YOUNG_MODULUS": young, "POISSON_RATIO": LIBRARY_POISSON_RATIO,
+                          "DENSITY_SOLID": weight * 1000 / 9.81,
+                          "PERMEABILITY_XX": conductivity * PER_M_PER_DAY, "POROSITY": 0.0,
+                          "GEO_COHESION": cohesion, "GEO_FRICTION_ANGLE": friction}}
+
+
 LIBRARY: list[dict[str, Any]] = [
-    {"id": "m1", "model": "mohr_coulomb", "name": "Fill", "color": "#d8c48a", "r_inter": 0.70,
-     "interface_permeability": "Neutral",
-     "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.5e7,
-                   "POISSON_RATIO": 0.30, "DENSITY_SOLID": 17000 / 9.81,
-                   "PERMEABILITY_XX": 1.0 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 1000,
-                   "GEO_FRICTION_ANGLE": 30.0}},
-    {"id": "m2", "model": "mohr_coulomb", "name": "Sand, loose", "color": "#c4a86a", "r_inter": 0.70,
-     "interface_permeability": "Neutral",
-     "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 2.5e7,
-                   "POISSON_RATIO": 0.28, "DENSITY_SOLID": 18000 / 9.81,
-                   "PERMEABILITY_XX": 1.5 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 500,
-                   "GEO_FRICTION_ANGLE": 32.0}},
-    {"id": "m3", "model": "mohr_coulomb", "name": "Clay, soft", "color": "#8fa86b", "r_inter": 0.50,
-     "interface_permeability": "Impermeable",
-     "variables": {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "YOUNG_MODULUS": 4.0e6,
-                   "POISSON_RATIO": 0.35, "DENSITY_SOLID": 15000 / 9.81,
-                   "PERMEABILITY_XX": 0.0001 * PER_M_PER_DAY, "POROSITY": 0.0,
-                   "GEO_COHESION": 5000, "GEO_FRICTION_ANGLE": 22.0}},
-    {"id": "m4", "model": "mohr_coulomb", "name": "Clay, stiff", "color": "#6f8fa8", "r_inter": 0.55,
-     "interface_permeability": "Impermeable",
-     "variables": {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "YOUNG_MODULUS": 1.2e7,
-                   "POISSON_RATIO": 0.33, "DENSITY_SOLID": 17500 / 9.81,
-                   "PERMEABILITY_XX": 0.0005 * PER_M_PER_DAY, "POROSITY": 0.0,
-                   "GEO_COHESION": 15000, "GEO_FRICTION_ANGLE": 25.0}},
-    {"id": "m5", "model": "mohr_coulomb", "name": "Sand, dense", "color": "#b08a6a", "r_inter": 0.75,
-     "interface_permeability": "Neutral",
-     "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 4.5e7,
-                   "POISSON_RATIO": 0.25, "DENSITY_SOLID": 19000 / 9.81,
-                   "PERMEABILITY_XX": 5.0 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 0,
-                   "GEO_FRICTION_ANGLE": 36.0}},
-    {"id": "m6", "model": "linear_elastic", "name": "Bedrock", "color": "#8d8d99", "r_inter": 1.00,
-     "interface_permeability": "Impermeable",
+    #             id                     name                    colour     γ   E       c'    φ'  k
+    _library_soil("embankment",          "Embankment",           "#c9b27c", 18, 1.4e7, 7000, 30, 0.01),
+    _library_soil("clay_shallow",        "Clay, shallow",        "#8fa86b", 15, 2.9e6, 5000, 18, 0.01),
+    _library_soil("clay_deep",           "Clay, deep",           "#6f8f5a", 16, 1.4e7, 7000, 18, 0.01),
+    _library_soil("organic_clay",        "Organic clay",         "#7f8a6a", 14, 1.4e6, 5000, 15, 0.01),
+    _library_soil("peat_shallow",        "Peat, shallow",        "#8b6a4f", 11, 2.9e5, 5000, 15, 0.01),
+    _library_soil("peat_deep",           "Peat, deep",           "#6e5240", 11, 2.9e5, 5000, 15, 0.01),
+    _library_soil("clay_with_silt",      "Clay with silt",       "#a3b48a", 18, 1.4e7, 5000, 23, 0.1),
+    _library_soil("sand_with_clay",      "Sand with clay",       "#c2b06a", 18, 1.4e7, 3000, 28, 1.0),
+    _library_soil("sand",                "Sand",                 "#e3cf8b", 20, 3.0e7, 1000, 30, 30),
+    _library_soil("sand_permeable",      "Sand, permeable",      "#d6a84e", 19, 3.0e7, 1000, 30, 45),
+    _library_soil("sand_less_permeable", "Sand, less permeable", "#bfb48e", 20, 3.0e7, 1000, 30, 15),
+    {"id": "bedrock", "model": soil_models.LINEAR_ELASTIC, "name": "Bedrock", "color": "#8d8d99",
+     "r_inter": 1.0, "interface_permeability": "Impermeable",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 2.0e9,
-                   "POISSON_RATIO": 0.20, "DENSITY_SOLID": 24000 / 9.81,
+                   "POISSON_RATIO": LIBRARY_POISSON_RATIO, "DENSITY_SOLID": 24 * 1000 / 9.81,
                    "PERMEABILITY_XX": 0.0, "POROSITY": 0.0}},
 ]
-"""The material library's soils (`App.MaterialLibrary`), in SI. A preset is added in the
-project's own unit system, as its soil model with that model's defaults for what it does
-not give. A soil with a strength is a Mohr-Coulomb one: a linear elastic soil has none.
-The permeabilities are intrinsic, the frozen demo's m/day conductivities times
-`PER_M_PER_DAY`."""
+"""The material library's soils (`App.MaterialLibrary`), in SI: the default soils of
+D-Stability and D-Settlement (Deltares D-GEO Suite, `SoilFactory.cs` in each), made into
+Kratos property sets. Values have two significant digits.
+
+* Names and unit weights are D-Stability's (D-Settlement's for the two sands only it
+  has), with no unit weight under 11 kN/m3: less leaves too little effective stress
+  below the water for a run to converge. Their new and old embankments are one
+  Embankment here, with the old one's weight, on which the two programs agree.
+* k is D-Settlement's.
+* E of the clays, the peats, the embankment and sand with clay is the oedometer modulus
+  of D-Settlement's compression ratio CR at 100 kPa, M = ln(10) 100 kPa / CR, as a
+  Young's modulus: E = M (1 + nu)(1 - 2 nu) / (1 - nu). The sands, which D-Settlement
+  makes all but incompressible, take 30 MPa.
+* c' and phi' of the embankment and of Sand are D-Stability's, but Sand's cohesion is
+  1 kPa: with none, the yield surface has its apex at zero stress and the ground surface
+  keeps a run from converging. D-Stability gives the clays and peats an undrained
+  strength only, so their drained c' and phi' are ours, the cohesion generous enough to
+  keep a model standing.
+
+Each soil is a Mohr-Coulomb one but Bedrock, which has no strength. Added as the other
+model (`soil`'s `model`, the material window's Model list), a soil drops what that model
+does not read -- a linear elastic soil has no strength -- and takes that model's
+defaults for what it lacks."""
 
 
 class DraftError(ValueError):
@@ -136,12 +161,14 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
         variables_si = {name: value for name, value in start["variables"].items()
                         if name not in soil_models.unread(chosen, start["variables"])}
         if model is not None:
-            # What the model lists that the preset does not give, it fills -- quietly
-            # for the preset's own model, which is how a preset is made.
+            # What the model lists that the preset does not give, it fills. Said: only
+            # what the preset's own model would not have filled in -- a bedrock made
+            # Mohr-Coulomb its strength -- so the preset's own model says nothing.
             filled = soil_models.fill(None, {}, chosen, variables_si, "SI",
                                       flow=reads_flow(project))
-            if model == start["model"]:
-                filled = []
+            own = soil_models.fill(None, {}, soil_models.law(start["model"], project.dimension),
+                                   dict(start["variables"]), "SI", flow=reads_flow(project))
+            filled = [name for name in filled if name not in own]
     else:
         # Created as the window creates it, then made `model` as the window's list does.
         blank_law = soil_models.law(soil_models.LINEAR_ELASTIC, project.dimension)
@@ -233,7 +260,11 @@ SECTION_DEFAULTS_SI: dict[str, dict[str, Any]] = {
                # A four-strand tendon, per anchor.
                "variables": {"YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006,
                              "DENSITY": 7850.0}},
-    "interface": {"name": "Interface", "r_inter": 0.7, "virtual_thickness": 0.01,
+    # No r_inter: each stretch takes the Rinter of the soil it runs against. A virtual
+    # thickness of 1 m: the derived stiffnesses are G and 10 G, as in the reference deck.
+    # Both are what `InterfaceSection` itself defaults to, so a contact drawn in the GUI
+    # or made by `section add` is the one a model script writes.
+    "interface": {"name": "Interface", "r_inter": None, "virtual_thickness": 1.0,
                   "permeability": "Neutral",
                   "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
                   "variables": {}},
@@ -241,7 +272,7 @@ SECTION_DEFAULTS_SI: dict[str, dict[str, Any]] = {
 """A new section of each kind, in SI (`App.Beams.defaultSection`, `defaultPanelSection`,
 `App.Anchors.defaultSection`, `App.Interfaces.defaultSection`). The tendon's working
 limit is a force and is stated in the project's force unit; a new interface section
-reduces the project's first soil."""
+takes the soil each stretch runs against."""
 
 SECTION_KINDS = {"beam": BeamSection, "panel": PanelSection, "anchor": AnchorSection,
                  "interface": InterfaceSection}
@@ -256,9 +287,10 @@ interface's is the first free `interfacesection_<n>`."""
 SNAP_DISTANCE = 1.0
 """How far, in metres, an anchor head may be off the structure it is snapped onto."""
 
-ANCHOR_LENGTH = 10.0
-ANCHOR_RAKE = 35.0
-"""A new anchor: 10 m, raking back and down at 35 degrees -- the usual ground anchor."""
+ANCHOR_RUN = 8.0
+ANCHOR_DROP = 6.0
+"""A new anchor: 8 m back and 6 m down from its head, 10 m long at about 37 degrees --
+the usual ground anchor -- with its tail on whole metres."""
 
 LOAD_SI = 20000.0
 """A new load: 20 kN down -- per point, per metre or per square metre -- in SI."""
@@ -500,31 +532,34 @@ def _round(value: float) -> float:
     return math.floor(value * 1e6 + 0.5) / 1e6
 
 
-def anchor_head(project: Project, point) -> tuple[float, ...]:
-    """`point` snapped onto the nearest structure an anchor may hang from, refused when
-    that is more than `SNAP_DISTANCE` away: the head becomes a node of that structure."""
-    snapped = nearest_on_pile(project, point)
+def anchor_head(project: Project, point, head_end: str = "free") -> tuple[float, ...]:
+    """`point` snapped onto the nearest structure an anchor may hang from when that is
+    no more than `SNAP_DISTANCE` away, so the head becomes a node of that structure.
+    Further away it stays where it is, and the head is a node of the soil mesh: an
+    anchor needs no structure. A fixed head is held in place, so it is never snapped."""
+    snapped = None if head_end == "fixed" else nearest_on_pile(project, point)
     if snapped is None or snapped[1] > SNAP_DISTANCE:
-        raise DraftError("The anchor head must be placed on a wall or a member."
-                         if project.dimension != 2
-                         else "The anchor head must be placed on a sheet pile.")
+        return tuple(_round(value) for value in point)
     return tuple(_round(value) for value in snapped[0])
 
 
-def _no_pile(project: Project) -> str:
-    if project.dimension != 2:
-        return "An anchor hangs from a wall or a member; create one first."
-    return "An anchor hangs from a sheet pile; create one first."
+def _inside(project: Project, point) -> bool:
+    """Whether an anchor end may be here: inside the model's extent, with a section's
+    top open (`Project`'s check): a strut from the part of a pile above the ground ends
+    at a fixed point in the air."""
+    span = project.extent()
+    return (span.x0 <= point[0] <= span.x1 and span.y_bottom <= point[1]
+            and (len(point) == 2
+                 or (point[1] <= span.y_top and span.z0 <= point[2] <= span.z1)))
 
 
 def _raked(project: Project, head) -> list[float]:
     """The tail of a new anchor from `head`: back and down into the longer side of the
-    domain, kept inside it."""
+    domain, on whole metres, kept inside it."""
     d = project.domain
-    radians = ANCHOR_RAKE * math.pi / 180
     into = 1 if (d.x1 - head[0]) >= (head[0] - d.x0) else -1
-    tail = [head[0] + into * ANCHOR_LENGTH * math.cos(radians),
-            head[1] - ANCHOR_LENGTH * math.sin(radians), *head[2:]]
+    tail = [math.floor(head[0] + into * ANCHOR_RUN + 0.5),
+            math.floor(head[1] - ANCHOR_DROP + 0.5), *head[2:]]
     tail[0] = max(d.x0, min(d.x1, tail[0]))
     tail[1] = max(d.y_bottom, min(d.y_top, tail[1]))
     return tail
@@ -532,7 +567,12 @@ def _raked(project: Project, head) -> list[float]:
 
 def _default_head(project: Project) -> list[float]:
     """A quarter of the way down the first structure an anchor may hang from -- halfway
-    along a wall's footprint."""
+    along a wall's footprint. With no structure, 2 m below the top of the soil in the
+    middle of the domain."""
+    if not live_piles(project):
+        d = project.domain
+        middle = [(d.x0 + d.x1) / 2, max(d.y_bottom, d.y_top - 2.0)]
+        return middle if project.dimension == 2 else [*middle, (d.z0 + d.z1) / 2]
     pile = live_piles(project)[0]
     if isinstance(pile, Panel):
         first, last = pile.footprint[0], pile.footprint[-1]
@@ -544,28 +584,31 @@ def _default_head(project: Project) -> list[float]:
 
 def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
            name: str | None = None, section: str | None = None,
-           prestress: float = 0.0):
-    """A new anchor from `head`, snapped onto the nearest structure, to `tail`
-    (`App.Anchors.draft`, `draftFromPoints`). Without a head it hangs a quarter of the way
-    down the first structure; without a tail it rakes back and down from its head."""
-    if not live_piles(project):
-        raise DraftError(_no_pile(project))
+           prestress: float = 0.0, head_end: str = "free", tail_end: str = "free"):
+    """A new anchor from `head` to `tail` (`App.Anchors.draft`, `draftFromPoints`). A
+    head near a structure is snapped onto it; one further away is a node of the soil
+    mesh. Without a head it hangs a quarter of the way down the first structure, or sits
+    in the middle of the soil when there is none; without a tail it rakes back and down
+    from its head. Both ends are free -- attached to the mesh -- unless `head_end` or
+    `tail_end` is "fixed": then that end is held in place, and a fixed head is not
+    snapped."""
     width = 2 if project.dimension == 2 else 3
     head = _default_head(project) if head is None else list(head)
     tail = _raked(project, head) if tail is None else list(tail)
     if len(head) != width or len(tail) != width:
         raise DraftError(f"An anchor's head and tail are {width} coordinates each here.")
     _finite([head, tail], "Every anchor coordinate must be a number.")
-    snapped = anchor_head(project, head)
-    span = project.extent()
-    # In a section the top is free (`Project`'s check): a strut from the part of a pile
-    # above the ground ends at a fixed point in the air.
-    inside = (span.x0 <= tail[0] <= span.x1 and span.y_bottom <= tail[1]
-              and (width == 2 or (tail[1] <= span.y_top and span.z0 <= tail[2] <= span.z1)))
-    if not inside:
+    snapped = anchor_head(project, head, head_end)
+    if not (_inside(project, snapped) and _inside(project, tail)):
         raise DraftError("The anchor must stay inside the model domain.")
+    problem = head_problem(project, snapped, head_end)
+    if problem:
+        raise DraftError(problem)
     if all(value == tail[axis] for axis, value in enumerate(snapped)):
         raise DraftError("An anchor must have a non-zero length.")
+    problem = tail_end_problem(project, tail_end, tail)
+    if problem:
+        raise DraftError(problem)
     id, default_name = _named(id, [a.id for a in project.anchors], "anchor_", "Anchor")
     # Any: the one call below builds either, so its kind and coordinates are the
     # width's own -- which mypy cannot follow through the conditional.
@@ -574,7 +617,46 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
                   kind="anchor3d" if width == 3 else "anchor",
                   section=section or _first_section(project, "anchor"),
                   head=snapped, tail=tuple(_round(value) for value in tail),
-                  prestress=prestress, active=True)
+                  prestress=prestress, head_end=head_end, tail_end=tail_end,
+                  active=True)
+
+
+ANCHOR_ENDS = ("free", "fixed")
+"""What an anchor end is joined to (`schemas.AnchorEnd`)."""
+
+
+def head_problem(project: Project, head, head_end: str = "free") -> str | None:
+    """Why an anchor cannot start at `head`, or None (`App.Anchors.headProblem`). A free
+    head on no structure is a node of the soil mesh, so it has to be where soil can be,
+    as a free tail does (`tail_end_problem`). A fixed head is held in place and may be
+    anywhere in the model."""
+    if head_end not in ANCHOR_ENDS:
+        return "The head end is free or fixed."
+    if head_end == "fixed":
+        return None
+    on = nearest_on_pile(project, head)
+    if on is not None and on[1] <= 1e-6:
+        return None
+    if head[1] > project.extent().y_top:
+        return ("An anchor head on no structure must be in the soil. Move the head "
+                "down, onto a structure, or make the head end fixed.")
+    return None
+
+
+def tail_end_problem(project: Project, tail_end: str, tail) -> str | None:
+    """Why `tail_end` cannot be used with this tail, or None (`App.Anchors.validate`).
+
+    A free tail is a node of the soil mesh, so it has to be where soil can be: in a
+    section the model's top is otherwise open, for a fixed strut end in the air above
+    the pit. Whether there really is soil at the tail is only known once the model is
+    built; the export says so if there is not (`core.kratos.writer._anchor_ties`)."""
+    if tail_end not in ANCHOR_ENDS:
+
+        return "The tail end is free or fixed."
+    if tail_end == "free" and tail[1] > project.extent().y_top:
+        return ("A free anchor tail must be in the soil. Move the tail down, "
+                "or make the tail end fixed.")
+    return None
 
 
 # Interfaces and normal loads -- plane strain only

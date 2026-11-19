@@ -1,4 +1,4 @@
-/* What Styx does not do yet is greyed, everywhere it is drawn, by one rule
+/* What Styx does not do yet is taken out, everywhere it is drawn, by one rule
    (patches.js NOT_YET / `implemented`) -- and the menu twins of tools that do work
    carry the tool's action, so a menu row and its button cannot disagree. */
 
@@ -50,54 +50,134 @@
     T.eq(implemented({ label: 'Stage', sub: [] }), true, 'a submenu a caller fills is');
     T.eq(implemented('-'), true, 'a separator is not a control');
     T.eq(implemented({ title: 'Standard views' }), true, 'nor is a caption');
-    T.eq(App.LivePatches.NOT_YET.slice().sort(), ['drawPoint', 'importSoilLayers']);
+    T.eq(App.LivePatches.NOT_YET.slice().sort(),
+         ['drawBox', 'drawCylinder', 'drawPoint', 'drawPolygon', 'importModel',
+          'importSoilLayers']);
   });
 
-  test('every menu row that does nothing is greyed, submenus included', function () {
+  test('the drawn and imported shapes Kratos never gets are gone from rail and menus',
+       function () {
     withInstall(function () {});
-    var live = [];
+    var gone = ['drawPolygon', 'drawBox', 'drawCylinder', 'importModel'];
+    var found = [];
+    function walk(items, path) {
+      (items || []).forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        if (gone.indexOf(item.action) >= 0) found.push(path + (item.label || item.tip));
+        if (Array.isArray(item.sub)) walk(item.sub, path);
+        if (Array.isArray(item.flyout)) walk(item.flyout, path);
+      });
+    }
+    App.MENUS.forEach(function (m) { walk(m.items, m.label + ' > '); });
+    Object.keys(App.RAILS).forEach(function (mode) { walk(App.RAILS[mode], mode + ' rail > '); });
+    T.eq(found, []);
+    T.eq(row('Structures', /^Create surface$/), [], 'no Create surface row');
+  });
+
+  test('Help > Kratos documentation opens the Kratos user documentation in a new tab',
+       function () {
+    var opened = [];
+    var savedOpen = window.open;
+    window.open = function (url, target) { opened.push([url, target]); return null; };
+    try {
+      withInstall(function () {
+        var docs = row('Help', /^Kratos documentation$/);
+        T.eq(docs.length, 1, 'one row');
+        var items = menu('Help').items;
+        var at = items.indexOf(docs[0]);
+        T.eq(items[at - 1] && items[at - 1].action, 'cmdref', 'under Command reference');
+        App.runAction(docs[0]);
+      });
+    } finally { window.open = savedOpen; }
+    T.eq(opened, [['https://deltares.github.io/Kratos-GeoMechanicsApplication-Documentation/'
+                   + 'user_documentation/', '_blank']]);
+  });
+
+  test('no menu row that does nothing is left, submenus included', function () {
+    withInstall(function () {});
+    var dead = [];
     function walk(items, path) {
       (items || []).forEach(function (item) {
         if (!item || typeof item !== 'object' || item.title) return;
-        if (!App.LivePatches.implemented(item) && !item.disabled) live.push(path + item.label);
+        if (!App.LivePatches.implemented(item)) dead.push(path + item.label);
         if (Array.isArray(item.sub)) walk(item.sub, path + item.label + ' > ');
       });
     }
     App.MENUS.forEach(function (m) { walk(m.items, m.label + ' > '); });
-    T.eq(live, [], 'rows that look ready and do nothing');
+    T.eq(dead, [], 'rows that do nothing');
   });
 
-  test('the rows the mockup drew without anything behind them are greyed by name',
+  test('the rows the mockup drew without anything behind them are gone, by name',
        function () {
     withInstall(function () {});
     [['File', /^Recent projects$/], ['File', /^Pack project/], ['File', /^Print/],
-     ['File', /^Exit$/], ['Edit', /^Select all$/],
+     ['File', /^Exit$/], ['Edit', /^Cut$/], ['Edit', /^Copy$/], ['Edit', /^Paste$/],
+     ['Edit', /^Delete$/], ['Edit', /^Select all$/],
      ['Structures', /^Create point$/],
      ['Soil', /^Import soil layers/], ['Structures', /^Create plate$/],
      ['Structures', /^Create beam$/], ['Structures', /^Create embedded beam$/],
      ['Structures', /^Tunnel designer/],
      ['Flow conditions', /^Create well$/], ['Flow conditions', /^Create drain$/],
      ['Flow conditions', /^Flow functions/], ['Flow conditions', /^Global water level$/],
-     ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/],
+     ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/], ['Stages', /^Delete stage$/],
      ['Expert', /^Examine commands/], ['Expert', /^Macro library/],
-     ['Expert', /^Configure remote scripting/], ['Expert', /^Python interpreter/],
-     ['Help', /^Reference manual$/], ['Help', /^Tutorial manual$/]
+     ['Expert', /^Configure remote scripting/], ['Expert', /^Python interpreter/]
     ].forEach(function (pair) {
-      var found = row(pair[0], pair[1]);
-      T.eq(found.length, 1, pair[0] + ' > ' + pair[1]);
-      T.eq(found[0].disabled, true, pair[0] + ' > ' + found[0].label + ' is greyed');
+      T.eq(row(pair[0], pair[1]).length, 0, pair[0] + ' > ' + pair[1]);
     });
-    T.eq(!!row('Flow conditions', /^Global water level$/)[0].checked, false,
-         'a tick nobody can change is not shown');
+  });
+
+  /* A separator at either end of a list, or right after another, is what removing
+     rows leaves behind when nothing tidies up after it. */
+  function strayDividers(items) {
+    return (items || []).filter(function (item, i) {
+      return item === '-' && (i === 0 || i === items.length - 1 || items[i + 1] === '-');
+    }).length;
+  }
+
+  test('no menu is left with a stray divider, nor empty', function () {
+    withInstall(function () {});
+    App.MENUS.forEach(function (m) {
+      T.eq(strayDividers(m.items), 0, m.label);
+      T.ok(m.items.some(function (i) { return i !== '-'; }), m.label + ' has rows');
+    });
+  });
+
+  test('tidySeparators drops the dividers that fence off nothing', function () {
+    var a = { label: 'A' }, b = { label: 'B' };
+    T.eq(App.LivePatches.tidySeparators(['-', a, '-', '-', b, '-']), [a, '-', b]);
+    T.eq(App.LivePatches.tidySeparators(['-', '-']), []);
   });
 
   test('the rows that work are left alone', function () {
     withInstall(function () {});
     [['File', /^Export model/], ['View', /^Zoom to fit$/], ['Soil', /^Modify soil layers/],
+     ['Help', /^Documentation$/], ['Help', /^GUI tutorials$/],
      ['Help', /^Command reference$/], ['Help', /^About/], ['Mesh', /^Refine mesh$/],
      ['Mesh', /^Coarsen mesh$/], ['Mesh', /^Reset local refinement$/]
     ].forEach(function (pair) {
       T.eq(!!row(pair[0], pair[1])[0].disabled, false, pair[0] + ' > ' + pair[1]);
+    });
+  });
+
+  test('Help > Documentation (F1) and GUI tutorials open their page of the site', function () {
+    withInstall(function (ctx) {
+      var saved = App.Documentation.open;
+      var opened = [];
+      App.Documentation.open = function (page) { opened.push(page); };
+      try {
+        App.runAction(row('Help', /^Documentation$/)[0]);
+        App.runAction(row('Help', /^GUI tutorials$/)[0]);
+      } finally {
+        App.Documentation.open = saved;
+      }
+      T.eq(opened, ['home', 'tutorials']);
+      T.eq(row('Help', /^Documentation$/)[0].key, 'F1');
+      T.eq(ctx.frozen, [], 'answered by the live layer, not the mockup');
+      T.eq(menu('Help').items.map(function (i) { return i === '-' ? '-' : i.label; }),
+           ['Documentation', 'GUI tutorials', 'Command reference', 'Kratos documentation',
+            '-', 'About…'],
+           'the two pages of the site side by side');
     });
   });
 
@@ -112,39 +192,39 @@
     tips.forEach(function (tip) { T.ok(/the selected object/.test(tip), tip); });
   });
 
-  function notYetTips(mode) {
-    return (App.RAILS[mode] || []).filter(function (t) { return t && t.notYet; })
-      .map(function (t) { return t.tip.replace(App.LivePatches.NOT_YET_TIP, ''); });
-  }
-
-  test('the rail tools with nothing behind them are marked, in every mode', function () {
+  test('the rail tools with nothing behind them are gone, in every mode', function () {
     withInstall(function () {});
-    T.eq(notYetTips('soil'), []);
-    T.eq(notYetTips('structures'), ['Select multiple objects', 'Create point', 'Create plate',
-         'Create beam', 'Create embedded beam row', 'Tunnel designer']);
-    T.eq(notYetTips('mesh'), []);
-    T.eq(notYetTips('flow'), ['Create well', 'Create drain', 'Flow functions']);
-    T.eq(notYetTips('staged'), ['Select multiple objects', 'Activate selection',
-         'Deactivate selection', 'Preview stage']);
+    Object.keys(App.RAILS).forEach(function (mode) {
+      App.RAILS[mode].forEach(function (tool) {
+        T.ok(App.LivePatches.implemented(tool), mode + ': ' + (tool.tip || tool.icon));
+      });
+      T.eq(strayDividers(App.RAILS[mode]), 0, mode + ' has no stray divider');
+    });
+    function tips(mode) {
+      return App.RAILS[mode].filter(function (t) { return t !== '-'; })
+        .map(function (t) { return t.tip; });
+    }
+    [['structures', /^Select multiple/], ['structures', /^Create point$/],
+     ['structures', /^Create plate$/], ['structures', /^Create beam$/],
+     ['structures', /^Create embedded beam/], ['structures', /^Tunnel designer/],
+     ['flow', /^Create well$/], ['flow', /^Create drain$/], ['flow', /^Flow functions/],
+     ['staged', /^Select multiple/], ['staged', /^Activate selection$/],
+     ['staged', /^Deactivate selection$/], ['staged', /^Preview stage$/]
+    ].forEach(function (pair) {
+      T.eq(tips(pair[0]).filter(function (tip) { return pair[1].test(tip); }), [],
+           pair[0] + ': ' + pair[1]);
+    });
+    withInstall(function () {});
+    T.eq(App.RAILS.structures.every(App.LivePatches.implemented), true,
+         'a second install finds nothing more to take out');
   });
 
-  test('a greyed rail tool says so in its tip, and loses a flyout of nothing', function () {
-    withInstall(function () {});
-    var plate = App.RAILS.structures.filter(function (t) { return t && t.icon === 'plate'; })[0];
-    T.eq(plate.tip, 'Create plate' + App.LivePatches.NOT_YET_TIP);
-    T.eq(plate.flyout, undefined);
-    withInstall(function () {});
-    T.eq(plate.tip, 'Create plate' + App.LivePatches.NOT_YET_TIP,
-         'a second install does not say it twice');
-  });
-
-  test('Select is never greyed: it is the pointer, and picking works', function () {
+  test('Select is always there: it is the pointer, and picking works', function () {
     withInstall(function () {});
     Object.keys(App.RAILS).forEach(function (mode) {
       var select = App.RAILS[mode].filter(function (t) { return t && t.icon === 'select'; })[0];
       if (!select) return;
       T.eq(select.action, 'select', mode);
-      T.eq(!!select.notYet, false, mode);
     });
   });
 
@@ -163,32 +243,59 @@
     } finally { App.DrawInput = savedDraw; }
   });
 
-  test('a greyed tool is drawn greyed but keeps its tip; Select stays live', function () {
+  test('the rail draws no button for a missing tool; Select and Create line stay live',
+       function () {
     var savedState = App.state;
     App.state = { mode: 'structures', modelMode: '2d' };
     try {
-      withInstall(function (ctx) {
+      withInstall(function () {
         App.Toolbars.mountRail('structures');
         var tools = App.RAILS.structures.filter(function (t) { return t !== '-'; });
         var buttons = document.querySelectorAll('#toolrail .rail-btn');
-        function button(icon) {
-          return buttons[tools.map(function (t) { return t.icon; }).indexOf(icon)];
+        T.eq(buttons.length, tools.length, 'one button per tool');
+        function button(tool) {
+          return document.querySelector('#toolrail .rail-btn[data-tool="' + tool + '"]');
         }
-        var tunnel = button('tunnel');
-        T.ok(tunnel.classList.contains('disabled'), 'Tunnel designer is drawn greyed');
-        T.ok(tunnel.classList.contains('not-yet'), 'and keeps its pointer events');
-        T.eq(tunnel.getAttribute('aria-disabled'), 'true');
-        T.eq(tunnel.disabled, false, 'a disabled button gets no mouseenter, so no tip');
-        tunnel.click();
-        T.eq(ctx.notes, [], 'the click goes nowhere: no "not implemented" note');
-        T.eq(ctx.frozen, []);
-        T.eq(tunnel.classList.contains('active'), false, 'nor does it become the tool');
+        T.eq(button('tunnel'), null, 'no Tunnel designer');
+        T.eq(button('drawPoint'), null, 'no Create point: the server has no point recipe');
         T.eq(button('select').classList.contains('disabled'), false);
-        T.eq(button('line').classList.contains('disabled'), false, 'Create line works');
-        T.eq(button('line').classList.contains('not-yet'), false);
-        T.eq(button('line').hasAttribute('aria-disabled'), false);
-        T.ok(button('point').classList.contains('not-yet'),
-             'Create point is greyed: the server has no point recipe');
+        T.eq(button('drawLine').classList.contains('disabled'), false, 'Create line works');
+      });
+    } finally {
+      App.state = savedState;
+      App.UI.clear(document.getElementById('toolrail'));
+    }
+  });
+
+  test('the rail leaves out the tools of the other dimension, not greyed', function () {
+    var savedState = App.state;
+    App.state = { mode: 'structures', modelMode: '2d' };
+    function button(tool) {
+      return document.querySelector('#toolrail .rail-btn[data-tool="' + tool + '"]');
+    }
+    function shownSeparators() {
+      var children = Array.prototype.filter.call(
+        document.getElementById('toolrail').children, function (c) { return !c.hidden; });
+      return children.map(function (c) { return c.classList.contains('rail-sep'); });
+    }
+    try {
+      withInstall(function () {
+        App.Toolbars.mountRail('structures');
+        T.eq(button('createMember').hidden, true, 'no member in a 2D section');
+        T.eq(button('drawLine').hidden, false);
+        T.eq(button('interface').hidden, false);
+
+        App.state.modelMode = '3d';
+        App.Toolbars.mountRail('structures');
+        T.eq(button('createMember').hidden, false, 'the member comes back in 3D');
+        T.eq(button('drawLine').hidden, true, 'no line tool in 3D');
+        T.eq(button('interface').hidden, true);
+
+        var seps = shownSeparators();
+        T.eq(seps[0], false, 'no divider at the top');
+        T.eq(seps[seps.length - 1], false, 'no divider at the bottom');
+        T.ok(seps.every(function (sep, i) { return !(sep && seps[i + 1]); }),
+             'no two dividers in a row');
       });
     } finally {
       App.state = savedState;
@@ -201,7 +308,7 @@
   test('a NOT_YET action that still arrives is refused, not run', function () {
     withInstall(function (ctx) {
       App.runAction({ action: 'importSoilLayers', label: 'Import soil layers…' });
-      App.runAction({ action: 'drawPoint', tip: 'Create point' + App.LivePatches.NOT_YET_TIP });
+      App.runAction({ action: 'drawPoint', tip: 'Create point' });
       T.eq(ctx.frozen, [], 'the frozen dispatcher would open the mockup dialog');
       T.eq(ctx.notes, ['"Import soil layers…" is not available in Styx yet.',
                        '"Create point" is not available in Styx yet.']);
@@ -228,9 +335,7 @@
 
   test('the menu twins of working tools carry the tool’s action', function () {
     withInstall(function () {});
-    T.eq(row('Structures', /^Create point$/)[0].action, 'drawPoint');
     T.eq(row('Structures', /^Create line$/)[0].action, 'drawLine');
-    T.eq(row('Structures', /^Create surface$/)[0].action, 'drawPolygon');
     T.eq(row('Mesh', /^View mesh$/)[0].action, 'viewMesh');
     T.eq(row('Edit', /^Deselect all$/)[0].action, 'deselectAll');
     var water = row('Flow conditions', /water pressure line/);
@@ -389,8 +494,7 @@
 
   /* ── The frozen dialogs and the tree ───────────────────────────────── */
 
-  test("the frozen tree menu's dead Properties… is greyed; the live one is not touched",
-       function () {
+  test("the frozen tree menu's dead rows are taken out; Hide/Show stays", function () {
     var saved = { project: App.PROJECT, menu: App.Menu };
     var opened = null;
     App.PROJECT = { custom_parts: [] };
@@ -401,16 +505,21 @@
     try {
       App.LivePatches.onTreeContextMenu({ target: row, preventDefault: function () {},
                                           stopImmediatePropagation: function () {} });
-      // What js/explorer.js:102 then does, inside the same event.
+      // What js/explorer.js:102 then does for a row that is not a soil layer, inside
+      // the same event.
       App.Menu.openAt([{ label: 'Zoom to object', action: 'zoomFit' },
-                       { label: 'Properties…', icon: 'settings' }], 0, 0, function () {});
+                       { label: 'Show', icon: 'eye' },
+                       '-',
+                       { label: 'Rename\u2026', disabled: true, action: null },
+                       { label: 'Delete', icon: 'delete', disabled: true, action: null },
+                       '-',
+                       { label: 'Properties\u2026', icon: 'settings' }], 0, 0, function () {});
       T.ok(opened, 'the frozen menu still opens');
-      T.eq(!!opened[0].disabled, false);
-      T.eq(opened[1].disabled, true);
+      T.eq(opened.map(function (i) { return i.label; }), ['Zoom to object', 'Show']);
       var again = null;
       App.Menu.openAt = function (items) { again = items; };
-      App.Menu.openAt([{ label: 'Properties…' }]);
-      T.eq(!!again[0].disabled, false, 'the loan is for one menu only');
+      App.Menu.openAt([{ label: 'Properties\u2026' }]);
+      T.eq(again.length, 1, 'the loan is for one menu only');
     } finally { App.PROJECT = saved.project; App.Menu = saved.menu; }
   });
 })();

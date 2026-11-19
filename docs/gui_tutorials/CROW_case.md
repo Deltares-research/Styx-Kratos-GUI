@@ -6,7 +6,7 @@ windows, the tool rail and the explorers of the GUI. The tutorial is for a geote
 engineer who has not used Styx before.
 
 The model is the CROW excavation wall with Mohr-Coulomb soils. It is the same model as the
-[`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md), and Kratos uses the
+[`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md), and Kratos uses the
 same case to validate its GeoMechanicsApplication.
 
 Each step has a screenshot. An orange outline on the screenshot shows the button, field or
@@ -17,7 +17,7 @@ row to use.
 A 2D plane-strain section, 80 m wide and 60 m deep. All values are in SI units: m, N, Pa
 and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 
-![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](crow_model.svg)
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](../../examples/CROW_case/crow_model.svg)
 
 - A sheet pile wall at x = 5 m, from the ground surface down to y = −13 m.
 - A strut at y = −1.5 m, which holds the wall from the pit side.
@@ -30,9 +30,9 @@ and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 ## Before you start
 
 - Install Styx and start it with `run.bat` (Windows) or `run.sh` (Linux and macOS). See
-  [INSTALLATION.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/INSTALLATION.md). Styx opens in your browser with an empty 2D project.
+  [INSTALLATION.md](../INSTALLATION.md). Styx opens in your browser with an empty 2D project.
 - Step 13 calculates the model, and for that Styx needs Kratos. If Kratos is not set up
-  yet, follow [KRATOS_SETUP.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/KRATOS_SETUP.md). You can do steps 1 to 12 without
+  yet, follow [KRATOS_SETUP.md](../KRATOS_SETUP.md). You can do steps 1 to 12 without
   Kratos.
 
 How the GUI takes the values that you type:
@@ -54,8 +54,19 @@ How the GUI takes the values that you type:
 ![The New project window with the project name typed in. The New project button on the toolbar is outlined.](images/crow/01_project.png)
 
 The title bar shows the project name. A new project is a 2D section, so the **2D** button
-on the toolbar is already selected. **File** > **Project properties…** shows the
-gravitational acceleration g = 9.81 m/s². Keep that value.
+on the toolbar is already selected.
+
+A new project has a soil block 20 m wide and 15 m deep. The CROW model is 80 m wide and
+60 m deep. Set its size in the project properties:
+
+1. Click **File** > **Project properties…**.
+2. Type `80` in **x max** and `-60` in **y min**. Keep `0` in **x min** and in **y max**:
+   the ground is at y = 0.
+3. Keep **Gravity** at 9.81 m/s² and **Unit system** at **SI (N, m, kg, s)**. All values
+   in this tutorial are in SI units.
+4. Click **OK**.
+
+![The Project properties window with the new size of the soil block. The x max and y min fields are outlined.](images/crow/01_project_properties.png)
 
 ## 2. Make the two soils
 
@@ -120,7 +131,7 @@ The sand, from the top of its window:
 
 ![The Soil material window of the sand, from its top.](images/crow/02_soils_sand.png)
 
-## 3. Add the soil layers and set the width
+## 3. Add the soil layers
 
 The layers are stacked from the ground surface down. The clay is split at −8 m, so that the
 floor of the third lift is on a layer boundary.
@@ -139,14 +150,7 @@ floor of the third lift is on a layer boundary.
 
 ![The Modify soil layers window with the three layers. The Modify soil layers tool is outlined.](images/crow/03_layers.png)
 
-No window sets the width of the model. Set it in the Selection explorer of a layer:
-
-1. In the Model explorer, click **Soil_Top**.
-2. In the Selection explorer, type `80` in **x max** and press Enter.
-
-![The model after x max is set to 80 m. The Soil_Top row in the Model explorer and the x max row in the Selection explorer are outlined.](images/crow/03_layers_width.png)
-
-All layers are now 80 m wide.
+The layers are 80 m wide, the width of the soil block from step 1.
 
 ## 4. Give the soil its water pressure
 
@@ -154,16 +158,15 @@ The water table is at y = −1.5 m in all stages. Below the water table the pore
 hydrostatic: it is zero at the water table and grows by 10 kPa per metre of depth. Above
 the water table the pore pressure is zero.
 
-1. Click the **Structures** tab.
-2. On the tool rail, click the small arrow in the corner of **Create boundary condition**,
-   then click **Create boundary condition…**.
+1. Click the **Flow conditions** tab.
+2. On the tool rail, click **Create flow boundary condition…**.
 3. In **Name**, type `Pore pressure`.
 4. In **Condition**, select **Water pressure**.
 5. In **Where**, select **Whole soil**.
 6. In **Type**, select **Hydrostatic**, and in **Reference level**, type `-1.5`.
 7. Click **Save**.
 
-![The Create boundary condition window for the water pressure. The Create boundary condition tool is outlined.](images/crow/04_water.png)
+![The Create boundary condition window for the water pressure. The Create flow boundary condition tool is outlined.](images/crow/04_water.png)
 
 A new project already has the displacement conditions: the bottom is fixed, and the left
 and right sides are fixed in the horizontal direction only. The Model explorer now shows
@@ -193,9 +196,10 @@ pile. For that reason, the density is low: ρ · A = 298.36 × 0.4924 ≈ 147 kg
 wall, close to the mass of a steel sheet pile. The values are those of Kratos' own CROW
 test.
 
-1. On the tool rail, click **Create sheet pile…**.
-2. Type the values from the table. Scroll down to see all fields.
-3. Click **Save**.
+1. Click the **Structures** tab.
+2. On the tool rail, click **Create sheet pile…**.
+3. Type the values from the table. Scroll down to see all fields.
+4. Click **Save**.
 
 ![The Create sheet pile window. The Create sheet pile tool is outlined.](images/crow/05_wall.png)
 
@@ -262,13 +266,13 @@ selected.
 
 For each row:
 
-1. In the Model explorer, right-click the row and click **Rename…**.
+1. In the Model explorer, right-click the row and click **Rename part…**.
 2. Type the new name.
 3. Click **OK**.
 
 ![The Rename window for the first part, with the name lift 1 typed in.](images/crow/07_bodies_rename.png)
 
-After you rename all six parts, the Model explorer shows the new names:
+After you rename all six parts, the Model explorer shows each part by its new name:
 
 ![The Model explorer with the six renamed soil parts outlined.](images/crow/07_bodies_after.png)
 
@@ -281,28 +285,36 @@ A = 4.76 × 10⁻⁵ m².
 In the finite element model, the strut is a truss element: a straight bar between two
 points that carries only an axial force, in tension and in compression. In engineering, a
 strut takes compression and an anchor takes tension, but both are the same truss element.
-Styx makes this element with the **Create anchor** tool, so you make the strut as an anchor
-and then rename it.
+Styx makes this element with the **Create anchor** tool, so you make the strut as an
+anchor.
 
-1. On the tool rail, click **Create anchor…**. Styx adds an anchor on the wall, named
-   `Anchor 1`, and selects it.
-2. In the Selection explorer, type these values. Press Enter after each value.
+1. On the tool rail, click **Create anchor…**. The **Create anchor** window opens.
+2. Type these values:
 
-   | Row | Value |
+   | Field | Value |
    |---|---|
+   | **Name** | `Strut` |
+   | **Head x**, **Head y** (m) | `5`, `-1.5` |
+   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
    | **YOUNG_MODULUS** (Pa) | `210000000000` |
    | **CROSS_AREA** (m²) | `4.7619e-05` |
    | **DENSITY** (kg/m³) | `0` |
    | **Spacing** (m) | `1` |
-   | **Head x**, **Head y** (m) | `5`, `-1.5` |
-   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
 
-3. In the **Tension limit** row, click **No tension limit**. Leave **Compression limit**
-   empty. The strut then has no force limits.
-4. In the Model explorer, right-click **Anchor 1**, click **Rename…**, type `Strut` and
-   click **OK**.
+3. Leave **Head end** at **Free (attached to the mesh)**. The head is on the wall, so it
+   becomes a node of the wall.
+4. In **Tail end**, select **Fixed (held in place)**. The tail of a new anchor is
+   **Free (attached to the mesh)**: it is a node of the soil mesh. The tail of this strut
+   is in the pit, where the soil is removed, so it must be a fixed support.
 
-![The Selection explorer of the strut. The Create anchor tool and the rows with typed values are outlined.](images/crow/08_strut.png)
+   ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
+
+5. Click **Save**. Styx adds the strut and selects it.
+6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
+
+   Leave **Compression limit** empty. The strut then has no force limits.
+
+   ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
 
 The head of the strut is on the wall, so it becomes a node of the wall. The tail is a fixed
 support.
@@ -320,20 +332,21 @@ by the soil's own **Rinter** from step 2.
 
    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
-5. In the Selection explorer of the interface, set **Virtual thickness** to `1` and press
-   Enter. With a virtual thickness of 1 m, the stiffness of the interface comes directly
-   from the shear modulus of the soil, as the next paragraph shows.
-6. In **Law**, select **Coulomb**.
-7. In the **R_inter** row, click **Each soil's own R_inter**.
+5. In the Selection explorer of the interface, in **Law**, select **Coulomb**.
+6. Keep the other values of a new interface. **Stiffness** shows **From the soil** and
+   **R_inter** shows **Each soil's own**, so each part of the interface uses the
+   stiffness and the Rinter of its soil. **Virtual thickness** is 1 m, so the stiffness of
+   the interface comes directly from the shear modulus of the soil, as the next paragraph
+   shows.
 
-![The Selection explorer of the interface. The Law and Virtual thickness rows and the Each soil's own R_inter button are outlined.](images/crow/09_interface_contact.png)
+![The Selection explorer of the interface. The Law, Stiffness, R_inter and Virtual thickness rows are outlined.](images/crow/09_interface_contact.png)
 
 A Coulomb interface slips when the shear stress reaches the reduced strength of the soil.
 Styx derives the stiffness of the interface from the soil: the shear stiffness is G / t
 and the normal stiffness is 10 G / t, where G is the shear modulus of the soil and t is
-the virtual thickness. For the clay, G = 375 kPa, so the shear stiffness is 375 kPa/m and
-the normal stiffness is 3 750 kPa/m. The factor 10 makes the interface much stiffer across
-the wall than along it: the soil can slip along the wall, but it does not go into the wall
+the virtual thickness. R_inter reduces the strength only, not the stiffness. For the clay,
+G = 375 kPa, so the shear stiffness is 375 kPa/m and the normal stiffness is 3 750 kPa/m.
+The factor 10 makes the interface much stiffer across the wall than along it: the soil can slip along the wall, but it does not go into the wall
 or come away from it. Kratos' reference interface materials use the same factor.
 
 ## 10. Add the surcharge and the water loads
@@ -437,10 +450,10 @@ Then add the null step and the five construction stages:
 |---|---|---|---|---|---|
 | 2 | `Null step` | `150` | `0.0001` | | |
 | 3 | `Wall installation` | `150` | `0.001` | SheetPileWall, Interface, Load | |
-| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | Soil_Top · lift 1 |
+| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | lift 1 |
 | 5 | `Strut installation` | `150` | `0.001` | Strut | |
-| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | Soil_Top · lift 2, WaterLoad_Stage1 |
-| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | Soil_Top · lift 3, WaterLoad_Stage2 |
+| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | lift 2, WaterLoad_Stage1 |
+| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | lift 3, WaterLoad_Stage2 |
 
 The null step changes nothing in the model. Kratos' own CROW test has the same stage after
 the K0 procedure. The excavation stages have more iterations, because the soil yields
@@ -473,11 +486,14 @@ After the last stage, the Stages explorer shows seven stages:
 
 ## 13. Calculate and look at the wall
 
-1. On the toolbar, click **Calculate**. Styx writes the Kratos input files and runs Kratos.
-   The calculation takes a few minutes, because the Mohr-Coulomb soil yields in the
-   excavation stages.
-2. When the calculation is complete, Styx opens Results mode.
-3. On the tool rail, click **Plot along the wall**.
+1. On the toolbar, click **Calculate**. Styx writes the Kratos input files from the mesh of
+   step 11 and runs Kratos. The calculation takes a few minutes, because the Mohr-Coulomb
+   soil yields in the excavation stages.
+2. The **Convergence** window opens at the bottom right. It shows how the solver converges
+   in each stage, iteration by iteration. Leave it open.
+3. When the calculation is complete, Styx opens Results mode. The Convergence window stays
+   open and gives the time that the calculation took.
+4. On the tool rail, click **Plot along the wall**.
 
 ![The Plot along the wall window with the bending moment in the wall for stages 3 to 7. The Plot along the wall tool is outlined.](images/crow/13_results_plot.png)
 
@@ -514,11 +530,8 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
-When the calculation was complete, Styx also opened the **Choose results** window. It is
-under the plot window, and it covers the model.
-
-1. Click **Close** in the Plot along the wall window, then click **Close** in the Choose
-   results window.
+1. Click **Close** in the Plot along the wall window, then click **Close** in the
+   Convergence window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
    excavation**.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
@@ -564,6 +577,6 @@ Styx saves the project as `CROW excavation wall.json`. Open it again later with 
 
 - Change one value and calculate again, for example the band of the wall mesh, or the
   depth of the third lift.
-- Read [USAGE.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/USAGE.md) for all modes and tools of the GUI.
+- Read [USAGE.md](../USAGE.md) for all modes and tools of the GUI.
 - Build the same model with commands in the
-  [`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md).
+  [`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md).

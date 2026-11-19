@@ -90,7 +90,8 @@
     T.eq(library.length, 1);
     T.eq(library[0].id, record.section);
     T.eq(library[0].material, null, 'not the first soil in the list, which may be elsewhere');
-    T.ok(library[0].r_inter > 0 && library[0].r_inter <= 1);
+    T.eq(library[0].r_inter, null, 'each soil’s own Rinter, as a model script has it');
+    T.eq(library[0].virtual_thickness, 1, 'stiffnesses of G and 10 G, as the reference deck');
   });
 
   /* ── Validation ─────────────────────────────────────────────────────── */

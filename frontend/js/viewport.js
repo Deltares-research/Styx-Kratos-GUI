@@ -397,9 +397,10 @@ App.Viewport = (function () {
   /* The soil's edges that a line puts there, where it splits a layer: each piece draws
      one along the line. They are drawn with the line, so hiding the line in the Model
      explorer hides all of it, not only its dashes over the seam. An edge on a layer's
-     outline stays the soil's, as it is there with or without the line. In 3D an edge
-     across the model at one of the line's points goes with it too, unless it is the
-     domain's side. Pure, so it is testable without a renderer.
+     outline, or on the outline of a drawn soil surface, stays the soil's, as it is there
+     with or without the line. In 3D an edge across the model at one of the line's points
+     goes with it too, unless it is the domain's side. Pure, so it is testable without a
+     renderer.
 
      Returns `edges`, each section's flat LineSegments pairs less the seams, and
      `seams`, one `{line, section, edges}` per line and section that has one. */
@@ -409,6 +410,11 @@ App.Viewport = (function () {
     var layers = {};
     ((project && project.layers) || []).forEach(function (layer) {
       layers['soil_' + layer.id] = layer;
+    });
+    // A piece of a drawn soil surface is `<part>__<id>`, and its outline is the part's.
+    ((project && project.custom_parts) || []).forEach(function (part) {
+      var outline = partOutline(part);
+      if (outline) layers[part.key] = { outline: outline };
     });
     var d = project && project.domain;
     // The edges come rounded to 4 decimals (core/geometry/tessellation.py DECIMALS).
@@ -430,6 +436,10 @@ App.Viewport = (function () {
     }
 
     function onOutline(s, layer) {
+      if (layer.outline) {
+        return [[s[0], s[1]], [s[3], s[4]], [(s[0] + s[3]) / 2, (s[1] + s[4]) / 2]]
+          .every(function (p) { return onPolyline(p[0], p[1], layer.outline); });
+      }
       var across = near(s[0], s[3]) && near(s[1], s[4]);
       var sides = [[0, d.x0], [0, d.x1]];
       if (!across) sides.push([1, layer.top], [1, layer.bottom]);
@@ -467,6 +477,23 @@ App.Viewport = (function () {
       });
     });
     return { edges: edges, seams: seams };
+  }
+
+  /* The closed outline, in the section, of a drawn part that is a polygon swept along z
+     or a box. Which parts a line can cut is the server's rule
+     (core/model/schemas.py `CustomPart.section_outline`): only a cut part has pieces
+     (`<part>__<id>` in `soil_body_keys`) that look its outline up here. */
+  function partOutline(part) {
+    var recipe = part && part.recipe;
+    var points = null;
+    if (recipe && recipe.kind === 'polygon_extrude' && recipe.vertices) {
+      points = recipe.vertices.map(function (v) { return [v[0], v[1]]; });
+    } else if (recipe && recipe.kind === 'box' && recipe.origin && recipe.size) {
+      var x0 = recipe.origin[0], y0 = recipe.origin[1];
+      var x1 = x0 + recipe.size[0], y1 = y0 + recipe.size[1];
+      points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    }
+    return points && points.length > 2 ? points.concat([points[0]]) : null;
   }
 
   /* Frees GPU memory before a group is replaced. The frozen code never does
@@ -795,18 +822,25 @@ App.Viewport = (function () {
   /* ── The boundary conditions ─────────────────────────────────────────────
      Each condition drawn from its own record, client side, like the water line.
 
-     2D: a support is a row of symbols along its face or line, or one at its point --
-     the clamp of a fixed support (a stem on hatched ground) when it holds x and y, a
-     triangle on rollers when it holds one of them, pointing along the one it holds --
-     and a water pressure is its own level or phreatic line, dashed, with "h = ..."
-     beside it (a uniform one: its target outlined, "p = ..."). 3D: the face outline in
-     the condition's colour, and a level as the outline of its plane.
+     2D: a fixed support on a face or a line (x and y held) is hatched ground on the
+     edge itself, drawn without a break from its start to its end. A roller on a face
+     or a line (one of them held) is a row of the point's roller symbol along it,
+     pointing along the one it holds. A support at a point is one symbol: a triangle on
+     hatched ground, or a triangle on two wheels for a roller. A water pressure is its
+     own level or phreatic line, dashed, with no words beside it (a uniform one: its
+     target outlined); on a line, the pressure diagram with its deepest value. 3D: the
+     face outline in the condition's colour, and a level as the outline of its plane.
 
      Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
-     can reach. `lines` are polylines of [x, y, z]; `symbols` are where a support
-     symbol stands, the outward direction it points from, and whether it is a roller. */
+     can reach. `lines` are polylines of [x, y, z]; `strips` are the straight pieces of
+     a fixed face or line support, from, to and the side they stand out to; `symbols`
+     are where a single symbol stands, the outward direction it points from, and
+     whether it is a roller. */
   var SUPPORT_COLOR = 0x2e7d32;
   var WATER_COLOR = 0x1f6fb0;
+  // A water pressure on a line or a face of its own: indigo, apart from the phreatic
+  // line's blue and the water on the ground's light blue, and from the head lines'.
+  var CONDITION_PRESSURE_COLOR = '#3949ab';
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
 
   /* Where the symbols stand on a line of [x, y] points: at each corner, and evenly
@@ -834,6 +868,31 @@ App.Viewport = (function () {
     var faceOut = face && OUTWARD[face];
     if (faceOut && faceOut[held] !== 0) return faceOut;
     return held === 0 ? [-1, 0] : [0, -1];
+  }
+
+  /* A fixed face or line support as strips, one per straight piece of `points`
+     ([x, y]), each standing out on the side of `outward`; a piece along `outward`
+     stands out to -x (or -y) instead. A line with no length (a face the soil only
+     touches at a corner) is the one symbol. */
+  function supportStrips(points, outward, z) {
+    var out = { strips: [], symbols: [] };
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length < 1e-9) continue;
+      var dir = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+      var normal = [dir[1], -dir[0]];
+      var side = normal[0] * outward[0] + normal[1] * outward[1];
+      if (Math.abs(side) < 1e-9) side = normal[0] !== 0 ? -normal[0] : -normal[1];
+      if (side < 0) normal = [-normal[0], -normal[1]];
+      out.strips.push({ from: [a[0], a[1], z], to: [b[0], b[1], z],
+                        outward: [normal[0] + 0, normal[1] + 0] });
+    }
+    if (!out.strips.length && points.length) {
+      out.symbols.push({ at: [points[0][0], points[0][1], z], outward: outward,
+                         roller: false });
+    }
+    return out;
   }
 
   /* The faces of the soil as the build drew it. The export finds a face on the meshed
@@ -926,8 +985,29 @@ App.Viewport = (function () {
 
   var OUTWARD = { bottom: [0, -1], top: [0, 1], left: [-1, 0], right: [1, 0] };
 
+  /* The point a fraction `t` of the way along the polyline `path` of [x, y, z], by
+     length; null for a path with none. */
+  function alongPath(path, t) {
+    var total = 0, k;
+    for (k = 1; k < path.length; k += 1) {
+      total += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]);
+    }
+    if (!(total > 0)) return null;
+    var left = total * t;
+    for (k = 1; k < path.length; k += 1) {
+      var a = path[k - 1], b = path[k];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (left <= length && length > 0) {
+        var f = left / length;
+        return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2]];
+      }
+      left -= length;
+    }
+    return path[path.length - 1].slice();
+  }
+
   function conditionGlyphSpec(record, project, outlines) {
-    var spec = { kind: record.kind, lines: [], symbols: [], dashed: false, label: null,
+    var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
                  active: record.active !== false };
     var d = project.domain;
     var two = project.dimension === 2;
@@ -949,18 +1029,25 @@ App.Viewport = (function () {
       var face = record.on === 'face' ? record.face : null;
       var outward = roller ? rollerOutward(heldX ? 0 : 1, face)
         : (face ? OUTWARD[face] : [0, -1]);
+      var path = null;
       if (record.on === 'face') {
         var outline = faceOutline(project, record.face, outlines);
         if (!outline) return spec;
-        alongLine([outline[0], outline[1]], SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
-        });
+        path = [outline[0], outline[1]];
       } else if (record.on === 'line') {
-        var points = record.points || [];
-        spec.lines.push(points.map(function (p) { return [p[0], p[1], z]; }));
-        alongLine(points, SYMBOL_SPACING * spec.size).forEach(function (at) {
-          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
+        path = record.points || [];
+        spec.lines.push(path.map(function (p) { return [p[0], p[1], z]; }));
+      }
+      if (path && roller) {
+        // A row of triangles on two wheels, tips on the face or line, pointing along
+        // the component it holds.
+        alongLine(path, SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: true });
         });
+      } else if (path) {
+        var drawn = supportStrips(path, outward, z);
+        spec.strips = drawn.strips;
+        spec.symbols = drawn.symbols;
       } else if (record.on === 'point') {
         var p = (record.points || [[0, 0]])[0];
         spec.symbols.push({ at: [p[0], p[1], z], outward: outward, roller: roller });
@@ -968,7 +1055,7 @@ App.Viewport = (function () {
       return spec;
     }
 
-    // A seepage face: its edge or line, with arrows out of the soil, and the word.
+    // A seepage face: its edge or line, with arrows out of the soil.
     if (record.kind === 'seepage') {
       var path = record.on === 'face'
         ? faceOutline(project, record.face, outlines)
@@ -992,35 +1079,66 @@ App.Viewport = (function () {
           spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
         });
       }
-      var mid = path[Math.floor(path.length / 2)];
-      spec.label = { text: 'seepage', at: [mid[0], mid[1], z] };
       return spec;
     }
 
-    // A water pressure: its level or line, dashed, and what it is.
+    // A water pressure: its level or line, dashed. The symbol carries no words: the
+    // name and the value are in the Model explorer.
     spec.dashed = true;
     var type = record.fluid_pressure_type;
     if (type === 'Hydrostatic' && typeof record.reference_coordinate === 'number') {
       var y = record.reference_coordinate;
       spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
         : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
-      spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
-    } else if (type === 'Phreatic_Multi_Line' && record.x_coordinates) {
+      // On a line or a face (2D), the pressure is on that line only: the line, solid,
+      // and the pressure along it, as a diagram that grows with the depth below the
+      // level, with the deepest pressure beside it.
+      var target = !two ? null
+        : record.on === 'face' ? faceOutline(project, record.face, outlines)
+        : record.on === 'line'
+          ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
+          : null;
+      if (target && target.length > 1 && App.SurfaceWater && App.SurfaceWater.along) {
+        spec.color = CONDITION_PRESSURE_COLOR;
+        var pieces = App.SurfaceWater.along(record, target,
+                                            [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2]);
+        var reach = spec.size * 1.6;
+        var diagram = App.SurfaceWater.glyph(pieces, reach, reach * 1.4);
+        spec.diagram = { path: target, pieces: pieces, glyph: diagram,
+                         text: diagram.deepestAt
+                           ? App.SurfaceWater.pressureText(project, diagram.deepest) : null };
+      }
+    } else if ((type === 'Phreatic_Multi_Line' || type === 'Head_Line')
+               && record.x_coordinates) {
       var zs = record.z_coordinates;
-      spec.lines.push(record.x_coordinates.map(function (x, k) {
+      var waterPath = record.x_coordinates.map(function (x, k) {
         return [x, record.y_coordinates[k], two ? z : (zs ? zs[k] : z)];
-      }));
-      var last = record.x_coordinates.length - 1;
-      spec.label = { text: 'h = ' + record.y_coordinates[last].toFixed(2) + ' m',
-                     at: [record.x_coordinates[last], record.y_coordinates[last], z] };
+      });
+      spec.lines.push(waterPath);
+      // A water line the soils take (`App.BoundaryConditions.waterLines`): in the colour
+      // its soils are filled with in Flow conditions. The phreatic line solid, with the
+      // water-table mark (an inverted triangle) where it starts; a head line dashed, so
+      // the two never read as one another.
+      var BC = App.BoundaryConditions;
+      var list = project.boundary_conditions || [];
+      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list) : null;
+      if (color) {
+        spec.color = color;
+        if (type === 'Phreatic_Multi_Line') {
+          spec.waterLine = 'phreatic';
+          spec.dashed = false;
+          var mark = alongPath(waterPath, 0.15);
+          if (two && mark) spec.symbols.push({ at: mark, outward: [0, 1], waterTable: true });
+        } else {
+          spec.waterLine = 'head';
+        }
+      }
     } else if (type === 'Uniform') {
       var where = record.on === 'face' ? faceOutline(project, record.face, outlines)
         : (record.on === 'line' || record.on === 'point')
           ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
           : null;
       if (where) spec.lines.push(where);
-      var at = where ? where[0] : [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2, z];
-      spec.label = { text: 'p = ' + record.value, at: at };
     }
     return spec;
   }
@@ -1030,7 +1148,8 @@ App.Viewport = (function () {
     var group = new THREE.Group();
     group.name = record.id + '-condition';
     var color = !spec.active ? 0x777777
-      : record.kind === 'displacement' ? SUPPORT_COLOR : WATER_COLOR;
+      : record.kind === 'displacement' ? SUPPORT_COLOR
+      : spec.color ? new THREE.Color(spec.color).getHex() : WATER_COLOR;
 
     spec.lines.forEach(function (points) {
       if (points.length < 1) return;
@@ -1051,58 +1170,122 @@ App.Viewport = (function () {
       group.add(line);
     });
 
-    spec.symbols.forEach(function (symbol) {
-      var s = spec.size;
-      var o = symbol.outward, side = [-o[1], o[0]];
-      var at = symbol.at;
-      function p(along, out) {
+    var s = spec.size;
+    function stroke(points, segments) {
+      var geometry = new THREE.BufferGeometry().setFromPoints(points);
+      var material = new THREE.LineBasicMaterial({ color: color });
+      group.add(segments ? new THREE.LineSegments(geometry, material)
+                         : new THREE.Line(geometry, material));
+    }
+    // A point `along` the side direction and `out` along `o`, from `at`.
+    function frame(at, side, o) {
+      return function (along, out) {
         return new THREE.Vector3(at[0] + side[0] * along + o[0] * out,
                                  at[1] + side[1] * along + o[1] * out, at[2]);
+      };
+    }
+    /* Ground from `from` to `to` at `out`: its line and parallel slashes beyond it,
+       evenly spaced and leaning back, so none sticks out past either end. */
+    function hatchedGround(p, from, to, out) {
+      var count = Math.max(1, Math.round((to - from) / (0.3 * s)));
+      var step = (to - from) / count;
+      var pairs = [p(from, out), p(to, out)];
+      for (var k = 1; k <= count; k += 1) {
+        var u = from + step * k;
+        pairs.push(p(u, out), p(u - step, out + 0.35 * s));
       }
-      function stroke(points, segments) {
-        var geometry = new THREE.BufferGeometry().setFromPoints(points);
-        var material = new THREE.LineBasicMaterial({ color: color });
-        group.add(segments ? new THREE.LineSegments(geometry, material)
-                           : new THREE.Line(geometry, material));
+      stroke(pairs, true);
+    }
+    function wheel(p, along, out, radius) {
+      var ring = [];
+      for (var k = 0; k <= 16; k += 1) {
+        var angle = (k / 16) * Math.PI * 2;
+        ring.push(p(along + Math.cos(angle) * radius, out + Math.sin(angle) * radius));
+      }
+      stroke(ring);
+    }
+
+    spec.strips.forEach(function (strip) {
+      var a = strip.from, b = strip.to;
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!(length > 0)) return;
+      var p = frame(a, [(b[0] - a[0]) / length, (b[1] - a[1]) / length], strip.outward);
+      // Hatched ground on the edge itself, end to end.
+      hatchedGround(p, 0, length, 0);
+    });
+
+    spec.symbols.forEach(function (symbol) {
+      var o = symbol.outward;
+      var p = frame(symbol.at, [-o[1], o[0]], o);
+      if (symbol.waterTable) {
+        // The water table: an inverted triangle standing on the line, and two short
+        // strokes under it.
+        stroke([p(0, 0), p(-0.5 * s, 0.85 * s), p(0.5 * s, 0.85 * s), p(0, 0)]);
+        stroke([p(-0.4 * s, -0.25 * s), p(0.4 * s, -0.25 * s),
+                p(-0.22 * s, -0.5 * s), p(0.22 * s, -0.5 * s)], true);
+        return;
       }
       if (symbol.arrow) {
         // Water leaving the soil: a short arrow pointing out of it.
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
                 p(0.25 * s, 0.7 * s)]);
-      } else if (symbol.roller) {
-        // A triangle on three rollers.
-        stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
-        [-0.34, 0, 0.34].forEach(function (along) {
-          var ring = [];
-          for (var k = 0; k <= 16; k += 1) {
-            var angle = (k / 16) * Math.PI * 2;
-            ring.push(p((along + Math.cos(angle) * 0.14) * s,
-                        (0.94 + Math.sin(angle) * 0.14) * s));
-          }
-          stroke(ring);
-        });
+        return;
+      }
+      // A triangle with its tip on the point.
+      stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
+      if (symbol.roller) {
+        // On two wheels, on hatched ground.
+        wheel(p, -0.25 * s, 0.94 * s, 0.14 * s);
+        wheel(p, 0.25 * s, 0.94 * s, 0.14 * s);
+        hatchedGround(p, -0.7 * s, 0.7 * s, 1.08 * s);
       } else {
-        // The clamp: a stem out to hatched ground.
-        var clamp = [p(0, 0), p(0, 0.7 * s), p(-0.6 * s, 0.7 * s), p(0.6 * s, 0.7 * s)];
-        for (var h = -0.6; h <= 0.31; h += 0.3) {
-          clamp.push(p(h * s, 0.7 * s), p((h + 0.3) * s, 1.05 * s));
-        }
-        stroke(clamp, true);
+        // On hatched ground.
+        hatchedGround(p, -0.7 * s, 0.7 * s, 0.8 * s);
       }
     });
 
-    if (spec.label) {
-      group.add(makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
-                          spec.label.at[2], spec.size * 0.8));
+    // A pressure on a line of its own: the line, thick where the water presses on it,
+    // and the diagram of the pressure filled and hatched, without heads -- a condition
+    // the soil is held to, not a load.
+    var diagramFill = null;
+    if (spec.diagram) {
+      var zd = spec.diagram.path[0][2];
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+        spec.diagram.path.map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); })),
+        new THREE.LineBasicMaterial({ color: color })));
+      spec.diagram.pieces.forEach(function (piece) {
+        group.add(pressureBand(piece, spec.size * 0.3, zd, color));
+      });
+      var tails = spec.diagram.glyph.tails;
+      if (tails.length === spec.diagram.pieces.length && tails.length) {
+        diagramFill = quadsMesh(spec.diagram.pieces.map(function (piece, i) {
+          return [piece.a, piece.b, tails[i][1], tails[i][0]];
+        }), zd, color);
+        group.add(diagramFill);
+      }
+      addPressureDiagram(group, spec.diagram.glyph, zd, color);
+      // Written past the end of the deepest tick.
+      var deep = spec.diagram.glyph.deepestAt;
+      var away = spec.diagram.glyph.deepestInward;
+      if (spec.diagram.text && deep && away) {
+        var off = spec.size * 1.6 + spec.size * 1.2;
+        var label = makeLabel(spec.diagram.text, deep[0] - away[0] * off,
+                              deep[1] - away[1] * off, zd, spec.size * 0.7);
+        // Not over a result: the contours and the legend say what is there (`syncGlyphLabels`).
+        label.userData.glyphLabel = true;
+        label.visible = !(App.state && App.state.mode === 'results');
+        group.add(label);
+      }
     }
     group.traverse(function (child) {
       child.userData.key = record.id;
       if (child.material) {
         child.material.depthTest = false;
         child.material.transparent = true;
-        child.material.opacity = spec.active ? 1 : 0.45;
+        child.material.opacity = (spec.active ? 1 : 0.45) * (child === diagramFill ? 0.3 : 1);
+        if (child === diagramFill) child.material.depthWrite = false;
       }
-      child.renderOrder = 18;
+      child.renderOrder = child === diagramFill ? 17 : 18;
     });
     return group;
   }
@@ -1269,10 +1452,150 @@ App.Viewport = (function () {
     });
   }
 
+  /* ── The water on the ground, in Flow conditions and Staged construction ──
+     Where the phreatic line stands above the soil, the export puts the water's pressure
+     on the wet soil surface under it: fixed there (writer.py `_wet_surface`), and in a
+     mechanical stage as a normal load too (`_water_surface_loads`). Found by
+     `App.SurfaceWater` on the build's sections -- for the stage on screen in Staged
+     construction, for the model as built in Flow conditions -- and drawn as the open
+     water itself, a pale see-through fill up to the phreatic line, with arrows into
+     the soil hanging from that line (on an upright face, longer under deeper water),
+     and the pressure where it is deepest.
+     Lighter than the phreatic line, and filled where the lines are not, so the water,
+     its line and a water pressure condition on a line (indigo, `CONDITION_PRESSURE_COLOR`)
+     do not read as one another. Not a part, so not in `groups`: no eye, no pick, no
+     ghost -- it is rebuilt on every mode pass (`setMode`), in those two tabs only. */
+  var builtSections = null;
+  var surfaceWaterGroup = null;
+  var SURFACE_WATER_COLOR = 0x0288d1;
+  var SURFACE_WATER_FILL = 0x4fc3f7;
+
+  /* The sections of the last build, or null: what the Model explorer reads the water
+     on the ground off (model.js `surfaceWaterStages`). */
+  function sectionsBuilt() { return builtSections; }
+
+  function refreshSurfaceWaterRows() {
+    if (!App.Model || !App.Model.surfaceWaterStages) return;
+    var before = JSON.stringify(App.Model.surfaceWaterStages.last || {});
+    var now = JSON.stringify(App.Model.surfaceWaterStages());
+    if (now === before || !App.Model.rebuildDerived) return;
+    App.Model.rebuildDerived();
+    if (App.Explorer && App.Explorer.mountTree && App.state) {
+      App.Explorer.mountTree(App.state.mode);
+    }
+  }
+
+  function syncSurfaceWater(mode) {
+    if (surfaceWaterGroup) { disposeGroup(surfaceWaterGroup); surfaceWaterGroup = null; }
+    var project = App.PROJECT;
+    if ((mode !== 'staged' && mode !== 'flow') || !scene || !App.SurfaceWater
+        || !builtSections || !project || project.dimension !== 2 || project.deck) return;
+    var pieces = App.SurfaceWater.pieces(project, builtSections,
+                                         mode === 'staged' ? stageHidden() : {});
+    if (!pieces.length) return;
+    var span = modelSpan(project, frame && frame.size);
+    var length = span > 0 ? span * 0.035 : 0.5;
+    // The arrows in the open water hang from the phreatic line down to the ground.
+    var spec = App.SurfaceWater.glyph(pieces, length, length * 1.4,
+                                      App.SurfaceWater.linesOf(project));
+    var z = sectionOffset(project);
+    var group = surfaceWaterGroup = new THREE.Group();
+    group.name = 'surface-water';
+
+    // The open water on the ground, up to its line.
+    var body = App.SurfaceWater.waterBody(pieces);
+    var fill = body.length ? quadsMesh(body, z, SURFACE_WATER_FILL) : null;
+    if (fill) group.add(fill);
+    // Written in the soil, clear of the water line and its mark.
+    var text = spec.deepestAt && App.SurfaceWater.pressureText(project, spec.deepest);
+    if (text) {
+      var into = spec.deepestInward || [0, -1];
+      group.add(makeLabel(text, spec.deepestAt[0] + into[0] * length * 0.7,
+                          spec.deepestAt[1] + into[1] * length * 0.7, z, length * 0.55));
+    }
+
+    spec.arrows.forEach(function (entry) {
+      var direction = new THREE.Vector3(entry.direction[0], entry.direction[1], 0);
+      var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], z);
+      var head = Math.min(length * 0.22, entry.length * 0.6);
+      group.add(new THREE.ArrowHelper(direction,
+                                      tip.clone().addScaledVector(direction, -entry.length),
+                                      entry.length, SURFACE_WATER_COLOR, head, head * 0.6));
+    });
+    group.traverse(function (child) {
+      child.userData.noPick = true;
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.depthWrite = false;
+        child.material.transparent = true;
+        child.material.opacity = child === fill ? 0.22 : 0.7;
+      }
+      child.renderOrder = child === fill ? 15 : 16;
+    });
+    scene.add(group);
+  }
+
+  /* One mesh of quads of [x, y] corners, at `z`: a fill under the lines. */
+  function quadsMesh(quads, z, color) {
+    var positions = [];
+    quads.forEach(function (q) {
+      [0, 1, 2, 0, 2, 3].forEach(function (i) { positions.push(q[i][0], q[i][1], z); });
+    });
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      color: color, side: THREE.DoubleSide }));
+  }
+
+  /* A band `width` wide along a piece of a pressure diagram (`App.SurfaceWater`), on
+     the side its `inward` points to: the stretch the pressure is on. */
+  function pressureBand(piece, width, z, color) {
+    var n = piece.inward, a = piece.a, b = piece.b;
+    var corners = [[a[0], a[1]], [b[0], b[1]],
+                   [b[0] + n[0] * width, b[1] + n[1] * width],
+                   [a[0] + n[0] * width, a[1] + n[1] * width]];
+    var positions = [];
+    [0, 1, 2, 0, 2, 3].forEach(function (i) {
+      positions.push(corners[i][0], corners[i][1], z);
+    });
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      color: color, side: THREE.DoubleSide }));
+  }
+
+  /* A pressure diagram's ticks and outline (`App.SurfaceWater.glyph`), in `group`: from
+     the line out to the outline, without heads, as a water pressure condition has no
+     direction. */
+  function addPressureDiagram(group, spec, z, color) {
+    var ticks = [];
+    spec.arrows.forEach(function (entry) {
+      var tip = entry.tip, n = entry.direction;
+      ticks.push(new THREE.Vector3(tip[0], tip[1], z),
+                 new THREE.Vector3(tip[0] - n[0] * entry.length,
+                                   tip[1] - n[1] * entry.length, z));
+    });
+    if (ticks.length) {
+      group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ticks),
+                                       new THREE.LineBasicMaterial({ color: color })));
+    }
+    spec.tails.forEach(function (points) {
+      group.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points.map(function (p) {
+          return new THREE.Vector3(p[0], p[1], z);
+        })),
+        new THREE.LineBasicMaterial({ color: color })));
+    });
+  }
+
   function buildGroups(payload) {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
     glyphs = [];
+    builtSections = payload.sections;
+    // The Model explorer's water on the ground is read off these sections: a build
+    // that changes it shows there (model.js `surfaceWaterStages`).
+    refreshSurfaceWaterRows();
 
     var cut = lineSeams(payload.sections, App.PROJECT);
     var lineDepth = {};
@@ -1338,10 +1661,13 @@ App.Viewport = (function () {
   function modeLayout(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                       normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
-    // The boundary conditions' symbols: in every mode, each one hidden until it is
-    // shown (the explorer's Show) or selected.
-    var conditions = ((conditionKeys && conditionKeys.supports) || [])
-      .concat((conditionKeys && conditionKeys.water) || []);
+    // The boundary conditions' symbols, each in the tabs it belongs to: the supports
+    // in Soil, Structures and Mesh, the flow conditions (water pressures, seepage
+    // faces) in Flow conditions, both in Staged construction. A row's Hide in the
+    // explorer still hides one, and selecting a row still shows it in any tab.
+    var supports = (conditionKeys && conditionKeys.supports) || [];
+    var flowConditions = (conditionKeys && conditionKeys.water) || [];
+    var conditions = supports.concat(flowConditions);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
     // :112-126), so their keys need to be listed in the modes that show structures.
@@ -1371,11 +1697,11 @@ App.Viewport = (function () {
       // out of structures/mesh so those keep reading as they did.
       return {
         groups: {
-          soil: visibleKeys.concat(conditions, soilFaded),
-          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+          soil: visibleKeys.concat(supports, soilFaded),
+          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, supports),
           // The loads solid, not faded: the mesh is read against where it is loaded.
-          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, conditions),
-          flow: visibleKeys.concat(['water'], conditions, flowFaded),
+          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, supports),
+          flow: visibleKeys.concat(['water'], flowConditions, flowFaded),
           // Loads too: Staged construction is where a load is switched on and
           // off, so it has to be on screen there (`stageHidden` still hides one
           // the selected stage has switched off).
@@ -1390,12 +1716,12 @@ App.Viewport = (function () {
     flowFaded = ['struts', 'anchors', 'piles'].concat(loadKeys, memberKeys, contactKeys);
     return {
       groups: {
-        soil:       soilKeys.concat(conditions, soilFaded),
+        soil:       soilKeys.concat(supports, soilFaded),
         structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                    loadKeys, memberKeys, contactKeys, customKeys, conditions),
+                                    loadKeys, memberKeys, contactKeys, customKeys, supports),
         mesh:       ['mesh', 'wall'].concat(loadKeys, memberKeys, contactKeys, customKeys,
-                                            conditions),
-        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions,
+                                            supports),
+        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, flowConditions,
                                     flowFaded),
         staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
                       .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
@@ -1424,8 +1750,12 @@ App.Viewport = (function () {
 
   function rebuildModeGroups() {
     soilKeys = soilKeysOf(App.PROJECT, App.LAYERS);
+    // A part a line cut is drawn as its pieces, which are soil keys (`<part>__<id>`).
     var customKeys = ((App.PROJECT && App.PROJECT.custom_parts) || [])
-      .map(function (p) { return p.key; });
+      .map(function (p) { return p.key; })
+      .filter(function (key) {
+        return !soilKeys.some(function (soil) { return soil.split('__')[0] === key; });
+      });
     var loadKeys = ((App.PROJECT && App.PROJECT.loads) || []).filter(function (load) {
       return !App.Loads || App.Loads.compatible(load, App.PROJECT);
     }).map(function (load) { return load.id; });
@@ -1703,18 +2033,23 @@ App.Viewport = (function () {
   /* Canvas-texture text label facing the camera. */
   function makeLabel(text, x, y, z, scale) {
     var c = document.createElement('canvas');
-    c.width = 256; c.height = 64;
+    var font = 'bold 40px Segoe UI, Arial, sans-serif';
     var ctx = c.getContext('2d');
-    ctx.font = 'bold 40px Segoe UI, Arial, sans-serif';
+    ctx.font = font;
+    // Wide enough for the text: a water line's label carries its name as well as its
+    // level. 256 px (four heights) at the least, as every label was before.
+    var width = Math.max(256, Math.ceil(ctx.measureText(text).width) + 16);
+    c.width = width; c.height = 64;
+    ctx.font = font;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(255,255,255,.92)';
-    ctx.strokeText(text, 128, 34);
+    ctx.strokeText(text, width / 2, 34);
     ctx.fillStyle = '#1d2430';
-    ctx.fillText(text, 128, 34);
+    ctx.fillText(text, width / 2, 34);
     var tex = new THREE.CanvasTexture(c);
     tex.minFilter = THREE.LinearFilter;
     var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-    sp.scale.set(4 * (scale || 1), 1 * (scale || 1), 1);
+    sp.scale.set(4 * (width / 256) * (scale || 1), 1 * (scale || 1), 1);
     sp.position.set(x, y, z);
     sp.userData.noPick = true;
     sp.userData.pictureText = { text: text, fraction: 40 / 64, color: 0x1d2430, halo: true,
@@ -1790,10 +2125,16 @@ App.Viewport = (function () {
         rebuildFrame(payload.bbox);
         buildGroups(payload);
         rebuildHome(payload.bbox);
+        // An edit the mesher never sees (a stage, a material, the name) leaves the mesh
+        // as it was, so it is drawn again and the Mesh tab still shows it. Any other
+        // edit drops it: a mesh of the old model would be a wrong picture of this one.
+        var keepMesh = meshBuilt && meshShown !== null && meshShown.key === currentMeshKey();
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
         forgetNodeParts();
+        if (keepMesh) drawMesh(meshShown.result);
+        else meshShown = null;
         refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -1803,6 +2144,8 @@ App.Viewport = (function () {
              + triangles.toLocaleString('en-GB') + ' display triangles.');
 
         ui.hide();
+        // A kept mesh is numbered again, after this overlay: see generateMesh.
+        if (keepMesh && App.MeshLabels && App.MeshLabels.anyActive()) renumberLabels();
         // Re-mounts the tree and the property grid against the new layer list.
         App.setMode(App.state.mode);
         setProjection(dimension === 2 ? false : App.state.projection !== false);
@@ -2481,8 +2824,109 @@ App.Viewport = (function () {
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
     // A stage may have switched a part off, and a coloured part follows that.
     syncPartColors();
+    applySoilWaterColors(mode);
     applyImportedVisibility(mode);
+    syncSurfaceWater(mode);
+    syncGlyphLabels(mode);
+    // The numbers follow what this tab draws: gone where the mesh is not, back where
+    // it is. Only a change of tab asks the server for a missing numbering: a redraw
+    // in the same tab comes from generateMesh or a rebuild, which ask for it
+    // themselves once their own progress overlay is down.
+    var tabChanged = mode !== labelledMode;
+    labelledMode = mode;
+    if (labelsOn()) {
+      if (tabChanged) renumberLabels();
+      else refreshLabels();
+    }
     needsRender = true;
+  }
+
+  /* The tab the labels were last gathered for (setMode). */
+  var labelledMode = null;
+
+  /* The text a condition's glyph carries (its level, its value) is drawn in every tab
+     but Results, where it would sit over the contours as a box of text. */
+  function syncGlyphLabels(mode) {
+    conditionIds.forEach(function (key) {
+      if (!groups[key]) return;
+      groups[key].traverse(function (child) {
+        if (child.userData.glyphLabel) child.visible = mode !== 'results';
+      });
+    });
+  }
+
+  /* ── The water of each soil, in Flow conditions ─────────────────────────
+     Each soil is filled with a tint of the water line it takes
+     (`App.BoundaryConditions.soilWaterColors`): the phreatic line's blue, a head line's
+     own colour, the interpolated amber. Only in that tab; every other tab, and a
+     project with no water line, keeps the soils in their own colours. The legend over
+     the viewport says which colour is which. */
+  function soilWaterKeys() {
+    return soilKeys.concat(((App.PROJECT && App.PROJECT.custom_parts) || [])
+      .filter(function (part) { return part.mat && soilKeys.indexOf(part.key) < 0; })
+      .map(function (part) { return part.key; }));
+  }
+
+  function applySoilWaterColors(mode) {
+    var BC = App.BoundaryConditions;
+    var keys = soilWaterKeys();
+    var colors = mode === 'flow' && App.PROJECT && !App.PROJECT.deck && BC
+      && BC.soilWaterColors ? BC.soilWaterColors(App.PROJECT, keys) : null;
+    keys.forEach(function (key) {
+      var g = groups[key];
+      if (!g) return;
+      var fill = colors && colors[key] ? colors[key].fill : null;
+      g.children.forEach(function (o) {
+        var m = o.isMesh && o.material;
+        if (!m || Array.isArray(m) || !m.color || (m.userData && m.userData.glyph)) return;
+        if (!m.userData.soilBase) m.userData.soilBase = m.color.clone();
+        if (fill) m.color.set(fill); else m.color.copy(m.userData.soilBase);
+      });
+    });
+    syncWaterLegend(colors ? BC.waterLegend(App.PROJECT, keys) : []);
+  }
+
+  var waterLegendHost = null;
+
+  function syncWaterLegend(rows) {
+    if (!rows.length) {
+      if (waterLegendHost) waterLegendHost.hidden = true;
+      return;
+    }
+    var parent = typeof document === 'undefined' ? null : document.getElementById('viewport');
+    if (!parent) return;
+    if (!waterLegendHost) {
+      waterLegendHost = document.createElement('div');
+      waterLegendHost.id = 'vp-water-legend';
+      waterLegendHost.className = 'vp-hud vp-water-legend';
+    }
+    if (waterLegendHost.parentNode !== parent) parent.appendChild(waterLegendHost);
+    waterLegendHost.hidden = false;
+    waterLegendHost.textContent = '';
+    var title = document.createElement('div');
+    title.className = 'vp-water-legend-title';
+    title.textContent = 'Soil water';
+    waterLegendHost.appendChild(title);
+    rows.forEach(function (row) {
+      var item = document.createElement('div');
+      item.className = 'vp-water-legend-row';
+      var swatch = document.createElement('i');
+      swatch.className = 'vp-water-legend-swatch';
+      swatch.style.background = row.fill;
+      swatch.style.borderColor = row.color;
+      if (row.line) {
+        var stroke = document.createElement('b');
+        stroke.className = 'vp-water-legend-line ' + row.line;
+        stroke.style.borderTopColor = row.color;
+        swatch.appendChild(stroke);
+      }
+      var text = document.createElement('span');
+      text.textContent = row.label;
+      text.title = row.label;
+      item.appendChild(swatch);
+      item.appendChild(text);
+      waterLegendHost.appendChild(item);
+    });
   }
 
   /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
@@ -2591,11 +3035,17 @@ App.Viewport = (function () {
   /* Everything currently on screen that has a number, for one kind of label. An
      imported deck brings its own numbering with it, section by section, so a part the
      eye is closed on is not labelled; a generated mesh's has to be asked for, so it only
-     joins in once `generatedLabels` has arrived. */
+     joins in once `generatedLabels` has arrived, and only while that mesh is drawn --
+     Structures and the other tabs that draw the geometry show no numbers for a mesh
+     they do not show. Results numbers the result mesh it draws (App.ResultsView). */
   function labelledPoints(kind) {
     var list = [];
     if (!App.MeshLabels) return list;
-    if (importedMeshGroup) {
+    if (App.state && App.state.mode === 'results') {
+      return App.ResultsView && App.ResultsView.labelPoints
+        ? App.ResultsView.labelPoints(kind) : list;
+    }
+    if (importedMeshGroup && importedMeshGroup.visible) {
       var sections = Object.keys(importedSectionLabels)
         .filter(function (key) {
           var group = importedSectionGroups[key];
@@ -2606,10 +3056,15 @@ App.Viewport = (function () {
         ? App.MeshLabels.elementsFromSections(sections)
         : App.MeshLabels.nodesFromSections(sections));
     }
-    if (generatedLabels && meshBuilt && visible.mesh !== false) {
+    if (generatedLabels && meshDrawn()) {
       list = list.concat(App.MeshLabels.pointsFromTable(generatedLabels[kind]));
     }
     return list;
+  }
+
+  /* The generated mesh is on screen: built, its eye open, and drawn by this tab. */
+  function meshDrawn() {
+    return meshBuilt && visible.mesh !== false && !!groups.mesh && groups.mesh.visible;
   }
 
   /* Re-gather without re-asking the server: called whenever what is drawn changes. Only
@@ -2627,7 +3082,7 @@ App.Viewport = (function () {
      needs asking, and only once: the numbering costs a full export pass, and nothing but
      a new mesh can change it. */
   function needsNumbering() {
-    return meshBuilt && visible.mesh !== false && !generatedLabels;
+    return meshDrawn() && !generatedLabels;
   }
 
   /* Fetch both tables at once. They come out of one export pass on the server, so asking
@@ -2739,55 +3194,43 @@ App.Viewport = (function () {
     });
   }
 
+  /* The mesh on screen, as the server sent it, with the key of what it was made from
+     (`App.MeshSettings.meshKey`). refresh() draws it again when the key still fits. */
+  var meshShown = null;
+  /* The key of the mesh the last calculation made on the server, or null. */
+  var calculatedKey = null;
+
+  function currentMeshKey() {
+    if (!App.MeshSettings || !App.MeshSettings.meshKey) return null;
+    return App.MeshSettings.meshKey(App.PROJECT, meshSettings());
+  }
+
+  /* A calculation meshes the model on the server. Its key is kept so the Mesh tab can
+     show that mesh later without asking for settings (js/calculate.js). */
+  function rememberCalculatedMesh(key) { calculatedKey = key || null; }
+
+  /* True when there is no mesh on screen, but the last calculation made one for the
+     model as it is now. */
+  function calculatedMeshFits() {
+    return !meshBuilt && calculatedKey !== null && calculatedKey === currentMeshKey();
+  }
+
   function generateMesh(done) {
     var ui = overlay();
     ui.show('Meshing with gmsh…', 20);
 
     var settings = meshSettings();
+    var key = currentMeshKey();
     App.Api.post('/api/mesh', settings).then(function (result) {
       ui.show('Uploading mesh…', 90);
-
-      disposeGroup(groups.mesh);
-      groups.mesh = new THREE.Group();
-      groups.mesh.name = 'mesh';
-      result.sections.forEach(function (section) {
-        var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
-          color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
-          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-        }));
-        mesh.material.userData = { base: mesh.material.emissive.clone() };
-        mesh.userData.key = 'mesh';
-        groups.mesh.add(mesh);
-
-        var wire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(mesh.geometry),
-          new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
-        );
-        wire.userData.noPick = true;
-        groups.mesh.add(wire);
-      });
-      buildPartColors(result.parts || []);
-      scene.add(groups.mesh);
-      if (!(('mesh') in visible)) visible.mesh = true;
-
-      meshBuilt = true;
-      // Different mesh, different nodes: whatever was numbered before is now numbering
-      // a mesh that no longer exists.
-      generatedLabels = null;
-      forgetNodeParts();
-      App.MESH_STATS = result.stats;
-      if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+      drawMesh(result);
+      meshShown = { key: key, result: result };
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
         .slice(-5).forEach(function (line) {
           if (/error/i.test(line) && App.Command.err) App.Command.err(line);
           else note(line);
         });
       ui.hide();
-      setMode(App.state.mode);
-      // The Model explorer's colour toggles are only drawn for parts that have mesh
-      // elements, so the tree is mounted again now that there are some.
-      if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
-      needsRender = true;
       // Last, and only if the numbers are on screen: re-numbering means a second trip
       // to the server with its own progress overlay, which must not start under this
       // one's.
@@ -2800,6 +3243,45 @@ App.Viewport = (function () {
     });
   }
 
+  /* Put a mesh from `POST /api/mesh` on screen, in place of the one there was. */
+  function drawMesh(result) {
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    result.sections.forEach(function (section) {
+      var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
+        color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+      }));
+      mesh.material.userData = { base: mesh.material.emissive.clone() };
+      mesh.userData.key = 'mesh';
+      groups.mesh.add(mesh);
+
+      var wire = new THREE.LineSegments(
+        new THREE.WireframeGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
+      );
+      wire.userData.noPick = true;
+      groups.mesh.add(wire);
+    });
+    buildPartColors(result.parts || []);
+    scene.add(groups.mesh);
+    if (!(('mesh') in visible)) visible.mesh = true;
+
+    meshBuilt = true;
+    // Different mesh, different nodes: whatever was numbered before is now numbering
+    // a mesh that no longer exists.
+    generatedLabels = null;
+    forgetNodeParts();
+    App.MESH_STATS = result.stats;
+    if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are only drawn for parts that have mesh
+    // elements, so the tree is mounted again now that there are some.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+  }
+
   function hasMesh() { return meshBuilt; }
 
   /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
@@ -2808,6 +3290,10 @@ App.Viewport = (function () {
      the local sizes stay in the project, so Generate mesh makes the same mesh again.
      False when there was no mesh to clear. */
   function clearMesh() {
+    // A mesh cleared on purpose stays cleared: the Mesh tab must not bring back the
+    // calculation's one.
+    meshShown = null;
+    calculatedKey = null;
     if (!meshBuilt) return false;
     disposeGroup(groups.mesh);
     groups.mesh = new THREE.Group();
@@ -3643,6 +4129,7 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
+    builtSections: sectionsBuilt,
     select: select, selectedKey: selectedKey, modelTabs: modelTabs,
     setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
@@ -3662,7 +4149,8 @@ App.Viewport = (function () {
     WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, meshRefinements: meshRefinements,
     hasMesh: hasMesh, resize: resize,
-    meshSettings: meshSettings,
+    meshSettings: meshSettings, meshKey: currentMeshKey,
+    rememberCalculatedMesh: rememberCalculatedMesh, calculatedMeshFits: calculatedMeshFits,
     setLabels: setLabels, labelsOn: labelsOn,
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
@@ -3693,6 +4181,7 @@ App.Viewport = (function () {
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
+    alongPath: alongPath,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
     applyStageVisibility: applyStageVisibility, stageGhosts: stageGhosts,
     normalLoadGlyphSpec: normalLoadGlyphSpec,

@@ -1106,6 +1106,432 @@
     });
   });
 
+  /* ── The zero water pressure line ─────────────────────────────────────── */
+
+  /* A run whose stages solved `calculation`, and a stage catalogue with a water
+     pressure in it to trace the line on. */
+  function showingWater(calculation, withPressure) {
+    var detail = JSON.parse(JSON.stringify(DETAIL));
+    detail.stages.forEach(function (s) { s.calculation = calculation; });
+    var answers = {};
+    answers['/api/results/runs/' + DETAIL.id] = detail;
+    setup(answers);
+    viewing();
+    var catalogue = JSON.parse(JSON.stringify(CATALOGUE));
+    if (withPressure !== false) {
+      catalogue.groups.push({ name: 'Groundwater', fields: [
+        { name: 'pw', label: 'Pore pressure', unit: 'kPa', locations: ['nodes'] }] });
+    }
+    var below = App.Api.get;
+    App.Api.get = function (path) {
+      if (/\/stages\/\d+\/fields$/.test(path)) {
+        api.calls.push(path);
+        return Promise.resolve(catalogue);
+      }
+      return below(path);
+    };
+    return App.Results.handleCommand('results open ' + DETAIL.id);
+  }
+
+  function pressureCalls() {
+    return api.calls.filter(function (path) { return /\/field\/pw\?/.test(path); });
+  }
+
+  test('after a flow stage the zero pressure line is drawn without being asked for',
+       function () {
+    return showingWater('flow').then(function () {
+      var last = drawn[drawn.length - 1];
+      T.eq(last.field.field, 'uy', 'the field on screen is still the default one');
+      T.ok(last.pressure, 'the water pressure travels with the payload');
+      T.eq(last.pressure.field, 'pw');
+      T.eq(pressureCalls(), ['/api/results/runs/' + DETAIL.id
+                             + '/stages/2/field/pw?location=nodes']);
+      T.eq(App.Results.options().zeroLine, false, 'the coupled setting is left alone');
+      T.eq(App.Results.state().calculation, 'flow');
+    });
+  });
+
+  test('a flow stage draws the line even with the coupled setting off', function () {
+    return showingWater('flow').then(function () {
+      return App.Results.handleCommand('results zeroline off');
+    }).then(function () {
+      T.ok(drawn[drawn.length - 1].pressure, 'still drawn');
+    });
+  });
+
+  test('after a coupled stage the zero pressure line is off until it is asked for',
+       function () {
+    return showingWater('mechanical').then(function () {
+      T.eq(drawn[drawn.length - 1].pressure, null, 'not drawn by default');
+      T.eq(pressureCalls().length, 0, 'and not fetched either');
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(App.Results.options().zeroLine, true);
+      T.eq(drawn[drawn.length - 1].pressure.field, 'pw');
+      T.ok(log.some(function (line) { return /zero pressure line on/.test(line[1]); }),
+           'the settings line says so');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.ok(drawn[drawn.length - 1].pressure, 'kept on from one stage to the next');
+      T.eq(pressureCalls().length, 2, 'fetched once per stage');
+      return App.Results.handleCommand('results zeroline');
+    }).then(function () {
+      T.eq(App.Results.options().zeroLine, false, 'a bare `results zeroline` toggles');
+      T.eq(drawn[drawn.length - 1].pressure, null);
+      App.Results.handleCommand('results zeroline on');
+      App.Results.forget();
+      T.eq(App.Results.options().zeroLine, false, 'off again for the next project');
+    });
+  });
+
+  test('the zero pressure line reuses the pore pressure when that is the field shown',
+       function () {
+    return showingWater('mechanical').then(function () {
+      return App.Results.handleCommand('results field pw');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'the field itself');
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'the line is traced on the field already here');
+      T.eq(drawn[drawn.length - 1].pressure, App.Results.field());
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'a display option fetches nothing again');
+      T.ok(drawn[drawn.length - 1].pressure);
+    });
+  });
+
+  test('a stage with no water pressure has no zero pressure line', function () {
+    return showingWater('flow', false).then(function () {
+      T.eq(drawn[drawn.length - 1].pressure, null);
+      T.eq(pressureCalls().length, 0);
+      T.eq(App.Results.state().pressure, false);
+      T.eq(App.Results.zeroLineShown(), false);
+    });
+  });
+
+  test('a run that does not say what it solved is treated as coupled', function () {
+    /* A run directory from before stages carried their calculation type. */
+    return showingWater(undefined).then(function () {
+      T.eq(App.Results.state().calculation, null);
+      T.eq(drawn[drawn.length - 1].pressure, null);
+    });
+  });
+
+  test('a pressure the server cannot send draws no line rather than an error', function () {
+    return showingWater('mechanical').then(function () {
+      var below = App.Api.get;
+      App.Api.get = function (path) {
+        if (/\/field\/pw\?/.test(path)) {
+          api.calls.push(path);
+          return Promise.reject(new Error('gone'));
+        }
+        return below(path);
+      };
+      log = [];
+      return App.Results.handleCommand('results zeroline on');
+    }).then(function () {
+      T.eq(pressureCalls().length, 1, 'it was asked for');
+      var last = drawn[drawn.length - 1];
+      T.eq(last.pressure, null, 'no line');
+      T.eq(last.field.field, 'uy', 'the contour is still drawn');
+      T.eq(lines('err'), [], 'and nothing is reported as failed');
+    });
+  });
+
+  test('the zero line carries the phreatic lines of the open project for the stage shown',
+       function () {
+    /* The open project is the one the run was made from: same deck name, same stages. */
+    var saved = { project: App.PROJECT, stages: App.Stages, water: App.SurfaceWater };
+    var asked = [];
+    App.PROJECT = { name: 'Staged excavation', dimension: 2,
+                    stages: [{ id: 's1', name: 'Initial stage' },
+                             { id: 's2', name: 'First excavation' }] };
+    App.Stages = {
+      order: function (project) { return project.stages; },
+      hiddenKeys: function (project, stage, kind) {
+        asked.push([stage, kind]);
+        return ['excavated'];
+      }
+    };
+    App.SurfaceWater = {
+      waters: function (project, hidden) {
+        asked.push(hidden);
+        return [{ x_coordinates: [0, 10, 20], y_coordinates: [-2, -3, -3] }];
+      }
+    };
+    function restore() {
+      App.PROJECT = saved.project;
+      App.Stages = saved.stages;
+      App.SurfaceWater = saved.water;
+    }
+    return showingWater('flow').then(function () {
+      var last = drawn[drawn.length - 1];
+      T.ok(last.pressure, 'the line is on');
+      T.eq(last.phreatic, [[[0, -2], [10, -3], [20, -3]]], 'as [x, y] polylines');
+      T.eq(asked[0], ['s2', 'staged'], "the stage on screen's own id");
+      T.eq(asked[1], { excavated: true }, 'with what that stage takes away left out');
+      App.PROJECT = Object.assign({}, App.PROJECT, { name: 'Another project' });
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].phreatic, [], "another project's water says nothing");
+      restore();
+    }, function (error) {
+      restore();
+      throw error;
+    });
+  });
+
+  /* ── Saved pictures: walking the stages and fields ───────────────────── */
+
+  test('the field names are every field the stage offers, in menu order', function () {
+    return showing().then(function () {
+      T.eq(App.Results.fieldNames(), ['u', 'uy', 'p']);
+    });
+  });
+
+  test('show moves to a stage and field without a line in the log for each', function () {
+    return showing().then(function () {
+      log = [];
+      return App.Results.show(1, 'p');
+    }).then(function () {
+      T.eq(App.Results.stage(), 1);
+      T.eq(App.Results.field().field, 'p');
+      T.eq(lines('ok'), [], 'quiet');
+      return App.Results.show(1, 'p');
+    }).then(function (answer) {
+      T.eq(answer, null, 'already there: nothing to do');
+      return App.Results.show(1);
+    }).then(function (answer) {
+      T.eq(answer, null, 'no field named: the stage alone');
+    });
+  });
+
+  /* ── Integration points: per element or averaged to the nodes ────────── */
+
+  function fieldCalls(name) {
+    return api.calls.filter(function (path) {
+      return path.indexOf('/field/' + name + '?') !== -1;
+    });
+  }
+
+  test('an integration-point field is drawn per element until asked otherwise',
+       function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'elements');
+      T.eq(App.Results.state().integration, 'elements');
+      T.eq(App.Results.state().integrationField, true);
+      T.ok(said('per element'), lines().join(' | '));
+    });
+  });
+
+  test('results location nodes redraws the field averaged to the nodes, and keeps it',
+       function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      return App.Results.handleCommand('results location nodes');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+      T.ok(/location=nodes$/.test(fieldCalls('p').pop()));
+      T.ok(said('averaged to the nodes'), lines().join(' | '));
+      // A nodal field in between, then back: still averaged to the nodes.
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.state().integrationField, false, 'u_y is nodal only');
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes', 'and from one stage to the next');
+      App.Results.forget();
+      T.eq(App.Results.options().location, 'elements', 'per element for the next project');
+    });
+  });
+
+  test('a location typed with the field is the choice for the next one too', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field p nodes');
+    }).then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      return App.Results.handleCommand('results field p');
+    }).then(function () {
+      T.eq(App.Results.location(), 'nodes');
+    });
+  });
+
+  test('results location with a nodal field on screen is remembered, not refused',
+       function () {
+    return showing().then(function () {
+      api.calls = [];
+      return App.Results.handleCommand('results location nodes');
+    }).then(function () {
+      T.eq(App.Results.options().location, 'nodes');
+      T.eq(fieldCalls('uy').length, 0, 'u_y is not fetched again');
+      T.eq(lines('err').length, 0);
+      return App.Results.handleCommand('results location sideways');
+    }).then(function () {
+      T.ok(said('Usage: results location'));
+    });
+  });
+
+  /* ── Arrows ───────────────────────────────────────────────────────────── */
+
+  var VECTORS = { field: 'flux', label: '|q|', unit: 'm/s', source: 'FLUID_FLUX_VECTOR',
+                  ids: [1, 2, 3], values: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], max: 1 };
+
+  /* The default catalogue, with the flux and the head of a flow stage. */
+  function showingFlow() {
+    setup();
+    viewing();
+    var catalogue = JSON.parse(JSON.stringify(CATALOGUE));
+    catalogue.groups[0].fields.forEach(function (entry) { entry.vector = 'u'; });
+    catalogue.groups.push({ name: 'Water pressure and head', fields: [
+      { name: 'head', label: 'Hydraulic head', unit: 'm',
+        locations: ['elements', 'nodes'] }] });
+    catalogue.groups.push({ name: 'Groundwater flow', fields: [
+      { name: 'flux', label: '|q|', unit: 'm/s', locations: ['nodes'], vector: 'flux' },
+      { name: 'fluxx', label: 'q_x', unit: 'm/s', locations: ['nodes'], vector: 'flux' },
+      { name: 'flow_rate', label: 'Nodal water flow rate (+ out)', unit: 'm³/s/m',
+        locations: ['nodes'] }] });
+    var below = App.Api.get;
+    App.Api.get = function (path) {
+      if (/\/stages\/\d+\/fields$/.test(path)) {
+        api.calls.push(path);
+        return Promise.resolve(catalogue);
+      }
+      if (/\/vectors\//.test(path)) {
+        api.calls.push(path);
+        var name = decodeURIComponent(path.split('/vectors/')[1]);
+        return Promise.resolve(Object.assign({}, VECTORS, { field: name }));
+      }
+      if (/\/field\/flow_rate\?/.test(path)) {
+        api.calls.push(path);
+        var rate = FIELD('flow_rate', 'm³/s/m');
+        rate.totals = { positive: 2.4e-5, negative: -2.4e-5, net: 0 };
+        return Promise.resolve(rate);
+      }
+      return below(path);
+    };
+    return App.Results.handleCommand('results open ' + DETAIL.id);
+  }
+
+  function vectorCalls() {
+    return api.calls.filter(function (path) { return /\/vectors\//.test(path); });
+  }
+
+  test('no arrows are drawn, or fetched, until they are asked for', function () {
+    return showingFlow().then(function () {
+      T.eq(drawn[drawn.length - 1].vectors, null);
+      T.eq(vectorCalls().length, 0);
+      T.eq(App.Results.state().vectors.map(function (v) { return v.name; }),
+           ['u', 'flux'], 'one entry per vector, in menu order');
+    });
+  });
+
+  test('results arrows on picks the vector of the field on screen', function () {
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field fluxx');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows on');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, 'flux', 'a vector, not "the field on screen"');
+      T.eq(App.Results.state().arrowsOf, 'flux');
+      T.eq(vectorCalls(), ['/api/results/runs/' + DETAIL.id + '/stages/2/vectors/flux']);
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux');
+      return App.Results.handleCommand('results bands 8');
+    }).then(function () {
+      T.eq(vectorCalls().length, 1, 'a display option fetches nothing again');
+      T.ok(drawn[drawn.length - 1].vectors);
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux', 'kept when the field changes');
+    });
+  });
+
+  test('results arrows <field> draws that vector over whatever is shaded', function () {
+    /* The flow net: the head shaded, the flux as arrows over it. */
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field head');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows flux');
+    }).then(function () {
+      var last = drawn[drawn.length - 1];
+      T.eq(last.field.field, 'head');
+      T.eq(last.vectors.field, 'flux');
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors.field, 'flux', 'kept from stage to stage');
+      T.eq(vectorCalls().length, 2, 'fetched once per stage');
+      return App.Results.handleCommand('results arrows off');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].vectors, null);
+    });
+  });
+
+  test('results arrows on over a field that is not a vector picks the first vector',
+       function () {
+    return showingFlow().then(function () {
+      return App.Results.handleCommand('results field head');
+    }).then(function () {
+      return App.Results.handleCommand('results arrows');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, 'u', 'a bare `results arrows` toggles on');
+      T.eq(drawn[drawn.length - 1].vectors.field, 'u');
+      return App.Results.handleCommand('results arrows');
+    }).then(function () {
+      T.eq(App.Results.options().arrows, null, 'and off again');
+      T.eq(drawn[drawn.length - 1].vectors, null);
+    });
+  });
+
+  test('vectors the server cannot send draw no arrows rather than an error', function () {
+    return showingFlow().then(function () {
+      var below = App.Api.get;
+      App.Api.get = function (path) {
+        if (/\/vectors\//.test(path)) {
+          api.calls.push(path);
+          return Promise.reject(new Error('gone'));
+        }
+        return below(path);
+      };
+      log = [];
+      return App.Results.handleCommand('results arrows flux');
+    }).then(function () {
+      T.eq(vectorCalls().length, 1, 'they were asked for');
+      var last = drawn[drawn.length - 1];
+      T.eq(last.vectors, null, 'no arrows');
+      T.ok(last.field, 'the contour is still drawn');
+      T.eq(lines('err'), [], 'and nothing is reported as failed');
+    });
+  });
+
+  test('results arrows refuses a field that is not part of a vector', function () {
+    return showingFlow().then(function () {
+      log = [];
+      return App.Results.handleCommand('results arrows head');
+    }).then(function () {
+      T.ok(said('not part of a vector'), lines().join(' | '));
+      T.ok(said('u, flux'), 'and names the ones that are');
+      T.eq(App.Results.options().arrows, null);
+    });
+  });
+
+  test('the nodal water flow rate says what comes in and what goes out', function () {
+    return showingFlow().then(function () {
+      log = [];
+      return App.Results.handleCommand('results field flow_rate');
+    }).then(function () {
+      T.ok(said('Out 2.40e-5'), lines().join(' | '));
+      T.ok(said('in 2.40e-5'));
+      T.ok(said('out − in 0 '));
+    });
+  });
+
   test('the mesh setting is kept from one stage to the next', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results mesh on');

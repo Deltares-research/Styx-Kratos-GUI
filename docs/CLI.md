@@ -25,6 +25,8 @@ uses `.venv-windows`, as `kratos-cli.bat` does, so a shell script of commands ru
 
 `kratos-cli <command> --help` lists what each command takes. `kratos-cli --version` says
 which version of Styx you have, as **Help > About** does in the GUI. Give it in a bug report.
+`kratos-cli --help` ends with the address of the Kratos GeoMechanics user documentation,
+the page that **Help > Kratos documentation** opens in the GUI.
 
 ## From an empty site to results
 
@@ -70,17 +72,18 @@ Genuchten soil.
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
-| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
-| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
+| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last. In the GUI: **File** > **Project properties…** |
+| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset clay_shallow] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
-| `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
+| `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
+| `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
 | `wall P list\|add\|set\|remove ...` | Walls, in 3D: `add [ID] [--footprint x z ...] [--top Y] [--toe Y]` |
 | `member P list\|add\|set\|remove ...` | Piles, king posts and struts in 3D: `add [ID] [--points x y z ...]` |
-| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
+| `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--head-end free\|fixed] [--tail-end free\|fixed] [--prestress S]`, a free head snapped onto a structure within 1 m, else in the soil |
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
@@ -166,8 +169,9 @@ An empty site, built up to a staged excavation. The numbers are in the project's
 kratos-cli new pit.json --name "Pit B"
 kratos-cli domain pit.json --x 0 60 --y -40 0 --z 0 10
 kratos-cli material pit.json presets                      # the library a soil can start from
-kratos-cli material pit.json add clay --preset m3 YOUNG_MODULUS=2e6 K0_NC=0.58
-kratos-cli material pit.json add sand --preset m5 --model mohr-coulomb
+kratos-cli material pit.json presets clay_shallow         # one preset with all its values
+kratos-cli material pit.json add clay --preset clay_shallow YOUNG_MODULUS=2e6 K0_NC=0.58
+kratos-cli material pit.json add sand --preset sand --model linear-elastic
 kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
@@ -189,7 +193,10 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
 - **Materials** start as the GUI's **Create soil** starts them: linear elastic,
   `CONSTANT_PW_FIELD` and saturated below the phreatic level, with nothing else; the command
   lists what is still to fill in before a calculation. Or from a library preset
-  (`--preset`). The law follows the model's dimension, and the values are converted into
+  (`--preset`): the default soils of D-Stability and D-Settlement, each a Mohr-Coulomb
+  soil (Bedrock linear elastic). `--model` adds a preset as the other soil model: a
+  linear elastic soil leaves out the strength, and a Mohr-Coulomb Bedrock takes the
+  model's default strength, which the command names. The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
   units; `get P materials[ID].variables` lists the values a material has.
   `GEO_DRAINAGE_TYPE` is `CONSTANT_PW_FIELD` (the GUI's "Mechanical only") or
@@ -218,9 +225,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   values a choice can take and when a parameter is used. `--law` is for any other law,
   for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
   given together.
-- **Lines** split the soil. Where a line crosses a layer from one edge to another, the
-  layer becomes separate soil bodies, and each is a SubModelPart that a stage can switch
-  off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
+- **Lines** split the soil. Where a line crosses a layer or a soil surface from one edge to
+  another, it becomes separate soil bodies, and each is a SubModelPart that a stage can
+  switch off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
   a line that ends inside the soil splits nothing, and the command says so when no part of
   the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
   cuts across the whole z range; it is drawn in 2D. The commands are in
@@ -233,17 +240,43 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   names each of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
   its material in every stage. `layer set --material` gives every body of that layer the
-  new material, also a body given one of its own. In a model script, `lines=` and
-  `bodies=` say the same. A record
+  new material, also a body given one of its own. `body remove KEY` deletes one body: no
+  soil is left there, the other bodies of the layer stay, and the stages stop naming it.
+  Its record stays with `removed: true`, so it stays deleted when the lines change; it
+  comes back when no line cuts it off any more. The last body of a layer is the whole
+  layer, so `layer remove` deletes it. `body list` labels a body by its own name, or by
+  its layer's name and `Part 1`, ... while it has the name it was given. In a model
+  script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
+
+  A soil surface that a line cuts is split by the same rules. Each piece is
+  `<surface>__<id>`, for example `drawn_0__part1`, and its record names the surface with
+  `part="drawn_0"` in place of `layer=`. A stage, a mesh size or a condition on the whole
+  surface `drawn_0` means each of its pieces. `surface set drawn_0 --material M` gives every
+  piece the new material, and `body set --material layer` gives a piece the surface's
+  material. A line cuts a drawn soil volume in 3D too, when the volume is a polygon
+  extruded along z or a box.
+- **Soil surfaces** are the 2D bodies of soil that are not layers, for example an
+  embankment or a lens. `surface add --points 0 0 3 0 3 3 0 3 --material sand` draws one,
+  as **Create soil surface…** in the GUI does. It has the key `drawn_0`, `drawn_1`, ...,
+  and `--label` gives it a name (the default is *Soil surface*). `surface set KEY` changes
+  its corners, material or name and keeps its key, and `surface remove KEY` removes it with
+  its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
+  it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
+  `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
+- **Names of layers and soil surfaces** are unique. A name that is already in use, given
+  with `layer add`, `layer set`, `surface add` or `surface set`, gets a number: a second
+  *Embankment* becomes *Embankment_2*, and a note says so. Names that differ only in case
+  or punctuation count as the same. This is the name of the SubModelPart in the Kratos
+  input files too, and the name the GUI shows.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
   line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
   `pit` and `outside`. A stage that named the whole layer then names the ground outside the
   pit. A pit with one level was never dug, so it just goes. A 3D pit narrower than the
   model in z cannot be made of lines, and the file is refused.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
-  section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
+  section plane, swept across the whole model, the same as `surface add`. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
   (`--center`, `--axis`, `--radius`). `volume import FILE` reads .step, .iges, .brep, .stl
   or .obj. With `--material`, a volume is soil.
@@ -274,7 +307,7 @@ kratos-cli line pit.json add floor_2 --points 0 -4.5 6 -4.5
 kratos-cli body pit.json list                                 # the pieces, and their keys
 kratos-cli body pit.json set soil_top__part3 --name "lift 1"
 kratos-cli body pit.json set soil_top__part4 --name "lift 3" --material sand
-kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
+kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1 --tail-end fixed
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet --side right
 kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
@@ -286,7 +319,7 @@ kratos-cli mesh pit.json --body-size sheet 0.5
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
   puts a new one: a sheet pile down the middle of the section to half its depth, a wall
   across the middle of the site, an anchor a quarter of the way down the first pile and
-  raking back 10 m at 35 degrees, an interface on the first pile, a 20 kN load.
+  raking back 8 m across and 6 m down, with the tail on whole metres, an interface on the first pile, a 20 kN load.
 - **Ids and names.** Other commands and the stages refer to a record by its id. `--name`
   is what the GUI shows and what the Kratos files call it. With no id typed, the name is
   the id too: `load add line --name Heavy` makes a load whose id is `Heavy`. This holds
@@ -327,9 +360,14 @@ kratos-cli mesh pit.json --body-size sheet 0.5
   `below` and `above`. `both` is for a pile only. Two interfaces may hold the two faces
   of one pile, or two parts of one face, but not the same face over the same length.
   An interface on its own points may not run along a sheet pile: put it on the pile.
-- **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
-  because it becomes one of its nodes; a head further away is refused. With no `--tail`,
-  the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
+- **Anchors.** An anchor needs no structure. A head within a metre of a pile, wall or
+  member is snapped onto it, because it becomes one of its nodes; a head further away is
+  a node of the soil mesh, and one above the soil is refused. `--head-end fixed` holds
+  the head in place: it is joined to nothing, is not snapped, and may be in the air.
+  With no `--tail`, the anchor rakes back from its head, 8 m across and 6 m down, with
+  the tail on whole metres. The tail is free, a node of the soil mesh, unless
+  `--tail-end fixed` makes it a pinned support. A strut is an anchor with a fixed tail end.
+  A free tail must be in the soil; one in the air is refused.
 - **Removing.** A structure a stage names, or a pile an anchor or an interface depends
   on, is not removed; the refusal names what still uses it. A section in use is not
   removed either.
@@ -358,6 +396,11 @@ kratos-cli boundary pit.json add start --domain --water-pressure Phreatic_Multi_
 kratos-cli boundary pit.json set head --inactive
 kratos-cli boundary pit.json remove well
 kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a seepage face
+kratos-cli boundary pit.json soil-water                         # the water of each soil
+kratos-cli boundary pit.json add head --line 0 1 60 3 --water-pressure Head_Line --phreatic-line 0 1 60 3
+kratos-cli boundary pit.json soil-water soil_L3 head            # the aquifer on its own line
+kratos-cli boundary pit.json soil-water soil_L2 interpolate     # the clay between them
+kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic line again
 ```
 
 - **Supports.** `--fixed` holds x, y and z; `--roller` holds the component normal to its
@@ -377,8 +420,26 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   `Hydrostatic` is zero at `--reference-coordinate` (in metres) and grows with depth below
   it; `Uniform` is `--value` at every node, a stress in the project's units with Kratos'
   sign (compression negative); `Phreatic_Multi_Line` is hydrostatic below the line
-  `--phreatic-line X Y X Y ...`, x increasing. Above the level the pressure is held at zero
+  `--phreatic-line X Y X Y ...`, x increasing, and so is a `Head_Line`. Above the level the pressure is held at zero
   unless `--pressure-tension-cut-off` allows suction up to that value.
+- **One phreatic line in each stage.** A `Phreatic_Multi_Line` on `--domain` or on a
+  `--line` (which is only where it is drawn) is a phreatic line: the water of every soil. A
+  stage may have one on; two on in the same stage are refused, so a later stage can switch
+  to a lower one. One on a face, a part or a point is a boundary condition like any other.
+  Given as start values (`--initial`), the phreatic line is the soil's initial pressure: it
+  is written in the stage it comes on, and later stages carry on from what the calculation
+  made of it. Where it stands above the ground, the deck also fixes the pressure on the wet
+  soil surface under it (2D), and frees it again in a stage that leaves it dry. The other
+  water lines are `Head_Line`s: polylines like it (`--phreatic-line`), which Kratos gets as
+  a `Phreatic_Multi_Line` on the soils that take them, and which put no water on the
+  ground.
+- **The water of each soil.** `soil-water` lists each soil and its water. `soil-water SOIL
+  WATER` gives a soil (a layer `soil_<id>`, one body, or a custom part with a material) the
+  water of a head line (its id, on `--domain` or a `--line`), `interpolate` for the
+  pressures of the soils above and below it, interpolated over its depth (Kratos'
+  `Interpolate_Line`, 2D only), or `default` for the phreatic line. A head line acts only on
+  the soils that take it. A body takes its own water, or else its layer's. Only the
+  phreatic line puts water on the ground.
 - **Its own level.** A `Hydrostatic` condition given no `--reference-coordinate` takes the
   water level, keeps it as its own, and says so. With no water level either it is refused.
   A dry model needs no water pressure condition, unless a soil couples the water pressure
@@ -710,6 +771,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
 | `gravity`, `gravity 9.80665` | `kratos-cli gravity P`, `kratos-cli gravity P 9.80665` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
+| `domain`, `domain --x 0 30 --y -20 0` | `kratos-cli domain P`, `kratos-cli domain P --x 0 30 --y -20 0` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |
 | `soillayers` | `kratos-cli layer P` (the window, as commands) |
@@ -743,7 +805,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
-| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn |
+| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results zeroline`, `results arrows`, `results location`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn (`kratos-cli results field RUN NAME --location` for the location) |
 
 While a drawing tool is placing points, typing `x y` or `x y z` places the next one. In the
 terminal, the points are the command's own: `--points`, `--head`, `--at`.

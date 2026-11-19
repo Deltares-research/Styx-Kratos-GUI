@@ -260,11 +260,17 @@ def rail(tour: Tour, key: str, flyout: str | None = None) -> None:
     item.last.click()
 
 
-def tree_row(page, label: str):
-    """A row of the Model explorer, by its label (`Soil_Top · Part 1` for a soil body)."""
+def tree_rows(page, label: str):
+    """Every row of the Model explorer with this label (`Soil_Top · Part 1` for a soil
+    body): two parts of two layers may have one name."""
     pattern = "^" + re.escape(label).replace(r"\ ·\ ", r"\s+·\s+") + r"(\s|$)"
     return page.locator("#tree-model .tree-row").filter(
-        has=page.locator(".tree-label", has_text=re.compile(pattern))).first
+        has=page.locator(".tree-label", has_text=re.compile(pattern)))
+
+
+def tree_row(page, label: str):
+    """The first row of the Model explorer with this label."""
+    return tree_rows(page, label).first
 
 
 def select_in_tree(tour: Tour, label: str) -> None:
@@ -292,12 +298,13 @@ def choose_in_selection(tour: Tour, label: str, option: str) -> None:
 
 
 def rename(tour: Tour, label: str, new: str, picture: str = "") -> None:
-    """Right-click a row of the Model explorer, Rename…, type the new name, OK. With
-    `picture`, the screenshot of that part is taken with the name typed."""
+    """Right-click a row of the Model explorer, Rename… (Rename part… on a part of a cut
+    layer), type the new name, OK. With `picture`, the screenshot of that part is taken
+    with the name typed."""
     page = tour.page
     row = tree_row(page, label)
     row.locator(".tree-label").click(button="right")
-    page.get_by_text("Rename…", exact=True).locator("visible=true").last.click()
+    page.get_by_text(re.compile(r"^Rename( part)?…$")).locator("visible=true").last.click()
     dialog = page.locator("#modal-layer .name-dialog-window")
     dialog.locator("input[name=name]").fill(new)
     if picture:
