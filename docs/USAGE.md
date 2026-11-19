@@ -143,9 +143,16 @@ law and its parameters.
   K0, the window shows the K0 that the export calculates from the Poisson's ratio (linear
   elastic) or the friction angle (Mohr-Coulomb).
 - To start from a preset instead, go to **Default soil material library** under the soils, select a preset
-  (Fill, Sand loose, Sand dense, Clay soft, Clay stiff or Bedrock) and click **Add to
-  project**. Styx adds a copy that you can change. The presets with a cohesion and a
-  friction angle are Mohr-Coulomb soils; Bedrock is linear elastic.
+  in **Soil** and a soil model in **Model**, and click **Add to project**. Styx adds a
+  copy that you can change. The presets are the default soils of D-Stability and
+  D-Settlement, from Embankment to Sand, less permeable, and Bedrock. **Model**
+  starts at the preset's own model: Mohr-Coulomb, or linear elastic for Bedrock. A preset
+  added as linear elastic has no strength. Bedrock added as Mohr-Coulomb gets the default
+  strength, and the line at the bottom of the window names those values.
+- To look at a preset before you add it, click **Properties…** next to **Model**. The
+  soil's window opens with all its values, but the soil is not in the project. Click
+  **Close** to leave it out, or change values and click **Add to project** to add it as
+  it stands. `kratos-cli material presets ID` shows the same values.
 - To change a material, click **Properties…** in its row.
 - To make a material Mohr-Coulomb, open **Properties…** and select **Mohr-Coulomb** in
   **Soil model**. Styx sets the Kratos law for the dimension of the model, keeps the values

@@ -152,8 +152,10 @@ Useful here:
 - `material list` shows the soils there are.
 - `material set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
   reduction.
-- `material presets` lists the library soils (`m1` Fill ... `m6` Bedrock), and
-  `material add ID --preset m3` starts from one instead of typing every variable.
+- `material presets` lists the library soils (`embankment` Embankment ...
+  `bedrock` Bedrock), and `material add ID --preset clay_shallow` starts from one
+  instead of typing every variable. Add `--model linear-elastic` to get it as a linear
+  elastic soil.
 
 #### Step 4. The soil layers
 
