@@ -163,12 +163,18 @@ Layers are stacked from the top, each under the one before:
 
 ```text
 kratos-cli layer add L_top --name Soil_Top --material clay --bottom -8
+```
+> <pre>added layer L_top; wrote ...\crow.json</pre>
+
+```text
 kratos-cli layer add L_mid --name Soil_Middle --material clay --bottom -12
+```
+> <pre>added layer L_mid; wrote ...\crow.json</pre>
+
+```text
 kratos-cli layer add L_bot  --name Soil_Bottom --material sand --bottom -60
 ```
-> <pre>added layer L_top; wrote ...\crow.json
-> added layer L_mid; wrote ...\crow.json
-> added layer L_bot; wrote ...\crow.json</pre>
+> <pre>added layer L_bot; wrote ...\crow.json</pre>
 
 The clay is split at −8 as well as at −12, so that the deepest lift of the pit ends
 exactly on a layer boundary.
@@ -239,12 +245,18 @@ floor of the third lift is the boundary between the layers.
 
 ```text
 kratos-cli line add floor_1 --name "Floor of lift 1" --points 0 -2 5 -2
+```
+> <pre>added line floor_1; wrote ...\crow.json</pre>
+
+```text
 kratos-cli line add floor_2 --name "Floor of lift 2" --points 0 -5 5 -5
+```
+> <pre>added line floor_2; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body list
 ```
-> <pre>added line floor_1; wrote ...\crow.json
-> added line floor_2; wrote ...\crow.json
-> soil_L_top__part3  Soil_Top · Part 3  ·  Clay
+> <pre>soil_L_top__part3  Soil_Top · Part 3  ·  Clay
 > soil_L_top__part2  Soil_Top · Part 2  ·  Clay
 > soil_L_top__part1  Soil_Top · Part 1  ·  Clay
 > soil_L_top__part4  Soil_Top · Part 4  ·  Clay
@@ -258,20 +270,38 @@ which is which. Give each piece a name that says what it is:
 
 ```text
 kratos-cli body set soil_L_top__part3 --name "lift 1"
+```
+> <pre>changed soil body soil_L_top__part3; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body set soil_L_top__part1 --name "lift 2"
+```
+> <pre>changed soil body soil_L_top__part1; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body set soil_L_top__part4 --name "lift 3"
+```
+> <pre>changed soil body soil_L_top__part4; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body set soil_L_top__part2 --name retained
+```
+> <pre>changed soil body soil_L_top__part2; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body set soil_L_mid__part1 --name "below the pit"
+```
+> <pre>changed soil body soil_L_mid__part1; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body set soil_L_mid__part2 --name retained
+```
+> <pre>changed soil body soil_L_mid__part2; wrote ...\crow.json</pre>
+
+```text
 kratos-cli body list
 ```
-> <pre>changed soil body soil_L_top__part3; wrote ...\crow.json
-> changed soil body soil_L_top__part1; wrote ...\crow.json
-> changed soil body soil_L_top__part4; wrote ...\crow.json
-> changed soil body soil_L_top__part2; wrote ...\crow.json
-> changed soil body soil_L_mid__part1; wrote ...\crow.json
-> changed soil body soil_L_mid__part2; wrote ...\crow.json
-> soil_L_top__part3  lift 1  ·  Clay
+> <pre>soil_L_top__part3  lift 1  ·  Clay
 > soil_L_top__part2  retained  ·  Clay
 > soil_L_top__part1  lift 2  ·  Clay
 > soil_L_top__part4  lift 3  ·  Clay
@@ -358,12 +388,18 @@ ground that stays is on the right of this walk. Its pressure is zero at its
 
 ```text
 kratos-cli normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
+```
+> <pre>added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json</pre>
+
+```text
 kratos-cli normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+```
+> <pre>added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json</pre>
+
+```text
 kratos-cli normal-load add water_3  --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
 ```
-> <pre>added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json
-> added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json
-> added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json</pre>
+> <pre>added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json</pre>
 
 ### Part 3: the mesh and the stages
 
@@ -402,26 +438,53 @@ before it has, and names what it switches on and off:
 
 ```text
 kratos-cli stages set initial --stress-initialisation k0
+```
+> <pre>changed stage initial; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add null_step --name "Null step" --max-iterations 150
+```
+> <pre>added stage (id null_step, name Null step) after initial; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
+```
+> <pre>sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
+```
+> <pre>sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
+```
+> <pre>added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
+```
+> <pre>added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add install_strut --name "Strut installation" --activate strut --max-iterations 150 --tolerance 1e-3
+```
+> <pre>added stage (id install_strut, name Strut installation) after dig_1; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add dig_2 --name "Second excavation" --activate water_2 --deactivate soil_L_top__part1 water_1 --max-iterations 300 --tolerance 1e-3
+```
+> <pre>added stage (id dig_2, name Second excavation) after install_strut; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages add dig_3 --name "Third excavation" --activate water_3 --deactivate soil_L_top__part4 water_2 --max-iterations 300 --tolerance 1e-3
+```
+> <pre>added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json</pre>
+
+```text
 kratos-cli stages list
 ```
-> <pre>changed stage initial; wrote ...\crow.json
-> added stage (id null_step, name Null step) after initial; wrote ...\crow.json
-> sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
-> sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json
-> added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json
-> added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json
-> added stage (id install_strut, name Strut installation) after dig_1; wrote ...\crow.json
-> added stage (id dig_2, name Second excavation) after install_strut; wrote ...\crow.json
-> added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json
-> 1  initial  Initial stage
+> <pre>1  initial  Initial stage
 >      calculation: mechanical, K0 stresses, static; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
 > 2  null_step  Null step  (after initial)
 >      calculation: mechanical, static
@@ -450,9 +513,21 @@ To look at a stage, or change one:
 
 ```text
 kratos-cli stages show dig_2                             # what is in the model during that stage
+```
+
+```text
 kratos-cli stages set dig_1 --max-iterations 600         # more iterations for the first dig
+```
+
+```text
 kratos-cli stages deactivate dig_3 strut                 # take the strut out of dig_3 alone
+```
+
+```text
 kratos-cli undo                                          # ...and put it back
+```
+
+```text
 kratos-cli undo                                          # ...and the first dig back to 500
 ```
 
@@ -546,14 +621,41 @@ and run again:
 
 ```text
 kratos-cli stages set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs         # stage 1
+```
+
+```text
 kratos-cli stages set null_step --solver strategy_type=quasi_newton quasi_newton_type=lbfgs       # stage 2
+```
+
+```text
 kratos-cli stages set install_wall --solver strategy_type=quasi_newton quasi_newton_type=lbfgs    # stage 3
+```
+
+```text
 kratos-cli stages set dig_1 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 4
+```
+
+```text
 kratos-cli stages set install_strut --solver strategy_type=quasi_newton quasi_newton_type=lbfgs   # stage 5
+```
+
+```text
 kratos-cli stages set dig_2 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 6
+```
+
+```text
 kratos-cli stages set dig_3 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 7
+```
+
+```text
 kratos-cli stages show dig_2                             # lists strategy_type = Quasi-Newton *
+```
+
+```text
 kratos-cli export --out deck                             # the deck again, with the new strategy
+```
+
+```text
 kratos-cli run deck                                      # a new run
 ```
 
@@ -695,7 +797,13 @@ Every field at node 161.
 
 ```text
 kratos-cli results files 1                           # every file of the run, with its size
+```
+
+```text
 kratos-cli results get 1 kratos.log --out logs/      # copy one into logs\ (made if need be)
+```
+
+```text
 kratos-cli results archive 1                         # the whole run as a .zip, here
 ```
 
@@ -755,9 +863,21 @@ input files into a run folder in `my_crow`, and runs them:
 
 ```text
 open <repo>\examples\CROW_case\crow.json
+```
+
+```text
 calculate
+```
+
+```text
 results show 1
+```
+
+```text
 results profile 1 wall M
+```
+
+```text
 exit
 ```
 
