@@ -1,4 +1,4 @@
-# Groundwater flow: seepage through a levee with `kratos-cli`
+# Build the levee seepage model in `kratos-cli`
 
 A steady-state groundwater flow calculation of the flow under and through a clay levee, built and run from
 the command line in PowerShell. Following the commands to build the example model will give the same results as running the python script
