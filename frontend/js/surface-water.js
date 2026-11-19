@@ -448,5 +448,5 @@ App.SurfaceWater = (function () {
 
   return { pieces: pieces, glyph: glyph, level: level, stagesWithWater: stagesWithWater,
            along: along, waterBody: waterBody, specificWeight: specificWeight,
-           pressureText: pressureText, linesOf: linesOf, reach: reach };
+           pressureText: pressureText, linesOf: linesOf, reach: reach, waters: waters };
 })();

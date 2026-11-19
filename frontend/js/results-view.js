@@ -105,10 +105,27 @@ App.ResultsView = (function () {
         && section.wire_indices && section.wire_indices.length
         ? wire(section, position) : null;
       if (outline) objects.push(outline);
+      // The zero water pressure line, when `App.Results` sent a pressure to trace it on.
+      var zero = payload.pressure ? zeroLine(section, payload.pressure, positions) : null;
+      if (zero) objects.push(zero);
       objects.forEach(function (object) { group.add(object); });
       drawn.push({ section: section, values: values.values, positions: positions,
                    objects: objects });
     });
+
+    // The zero line carried on along the phreatic line where that leaves the soil: over
+    // every section at once, so a stretch between two parts is not taken for outside.
+    if (payload.pressure) {
+      var beyond = phreaticOutside(payload.phreatic);
+      if (beyond) group.add(beyond);
+    }
+
+    // The arrows, when `App.Results` sent a vector field: over every section at once,
+    // from the drawn positions, so they start where the deformed shading puts a node.
+    if (payload.vectors) {
+      var arrows = arrowLines(payload.vectors, payload.mesh.bbox);
+      if (arrows) group.add(arrows);
+    }
 
     host.add(group);
     syncVisibility();
@@ -181,6 +198,153 @@ App.ResultsView = (function () {
     outline.name = section.key + ':mesh';
     outline.renderOrder = 15;
     return outline;
+  }
+
+  /* Where the water pressure is zero -- the phreatic surface the calculation found --
+     traced across the section's triangles by `ResultsRender.isoline` on the drawn
+     positions, so it deforms with the shading. A light water blue, lighter than the
+     phreatic line the user drew (#1565c0), so the two are told apart where both are
+     on screen, and `ZERO_LINE_WIDTH` pixels wide; over the mesh outlines (15) and
+     below the structural line work (20), like the outlines and for the same reason. */
+  var ZERO_LINE_COLOR = 0x42a5f5;
+  var ZERO_LINE_CSS = '#42a5f5';
+  var ZERO_LINE_WIDTH = 3;
+
+  function zeroLine(section, pressure, positions) {
+    if (!section.indices || !section.indices.length) return null;
+    var values = App.ResultsRender.vertexValues(section, pressure).values;
+    var points = App.ResultsRender.isoline(section, values, positions, 0);
+    return points.length ? waterLine(points, section.key + ':zero-pressure') : null;
+  }
+
+  /* The zero line carried on outside the soil: the stage's phreatic lines where they
+     leave every drawn triangle (`ResultsRender.outside`), on the drawn positions so it
+     meets the traced line where the shading ends. Drawn as the zero line is, so the
+     two read as one water surface. */
+  function phreaticOutside(lines) {
+    if (!lines || !lines.length || !drawn.length) return null;
+    var meshes = drawn.map(function (entry) {
+      return { indices: entry.section.indices, positions: entry.positions };
+    });
+    var z = drawn[0].positions.length ? drawn[0].positions[2] : 0;
+    var points = App.ResultsRender.outside(lines, meshes, z);
+    return points.length ? waterLine(points, 'results:phreatic-outside') : null;
+  }
+
+  /* Line segments `points` as the zero line is drawn: a plain one-pixel line, which is
+     what a picture and the CPU renderer read, with a band `ZERO_LINE_WIDTH` pixels
+     wide over it on screen (`band`). */
+  function waterLine(points, name) {
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
+    var material = new THREE.LineBasicMaterial({ color: ZERO_LINE_COLOR, depthTest: false });
+    var line = new THREE.LineSegments(geometry, material);
+    line.name = name;
+    line.renderOrder = 18;
+    // A picture draws it as a heavier line than the default, as the screen does.
+    line.userData.lineWeight = ZERO_LINE_WIDTH;
+    line.add(band(points, ZERO_LINE_COLOR, ZERO_LINE_WIDTH));
+    return line;
+  }
+
+  /* A line `width` CSS pixels wide, whatever the zoom.
+
+     WebGL draws a line one pixel wide on most platforms -- `linewidth` is ignored on
+     Windows and in Chrome -- so a thicker line is two triangles per segment, pushed out
+     sideways by the vertex shader in screen space: each corner knows the segment's
+     other end (`other`) and which side it is on (`side`). Each end is also pushed
+     half a width past itself, so the pieces of a polyline overlap at their joints
+     instead of leaving a notch. Flagged `screenOnly`: on the CPU and in a picture the
+     line it sits on is drawn instead. */
+  var BAND_VERTEX = [
+    'uniform vec2 resolution;',
+    'uniform float width;',
+    'attribute vec3 other;',
+    'attribute float side;',
+    'void main() {',
+    '  vec4 here = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    '  vec4 there = projectionMatrix * modelViewMatrix * vec4(other, 1.0);',
+    '  vec2 dir = there.xy / there.w * resolution - here.xy / here.w * resolution;',
+    '  float size = length(dir);',
+    '  dir = size > 0.0 ? dir / size : vec2(1.0, 0.0);',
+    '  vec2 normal = vec2(-dir.y, dir.x);',
+    '  here.xy += (normal * side - dir) * width / resolution * here.w;',
+    '  gl_Position = here;',
+    '}'
+  ].join('\n');
+
+  var BAND_FRAGMENT = [
+    'uniform vec3 color;',
+    'void main() { gl_FragColor = vec4(color, 1.0); }'
+  ].join('\n');
+
+  function band(points, color, width) {
+    var segments = points.length / 6;
+    var position = new Float32Array(segments * 12);
+    var other = new Float32Array(segments * 12);
+    var side = new Float32Array(segments * 4);
+    var index = [];
+    for (var s = 0; s < segments; s++) {
+      var a = points.subarray(s * 6, s * 6 + 3), b = points.subarray(s * 6 + 3, s * 6 + 6);
+      // a on its left, a on its right, b on a's left, b on a's right: seen from b the
+      // segment runs the other way, so its sides are the other way round too.
+      [a, a, b, b].forEach(function (corner, k) {
+        position.set(corner, s * 12 + k * 3);
+        other.set(k < 2 ? b : a, s * 12 + k * 3);
+      });
+      side.set([1, -1, -1, 1], s * 4);
+      var v = s * 4;
+      index.push(v, v + 1, v + 2, v + 2, v + 1, v + 3);
+    }
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
+    geometry.setAttribute('other', new THREE.BufferAttribute(other, 3));
+    geometry.setAttribute('side', new THREE.BufferAttribute(side, 1));
+    geometry.setIndex(index);
+    var material = new THREE.ShaderMaterial({
+      uniforms: {
+        color: { value: new THREE.Color(color) },
+        width: { value: width },
+        resolution: { value: new THREE.Vector2(1, 1) }
+      },
+      vertexShader: BAND_VERTEX,
+      fragmentShader: BAND_FRAGMENT,
+      side: THREE.DoubleSide,
+      depthTest: false
+    });
+    var mesh = new THREE.Mesh(geometry, material);
+    // The pixels it is measured in are the canvas's, read as it is drawn: a resize
+    // or a change of pixel ratio needs nothing else.
+    mesh.onBeforeRender = function (renderer) {
+      if (renderer.getSize) renderer.getSize(material.uniforms.resolution.value);
+      material.uniformsNeedUpdate = true;
+    };
+    // Never culled: its corners are all on the line, so the box three.js would test
+    // is the line's, a pixel or two short of what is drawn.
+    mesh.frustumCulled = false;
+    mesh.userData.screenOnly = true;
+    mesh.userData.noPick = true;
+    mesh.renderOrder = 18;
+    return mesh;
+  }
+
+  /* A vector field as arrows (`ResultsRender.arrows`). Near-black, which reads against
+     every colour map but the darkest end of a few, and over the shading and the mesh
+     for the same reason the zero line is. */
+  var ARROW_COLOR = 0x111111;
+
+  function arrowLines(vectors, bbox) {
+    var points = App.ResultsRender.arrows(vectors, drawn.map(function (entry) {
+      return { node_ids: entry.section.node_ids, positions: entry.positions };
+    }), bbox);
+    if (!points.length) return null;
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(points, 3));
+    var material = new THREE.LineBasicMaterial({ color: ARROW_COLOR, depthTest: false });
+    var segments = new THREE.LineSegments(geometry, material);
+    segments.name = 'results:arrows';
+    segments.renderOrder = 19;
+    return segments;
   }
 
   function lines(section, position, color) {
@@ -277,6 +441,15 @@ App.ResultsView = (function () {
       + '<i style="background:linear-gradient(to top,' + stops.join(',') + ')"></i>'
       + '<ul>' + rows + '</ul>'
       + '</div>'
+      + (payload.pressure
+         ? '<div class="vp-legend-foot vp-legend-zero">'
+           + '<i style="border-top-color:' + ZERO_LINE_CSS + '"></i>p<sub>w</sub> = 0</div>'
+         : '')
+      + (payload.vectors
+         ? '<div class="vp-legend-foot">→ ' + escape(payload.vectors.label) + ' up to '
+           + escape(App.ResultsRender.format(payload.vectors.max)) + ' '
+           + escape(payload.vectors.unit) + '</div>'
+         : '')
       + '<div class="vp-legend-foot">stage ' + payload.stage + '</div>';
   }
 

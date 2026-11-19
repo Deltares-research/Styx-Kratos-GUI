@@ -1269,8 +1269,12 @@ App.Viewport = (function () {
       var away = spec.diagram.glyph.deepestInward;
       if (spec.diagram.text && deep && away) {
         var off = spec.size * 1.6 + spec.size * 1.2;
-        group.add(makeLabel(spec.diagram.text, deep[0] - away[0] * off,
-                            deep[1] - away[1] * off, zd, spec.size * 0.7));
+        var label = makeLabel(spec.diagram.text, deep[0] - away[0] * off,
+                              deep[1] - away[1] * off, zd, spec.size * 0.7);
+        // Not over a result: the contours and the legend say what is there (`syncGlyphLabels`).
+        label.userData.glyphLabel = true;
+        label.visible = !(App.state && App.state.mode === 'results');
+        group.add(label);
       }
     }
     group.traverse(function (child) {
@@ -2823,6 +2827,7 @@ App.Viewport = (function () {
     applySoilWaterColors(mode);
     applyImportedVisibility(mode);
     syncSurfaceWater(mode);
+    syncGlyphLabels(mode);
     // The numbers follow what this tab draws: gone where the mesh is not, back where
     // it is. Only a change of tab asks the server for a missing numbering: a redraw
     // in the same tab comes from generateMesh or a rebuild, which ask for it
@@ -2838,6 +2843,17 @@ App.Viewport = (function () {
 
   /* The tab the labels were last gathered for (setMode). */
   var labelledMode = null;
+
+  /* The text a condition's glyph carries (its level, its value) is drawn in every tab
+     but Results, where it would sit over the contours as a box of text. */
+  function syncGlyphLabels(mode) {
+    conditionIds.forEach(function (key) {
+      if (!groups[key]) return;
+      groups[key].traverse(function (child) {
+        if (child.userData.glyphLabel) child.visible = mode !== 'results';
+      });
+    });
+  }
 
   /* ── The water of each soil, in Flow conditions ─────────────────────────
      Each soil is filled with a tint of the water line it takes

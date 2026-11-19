@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from core.model import units
-from core.results.gid_reader import GidMesh, Results
+from core.results.gid_reader import Field, GidMesh, Results
 
 COMPRESSION_POSITIVE = False
 """Whether stresses are flipped on the way out. They are not -- see the module
@@ -58,6 +58,15 @@ docstring. This is a constant so that the decision is visible and testable."""
 
 XX, YY, ZZ, XY, YZ, XZ = range(6)
 """GiD's component order for a symmetric tensor."""
+
+PRESSURE_AND_HEAD = "Water pressure and head"
+FLOW = "Groundwater flow"
+SATURATION = "Saturation"
+"""The groundwater's groups, named once: each is used by several definitions and by
+`GROUP_ORDER`, and a typo in one would make a group of its own."""
+
+LINE_ELEMENTS = ("linear", "point")
+"""GiD element types that are not soil: a beam, an anchor, a truss (`Definition.soil_only`)."""
 
 
 class UnknownField(LookupError):
@@ -68,6 +77,10 @@ class UnknownField(LookupError):
 
 def _component(index: int) -> Callable[[list[float]], float]:
     return lambda values: values[index]
+
+
+def _negated(values: list[float]) -> float:
+    return -values[0]
 
 
 def _magnitude(values: list[float]) -> float:
@@ -147,6 +160,23 @@ class Definition:
     source: str
     derive: Callable[[list[float]], float]
     quantity: units.Quantity
+    out_of_plane: bool = False
+    """Zero by construction in a 2D section -- a z component, a shear stress on the
+    plane of the section -- so not offered for one (`catalogue`'s `dimension`)."""
+    soil_only: bool = False
+    """Read off the soil's integration points alone. Kratos writes a Gauss variable for
+    every element, and a beam or an anchor that does not compute one writes 0 for it --
+    a head of zero along a wall, which would pull the range and the nodal average next
+    to the wall towards a number that means nothing."""
+    summed: bool = False
+    """A nodal quantity whose total means something: the water a boundary takes in or
+    lets out, the force a support carries. `values` adds it up."""
+    vector: str | None = None
+    """The name of the magnitude of the vector this is part of, when its source is one:
+    what an arrow plot of it draws (`vectors`)."""
+    fallback: tuple[str, Callable[[list[float]], float]] | None = None
+    """An older variable that carried the same quantity, read when `source` is absent,
+    so a run written before the deck changed still shows it."""
 
     def unit(self, system: str = units.DEFAULT) -> str:
         """The label of this field's numbers in a run made in `system`."""
@@ -154,13 +184,17 @@ class Definition:
 
 
 def _vector(source: str, prefix: str, group: str, label: str,
-            quantity: units.Quantity = units.LENGTH) -> tuple:
-    """A vector's magnitude and components, `u`, `ux`, `uy`, `uz`."""
+            quantity: units.Quantity = units.LENGTH, summed: bool = False) -> tuple:
+    """A vector's magnitude and components, `u`, `ux`, `uy`, `uz`. `summed` adds up the
+    components (`Definition.summed`); a sum of magnitudes means nothing."""
+    def part(name: str, text: str, derive, **more) -> Definition:
+        return Definition(name, text, group, source, derive, quantity, vector=prefix, **more)
+
     return (
-        Definition(prefix, f"|{label}|", group, source, _magnitude, quantity),
-        Definition(f"{prefix}x", f"{label}_x", group, source, _component(0), quantity),
-        Definition(f"{prefix}y", f"{label}_y", group, source, _component(1), quantity),
-        Definition(f"{prefix}z", f"{label}_z", group, source, _component(2), quantity),
+        part(prefix, f"|{label}|", _magnitude),
+        part(f"{prefix}x", f"{label}_x", _component(0), summed=summed),
+        part(f"{prefix}y", f"{label}_y", _component(1), summed=summed),
+        part(f"{prefix}z", f"{label}_z", _component(2), summed=summed, out_of_plane=True),
     )
 
 
@@ -171,8 +205,10 @@ def _stresses(source: str, group: str, mark: str) -> tuple:
         Definition(f"s{mark}yy", f"σ{mark}yy", group, source, _component(YY), kPa),
         Definition(f"s{mark}zz", f"σ{mark}zz", group, source, _component(ZZ), kPa),
         Definition(f"s{mark}xy", f"σ{mark}xy", group, source, _component(XY), kPa),
-        Definition(f"s{mark}yz", f"σ{mark}yz", group, source, _component(YZ), kPa),
-        Definition(f"s{mark}xz", f"σ{mark}xz", group, source, _component(XZ), kPa),
+        Definition(f"s{mark}yz", f"σ{mark}yz", group, source, _component(YZ), kPa,
+                   out_of_plane=True),
+        Definition(f"s{mark}xz", f"σ{mark}xz", group, source, _component(XZ), kPa,
+                   out_of_plane=True),
         Definition(f"p{mark}", f"p{mark} (mean)", group, source, _mean_stress, kPa),
         Definition(f"q{mark}", "q (deviatoric)", group, source, _deviatoric_stress, kPa),
         Definition(f"s{mark}1", f"σ{mark}1 (most compressive)", group, source,
@@ -199,56 +235,92 @@ DEFINITIONS: tuple[Definition, ...] = (
     # there, which is the whole point of deriving the catalogue from the file.
     *_stresses("TOTAL_STRESS_TENSOR", "Total stresses", "_t"),
 
-    Definition("pw", "Pore pressure", "Groundwater", "WATER_PRESSURE",
+    # The water, in three groups: what it is at a point (the pressure, and the head
+    # Kratos derives from it at the soil's integration points), how it moves, and how
+    # much of the pores it fills.
+    Definition("pw", "Pore pressure", PRESSURE_AND_HEAD, "WATER_PRESSURE",
                _component(0), units.STRESS),
-    Definition("head", "Hydraulic head", "Groundwater", "HYDRAULIC_HEAD",
-               _component(0), units.LENGTH),
-    Definition("saturation", "Degree of saturation", "Groundwater",
-               "DEGREE_OF_SATURATION", _component(0), units.DIMENSIONLESS),
+    Definition("head", "Hydraulic head", PRESSURE_AND_HEAD, "HYDRAULIC_HEAD",
+               _component(0), units.LENGTH, soil_only=True),
     # What a groundwater flow stage writes (`parameters.FLOW_NODAL_RESULTS`): the
-    # saturation of the pores the retention law gives, and the specific discharge,
-    # the volume of water through a unit area per second.
-    Definition("effective_saturation", "Effective saturation", "Groundwater",
+    # specific discharge, the volume of water through a unit area per second, and the
+    # water each node lets out (positive) or takes in, per metre of the section. The
+    # second is Kratos' reaction to the fixed water pressures, turned round: the seepage
+    # strategy's NODAL_WATER_FLOW_RATE is that same number with the opposite sign, node
+    # for node, and only that strategy computes it -- the reaction comes from all of
+    # them. Runs written before every flow stage wrote the reaction have only the
+    # seepage strategy's variable, which is read in its place.
+    *_vector("FLUID_FLUX_VECTOR", "flux", FLOW, "q", units.VELOCITY),
+    Definition("flow_rate", "Nodal water flow rate (+ out)", FLOW,
+               "REACTION_WATER_PRESSURE", _negated, units.FLOW_RATE, summed=True,
+               fallback=("NODAL_WATER_FLOW_RATE", _component(0))),
+    Definition("saturation", "Degree of saturation", SATURATION,
+               "DEGREE_OF_SATURATION", _component(0), units.DIMENSIONLESS),
+    Definition("effective_saturation", "Effective saturation", SATURATION,
                "EFFECTIVE_SATURATION", _component(0), units.DIMENSIONLESS),
-    *_vector("FLUID_FLUX_VECTOR", "flux", "Groundwater", "q", units.VELOCITY),
-    # What a stage with a seepage face adds (`parameters.SEEPAGE_NODAL_RESULTS`): the
-    # water each node lets out (positive) or takes in, per metre of the section.
-    Definition("flow_rate", "Nodal water flow rate", "Groundwater",
-               "NODAL_WATER_FLOW_RATE", _component(0), units.FLOW_RATE),
+
+    # The force each support exerts on the model (`parameters.NODAL_RESULTS`), per
+    # metre of the section. Zero everywhere but where a displacement is fixed, so its
+    # sum over the model is what the supports carry together.
+    *_vector("REACTION", "reaction", "Nodal forces", "R", units.LINE_FORCE, summed=True),
 )
 
 BY_NAME = {definition.name: definition for definition in DEFINITIONS}
 
 GROUP_ORDER = ("Deformations", "Stage deformations", "Effective stresses",
-               "Total stresses", "Strains", "Groundwater")
+               "Total stresses", "Strains", PRESSURE_AND_HEAD, FLOW, SATURATION,
+               "Nodal forces")
 
 
-def catalogue(results: Results, system: str = units.DEFAULT) -> list[dict]:
+def _source(results: Results, definition: Definition
+            ) -> tuple[str, Field, Callable[[list[float]], float]] | None:
+    """The variable a definition is read from in this stage, its block, and how to
+    derive the number from it -- or `None` when the stage has none of it with values.
+
+    "With values" is the point: Kratos writes a declared but empty block for a variable
+    an element does not implement, and offering that would put a menu entry in front of
+    the user that paints nothing. Judged on the stage's last step (`Results.field`), the
+    one `values` draws.
+    """
+    candidates = [(definition.source, definition.derive)]
+    if definition.fallback:
+        candidates.append(definition.fallback)
+    for variable, derive in candidates:
+        found = results.field(variable)
+        if found is not None and found.values:
+            return variable, found, derive
+    return None
+
+
+def catalogue(results: Results, system: str = units.DEFAULT,
+              dimension: int = 3) -> list[dict]:
     """The field menu for one stage, derived from what that stage's file contains.
 
-    A definition is offered when its source variable is present *and has values*. The
-    distinction matters: Kratos writes a declared but empty block for a variable an
-    element does not implement, and offering that would put a menu entry in front of
-    the user that paints nothing.
-    """
-    # Judged on the stage's last step (`Results.field`), the one `values` will draw.
-    available = {variable for variable in results.variables()
-                 if (found := results.field(variable)) is not None and found.values}
+    A definition is offered when its source variable is present *and has values*
+    (`_source`), and -- in a 2D section, `dimension` 2 -- when it is not zero by
+    construction there (`Definition.out_of_plane`).
 
+    An entry of a vector says which (`vector`, the name of its magnitude), which is what
+    an arrow plot of it is asked for by.
+    """
     groups: dict[str, list[dict]] = {}
     for definition in DEFINITIONS:
-        if definition.source not in available:
+        if definition.out_of_plane and dimension < 3:
             continue
-        source = results.field(definition.source)
-        if source is None:
+        resolved = _source(results, definition)
+        if resolved is None:
             continue
-        groups.setdefault(definition.group, []).append({
+        variable, source, _ = resolved
+        entry = {
             "name": definition.name,
             "label": definition.label,
             "unit": definition.unit(system),
-            "source": definition.source,
+            "source": variable,
             "locations": _locations(source.location),
-        })
+        }
+        if definition.vector and source.kind == "vector" and source.location == "nodes":
+            entry["vector"] = definition.vector
+        groups.setdefault(definition.group, []).append(entry)
     return [{"name": name, "fields": groups[name]}
             for name in GROUP_ORDER if name in groups]
 
@@ -276,28 +348,32 @@ def values(results: Results, mesh: GidMesh, name: str, location: str = "nodes",
     definition = BY_NAME.get(name)
     if definition is None:
         raise UnknownField(f"There is no field called {name!r}.")
-    source = results.field(definition.source)
-    if source is None or not source.values:
+    # An out-of-plane field of a 2D section is not refused: it is left off the menu
+    # (`catalogue`), and asked for by name it is what Kratos wrote, zero.
+    resolved = _source(results, definition)
+    if resolved is None:
         raise UnknownField(
             f"{name!r} needs {definition.source}, which this stage did not write.")
+    _, source, derive = resolved
     if location not in _locations(source.location):
         raise UnknownField(f"{name!r} cannot be shown per {location}.")
 
     if source.location == "nodes":
-        table = {id: definition.derive(components)
-                 for id, components in source.values.items()}
+        table = {id: derive(components) for id, components in source.values.items()}
     else:
+        skipped = _line_elements(mesh) if definition.soil_only else set()
         # Derive at each integration point, then average. See the module docstring --
         # for q the other order is a different and wrong number.
         per_element = {
-            element: _mean([definition.derive(point) for point in points])
-            for element, points in source.values.items() if points
+            element: _mean([derive(point) for point in points])
+            for element, points in source.values.items()
+            if points and element not in skipped
         }
         table = per_element if location == "elements" else _to_nodes(per_element, mesh)
 
     ids = sorted(table)
     numbers = [table[id] for id in ids]
-    return {
+    out = {
         "field": name,
         "label": definition.label,
         "unit": definition.unit(system),
@@ -306,6 +382,55 @@ def values(results: Results, mesh: GidMesh, name: str, location: str = "nodes",
         "values": numbers,
         "min": min(numbers) if numbers else 0.0,
         "max": max(numbers) if numbers else 0.0,
+    }
+    if definition.summed:
+        # What goes out and what comes in, apart and together: for the flow rate, the
+        # water the model takes in and lets out, and their difference -- zero in a
+        # steady state, what the pores stored or gave up in a transient one.
+        out["totals"] = {"positive": sum(n for n in numbers if n > 0),
+                         "negative": sum(n for n in numbers if n < 0),
+                         "net": sum(numbers)}
+    return out
+
+
+def _line_elements(mesh: GidMesh) -> set[int]:
+    return {element for block in mesh.blocks
+            if block.element_type.lower() in LINE_ELEMENTS for element in block.elements}
+
+
+def vectors(results: Results, name: str, system: str = units.DEFAULT) -> dict:
+    """The vectors behind a field, for an arrow plot: `name` is any field of the vector
+    (`flux`, `fluxx`, ...), the answer is the whole vector at every node, with the
+    largest magnitude, which the arrows are scaled by.
+
+    Nodal only. Every vector this deck writes is nodal -- the flux is extrapolated to the
+    nodes in the deck (`core.kratos.writer.FLOW_EXTRAPOLATED`) -- and an arrow sits on a
+    point, which a per-element average does not have.
+    """
+    definition = BY_NAME.get(name)
+    if definition is None:
+        raise UnknownField(f"There is no field called {name!r}.")
+    if definition.vector is None:
+        raise UnknownField(f"{definition.label} is not part of a vector, so it has no "
+                           "arrows.")
+    whole = BY_NAME[definition.vector]
+    resolved = _source(results, whole)
+    if resolved is None:
+        raise UnknownField(
+            f"{name!r} needs {whole.source}, which this stage did not write.")
+    variable, source, _ = resolved
+    if source.kind != "vector" or source.location != "nodes":
+        raise UnknownField(f"{whole.source} is not a nodal vector in this stage.")
+    ids = sorted(source.values)
+    rows = [list(source.values[id][:3]) for id in ids]
+    return {
+        "field": whole.name,
+        "label": whole.label,
+        "unit": whole.unit(system),
+        "source": variable,
+        "ids": ids,
+        "values": rows,
+        "max": max((_magnitude(row) for row in rows), default=0.0),
     }
 
 
@@ -351,7 +476,7 @@ def at_node(results: Results, mesh: GidMesh, node: int,
         raise UnknownField(f"This stage has no node {node}.")
 
     rows = []
-    for group in catalogue(results, system):
+    for group in catalogue(results, system, mesh.dimension):
         for entry in group["fields"]:
             location = "nodes"
             try:

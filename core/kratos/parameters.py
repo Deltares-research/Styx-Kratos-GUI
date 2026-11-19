@@ -125,6 +125,15 @@ seepage face also writes `SEEPAGE_NODAL_RESULTS`: the water each node takes in o
 out, which the seepage strategy works out to decide where the face is open (as Kratos'
 `tests/seepage_tests` decks write it)."""
 
+REACTION_RESULTS = {"mechanical": ("REACTION",), "flow": ("REACTION_WATER_PRESSURE",)}
+"""What a stage writes after the reference list, when it computes reactions
+(`compute_reactions`, on by default): the reaction to its fixed degrees of freedom.
+For a mechanical stage that is the force each support exerts, per metre of the
+section; for a flow stage the water each fixed water pressure takes out of the model,
+per second and per metre -- the nodal water flow rate turned round
+(`core.results.fields`), which every flow strategy computes, where the seepage
+strategy's own `NODAL_WATER_FLOW_RATE` is written by it alone and is zero otherwise."""
+
 SOLVER = {
     "solver_type": "U_Pw",
     "model_part_name": "PorousDomain",
@@ -590,8 +599,10 @@ def _stage(stage: Stage, index: int, constraint_processes: list[dict],
             "solver_settings": dict(solver),
             "processes": processes,
             "output_processes": {
-                "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity,
-                                           flow, seepage=bool(stage.seepage))]},
+                "gid_output": [_gid_output(
+                    f"{deck_name}_{stage.name}", gravity, flow,
+                    seepage=bool(stage.seepage),
+                    reactions=bool(solver.get("compute_reactions", True)))]},
         },
     }
     preprocess = _preprocess(stage, deck_name)
@@ -844,16 +855,21 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
 
 
 def _gid_output(output_name: str, gravity: bool = True, flow: bool = False,
-                seepage: bool = False) -> dict:
+                seepage: bool = False, reactions: bool = True) -> dict:
     """GiD ASCII results beside the deck, one file per stage.
 
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
-    compare two runs. Without gravity the hydraulic head is left out: it would be 0.
-    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`), and the
-    nodal water flow rate when it has a seepage face (`SEEPAGE_NODAL_RESULTS`).
+    compare two runs, and the reactions after them (`REACTION_RESULTS`) -- unless the
+    stage does not compute them (`reactions`), when Kratos would write zeros. Without
+    gravity the hydraulic head is left out: it would be 0. A groundwater flow stage
+    writes the flow results (`FLOW_NODAL_RESULTS`), and the nodal water flow rate when
+    it has a seepage face (`SEEPAGE_NODAL_RESULTS`).
     """
-    nodal = (FLOW_NODAL_RESULTS + (SEEPAGE_NODAL_RESULTS if seepage else ())) if flow         else NODAL_RESULTS
+    nodal = (FLOW_NODAL_RESULTS + (SEEPAGE_NODAL_RESULTS if seepage else ())) if flow \
+        else NODAL_RESULTS
+    if reactions:
+        nodal += REACTION_RESULTS["flow" if flow else "mechanical"]
     gauss = [name for name in (FLOW_GAUSS_POINT_RESULTS if flow else GAUSS_POINT_RESULTS)
              if gravity or name != "HYDRAULIC_HEAD"]
     return {

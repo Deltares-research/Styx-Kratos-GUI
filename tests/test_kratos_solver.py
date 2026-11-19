@@ -17,7 +17,7 @@ import pytest
 
 from core.geometry import solid_model
 from core.kratos import writer, parameters
-from core.model.schemas import LineLoad, MeshRequest, Project
+from core.model.schemas import LineLoad, MeshRequest, Project, Stage
 from core.model.templates import seed_project
 
 PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
@@ -237,3 +237,36 @@ def test_gid_flow_output_includes_hydraulic_results_and_optional_seepage_rate():
     assert "FLUID_FLUX_VECTOR" in configuration["nodal_results"]
     assert "NODAL_WATER_FLOW_RATE" in configuration["nodal_results"]
     assert "HYDRAULIC_HEAD" not in configuration["gauss_point_results"]
+
+
+def _nodal(output: dict) -> list[str]:
+    return output["Parameters"]["postprocess_parameters"]["result_file_configuration"][
+        "nodal_results"]
+
+
+def test_every_stage_writes_its_reactions_after_the_reference_results():
+    """The force at each support of a mechanical stage, the nodal water flow rate of a
+    flow stage with or without a seepage face -- unless the stage does not compute
+    reactions, when Kratos would write zeros."""
+    assert _nodal(parameters._gid_output("m")) == [*parameters.NODAL_RESULTS, "REACTION"]
+    assert _nodal(parameters._gid_output("f", flow=True)) == [
+        *parameters.FLOW_NODAL_RESULTS, "REACTION_WATER_PRESSURE"]
+    assert _nodal(parameters._gid_output("s", flow=True, seepage=True))[-1] == \
+        "REACTION_WATER_PRESSURE"
+    assert _nodal(parameters._gid_output("m", reactions=False)) == list(
+        parameters.NODAL_RESULTS)
+    assert _nodal(parameters._gid_output("f", flow=True, reactions=False)) == list(
+        parameters.FLOW_NODAL_RESULTS)
+
+
+def test_a_stage_that_does_not_compute_reactions_does_not_write_them(session):
+    """`compute_reactions` is an expert setting (`core.model.solver`), on by default."""
+    project = seed_project()
+    project.dimension = 2
+    project.section_offset = 20.0
+    project.stages = [Stage(id="on", name="On"),
+                      Stage(id="off", name="Off", solver_settings={"compute_reactions": False})]
+    export = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
+    written = [_nodal(stage["output_processes"]["gid_output"][0]) for stage in stages(export)]
+
+    assert ["REACTION" in nodal for nodal in written] == [True, False]

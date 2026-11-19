@@ -87,6 +87,117 @@
     });
   });
 
+  test('results view: the zero line goes on along the phreatic line outside the soil',
+       function () {
+    stage(function (ctx) {
+      var pressure = { field: 'pw', label: 'Pore pressure', unit: 'kPa', location: 'nodes',
+                       ids: [1, 2, 3], values: [-10, -10, 10], min: -10, max: 10 };
+      function beyond() {
+        return group(ctx.scene).children.filter(function (c) {
+          return c.name === 'results:phreatic-outside';
+        })[0];
+      }
+      // The triangle (0,0) (2,0) (0,2); the line at y = 1 leaves it at x = 1.
+      V.draw(payload({ pressure: pressure, phreatic: [[[-3, 1], [5, 1]]] }));
+      var line = beyond();
+      T.ok(line && line.isLineSegments, 'drawn');
+      var at = line.geometry.getAttribute('position');
+      T.eq(at.count, 4, 'a piece either side of the soil');
+      T.near(at.getX(0), -3, 1e-6);
+      T.near(at.getX(1), 0, 1e-6, 'meets the soil where the traced line ends');
+      // Out through the hypotenuse, at 45 degrees: within a millimetre or so of it.
+      T.near(at.getX(2), 1, 2e-3);
+      T.near(at.getX(3), 5, 1e-6);
+
+      V.draw(payload({ phreatic: [[[-3, 1], [5, 1]]] }));
+      T.ok(!beyond(), 'not without the zero line it carries on');
+    });
+  });
+
+  test('results view: the zero pressure line is drawn where the pressure sent crosses zero',
+       function () {
+    stage(function (ctx) {
+      var pressure = { field: 'pw', label: 'Pore pressure', unit: 'kPa', location: 'nodes',
+                       ids: [1, 2, 3], values: [-10, -10, 10], min: -10, max: 10 };
+      V.draw(payload({ pressure: pressure }));
+      var line = group(ctx.scene).children.filter(function (c) {
+        return c.name === 'results:Soil:zero-pressure';
+      })[0];
+      T.ok(line && line.isLineSegments, 'a line was drawn');
+      var at = line.geometry.getAttribute('position');
+      T.eq(at.count, 2, 'one segment across the one triangle');
+      T.near(at.getY(0), 1, 1e-6, 'halfway up, where -10 turns into 10');
+      T.near(at.getY(1), 1, 1e-6);
+      T.ok(ctx.host.querySelector('.vp-legend-zero'), 'the legend names the line');
+      var wide = line.children.filter(function (c) { return c.userData.screenOnly; })[0];
+      T.ok(wide && wide.isMesh, 'drawn wide on screen');
+      T.eq(wide.geometry.getAttribute('position').count, 4, 'two triangles to a segment');
+
+      V.draw(payload());
+      T.ok(!group(ctx.scene).children.some(function (c) { return /zero-pressure/.test(c.name); }),
+           'no pressure sent, no line');
+      T.ok(!ctx.host.querySelector('.vp-legend-zero'));
+    });
+  });
+
+  test('results view: the wide zero line reads the canvas size each time it is drawn',
+       function () {
+    stage(function (ctx) {
+      var pressure = { field: 'pw', label: 'Pore pressure', unit: 'kPa', location: 'nodes',
+                       ids: [1, 2, 3], values: [-10, -10, 10], min: -10, max: 10 };
+      V.draw(payload({ pressure: pressure }));
+      var line = group(ctx.scene).children.filter(function (c) {
+        return c.name === 'results:Soil:zero-pressure';
+      })[0];
+      var wide = line.children.filter(function (c) { return c.userData.screenOnly; })[0];
+      var resolution = wide.material.uniforms.resolution.value;
+      wide.onBeforeRender({ getSize: function (target) { return target.set(800, 600); } });
+      T.eq([resolution.x, resolution.y], [800, 600]);
+      T.ok(wide.material.uniformsNeedUpdate);
+      wide.onBeforeRender({});
+      T.eq([resolution.x, resolution.y], [800, 600], 'a renderer with no size changes nothing');
+    });
+  });
+
+  test('results view: a vector field is drawn as arrows over the shading', function () {
+    stage(function (ctx) {
+      function arrows() {
+        return group(ctx.scene).children.filter(function (c) {
+          return c.name === 'results:arrows';
+        })[0];
+      }
+      var vectors = { field: 'flux', label: '|q|', unit: 'm/s',
+                      ids: [1, 2, 3], values: [[1, 0, 0], [0, 1, 0], [0, 0, 0]], max: 1 };
+      V.draw(payload({ vectors: vectors }));
+      var drawnArrows = arrows();
+      T.ok(drawnArrows && drawnArrows.isLineSegments, 'drawn');
+      T.eq(drawnArrows.renderOrder, 19, 'over the shading');
+      var at = drawnArrows.geometry.getAttribute('position');
+      T.ok(at.count > 0 && at.count % 2 === 0, 'whole segments');
+      T.near(at.getX(0), 0, 1e-6, 'the first arrow starts at node 1');
+      T.near(at.getY(0), 0, 1e-6);
+      T.ok(/\|q\| up to/.test(document.getElementById('vp-legend').textContent),
+           'the legend names it');
+
+      V.draw(payload({ vectors: Object.assign({}, vectors, {
+        values: [[0, 0, 0], [0, 0, 0], [0, 0, 0]] }) }));
+      T.ok(!arrows(), 'a field that is zero everywhere has no arrows');
+    });
+  });
+
+  test('results view: the legend data says what the legend on screen says', function () {
+    stage(function () {
+      T.eq(V.legendData(), null, 'nothing drawn, nothing to say');
+      V.draw(payload());
+      var data = V.legendData();
+      T.eq(data.title, 'u_y');
+      T.eq(data.unit, 'm');
+      T.eq(data.stage, 3);
+      T.eq(data.options.map, 'rainbow');
+      T.ok(data.range, 'with the lines the range is given in');
+    });
+  });
+
   test('results view: a structure is drawn as lines above the surface', function () {
     stage(function (ctx) {
       V.draw(payload({ mesh: { bbox: [0, 0, 0, 2, 2, 0], sections: [

@@ -269,8 +269,43 @@ def stage_list(directory: Path) -> list[dict]:
     that cannot be read falls back to the output files themselves.
     """
     stages = _stages_from_deck(directory) or _stages_from_files(directory)
-    return [_stage(directory, index, name, base)
+    calculations = _calculations_from_deck(directory)
+    return [_stage(directory, index, name, base, calculations.get(name))
             for index, (name, base) in enumerate(stages, start=1)]
+
+
+def _read_deck(directory: Path) -> dict | None:
+    """`ProjectParameters.json`, or None when it is missing or not a JSON object."""
+    try:
+        deck = json.loads((directory / deck_files.PARAMETERS_NAME)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return deck if isinstance(deck, dict) else None
+
+
+def _calculations_from_deck(directory: Path) -> dict[str, str]:
+    """Each stage's calculation type, "flow" or "mechanical", by stage name.
+
+    Read off the stage's `solution_type` the way `core.kratos.external_deck` reads it:
+    a groundwater flow solution is a flow stage, anything else a (coupled) mechanical
+    one. A stage whose deck does not say is left out. The Results view needs it to know
+    whether the zero water pressure line belongs on screen unasked (a flow stage) or
+    only on request (a mechanical one).
+    """
+    deck = _read_deck(directory)
+    stages = deck.get("stages") if deck else None
+    if not isinstance(stages, dict):
+        return {}
+    out = {}
+    for name, stage in stages.items():
+        try:
+            solution = stage["stage_settings"]["solver_settings"]["solution_type"]
+        except (KeyError, TypeError):
+            continue
+        if isinstance(solution, str) and solution:
+            out[name] = "flow" if "groundwater_flow" in solution.lower() else "mechanical"
+    return out
 
 
 def _stages_from_deck(directory: Path) -> list[tuple[str, str | None]]:
@@ -280,12 +315,8 @@ def _stages_from_deck(directory: Path) -> list[tuple[str, str | None]]:
     is not owned by anyone: it can be a deck from an older exporter, truncated, or
     edited by hand after the fact, and none of those should take the listing down.
     """
-    try:
-        deck = json.loads((directory / deck_files.PARAMETERS_NAME)
-                          .read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(deck, dict):
+    deck = _read_deck(directory)
+    if deck is None:
         return []
     settings = deck.get("orchestrator", {})
     order = settings.get("settings", {}).get("execution_list", []) \
@@ -340,7 +371,8 @@ def _stages_from_files(directory: Path) -> list[tuple[str, str | None]]:
     return [(name, base) for _, name, base in sorted(found)]
 
 
-def _stage(directory: Path, index: int, name: str, base: str | None) -> dict:
+def _stage(directory: Path, index: int, name: str, base: str | None,
+           calculation_type: str | None = None) -> dict:
     """One stage row. `base` is the deck's own `problem_name`; without it the output
     files are found by looking for a name ending in this stage's name, which is what a
     deck too old or too broken to read leaves us with."""
@@ -360,6 +392,9 @@ def _stage(directory: Path, index: int, name: str, base: str | None) -> dict:
         "results_file": res.name if res and res.is_file() else None,
         "results": bool(res and res.is_file()),
         "json": sorted(path.name for path in directory.glob(f"{name}__*.json")),
+        # "flow", "mechanical", or None for a deck that does not say
+        # (`_calculations_from_deck`).
+        "calculation": calculation_type,
     }
 
 
@@ -510,8 +545,8 @@ def stage_fields(run: Run, index: int) -> dict:
 
     stage = stage_record(run, index)
     return {"stage": stage,
-            "groups": fields.catalogue(stage_results(run, index),
-                                              run_unit_system(run))}
+            "groups": fields.catalogue(stage_results(run, index), run_unit_system(run),
+                                       stage_mesh(run, index).dimension)}
 
 
 def stage_field(run: Run, index: int, name: str, location: str = "nodes") -> dict:
@@ -528,6 +563,13 @@ def stage_displacement(run: Run, index: int) -> dict:
     from core.results import fields
 
     return fields.displacement(stage_results(run, index))
+
+
+def stage_vectors(run: Run, index: int, name: str) -> dict:
+    """The vectors behind one field of one stage -- what its arrows are drawn with."""
+    from core.results import fields
+
+    return fields.vectors(stage_results(run, index), name, run_unit_system(run))
 
 
 def stage_at_node(run: Run, index: int, node: int) -> dict:
