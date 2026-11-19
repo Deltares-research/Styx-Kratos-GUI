@@ -80,8 +80,7 @@
      ['Flow conditions', /^Flow functions/], ['Flow conditions', /^Global water level$/],
      ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/],
      ['Expert', /^Examine commands/], ['Expert', /^Macro library/],
-     ['Expert', /^Configure remote scripting/], ['Expert', /^Python interpreter/],
-     ['Help', /^Reference manual$/], ['Help', /^Tutorial manual$/]
+     ['Expert', /^Configure remote scripting/], ['Expert', /^Python interpreter/]
     ].forEach(function (pair) {
       var found = row(pair[0], pair[1]);
       T.eq(found.length, 1, pair[0] + ' > ' + pair[1]);
@@ -94,10 +93,31 @@
   test('the rows that work are left alone', function () {
     withInstall(function () {});
     [['File', /^Export model/], ['View', /^Zoom to fit$/], ['Soil', /^Modify soil layers/],
+     ['Help', /^Documentation$/], ['Help', /^GUI tutorials$/],
      ['Help', /^Command reference$/], ['Help', /^About/], ['Mesh', /^Refine mesh$/],
      ['Mesh', /^Coarsen mesh$/], ['Mesh', /^Reset local refinement$/]
     ].forEach(function (pair) {
       T.eq(!!row(pair[0], pair[1])[0].disabled, false, pair[0] + ' > ' + pair[1]);
+    });
+  });
+
+  test('Help > Documentation (F1) and GUI tutorials open their page of the site', function () {
+    withInstall(function (ctx) {
+      var saved = App.Documentation.open;
+      var opened = [];
+      App.Documentation.open = function (page) { opened.push(page); };
+      try {
+        App.runAction(row('Help', /^Documentation$/)[0]);
+        App.runAction(row('Help', /^GUI tutorials$/)[0]);
+      } finally {
+        App.Documentation.open = saved;
+      }
+      T.eq(opened, ['home', 'tutorials']);
+      T.eq(row('Help', /^Documentation$/)[0].key, 'F1');
+      T.eq(ctx.frozen, [], 'answered by the live layer, not the mockup');
+      T.eq(menu('Help').items.map(function (i) { return i === '-' ? '-' : i.label; }),
+           ['Documentation', 'GUI tutorials', 'Command reference', '-', 'About…'],
+           'the two pages of the site side by side');
     });
   });
 

@@ -1251,6 +1251,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # Help > Documentation and GUI tutorials.
+                             "documentation.js",
                              # The convergence figure, and the window that shows it live
                              # during Calculate.
                              "convergence-plot.js", "convergence-window.js",

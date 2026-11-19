@@ -36,8 +36,10 @@ says *not available yet*. These are, for example: **Import soil layers…**, **C
 **Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
 wells, drains and flow functions, **Select multiple objects**,
 **Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
-**Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
-manual** and **Tutorial manual**.
+**Print…**, and the **Expert** menu (except **Command line**).
+
+**Help** → **Documentation** (or F1) opens the Styx documentation site in a new browser tab.
+**Help** → **GUI tutorials** opens the [GUI tutorials](gui_tutorials/index.md).
 
 ## The order of work
 

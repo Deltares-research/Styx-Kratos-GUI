@@ -5,6 +5,9 @@
 #   python tools/gui_tutorial.py      the GUI tutorial screenshots first, then the site
 # CI builds and publishes it: .github/workflows/docs-site.yml.
 site_name: Styx documentation
+# Where GitHub Pages publishes it. Help > Documentation in the GUI opens it
+# (frontend/js/documentation.js).
+site_url: https://ubiquitous-adventure-vo3qvvw.pages.github.io/
 docs_dir: build/docs_site/pages
 site_dir: build/docs_site/site
 # Pages as USAGE.html, not USAGE/index.html: the links then also work when a reader opens

@@ -81,6 +81,12 @@ SUITES = {
         [JS / "script-command.js"],
         TESTS / "test-script-command.js",
     ),
+    # Help > Documentation and GUI tutorials: which page of the site each opens. The
+    # menu rows and F1 are patches.js's.
+    "documentation": (
+        [JS / "documentation.js"],
+        TESTS / "test-documentation.js",
+    ),
     # `node <id>`, the right-click "which parts is this node in" and the hover: the
     # node -> parts index and the text. The fetch, the marker and the menu are DOM.
     "node-parts": (

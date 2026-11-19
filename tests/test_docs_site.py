@@ -4,6 +4,8 @@ site."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tools import docs_site
@@ -88,3 +90,17 @@ def test_the_pages_copy_with_only_screenshots_missing(tmp_path):
     problems = docs_site.prepare(tmp_path)
     assert all("shows images/" in problem for problem in problems), problems
     assert all((tmp_path / page).is_file() for page in nav())
+
+
+def test_the_help_menu_opens_pages_of_the_published_site():
+    """Help > Documentation and GUI tutorials (frontend/js/documentation.js) open the
+    `site_url` of mkdocs.yml, on pages the nav lists: moving a page breaks the menu."""
+    script = (docs_site.ROOT / "frontend" / "js" / "documentation.js").read_text(encoding="utf-8")
+    config = docs_site.CONFIG.read_text(encoding="utf-8")
+    site = re.search(r"var SITE = '([^']+)'", script).group(1)
+    assert re.search(r"^site_url:\s*(\S+)\s*$", config, re.MULTILINE).group(1) == site
+    pages = re.search(r"var PAGES = \{(.*?)\};", script, re.DOTALL).group(1)
+    opened = re.findall(r":\s*'([^']+)'", pages)
+    assert opened == ["index.html", "docs/gui_tutorials/index.html"]
+    published = {docs_site.html_page(page) for page in nav()}
+    assert set(opened) <= published, set(opened) - published
