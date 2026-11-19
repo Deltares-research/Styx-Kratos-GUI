@@ -231,6 +231,8 @@ App.Calculate = (function () {
                + (result.error || 'Kratos exited without saying why.'));
     log('note', 'The deck and the full log (' + result.log + ') are in '
                 + result.directory);
+    // Kept for a feedback report, which then offers itself (feedback.js).
+    if (App.Feedback) App.Feedback.calculationFailed(result);
   }
 
   function run(done) {

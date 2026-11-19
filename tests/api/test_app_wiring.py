@@ -38,6 +38,7 @@ OWNERS = [
     (lambda path: path.startswith("/api/calculate"), "backend.routes.decks"),
     (lambda path: path.startswith("/api/results/"), "backend.routes.results"),
     (lambda path: path.startswith("/api/files/"), "backend.routes.files"),
+    (lambda path: path.startswith("/api/feedback"), "backend.routes.feedback"),
 ]
 """Which module a path belongs to, first match wins."""
 
@@ -68,14 +69,16 @@ def test_every_router_module_is_included():
     assert modules <= serving, sorted(modules - serving)
 
 
-def test_the_middleware_runs_host_check_then_no_cache_then_gzip():
+def test_the_middleware_runs_host_check_then_no_cache_then_requests_then_gzip():
     """Starlette makes the middleware added last the outermost, and `user_middleware`
     lists them outermost first. The Host/Origin check has to run before anything else
-    sees the request (`test_security.py`)."""
+    sees the request (`test_security.py`), so a refused request is not kept for a
+    feedback report either."""
     names = [m.kwargs["dispatch"].__name__ if "dispatch" in m.kwargs else m.cls.__name__
              for m in app.user_middleware]
 
-    assert names == ["only_this_browser_tab", "do_not_cache_sources", "GZipMiddleware"]
+    assert names == ["only_this_browser_tab", "do_not_cache_sources", "keep_api_requests",
+                     "GZipMiddleware"]
 
 
 # ── The helpers the routes share (backend/routes/common.py) ─────────────────

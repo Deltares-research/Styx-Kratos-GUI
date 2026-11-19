@@ -10,6 +10,9 @@
    asked, such as the mesh size of a body it removed (backend/routes/common.py
    `stored`). Every answer comes through here, so each note is shown whichever part
    of the GUI made the edit.
+
+   An answer of 500 or more is also given to `failed`: the live client hands it to
+   feedback.js, which offers to save a report about it.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -51,6 +54,7 @@ App.Api = (function () {
     var base = options.base || '';
     var fetcher = options.fetch;
     var note = options.note;
+    var failed = options.failed;
 
     function request(method, path, body) {
       var opts = { method: method, headers: {} };
@@ -69,6 +73,7 @@ App.Api = (function () {
           .then(function (parsed) {
             var err = new Error(messageFrom(response.status, parsed));
             err.status = response.status;
+            if (failed && response.status >= 500) failed(response.status, err.message, method, path);
             throw err;
           });
       }, function (cause) {
@@ -95,10 +100,15 @@ App.Api = (function () {
     if (App.Command && App.Command.note) App.Command.note(line);
   }
 
+  function offerAReport(status, message, method, path) {
+    if (App.Feedback) App.Feedback.serverError(status, message, method, path);
+  }
+
   var live = create({
     base: baseFor(window.location),
     fetch: function (url, opts) { return window.fetch(url, opts); },
-    note: noteInTheLog
+    note: noteInTheLog,
+    failed: offerAReport
   });
 
   return {

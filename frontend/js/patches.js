@@ -962,6 +962,11 @@ App.LivePatches = (function () {
     return App.Picture.command(text) !== false;
   }
 
+  function runFeedbackCommand(text) {
+    if (!App.FeedbackDialog) return false;
+    return App.FeedbackDialog.command(text) !== false;
+  }
+
   /* `water ...`, typed: set, show or remove the project's water level. What to send is
      `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
      the server stored. `false` when it is not this command. */
@@ -3252,6 +3257,7 @@ App.LivePatches = (function () {
     ['view iso|top|front|side', 'a standard view'],
     ['zoomfit', 'zoom to fit the model'],
     ['clear', 'clear the session log'],
+    ['feedback [text]', 'save a feedback report: what went wrong, or what you would like'],
     ['help', 'this list']
   ];
 
@@ -3578,6 +3584,10 @@ App.LivePatches = (function () {
         if (App.PictureDialog) App.PictureDialog.open();
         return;
       }
+      if (item && item.action === 'feedback') {
+        if (App.FeedbackDialog) App.FeedbackDialog.open();
+        return;
+      }
       if (item && item.action === 'copyPicture') {
         if (App.Picture) App.Picture.copy();
         return;
@@ -3794,6 +3804,23 @@ App.LivePatches = (function () {
       App.TOOLBAR.splice(App.TOOLBAR.indexOf('|'), 0, {
         icon: 'camera', tip: 'Save picture — the view as PNG, PDF or SVG', action: 'savePicture'
       });
+    }
+    /* Feedback, last on the toolbar and in the Help menu: always in sight in a workshop,
+       and out of the way of the modelling tools (js/feedback-dialog.js). */
+    if (!App.ICONS.feedback) {
+      App.ICONS.feedback = '<path d="M4 5h16v11H10l-4 4v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>';
+    }
+    if (!App.TOOLBAR.some(function (t) { return t && t.action === 'feedback'; })) {
+      App.TOOLBAR.push('|', {
+        icon: 'feedback', wide: 'Feedback', action: 'feedback',
+        tip: 'Send feedback — say what went wrong or what you would like; saved as a file'
+      });
+    }
+    var helpMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Help'; })[0];
+    if (helpMenu && !helpMenu.items.some(function (i) { return i && i.action === 'feedback'; })) {
+      var aboutAt = helpMenu.items.findIndex(function (i) { return i && i.action === 'about'; });
+      helpMenu.items.splice(aboutAt < 0 ? helpMenu.items.length : aboutAt, 0,
+                            { label: 'Send feedback…', icon: 'feedback', action: 'feedback' });
     }
     var viewMenu = (App.MENUS || []).filter(function (m) { return m.label === 'View'; })[0];
     if (viewMenu && !viewMenu.items.some(function (i) { return i && i.action === 'toggleRuler'; })) {
@@ -5032,6 +5059,8 @@ App.LivePatches = (function () {
 
       // `picture`, `picture copy`, `picture save`: the Save picture window's words.
       if (runPictureCommand(text)) return;
+      // `feedback [text]`: the Feedback window, with the text in it.
+      if (runFeedbackCommand(text)) return;
       // `colour <part>`: the Model explorer's colour toggle, typed.
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.

@@ -107,6 +107,16 @@ def checkout() -> Path:
     return folder
 
 
+def solver_as_written(reference: dict) -> dict:
+    """A reference deck's solver block as this exporter writes it: where it iterates,
+    with Kratos' own smallest step written out, 1e-4 of the stage (`core.model.solver`),
+    which the deck leaves to Kratos."""
+    out = dict(reference)
+    if "number_cycles" in out and "time_stepping" in out:
+        out["time_stepping"] = {**out["time_stepping"], "minimum_allowable_value": 1e-4}
+    return out
+
+
 def reference_view(case: str) -> dict:
     """The reference deck of `case`: its one stage and its materials."""
     folder = checkout() / case

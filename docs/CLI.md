@@ -107,6 +107,7 @@ Genuchten soil.
 | `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
 | `picture result RUN [FIELD\|all] [--stage S\|all] ...` | Save a picture of a result, or of every field and stage |
 | `shell [P]` | Type commands one after another, without `kratos-cli` and the project file |
+| `feedback MESSAGE [--kind K] [--name NAME] [--project P] [--run RUN] [--attach FILE] [--out DIR]` | Add a feedback report to your ZIP file of the day, as the GUI's **Feedback** button does. See [Feedback](#feedback). |
 
 `P` is a project file (`.json`), or a model script (`.py`) for the commands that only read the
 model: `show`, `check`, `get`, the `list` actions, `parts`, `stages show`, `node`, `mesh`
@@ -150,6 +151,31 @@ It also takes `--no-legend`, `--csv` (the field values too), `--map`, `--bands`,
 `--range MIN MAX`, `--deform` and `--mesh`, which mean what the `results` commands of the GUI's
 command box mean, and `--project P` to draw the loads and the water of the model over the result.
 A run in a folder outside the runs root must keep its name, `<deck>_<date>_<time>`.
+
+## Feedback
+
+`kratos-cli feedback` saves a feedback report for the Styx team. It adds the report to the same
+ZIP file that the GUI's **Feedback** button adds to: one file per person per day, for example
+`styx-feedback-2026-11-17-ben.zip`, with one folder per report:
+
+```bash
+kratos-cli feedback "The mesh of the anchor is too coarse" --project site.json
+kratos-cli feedback "Stage 3 failed" --project site.json --run 1 --name "Ben"
+kratos-cli feedback "A way to copy a stage" --kind missing
+kratos-cli feedback "The legend hides the wall" --attach legend.png --name "Ben"
+```
+
+| Option | What it does |
+|---|---|
+| `--kind K` | `bug` (something is wrong, the default), `confusing`, `missing` or `good` (something works well). These are the four choices of the GUI's window. |
+| `--name NAME` | Your name, so that the team can ask you about the report |
+| `--project P` | The project file or model script. A copy goes in the report. |
+| `--run RUN` | The run, as in `kratos-cli results`. Its Kratos log and parameter files go in the report. |
+| `--attach FILE` | A file to add to the report: a screenshot, a document, any file. Give it once for each file, up to 10 files of at most 15 MB each. |
+| `--out DIR` | The folder of the ZIP file (default: `~/KratosGUI/feedback`, or `KRATOS_GUI_FEEDBACK`) |
+
+When `kratos-cli` stops on an error that no command expected, it shows the error and says how
+to send a report about it.
 
 ## Axes
 
@@ -805,6 +831,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
+| `feedback [text]` | `kratos-cli feedback "MESSAGE" [--project P] [--run RUN]`: the same report. See [Feedback](#feedback). |
 | `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results zeroline`, `results arrows`, `results location`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn (`kratos-cli results field RUN NAME --location` for the location) |
 
 While a drawing tool is placing points, typing `x y` or `x y z` places the next one. In the
