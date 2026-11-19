@@ -152,7 +152,8 @@ same script is a test:
 | The test: play the steps, hold the deck to `MODEL`, hold the page to the screenshots | `tests/e2e/test_gui_tutorials.py` (`e2e` tier) |
 | The page names only screenshots of its steps, and is on the site | `tests/test_gui_tutorial_pages.py` (`quick` tier) |
 | A recorded Kratos run, and its replay | `tests/fixtures/tutorial_runs/<name>/`, `tests/fakes/replay_kratos.py` |
-| The site settings | `mkdocs.yml`, built with Zensical (`requirements-docs.txt`) |
+| The site settings, and the pages on the site | `mkdocs.yml`, built with Zensical (`requirements-docs.txt`) |
+| Copy the pages, and build the site | `tools/docs_site.py`, checked by `tests/test_docs_site.py` (`quick` tier) |
 
 Make the screenshots and the site on your computer, for a preview:
 
@@ -163,8 +164,8 @@ python tools/gui_tutorial.py NAME --headed   # one tutorial; watch the browser p
 ```
 
 The screenshots go in `docs/gui_tutorials/images/<name>/` and the site in
-`build/gui_tutorials/site/`. Neither is committed. CI makes both for every pull request
-(the artifact `gui-tutorials-site` of the [docs site](../../.github/workflows/docs-site.yml)
+`build/docs_site/site/`. Neither is committed. CI makes both for every pull request
+(the artifact `docs-site` of the [docs site](../../.github/workflows/docs-site.yml)
 run) and publishes the site from `main`. To look at the site of a pull request, download
 the artifact from the **Artifacts** list at the bottom of the run's summary page, unzip
 it, and open `index.html`. It needs no web server; only the search box does not work.
@@ -176,7 +177,7 @@ the site. These events start it:
 
 | Event | Result |
 |---|---|
-| A pull request is opened or gets new commits | The site as the artifact `gui-tutorials-site`, kept for 14 days |
+| A pull request is opened or gets new commits | The site as the artifact `docs-site`, kept for 14 days |
 | A push to `main`, for example a merge | The same artifact, and the job `publish` puts the site on GitHub Pages |
 | **Run workflow** on the workflow's page in the **Actions** tab | The site as the artifact |
 
@@ -195,9 +196,10 @@ preview on Windows. The job does these steps:
 5. Calculate replays the recorded run, so the Results screenshots show real Kratos
    results. If the deck differs from the recorded deck, a pull request gets a warning and
    a push to `main` fails.
-6. The script checks that each screenshot that a page names exists. Then it runs
-   `zensical build --strict --clean -f mkdocs.yml`, which writes the site to
-   `build/gui_tutorials/site/`.
+6. The script calls `tools/docs_site.py`, which copies the pages of the site into
+   `build/docs_site/pages/` and checks that each picture a page shows exists. Then it
+   runs `zensical build --strict --clean -f mkdocs.yml`, which writes the site to
+   `build/docs_site/site/`.
 7. The workflow uploads that folder as the artifact. On `main`, the job `publish` gives the
    artifact to GitHub Pages.
 
@@ -214,6 +216,32 @@ The tools that make the site:
 | Zensical (`requirements-docs.txt`) | Makes HTML pages from the Markdown pages and the screenshots. It reads `mkdocs.yml`. |
 | Material theme | The look of the site |
 | GitHub Pages | Holds the published site |
+
+### The pages on the site
+
+The site holds all the documentation, not only the GUI tutorials: the README as the home
+page, the guides in `docs/`, the `kratos-cli` tutorials, the pages of the example models
+and the developer guide. The `nav` of `mkdocs.yml` lists each page, as a path from the
+repository root. A page that is not in the `nav` is not on the site.
+
+The pages stay where they are in the repository, so they also read well on GitHub. Zensical
+reads one folder only, so `tools/docs_site.py` copies the pages of the `nav`, and the
+pictures they show, into `build/docs_site/pages/` at the same paths. Links between pages
+then work on GitHub and on the site. On the way, the copy changes what only works on
+GitHub:
+
+| On GitHub | On the site |
+|---|---|
+| A link to a file that is not on the site: code, a project file, a folder | A link to that file on GitHub |
+| A link in HTML to a page, such as `<a href="docs/USAGE.md">` | A link to the HTML page |
+| A picture in two versions, for the light and the dark mode | The light version only, as the site has a light theme only |
+| A picture from the repository's GitHub pages, such as a workflow's status badge | Left out, as the site cannot show it while the repository is private |
+| A GitHub alert, such as `> [!NOTE]` | A box of the same kind |
+
+To add a page, write it where it belongs and add it to the `nav`. To look at the site
+without making the screenshots again, run `python tools/docs_site.py`: it uses the
+screenshots in `docs/gui_tutorials/images/`, and stops if one that a page shows is
+missing. The strict build also stops on a link to a page or a heading that is not there.
 
 **When you change the GUI.** If a tutorial step breaks, the `e2e` tier fails with the step
 and the reason. Fix the step in `tests/e2e/tutorials/<name>.py`, and the page if the reader
@@ -243,7 +271,7 @@ Saturday ([.github/workflows/kratos.yml](../../.github/workflows/kratos.yml)). T
 run only when the repository variable `KRATOS_RUNNER` is `true`.
 
 The [docs site](../../.github/workflows/docs-site.yml) workflow plays the GUI tutorials on
-Windows, makes their screenshots and builds the site (see
+Windows, makes their screenshots and builds the documentation site (see
 [The GUI tutorials](#the-gui-tutorials)).
 
 [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the other checks of CI.

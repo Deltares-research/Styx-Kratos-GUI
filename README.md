@@ -97,7 +97,7 @@ Do these steps in this order. Each step has its own guide.
 |---|---|
 | [INSTALLATION.md](docs/INSTALLATION.md) | What to install on each platform, and how to start Styx with `run.bat` or `run.sh` |
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
-| [GUI tutorials](docs/gui_tutorials/index.md) | Build a model in the GUI step by step, with a screenshot of each step: the CROW excavation wall, from an empty project to the bending moment in the wall. The site with the screenshots is published from `main` on GitHub Pages; CI also attaches it to each run as `gui-tutorials-site`. |
+| [GUI tutorials](docs/gui_tutorials/index.md) | Build a model in the GUI step by step, with a screenshot of each step: the CROW excavation wall, from an empty project to the bending moment in the wall. The documentation site, with these screenshots and all the other pages, is published from `main` on GitHub Pages; CI also attaches it to each run as `docs-site`. |
 | [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
 | [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
 | [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |

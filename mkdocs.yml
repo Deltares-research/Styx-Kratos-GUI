@@ -1,24 +1,56 @@
-# The GUI tutorials site: docs/gui_tutorials/ only, built with Zensical
-# (requirements-docs.txt), which reads this file.
-#   python tools/gui_tutorial.py      screenshots, then the site in build/gui_tutorials/site/
+# The documentation site, built with Zensical (requirements-docs.txt), which reads this file.
+# The pages stay where they are in the repository: tools/docs_site.py copies the pages of
+# the nav below, with their pictures, into docs_dir, and builds the site from there.
+#   python tools/docs_site.py         the site in build/docs_site/site/
+#   python tools/gui_tutorial.py      the GUI tutorial screenshots first, then the site
 # CI builds and publishes it: .github/workflows/docs-site.yml.
-site_name: Styx GUI tutorials
-docs_dir: docs/gui_tutorials
-site_dir: build/gui_tutorials/site
-# Pages as CROW_case.html, not CROW_case/index.html: the links then also work when a
-# reader opens index.html from the unzipped CI artifact, with no web server.
+site_name: Styx documentation
+docs_dir: build/docs_site/pages
+site_dir: build/docs_site/site
+# Pages as USAGE.html, not USAGE/index.html: the links then also work when a reader opens
+# index.html from the unzipped CI artifact, with no web server.
 use_directory_urls: false
 
 theme:
   name: material
   features:
     - navigation.footer
+    - navigation.tabs
+    - navigation.sections
     - content.code.copy
 
 markdown_extensions:
   - tables
   - attr_list
+  - admonition
 
+# Paths from the repository root. Each README.md is the index.html of its folder.
 nav:
-  - Home: index.md
-  - CROW excavation wall: CROW_case.md
+  - Home: README.md
+  - Get started:
+      - Installation: docs/INSTALLATION.md
+      - Set up Kratos: docs/KRATOS_SETUP.md
+      - Use the GUI: docs/USAGE.md
+      - Features: docs/FEATURES.md
+  - GUI tutorials:
+      - Overview: docs/gui_tutorials/index.md
+      - CROW excavation wall: docs/gui_tutorials/CROW_case.md
+  - Command line:
+      - Reference: docs/CLI.md
+      - Tutorials: docs/cli_tutorials/README.md
+      - "Simple dike 1: build from scratch": docs/cli_tutorials/1_build_from_scratch.md
+      - "Simple dike 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
+      - "Simple dike 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
+      - CROW excavation wall: docs/cli_tutorials/CROW_case.md
+      - Muskat case: docs/cli_tutorials/Muskat_case.md
+  - Examples:
+      - CROW excavation wall: examples/CROW_case/README.md
+      - Muskat case: examples/Muskat_case/README.md
+  - Developers:
+      - Overview: docs/developer/README.md
+      - Project overview: docs/developer/PROJECT_OVERVIEW.md
+      - Architecture: docs/developer/ARCHITECTURE.md
+      - Testing: docs/developer/TESTING.md
+      - Reviewing: docs/developer/REVIEWING.md
+      - Contributing: CONTRIBUTING.md
+      - Security: SECURITY.md

@@ -6,7 +6,7 @@ windows, the tool rail and the explorers of the GUI. The tutorial is for a geote
 engineer who has not used Styx before.
 
 The model is the CROW excavation wall with Mohr-Coulomb soils. It is the same model as the
-[`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md), and Kratos uses the
+[`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md), and Kratos uses the
 same case to validate its GeoMechanicsApplication.
 
 Each step has a screenshot. An orange outline on the screenshot shows the button, field or
@@ -17,7 +17,7 @@ row to use.
 A 2D plane-strain section, 80 m wide and 60 m deep. All values are in SI units: m, N, Pa
 and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 
-![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](crow_model.svg)
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](../../examples/CROW_case/crow_model.svg)
 
 - A sheet pile wall at x = 5 m, from the ground surface down to y = −13 m.
 - A strut at y = −1.5 m, which holds the wall from the pit side.
@@ -30,9 +30,9 @@ and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 ## Before you start
 
 - Install Styx and start it with `run.bat` (Windows) or `run.sh` (Linux and macOS). See
-  [INSTALLATION.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/INSTALLATION.md). Styx opens in your browser with an empty 2D project.
+  [INSTALLATION.md](../INSTALLATION.md). Styx opens in your browser with an empty 2D project.
 - Step 13 calculates the model, and for that Styx needs Kratos. If Kratos is not set up
-  yet, follow [KRATOS_SETUP.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/KRATOS_SETUP.md). You can do steps 1 to 12 without
+  yet, follow [KRATOS_SETUP.md](../KRATOS_SETUP.md). You can do steps 1 to 12 without
   Kratos.
 
 How the GUI takes the values that you type:
@@ -572,6 +572,6 @@ Styx saves the project as `CROW excavation wall.json`. Open it again later with 
 
 - Change one value and calculate again, for example the band of the wall mesh, or the
   depth of the third lift.
-- Read [USAGE.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/USAGE.md) for all modes and tools of the GUI.
+- Read [USAGE.md](../USAGE.md) for all modes and tools of the GUI.
 - Build the same model with commands in the
-  [`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md).
+  [`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md).
