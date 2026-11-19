@@ -10,11 +10,14 @@ error the server did not expect comes back as a sentence and lands in its log.
 from __future__ import annotations
 
 import base64
+import logging
+import logging.config
 import zipfile
 
 import pytest
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
+from uvicorn.config import LOGGING_CONFIG
 
 from backend import server_log
 from backend.main import app
@@ -191,3 +194,12 @@ def test_the_page_files_are_not_kept_as_requests(client):
     client.get("/")
 
     assert "GET / " not in server_log.text()
+
+
+def test_a_line_of_uvicorn_is_kept_once():
+    """`uvicorn.error` hands its lines on to `uvicorn`, as uvicorn's own log setup has it."""
+    logging.config.dictConfig(LOGGING_CONFIG)
+    server_log.clear()
+    server_log.install()
+    logging.getLogger("uvicorn.error").info("Started server process [1]")
+    assert server_log.text().count("Started server process [1]") == 1

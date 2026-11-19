@@ -166,7 +166,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
-| Feedback | `feedback.js` (what a report says, the errors kept for it; no DOM), `feedback-dialog.js` (the **Send feedback** window with the files the user adds, the speech bubble in each window's title bar, the `feedback` command, and the note that offers a report after a server error, a stopped calculation or a script error) |
+| Feedback | `feedback.js` (what a report says, the errors kept for it; no DOM), `feedback-dialog.js` (the **Send feedback** window with the files the user adds, the speech bubble in each window's title bar, the `feedback` command, and the note that offers a report after a server error, a failed calculation or a script error) |
 | Calculation and results | `calculate.js`, `convergence-window.js` (the Convergence window, which asks for the run's convergence once a second while Kratos runs), `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure), `convergence-plot.js` (`results convergence …`, its SVG figure and CSV) |
 
 ## Results mode

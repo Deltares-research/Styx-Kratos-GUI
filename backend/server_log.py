@@ -42,9 +42,10 @@ class _Keep(logging.Handler):
 _handler = _Keep()
 _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s",
                                         "%H:%M:%S"))
-WATCHED = ("styx", "uvicorn", "uvicorn.error")
-"""The loggers kept. `uvicorn.access` is not: `request` keeps the API requests in a shorter
-form, and leaves out the page's own files."""
+WATCHED = ("styx", "uvicorn")
+"""The loggers kept. `uvicorn.error` is not named: its lines reach `uvicorn` too, and would be
+kept twice. `uvicorn.access` is not kept: `request` keeps the API requests in a shorter form,
+and leaves out the page's own files."""
 
 
 def install() -> None:

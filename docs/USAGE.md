@@ -1164,7 +1164,7 @@ set the environment variable `KRATOS_GUI_FEEDBACK` before you start Styx.
 ### After an error
 
 When something goes wrong, a note comes up at the bottom right: *Something went wrong*, with
-the reason. This happens when the server stops on an error, when Kratos stops a calculation,
+the reason. This happens when the server stops on an error, when a calculation fails,
 or when the page has a script error. Click **Save a report** to open the **Send feedback**
 window with the error in it. You can save the report without a message: the error says what
 happened. The same error does not show the note again within a minute.

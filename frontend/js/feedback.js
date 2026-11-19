@@ -11,7 +11,7 @@
 
    *   an answer of 500 or more from the server (api.js): a mesh gmsh could not make,
        a Kratos that would not start, or a fault in Styx itself;
-   *   a calculation Kratos stopped (calculate.js);
+   *   a calculation that failed (calculate.js); a run the user stopped is not one;
    *   an error in the page's own scripts.
 
    `notice` keeps each one and tells the listeners about it, unless the same error was
@@ -100,7 +100,8 @@ App.Feedback = (function () {
     return notice('Server error ' + status + ' on ' + method + ' ' + path, message);
   }
 
-  /* calculate.js: a run Kratos stopped (`ok` false in the answer of /api/calculate). */
+  /* calculate.js: a run that failed (`ok` false in the answer of /api/calculate). A run
+     the user stopped (`stopped` true) never comes here. */
   function calculationFailed(result) {
     var stage = result && result.stage;
     var what = 'Calculation failed' + (stage ? ' in stage ' + stage.index + ' of ' + stage.of

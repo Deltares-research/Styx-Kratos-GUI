@@ -51,7 +51,7 @@
     F.forgetForTests();
   });
 
-  test('feedback: a calculation Kratos stopped says the stage', function () {
+  test('feedback: a failed calculation says the stage', function () {
     F.forgetForTests();
     var kept = F.calculationFailed({ ok: false, returncode: 1, error: 'Diverged.',
                                      stage: { index: 3, of: 5, name: 'Excavation' } });

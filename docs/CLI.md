@@ -160,7 +160,7 @@ ZIP file that the GUI's **Feedback** button adds to: one file per person per day
 
 ```bash
 kratos-cli feedback "The mesh of the anchor is too coarse" --project site.json
-kratos-cli feedback "Stage 3 stopped" --project site.json --run 1 --name "Ben"
+kratos-cli feedback "Stage 3 failed" --project site.json --run 1 --name "Ben"
 kratos-cli feedback "A way to copy a stage" --kind missing
 kratos-cli feedback "The legend hides the wall" --attach legend.png --name "Ben"
 ```
