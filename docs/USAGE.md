@@ -773,8 +773,8 @@ When you stop a calculation:
 
 <kbd>F9</kbd> does not stop a calculation, so a key pressed twice cannot end a long run.
 
-Styx never overwrites or deletes a run folder. See
-[What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
+Styx never overwrites or deletes a run folder. To choose the folder the run folders go in,
+see [Environment variables](KRATOS_SETUP.md#environment-variables).
 
 ### Follow the solver
 
@@ -898,10 +898,10 @@ screen: a load that the stage switched off is not shown. They are shown only whe
 was calculated from the open project, with the same stages. They stay where they are in the
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
 
-After a groundwater flow stage a dark line shows where the calculated pore pressure is
-zero: the phreatic surface the flow calculation found. After a coupled (mechanical) stage
-the line is hidden until you tick **Zero pressure**, or type `results zeroline on`. The
-line is drawn only when the stage wrote a pore pressure.
+After a groundwater flow stage a wide light blue line shows where the calculated pore
+pressure is zero: the phreatic surface the flow calculation found. After a coupled
+(mechanical) stage the line is hidden until you tick **Zero pressure**, or type
+`results zeroline on`. The line is drawn only when the stage wrote a pore pressure.
 
 The arrows are black. The longest is 4 % of the model, and the others are to the same
 scale. On a fine mesh one node in each square of that size gets an arrow. The legend
