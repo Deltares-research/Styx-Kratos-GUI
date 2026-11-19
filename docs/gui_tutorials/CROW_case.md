@@ -6,7 +6,7 @@ windows, the tool rail and the explorers of the GUI. The tutorial is for a geote
 engineer who has not used Styx before.
 
 The model is the CROW excavation wall with Mohr-Coulomb soils. It is the same model as the
-[`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md), and Kratos uses the
+[`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md), and Kratos uses the
 same case to validate its GeoMechanicsApplication.
 
 Each step has a screenshot. An orange outline on the screenshot shows the button, field or
@@ -17,7 +17,7 @@ row to use.
 A 2D plane-strain section, 80 m wide and 60 m deep. All values are in SI units: m, N, Pa
 and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 
-![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](crow_model.svg)
+![The CROW model: (a) the whole section with clay over sand, the sheet pile at x = 5 m and the supports; (b) a close-up of the pit with the three lifts, the strut, the water table and the surcharge](../../examples/CROW_case/crow_model.svg)
 
 - A sheet pile wall at x = 5 m, from the ground surface down to y = −13 m.
 - A strut at y = −1.5 m, which holds the wall from the pit side.
@@ -30,9 +30,9 @@ and kg/m³. The y axis points up, so a depth of 8 m is y = −8 m.
 ## Before you start
 
 - Install Styx and start it with `run.bat` (Windows) or `run.sh` (Linux and macOS). See
-  [INSTALLATION.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/INSTALLATION.md). Styx opens in your browser with an empty 2D project.
+  [INSTALLATION.md](../INSTALLATION.md). Styx opens in your browser with an empty 2D project.
 - Step 13 calculates the model, and for that Styx needs Kratos. If Kratos is not set up
-  yet, follow [KRATOS_SETUP.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/KRATOS_SETUP.md). You can do steps 1 to 12 without
+  yet, follow [KRATOS_SETUP.md](../KRATOS_SETUP.md). You can do steps 1 to 12 without
   Kratos.
 
 How the GUI takes the values that you type:
@@ -62,7 +62,8 @@ A new project has a soil block 20 m wide and 15 m deep. The CROW model is 80 m w
 1. Click **File** > **Project properties…**.
 2. Type `80` in **x max** and `-60` in **y min**. Keep `0` in **x min** and in **y max**:
    the ground is at y = 0.
-3. Keep the gravitational acceleration g = 9.81 m/s².
+3. Keep **Gravity** at 9.81 m/s² and **Unit system** at **SI (N, m, kg, s)**. All values
+   in this tutorial are in SI units.
 4. Click **OK**.
 
 ![The Project properties window with the new size of the soil block. The x max and y min fields are outlined.](images/crow/01_project_properties.png)
@@ -485,11 +486,14 @@ After the last stage, the Stages explorer shows seven stages:
 
 ## 13. Calculate and look at the wall
 
-1. On the toolbar, click **Calculate**. Styx writes the Kratos input files and runs Kratos.
-   The calculation takes a few minutes, because the Mohr-Coulomb soil yields in the
-   excavation stages.
-2. When the calculation is complete, Styx opens Results mode.
-3. On the tool rail, click **Plot along the wall**.
+1. On the toolbar, click **Calculate**. Styx writes the Kratos input files from the mesh of
+   step 11 and runs Kratos. The calculation takes a few minutes, because the Mohr-Coulomb
+   soil yields in the excavation stages.
+2. The **Convergence** window opens at the bottom right. It shows how the solver converges
+   in each stage, iteration by iteration. Leave it open.
+3. When the calculation is complete, Styx opens Results mode. The Convergence window stays
+   open and gives the time that the calculation took.
+4. On the tool rail, click **Plot along the wall**.
 
 ![The Plot along the wall window with the bending moment in the wall for stages 3 to 7. The Plot along the wall tool is outlined.](images/crow/13_results_plot.png)
 
@@ -526,7 +530,8 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 
 ## 14. Look at the stresses and the displacements
 
-1. Click **Close** in the Plot along the wall window.
+1. Click **Close** in the Plot along the wall window, then click **Close** in the
+   Convergence window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
    excavation**.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
@@ -572,6 +577,6 @@ Styx saves the project as `CROW excavation wall.json`. Open it again later with 
 
 - Change one value and calculate again, for example the band of the wall mesh, or the
   depth of the third lift.
-- Read [USAGE.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/USAGE.md) for all modes and tools of the GUI.
+- Read [USAGE.md](../USAGE.md) for all modes and tools of the GUI.
 - Build the same model with commands in the
-  [`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md).
+  [`kratos-cli` tutorial of the CROW case](../cli_tutorials/CROW_case.md).

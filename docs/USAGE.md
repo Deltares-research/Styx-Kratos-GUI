@@ -33,6 +33,9 @@ explorer**, below the Model explorer.
 The menus and the tool rail show only the items that work. Plates, beams, wells, drains and
 other tools that Styx does not have yet are not shown.
 
+**Help** → **Documentation** (or F1) opens the Styx documentation site in a new browser tab.
+**Help** → **GUI tutorials** opens the [GUI tutorials](gui_tutorials/index.md).
+
 ## The order of work
 
 Do the modes from left to right:
@@ -780,8 +783,8 @@ stress initialisation:
 - The calculation uses the soil only. It leaves out sheet piles, anchors, interfaces and
   loads, and says so. It also leaves out the supports: the Model explorer marks them
   "(unused in flow)", and **Reset displacements to zero** is greyed out.
-- The results are the water pressure, the hydraulic head, the effective saturation and the
-  flux `q` (the specific discharge, in m/s).
+- The results are the water pressure, the hydraulic head, the effective saturation, the
+  flux `q` (the specific discharge, in m/s) and the nodal water flow rate.
 
 The window also lists the parts that each stage switches on and off, and the result of the
 last calculation for each stage.
@@ -826,8 +829,8 @@ When you stop a calculation:
 
 <kbd>F9</kbd> does not stop a calculation, so a key pressed twice cannot end a long run.
 
-Styx never overwrites or deletes a run folder. See
-[What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
+Styx never overwrites or deletes a run folder. To choose the folder the run folders go in,
+see [Environment variables](KRATOS_SETUP.md#environment-variables).
 
 ### Follow the solver
 
@@ -956,10 +959,10 @@ When you go to a different tab and then back to Results, Styx shows the same res
 The wall plot opens again if it was open when you left. The **Choose results** window does
 not: click **Choose results** in the tool rail to open it.
 
-After a groundwater flow stage a dark line shows where the calculated pore pressure is
-zero: the phreatic surface the flow calculation found. After a coupled (mechanical) stage
-the line is hidden until you tick **Zero pressure**, or type `results zeroline on`. The
-line is drawn only when the stage wrote a pore pressure.
+After a groundwater flow stage a wide light blue line shows where the calculated pore
+pressure is zero: the phreatic surface the flow calculation found. After a coupled
+(mechanical) stage the line is hidden until you tick **Zero pressure**, or type
+`results zeroline on`. The line is drawn only when the stage wrote a pore pressure.
 
 The arrows are black. The longest is 4 % of the model, and the others are to the same
 scale. On a fine mesh one node in each square of that size gets an arrow. The legend
@@ -978,8 +981,8 @@ same way: the sum of R_y is the vertical force the supports carry.
 ### Other results
 
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
-  bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
-  (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
+  bending moment (M), the shear force (Q), the normal force (N), the displacements (ux, uy)
+  and the interface tractions (tn, ts) against depth, with one line for each stage.
   Each face of the wall has its own tractions. They show only where the contact is on in
   that stage, so the face a pit is dug against starts at the pit floor.
   Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
@@ -1153,6 +1156,7 @@ the same as each command of the command box.
 | <kbd>Ctrl</kbd>+<kbd>N</kbd> | Start a new project |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Redo |
+| <kbd>F1</kbd> | Open the documentation site |
 | <kbd>F5</kbd> | Zoom to fit |
 | <kbd>F9</kbd> | In Mesh mode: make the mesh. In all other modes: calculate. |
 | <kbd>Esc</kbd> | Clear the selection, or stop a drawing tool |

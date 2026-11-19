@@ -1,7 +1,7 @@
-# The GUI tutorials site (docs/gui_tutorials/, mkdocs.yml): the screenshots made from the
-# GUI of this commit, then the site, on every pull request and every push to main. A
-# reviewer downloads the site from the run's artifacts. A push to main also publishes it
-# on GitHub Pages.
+# The documentation site (mkdocs.yml, tools/docs_site.py): the GUI tutorial screenshots
+# made from the GUI of this commit, then the site with every page of the docs, on every
+# pull request and every push to main. A reviewer downloads the site from the run's
+# artifacts. A push to main also publishes it on GitHub Pages.
 #
 # Calculate replays the recorded Kratos run of each tutorial (tests/fakes/replay_kratos.py),
 # as the runners have no Kratos. A deck that no longer matches its recorded run is a
@@ -63,8 +63,8 @@ jobs:
       - name: Keep the site
         uses: actions/upload-artifact@v7
         with:
-          name: gui-tutorials-site
-          path: build/gui_tutorials/site/
+          name: docs-site
+          path: build/docs_site/site/
           if-no-files-found: error
           retention-days: 14
 
@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: gui-tutorials-site
+          name: docs-site
           path: site
 
       - uses: actions/configure-pages@v6

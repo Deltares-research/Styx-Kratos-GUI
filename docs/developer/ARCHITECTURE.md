@@ -15,8 +15,8 @@ the tests).
 
 | Part | What |
 |---|---|
-| Web framework | FastAPI 0.143.0 and Uvicorn 0.34.0 |
-| Validation | Pydantic 2.14.2. `Project` in `core/model/schemas.py` is the one description of a model. |
+| Web framework | FastAPI 0.162.5 (Python 3.10) or 0.162.6 (Python 3.11 and newer), and Uvicorn 0.34.0 |
+| Validation | Pydantic 2.14.3. `Project` in `core/model/schemas.py` is the one description of a model. |
 | Geometry and mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
 | Numerics | NumPy 2.2.6 (Python 3.10), 2.3.5 (Python 3.11 to 3.14) or 2.5.4 (Python 3.15 and newer) |
 | State | One project in memory (`backend/store.py`). No database and no login. Runs are folders on disk. |
@@ -78,9 +78,9 @@ is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `solver.py` (a stage's expert solver settings: defaults, when each applies, the deck they write), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (what a new layer, soil, structure or load starts as, as the GUI puts it, and the soil library), `polylines.py` (points along a 2D polyline, for an interface on a part of a pile), `stages.py` (stage tree → Kratos stages; `phases.py` keeps the old name importable), `solver.py` (a stage's expert solver settings: defaults, when each applies, the deck they write), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
-| `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
+| `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `prestress_workaround.py` (a temporary Kratos process that a deck with a prestressed anchor ships; read as text, never imported), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, the log written line by line, the run in progress, failure messages), `kratos_main.py` (runs inside the Python of Kratos, with the output buffer of the C runtime off) |
 | `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces), `convergence.py` (the residuals of each iteration, from the log; ported from the ConvergencePlotter of Deltares' FEA-Tools) |
 | `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) is outside the packages too. |
@@ -115,12 +115,12 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/domain`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages` (also as the old `/phases`), `/dimension`, `/domain`, `/units`; `PUT /api/project/water`; `DELETE /api/project/bodies/{key}`, `/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate`; `GET /api/calculate/status` (is a run going on, and in which run folder); `POST /api/calculate/stop` (stop the run: Kratos is killed, the run answers `stopped`) |
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive`, `/runs/{run}/convergence` (also for the run in progress) |
-| Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
+| Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/vectors/{name}` (the arrows), `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
 | Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`; `DELETE /api/files/folder/{folder}` hands the folder back when the save ends. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. A folder id lasts for one save, and at most 15 minutes without use. One folder window is open at a time, and it closes after 10 minutes. `GET /api/files/picture-job/{token}` says whether the page may run the picture job in its address: only on a server `kratos-cli picture` started with that token. |
 | Health | `main.py` | `GET /api/health` (also the version of Styx) |
@@ -155,9 +155,9 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 
 | Role | Modules in `frontend/js/` |
 |---|---|
-| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `dialog-fit.js` (a window with help text opens wide enough to read it), `splitters.js` (the bars that resize the panels, in place of the shell's own), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
+| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `dialog-fit.js` (a window with help text opens wide enough to read it), `splitters.js` (the bars that resize the panels, in place of the shell's own), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage"), `documentation.js` (**Help** → **Documentation** and **GUI tutorials** open the documentation site) |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
-| View | `viewport.js` (three.js), `surface-water.js` (the water on the ground that Staged construction draws), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
+| View | `viewport.js` (three.js), `surface-water.js` (the water on the ground that Staged construction draws), `orbit.js` (camera with y up), `structure-glyphs.js` (sheet piles, anchors and interfaces as wide lines that keep their width when you zoom), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
 | Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `boundary-conditions.js` (the boundary conditions window, and the `boundary` and `gravity` commands), `point-list.js` (the list of points in the Line and normal load windows), `water-command.js`, `domain-command.js` (the `domain` command), `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Soil materials | `material-sets.js` (the **Soil materials** window: the soils, and the project's water under **Water**), `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
@@ -209,9 +209,10 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
 [TESTING.md](TESTING.md) tells you how to run the tests. Two facts about the design of the
 tests:
 
-- **No recorded Kratos run is in the repository.** Without Kratos, the results code is
-  tested on GiD output that `tests/fakes/` (a fake runner and `gid_writer.py`) makes from
-  the test model.
+- **Without Kratos, the results code is tested on made-up output.** `tests/fakes/` (a fake
+  runner and `gid_writer.py`) makes GiD output from the test model. The only recorded
+  Kratos runs are those of the GUI tutorials, in `tests/fixtures/tutorial_runs/`, which
+  `tests/fakes/replay_kratos.py` plays back for the tutorial screenshots.
 - **One syntax error stops the full live layer** of the browser app, so
   `frontend/tests/syntax_check.py` parses each JavaScript file in each test tier.
 

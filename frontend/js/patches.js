@@ -3586,6 +3586,10 @@ App.LivePatches = (function () {
         if (App.Export) App.Export.run();
         return;
       }
+      if (item && item.action === 'openDocumentation') {
+        if (App.Documentation) App.Documentation.open(item.page);
+        return;
+      }
       if (item && item.action === 'calculate') {
         // While a run goes on, the toolbar button (`cta`) and the menu item are Stop.
         // F9 (an action with no label) and the rail are refused below instead.
@@ -3864,6 +3868,35 @@ App.LivePatches = (function () {
         var at = exportAt === -1 ? fileMenu.items.length : exportAt + 1;
         fileMenu.items.splice(at, 0,
           { label: 'Import mesh (.mdpa)…', icon: 'open', action: 'importMdpa' });
+      }
+    }
+
+    /* Help > Reference manual and Tutorial manual had no action in the frozen mockup
+       (js/data.js:188), so they were greyed. They open the documentation site now
+       (js/documentation.js), under the names its pages go by, side by side: the
+       mockup had Command reference between the two. */
+    var helpMenu = App.MENUS.find(function (m) { return m.label === 'Help'; });
+    if (helpMenu) {
+      var tutorials = null;
+      helpMenu.items.forEach(function (item) {
+        if (!item || typeof item !== 'object' || item.action) return;
+        if (item.label === 'Reference manual') {
+          item.label = 'Documentation';
+          item.action = 'openDocumentation';
+          item.page = 'home';
+        } else if (item.label === 'Tutorial manual') {
+          item.label = 'GUI tutorials';
+          item.action = 'openDocumentation';
+          item.page = 'tutorials';
+          tutorials = item;
+        }
+      });
+      if (tutorials) {
+        helpMenu.items.splice(helpMenu.items.indexOf(tutorials), 1);
+        var docsAt = helpMenu.items.findIndex(function (item) {
+          return item && item.action === 'openDocumentation';
+        });
+        helpMenu.items.splice(docsAt + 1, 0, tutorials);
       }
     }
 
@@ -5299,6 +5332,13 @@ App.LivePatches = (function () {
       /* The shortcuts js/data.js prints next to the menu items it never wired up.
          Ctrl+N and Ctrl+O are the browser's own in most builds and cannot always be
          taken; the menu and the toolbar are the reliable route to those two. */
+      // F1, Help > Documentation, from anywhere: it types nothing, so the command box
+      // has no use for it. Taken from the browser, whose own F1 opens its help pages.
+      document.addEventListener('keydown', function (event) {
+        if (event.key !== 'F1' || event.ctrlKey || event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        App.runAction({ action: 'openDocumentation', page: 'home' });
+      });
       document.addEventListener('keydown', function (event) {
         if (!event.ctrlKey || event.altKey) return;
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
