@@ -2,9 +2,12 @@
 
 A steady-state groundwater flow under and through a clay levee on a clay cover over a
 sand aquifer. The river stands against the outer slope; the water flows to the polder
-and leaves through the inner slope and the polder surface. The model is rebuilt from a
-reference calculation of the same section, with the same geometry, soil properties and
-boundary conditions, and its water pressures are compared with that calculation below.
+and leaves through the inner slope and the polder surface.
+
+The same levee is a validation test of Kratos,
+[test_levee_seepage](https://github.com/KratosMultiphysics/Kratos/tree/master/applications/GeoMechanicsApplication/tests/test_levee_seepage),
+with the same geometry, soil properties and boundary conditions. That test compares the
+results of Kratos with a reference calculation.
 
 | File | What it is |
 |---|---|
@@ -44,8 +47,8 @@ boundary conditions, and its water pressures are compared with that calculation 
   most 300 iterations and a residual error tolerance of 1e-4.
 - **Mesh**: linear, 1.0 m.
 
-The river level holds on the outer slope above 5.0 m too, as in the reference
-calculation: up to the crest the soil there is held in suction, 10 kPa at (0, 6).
+The river level holds on the outer slope above 5.0 m too, as in the Kratos validation
+test: up to the crest the soil there is held in suction, 10 kPa at (0, 6).
 
 ## The results
 
@@ -62,31 +65,41 @@ pressure is suction positive.
 
 ## In the Styx GUI
 
-1. Open `levee_seepage.json` with **File > Open project…**, or type
-   `run examples/levee_seepage/levee_seepage.py` in the command box.
+1. Open `levee_seepage.json` with **File > Open project…**. With a copy of the
+   repository, you can also type `run examples/levee_seepage/levee_seepage.py` in the
+   command box.
 2. Click **Calculate**.
 3. In **Results**, show **Pore pressure**, **Hydraulic head**, **Effective saturation** or
    **Nodal water flow rate**.
 
 ## From the Styx command line
 
-```bash
-kratos-cli.bat check levee_seepage.json        # Windows; ./kratos-cli.sh on Linux, macOS, Git Bash
-kratos-cli.bat calculate levee_seepage.json
-kratos-cli.bat results field 1 pw
-kratos-cli.bat results field 1 flow_rate
+First prepare PowerShell as described in
+[Prepare PowerShell for the tutorials](../../docs/INSTALLATION.md#prepare-powershell-for-the-tutorials).
+This works with a copy of the repository and with the install from the Deltares package
+server. Then, in the folder that holds `levee_seepage.json`:
+
+```powershell
+kratos-cli check levee_seepage.json
+kratos-cli calculate levee_seepage.json
+kratos-cli results field 1 pw
+kratos-cli results field 1 flow_rate
 ```
 
-The model script writes the deck and runs it:
+On Linux and macOS, with a copy of the repository, type `<repo>/kratos-cli.sh` in place
+of `kratos-cli`, where `<repo>` is the folder you cloned the repository into.
 
-```bash
+## The model script
+
+The model script needs a copy of the repository: it loads Styx from the repository's
+`core` folder. Run it with the Python of the environment that `kratos-cli` uses:
+`<repo>\.venv-windows\Scripts\python.exe` on Windows, `<repo>/.venv-linux/bin/python` on
+Linux.
+
+```powershell
 python levee_seepage.py --out deck/            # write the Kratos deck
 python levee_seepage.py --calculate            # write the deck, run it, print the results
 ```
-
-`python` is the environment `kratos-cli` runs in: `<repo>\.venv-windows\Scripts\python.exe`
-on Windows, `<repo>/.venv-linux/bin/python` on Linux, where `<repo>` is the folder you
-cloned the repository into.
 
 [docs/cli_tutorials/levee_seepage_case.md](../../docs/cli_tutorials/levee_seepage_case.md)
 builds this model command by command. The commands are all in

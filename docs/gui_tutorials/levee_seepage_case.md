@@ -153,7 +153,7 @@ ground surface, y = 0.
    level in **Bottom [m]**. The top of each layer follows from the layer above it.
 4. Click **OK**.
 
-![The Modify soil layers window with the two layers. The Modify soil layers tool is outlined.](images/levee_seepage/03_layers.png)
+![The Modify soil layers window with the two layers. The Modify soil layers tool and the Add button are outlined.](images/levee_seepage/03_layers.png)
 
 No window sets the width of the model. Set it in the Selection explorer of a layer:
 
@@ -308,7 +308,7 @@ groundwater flow stage:
 ## Step 9. Look at the water pressure and the flow
 
 1. In the Results explorer, at the bottom right, in **Stage**, select **1 Flow**.
-2. In **Field**, select **Groundwater · Pore pressure**.
+2. In **Field**, select **Water pressure and head · Pore pressure (Pa)**.
 
 ![The pore pressure. The Stage and Field lists of the Results explorer are outlined.](images/levee_seepage/09_contours_pressure.png)
 
@@ -319,14 +319,14 @@ bottom right. The largest suction, about 17 kPa, is at the inner corner of the c
 through the levee from the river level and comes out on the inner slope at
 x = 19.2 m, y = 0.95 m: the exit point of the seepage face.
 
-3. In **Field**, select **Groundwater · Hydraulic head**.
+3. In **Field**, select **Water pressure and head · Hydraulic head (m)**.
 
 ![The hydraulic head. The Stage and Field lists are outlined.](images/levee_seepage/09_contours_head.png)
 
 The head goes from 5.0 m at the river to −0.5 m at the polder. Most of the head drop is naturally located
 under and in the levee.
 
-4. In **Field**, select **Groundwater · Effective saturation**.
+4. In **Field**, select **Saturation · Effective saturation (-)**.
 
 ![The effective saturation. The Stage and Field lists are outlined.](images/levee_seepage/09_contours_saturation.png)
 
@@ -335,8 +335,8 @@ saturation smaller as the suction grows: in the crest of the levee it is about 0
 calculates the saturation at the integration points and extrapolates it to the nodes, so
 it can show a little above 1.
 
-5. In **Field**, select **Groundwater · |q|**. This is the size of the specific discharge,
-   the Darcy velocity of the water.
+5. In **Field**, select **Groundwater flow · |q| (m/s)**. This is the size of the
+   specific discharge, the Darcy velocity of the water.
 
 ![The specific discharge. The Stage and Field lists are outlined.](images/levee_seepage/09_contours_flux.png)
 
@@ -345,7 +345,7 @@ and comes out through the seepage face and the right side. The specific discharg
 largest, about 5 × 10⁻⁶ m/s, in the outer slope just below the river level, where the
 water enters the levee. Above the phreatic line, in the dry crest, the water hardly moves.
 
-6. In **Arrows**, select **|q|**. This draws the groundwater flux as arrows over the
+6. In **Arrows**, select **|q| (m/s)**. This draws the groundwater flux as arrows over the
    colors: each arrow starts at a node and points in the direction in which the water
    flows there.
 
@@ -357,8 +357,8 @@ moves has no arrow that you can see. The arrows go down into the soil under the 
 along the sand aquifer under the levee, and up to the seepage face and the polder.
 Select **off** in **Arrows** to hide them again.
 
-**Groundwater · Nodal water flow rate** shows the water that each node takes in (negative)
-or lets out (positive), per meter of the section. In total 2.87 m³/day per meter comes in
+**Groundwater flow · Nodal water flow rate (+ out) (m³/s/m)** shows the water that each
+node takes in (negative) or lets out (positive), per meter of the section. In total 2.87 m³/day per meter comes in
 from the river: 2.03 leaves through the seepage face and 0.84 through the right side.
 The seepage strategy converged in 20 iterations.
 

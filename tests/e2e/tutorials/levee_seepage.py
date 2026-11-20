@@ -116,8 +116,9 @@ def layers(tour: Tour) -> None:
     page = tour.page
     rail(tour, "soilLayers")
     dialog = window(page)
+    add = dialog.locator(".lay-toolbar button", has_text="Add").first
     for _ in PLAN.layers:
-        dialog.locator(".lay-toolbar button", has_text="Add").first.click()
+        add.click()
     rows = dialog.locator(".lay-table tbody tr")
     rows.nth(len(PLAN.layers) - 1).wait_for()
     soil_names = {m.id: m.name for m in PLAN.materials}
@@ -126,7 +127,7 @@ def layers(tour: Tour) -> None:
         fill(row.locator("input").nth(0), layer.name)
         row.locator("select").select_option(label=soil_names[layer.mat])
         fill(row.locator("input").nth(2), f"{layer.bottom:g}")
-    tour.picture(mark=rail_tool("soilLayers"))
+    tour.picture(mark=[rail_tool("soilLayers"), add])
     dialog.locator(".dlg-foot .btn-primary").click()
     tour.until(f"App.PROJECT.layers.length === {len(PLAN.layers)}")
     tour.settle()

@@ -183,9 +183,11 @@ for display.
 
 ## Step 5. The water
 
-A new project has standard supports that block the normal movement of sides by rollers and fix the bottom motion in all directions.
-A groundwater flow calculation, like this levee case, does not make use of them. The front and back rollers are there
-for a 3D model and are not listed in 2D:
+A new project has standard supports: a fixed bottom, which blocks all movement, and
+rollers on the left and right sides, which block the movement normal to the side. A
+groundwater flow calculation, like this levee case, does not use them. The front and back
+rollers are only for a 3D model. In 2D the list leaves them out, and its last line says
+so:
 
 ```powershell
 kratos-cli boundary levee.json list
@@ -342,7 +344,7 @@ kratos-cli results field 1 pw
 > <pre style="white-space: pre-wrap">Pore pressure (Pa), stage 1 (Flow): -2.70e+5 to 16802 over 2628 nodes
 >   min -2.70e+5 at node 9
 >   max 16802 at node 16
-> `--csv` writes every value.</pre>
+> &#96;--csv&#96; writes every value.</pre>
 
 ```powershell
 kratos-cli results field 1 flow_rate
@@ -351,7 +353,7 @@ kratos-cli results field 1 flow_rate
 >   min -3.08e-6 at node 236
 >   max 6.10e-6 at node 15
 >   out 3.33e-5, in 3.33e-5, out - in 1.73e-11 m³/s/m
-> `--csv` writes every value.</pre>
+> &#96;--csv&#96; writes every value.</pre>
 
 ```powershell
 kratos-cli results field 1 effective_saturation
@@ -359,7 +361,7 @@ kratos-cli results field 1 effective_saturation
 > <pre style="white-space: pre-wrap">Effective saturation (-), stage 1 (Flow): 0.4841 to 1.04 over 2628 nodes
 >   min 0.4841 at node 16
 >   max 1.04 at node 2565
-> `--csv` writes every value.</pre>
+> &#96;--csv&#96; writes every value.</pre>
 
 - Kratos' sign for the water pressure is suction positive. The fixed river head gives compression of
   −270 kPa at the bottom left corner. The largest suction, 16.8 kPa, is in the soil of
@@ -370,13 +372,16 @@ kratos-cli results field 1 effective_saturation
 - Kratos calculates the saturation at the Gauss points and extrapolates it to the nodes,
   so it can show a little above 1.
 
-What these results mean, and how they compare with a reference calculation of the same
-section, is in the example's [README](../../examples/levee_seepage/README.md#the-results).
+What these results mean is in the example's
+[README](../../examples/levee_seepage/README.md#the-results). The Kratos validation test
+[test_levee_seepage](https://github.com/KratosMultiphysics/Kratos/tree/master/applications/GeoMechanicsApplication/tests/test_levee_seepage)
+compares the results of the same levee with a reference calculation.
 
 ## The same model as the script
 
-To check that the commands built the model script's model, write the script's model as a
-project file and export both:
+This check needs a copy of the repository, because the model script is in it. To check
+that the commands built the model script's model, write the script's model as a project
+file and export both:
 
 ```powershell
 kratos-cli build <repo>\examples\levee_seepage\levee_seepage.py --out script.json
