@@ -4,9 +4,19 @@
 (function () {
   var D = App.FeedbackDialog;
 
+  /* A stand-in for html2canvas: the picture of the window is "WIN" in base64. */
+  function fakeDrawer(seen) {
+    return function (element, options) {
+      if (seen) seen.push({ element: element, options: options });
+      return Promise.resolve({ toDataURL: function () { return 'data:image/png;base64,V0lO'; } });
+    };
+  }
+
   /* A modal layer, a recorded API and command log, and nothing open at the end. */
   function rig(answer) {
-    var saved = { api: App.Api, command: App.Command, viewport: App.Viewport };
+    var saved = { api: App.Api, command: App.Command, viewport: App.Viewport,
+                  drawer: window.html2canvas };
+    window.html2canvas = fakeDrawer();
     var ctx = { posts: [], lines: [] };
     var layer = document.getElementById('modal-layer');
     var owned = !layer;
@@ -35,6 +45,7 @@
       D.hideNote();
       if (owned) layer.remove();
       App.Api = saved.api; App.Command = saved.command; App.Viewport = saved.viewport;
+      window.html2canvas = saved.drawer;
       App.Feedback.forgetForTests();
     };
     return ctx;
@@ -107,6 +118,7 @@
       T.eq(sent.body.message, 'Hard to find');
       T.eq(sent.body.include_project, false);
       T.eq(sent.body.view, null);
+      T.eq(sent.body.window_picture, 'V0lO', 'the picture of the whole window');
       T.eq(sent.body.attachments, []);
       T.ok(sent.body.context.mode, 'where in the app');
       T.ok(!D.isOpen(), 'closed after the save');
@@ -199,6 +211,77 @@
       return D.screenshot();
     }).then(function (none) {
       T.eq(none, null);
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('feedback dom: with the pictures switched off, neither picture goes', function () {
+    var ctx = rig({ path: 'p', folder: 'f', name: 'n', report: 'r', reports: 1 });
+    D.open({ message: 'No pictures' });
+    feedbackWindow().querySelector('input[name="feedback-picture"]').checked = false;
+    press('Save report');
+    return settle().then(settle).then(function () {
+      T.eq(ctx.posts[0].body.view, null);
+      T.eq(ctx.posts[0].body.window_picture, null);
+    }).then(ctx.restore, function (error) { ctx.restore(); throw error; });
+  });
+
+  test('feedback dom: the picture of the window shows the view frames and leaves the Feedback window out', function () {
+    var ctx = rig({});
+    var seen = [];
+    window.html2canvas = fakeDrawer(seen);
+    var canvas = document.createElement('canvas');
+    canvas.className = 'scene-canvas';
+    canvas.style.cssText = 'position: absolute; left: 3px;';
+    document.body.appendChild(canvas);
+    var frame = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+    App.Viewport = { canvasPictures: function () { return [{ canvas: canvas, url: frame }]; } };
+    function restore() { canvas.remove(); ctx.restore(); }
+    var asked = D.windowPicture();
+    T.eq(canvas.getAttribute('data-feedback-frame'), '0', 'marked while it is drawn');
+    return asked.then(function (png) {
+      T.eq(png, 'V0lO');
+      T.eq(seen[0].element, document.body);
+      T.ok(canvas.getAttribute('data-feedback-frame') === null, 'the mark is taken off');
+      var options = seen[0].options;
+      var leftOut = document.createElement('div');
+      leftOut.className = 'dialog feedback-leave-out';
+      var note = document.createElement('div');
+      note.id = 'feedback-note';
+      T.eq(options.ignoreElements(leftOut), true);
+      T.eq(options.ignoreElements(note), true);
+      T.eq(options.ignoreElements(document.createElement('div')), false);
+      var copy = document.implementation.createHTMLDocument('copy');
+      copy.body.innerHTML = '<canvas class="scene-canvas" style="position: absolute"'
+                          + ' data-feedback-frame="0"></canvas>';
+      options.onclone(copy);
+      var image = copy.querySelector('img');
+      T.ok(image && !copy.querySelector('canvas'), 'the canvas became a picture');
+      T.eq(image.getAttribute('src'), frame);
+      T.eq(image.className, 'scene-canvas');
+      T.eq(image.style.position, 'absolute', 'placed where the canvas was');
+    }).then(function () {
+      App.Viewport = { canvasPictures: function () { throw new Error('no context'); } };
+      window.html2canvas = function () { return Promise.reject(new Error('cannot draw')); };
+      return D.windowPicture();
+    }).then(function (none) {
+      T.eq(none, null, 'no picture when the page cannot be drawn');
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('feedback dom: html2canvas is loaded the first time, and a load that fails can be tried again', function () {
+    var kept = window.html2canvas;
+    delete window.html2canvas;
+    function restore() { window.html2canvas = kept; }
+    return D.pageDrawer('no-such-folder/html2canvas.min.js').then(function () {
+      throw new Error('should not load');
+    }, function (error) {
+      T.ok(/could not be loaded/.test(error.message), error.message);
+      return D.pageDrawer('data:text/javascript,window.html2canvas=function(){return 7;}');
+    }).then(function (draw) {
+      T.eq(draw(), 7);
+      return D.pageDrawer();
+    }).then(function (again) {
+      T.eq(again(), 7, 'once loaded, it is the same');
     }).then(restore, function (error) { restore(); throw error; });
   });
 

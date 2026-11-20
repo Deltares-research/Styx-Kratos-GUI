@@ -150,13 +150,14 @@ def test_the_report_holds_the_model_the_picture_the_logs_and_says_what_each_is(t
         errors=[{"when": "14:04:00", "what": "Server error 500 on POST /api/mesh",
                  "detail": "gmsh failed\nat line 2"}],
         logs={"session-log.txt": "> mesh\nMesh failed", "model-history.txt": "  "},
-        project='{"name": "dike"}', view=PNG)
+        project='{"name": "dike"}', view=PNG, window=PNG + b"window")
 
     files = report_files(feedback.write(report, tmp_path, NOW))
     text = files["report.txt"].decode()
 
     assert files["project.json"] == b'{"name": "dike"}'
     assert files["view.png"] == PNG
+    assert files["window.png"] == PNG + b"window"
     assert files["session-log.txt"] == b"> mesh\nMesh failed"
     assert "model-history.txt" not in files, "an empty log is left out"
     assert "Kind:     Something is wrong (bug)" in text
@@ -167,10 +168,11 @@ def test_the_report_holds_the_model_the_picture_the_logs_and_says_what_each_is(t
     assert "selected" not in text, "an empty value is left out"
     assert "14:04:00  Server error 500 on POST /api/mesh\n    gmsh failed\n    at line 2" in text
     assert "project.json     the model when the report was written" in text
+    assert "window.png       the whole Styx window when the report was written" in text
     summary = json.loads(files["report.json"])
     assert summary["kind"] == "bug"
     assert summary["time"] == "2026-11-17T14:05:12"
-    assert summary["files"] == ["project.json", "session-log.txt", "view.png"]
+    assert summary["files"] == ["project.json", "session-log.txt", "view.png", "window.png"]
 
 
 def test_the_open_run_gives_its_log_and_parameters(tmp_path, monkeypatch):

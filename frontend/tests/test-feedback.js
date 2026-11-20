@@ -90,7 +90,7 @@
     var body = F.payload({
       kind: 'bug', message: '  It broke.  ', name: ' Ben ', error: about,
       context: { mode: 'Mesh' }, sessionLog: ['> mesh', 'Mesh failed'], modelHistory: [],
-      view: 'AAAA', attachments: [{ name: 'a.txt', data: 'data:,x', size: 1, type: 'text/plain' }],
+      view: 'AAAA', windowPicture: 'BBBB', attachments: [{ name: 'a.txt', data: 'data:,x', size: 1, type: 'text/plain' }],
       includeProject: false, run: 'dike_2026-11-17_14-00'
     });
     T.eq(body.message, 'It broke.');
@@ -99,6 +99,7 @@
     T.eq(body.session_log, '> mesh\nMesh failed');
     T.eq(body.model_history, '');
     T.eq(body.view, 'AAAA');
+    T.eq(body.window_picture, 'BBBB');
     T.eq(body.attachments, [{ name: 'a.txt', data: 'data:,x' }], 'the name and the data only');
     T.eq(body.include_project, false);
     T.eq(body.run, 'dike_2026-11-17_14-00');

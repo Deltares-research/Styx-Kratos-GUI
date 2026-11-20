@@ -4108,7 +4108,10 @@ App.Viewport = (function () {
     if (orbit.tick()) needsRender = true;
     if (!needsRender) return;
     needsRender = false;
+    drawFrame();
+  }
 
+  function drawFrame() {
     orbit.apply(cam);
     syncGlyphs();                          // pixel-sized, so sized for this camera
     syncSectionGrid();                     // needs the camera the frame is drawn with
@@ -4125,6 +4128,21 @@ App.Viewport = (function () {
     }
 
     App.setZoom(Math.round(home.homeRadius / orbit.radius * 100));
+  }
+
+  /* The view's two canvases as pictures, each {canvas, url} with url a PNG data URL, for
+     a picture of the whole window (feedback-dialog.js). A WebGL canvas keeps its pixels
+     only until the frame is on screen, so a frame is drawn now and read at once. */
+  function canvasPictures() {
+    if (!renderer || !scene || !cam) return [];
+    drawFrame();
+    return [canvas, triadRenderer ? triadCanvas : null].filter(Boolean).map(function (c) {
+      try {
+        return { canvas: c, url: c.toDataURL('image/png') };
+      } catch (err) {
+        return null;                       // a canvas that cannot be read: left as it is
+      }
+    }).filter(Boolean);
   }
 
   return {
@@ -4187,6 +4205,7 @@ App.Viewport = (function () {
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     pictureView: pictureView,
+    canvasPictures: canvasPictures,
     getCamera: function() { return cam; },
     getCanvas: function() { return canvas; },
     // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to

@@ -8,5 +8,5 @@ Until a license is chosen and published in this file, no license is granted: you
 copy, modify or redistribute this software without permission.
 
 Styx relies on third-party software under its own licenses: Gmsh (GNU GPL v2 or later,
-installed from PyPI by the launcher), three.js (MIT, bundled in frontend/vendor/) and
-Kratos Multiphysics (BSD, installed separately).
+installed from PyPI by the launcher), three.js and html2canvas (both MIT, bundled in
+frontend/vendor/) and Kratos Multiphysics (BSD, installed separately).

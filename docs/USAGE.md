@@ -1152,7 +1152,10 @@ In the window:
 Styx adds these to the report:
 
 - where you were in the app: the mode, the open windows and the selected object
-- a picture of the model view (clear **Add a picture of the view** to leave it out)
+- a picture of the whole Styx window, as it was when you opened the **Send feedback** window:
+  the windows that were open, what you typed in them, and the **Session** log with its errors
+- a picture of the model view (clear **Add pictures of the Styx window and the view** to leave
+  both pictures out)
 - the model (clear **Add the model** to leave it out)
 - the **Session** log and the **Model history**
 - the errors that Styx saw before the report, and the log of the server

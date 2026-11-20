@@ -16,6 +16,8 @@ A report's folder holds:
 - `report.json`: the same, for a script to read.
 - `project.json` (or the model script): the model at that moment, so the problem can be seen
   again by opening it.
+- `window.png`: a picture of the whole Styx window, when the GUI sent one: the windows that
+  were open, what was typed in them, and the Session log with its errors.
 - `view.png`: a picture of the model view, when the GUI sent one.
 - `attachments/`: the files the user added: a screenshot they pasted, a document, a model of
   their own, any file.
@@ -106,6 +108,8 @@ class Report:
     project_file: str = "project.json"
     view: bytes | None = None
     """A picture of the model view, as PNG: the GUI adds it by itself."""
+    window: bytes | None = None
+    """A picture of the whole Styx window, as PNG: the GUI adds it by itself."""
     attachments: list[tuple[str, bytes]] = field(default_factory=list)
     """The files the writer added, of any kind, each as the name it had and its bytes.
     `attachment_names` makes the names safe for the ZIP file, and tells two alike apart."""
@@ -147,8 +151,9 @@ def check(report: Report) -> None:
         raise FeedbackError(f"The name is longer than {MAX_NAME} characters.")
     if isinstance(report.run, str) and not _RUN_NAME.fullmatch(report.run):
         raise FeedbackError(f"{report.run!r} is not the name of a run.")
-    if report.view and not report.view.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise FeedbackError("The picture of the view is not a PNG.")
+    for picture, what in ((report.view, "view"), (report.window, "Styx window")):
+        if picture and not picture.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise FeedbackError(f"The picture of the {what} is not a PNG.")
     if len(report.attachments) > MAX_ATTACHMENTS:
         raise FeedbackError(f"A report can hold {MAX_ATTACHMENTS} files at most. Put the "
                             "others in a second report.")
@@ -320,6 +325,8 @@ def contents(report: Report, now: datetime) -> dict[str, str | bytes]:
     files: dict[str, str | bytes] = {}
     if report.project is not None:
         files[report.project_file] = report.project
+    if report.window:
+        files["window.png"] = report.window
     if report.view:
         files["view.png"] = report.view
     safe = attachment_names([name for name, _data in report.attachments])
@@ -368,6 +375,7 @@ def run_files(run: str | Path | None) -> dict[str, str]:
 
 
 FILE_NOTES = {
+    "window.png": "the whole Styx window when the report was written",
     "view.png": "the model view when the report was written",
     "session-log.txt": "the Session log of the GUI's command panel",
     "model-history.txt": "the Model history of the GUI's command panel",

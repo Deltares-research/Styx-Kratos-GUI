@@ -1,7 +1,7 @@
 """The Feedback routes: a report written in the GUI, saved as a ZIP file (`core/feedback.py`).
 
 The page sends what only it knows -- the message, where in the app it was written, its
-Session log and Model history, a picture of the view, the files the user added (a pasted
+Session log and Model history, pictures of the whole window and of the view, the files the user added (a pasted
 screenshot, a document, ...), the errors it saw. The server adds what only it knows: the project as it holds it, its own log
 (`backend/server_log.py`), the files of the open run, and the version. The report goes in
 the writer's ZIP file of the day in the feedback folder, and the answer says where;
@@ -31,7 +31,7 @@ router = APIRouter()
 MAX_LOG = 2_000_000
 """The longest log the page may send, in characters: far more than a day's Session log."""
 MAX_PICTURE = 20_000_000
-"""The longest picture of the view, in base64 characters (about 15 MB)."""
+"""The longest picture of the view or of the window, in base64 characters (about 15 MB)."""
 MAX_FILE = 4 * feedback.MAX_ATTACHMENT_BYTES // 3 + 1000
 """The longest file the user added, in base64 characters, with room for the data-URL head."""
 
@@ -54,6 +54,9 @@ class FeedbackRequest(BaseModel):
     view: str | None = Field(None, max_length=MAX_PICTURE)
     """The picture of the model view: a PNG, base64-encoded, with or without the
     `data:image/png;base64,` in front."""
+    window_picture: str | None = Field(None, max_length=MAX_PICTURE)
+    """The picture of the whole Styx window, the same way: the windows open, what is
+    typed in them and the Session log, as on screen."""
     attachments: list[Attachment] = Field(default_factory=list,
                                           max_length=feedback.MAX_ATTACHMENTS)
     include_project: bool = True
@@ -82,6 +85,7 @@ def save_feedback(asked: FeedbackRequest) -> dict:
               "server-log.txt": server_log.text()},
         project=session.dumps(store.get()) if asked.include_project else None,
         view=_decoded(asked.view, "picture of the view"),
+        window=_decoded(asked.window_picture, "picture of the Styx window"),
         attachments=[(file.name, _decoded(file.data, f"file {file.name}") or b"")
                      for file in asked.attachments], run=asked.run)
     try:
