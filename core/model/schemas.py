@@ -1783,7 +1783,10 @@ class LayersUpdate(Base):
 
 
 class MaterialsUpdate(Base):
-    materials: list[Material] = Field(min_length=1)
+    # May be empty, as a project's library may: a blank project has no materials, and
+    # OK in its Soil materials window sends that empty library back. A material a layer
+    # still uses is refused by the project's own validation, not here.
+    materials: list[Material]
     fluid: Fluid | None = None
     """The water every soil holds, edited in the same window. None leaves it as it is."""
 
