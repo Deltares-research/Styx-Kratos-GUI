@@ -374,9 +374,9 @@ the water table. The pressure is hydrostatic and zero at −1.5 m.
 
 | Name | Point 1 | Point 2 | Point 3 |
 |---|---|---|---|
-| `WaterLoad_Stage1` | `0`, `-2` | `5`, `-2` | `5`, `-1.5` |
-| `WaterLoad_Stage2` | `0`, `-5` | `5`, `-5` | `5`, `-1.5` |
-| `WaterLoad_Stage3` | `0`, `-8` | `5`, `-8` | `5`, `-1.5` |
+| `WaterLoad_AfterLift1` | `0`, `-2` | `5`, `-2` | `5`, `-1.5` |
+| `WaterLoad_AfterLift2` | `0`, `-5` | `5`, `-5` | `5`, `-1.5` |
+| `WaterLoad_AfterLift3` | `0`, `-8` | `5`, `-8` | `5`, `-1.5` |
 
 For each water load:
 
@@ -439,7 +439,7 @@ off the objects that are not there yet:
 
 1. In the Stages explorer, click **Initial stage**.
 2. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
-   **Interface**, **WaterLoad_Stage1**, **WaterLoad_Stage2**, **WaterLoad_Stage3** and
+   **Interface**, **WaterLoad_AfterLift1**, **WaterLoad_AfterLift2**, **WaterLoad_AfterLift3** and
    **Load**.
 
 ![The initial stage, with the wall, strut, interface and loads switched off in the Model explorer. The Add stage button is outlined.](images/crow/12_stages_initial.png)
@@ -450,10 +450,10 @@ Then add the null step and the five construction stages:
 |---|---|---|---|---|---|
 | 2 | `Null step` | `150` | `0.0001` | | |
 | 3 | `Wall installation` | `150` | `0.001` | SheetPileWall, Interface, Load | |
-| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | lift 1 |
+| 4 | `First excavation` | `500` | `0.001` | WaterLoad_AfterLift1 | lift 1 |
 | 5 | `Strut installation` | `150` | `0.001` | Strut | |
-| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | lift 2, WaterLoad_Stage1 |
-| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | lift 3, WaterLoad_Stage2 |
+| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_AfterLift2 | lift 2, WaterLoad_AfterLift1 |
+| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_AfterLift3 | lift 3, WaterLoad_AfterLift2 |
 
 The null step changes nothing in the model. Kratos' own CROW test has the same stage after
 the K0 procedure. The excavation stages have more iterations, because the soil yields
