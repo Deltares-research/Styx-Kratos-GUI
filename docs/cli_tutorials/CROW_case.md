@@ -72,7 +72,8 @@ The shell is in `$HOME\crow`: every file from here on is written there, and so i
 
 In the shell you leave out `kratos-cli.bat` and the project file on every line, and `undo`
 and `redo` work. Each line is still an ordinary command: to run one on its own in PowerShell,
-put `<repo>\kratos-cli.bat` in front and the project file after the command word.
+put `<repo>\kratos-cli.bat` in front and the project file after the command word. However,
+when running the commands in PowerShell, `undo` and `redo` do not work.
 
 | In the shell | The same command on its own, in PowerShell |
 |---|---|
@@ -94,24 +95,19 @@ put `<repo>\kratos-cli.bat` in front and the project file after the command word
 ```powershell
 kratos-cli new crow.json --force --dim 2 --name "CROW excavation wall"
 ```
-> <pre>wrote crow.json: CROW excavation wall (2D section at z = 0, SI)
-> open  crow.json  (...\crow)
-> crow.json></pre>
+> <pre>wrote crow.json: CROW excavation wall (2D section at z = 0, SI)</pre>
 
-`new` writes an empty 2D project in SI units and opens it: the prompt now shows its name.
-`--force` replaces a `crow.json` that is already there. The name also names the deck's files
+`new` writes an empty 2D project in SI units. The name also names the deck's files
 (`CROW_excavation_wall.mdpa`).
 
 #### Step 2. The site
 
 ```powershell
-kratos-cli domain crow.json --x 0 80 --y -60 0 --z 0 10
+kratos-cli domain crow.json --x 0 80 --y -60 0
 ```
-> <pre>domain x 0 .. 80, y -60 .. 0 (2D section at z = 5); wrote ...\crow.json
-> The section at z = 0 is outside the new domain, so it is cut through its middle, at z = 5.</pre>
+> <pre>domain x 0 .. 80, y -60 .. 0 (2D section at z = 0); wrote ...\crow.json</pre>
 
-- The `--z` extent has no effect in plane strain: the section is taken through its middle.
-- The first soil layer starts at the top of the domain, so the ground is at 0.
+The first soil layer starts at the top of the domain, so the ground is at 0.
 
 #### Step 3. The soils
 
@@ -149,11 +145,11 @@ kratos-cli material crow.json add sand --name Sand --color "#b08a6a" --law GeoMo
 
 Useful here:
 
-- `material list` shows the soils there are.
-- `material set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
+- `kratos-cli material crow.json list` shows the soils there are.
+- `kratos-cli material crow.json set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
   reduction.
-- `material presets` lists the library soils (`embankment` Embankment ...
-  `bedrock` Bedrock), and `material add ID --preset clay_shallow` starts from one
+- `kratos-cli material crow.json presets` lists the library soils (`embankment` Embankment ...
+  `bedrock` Bedrock), and `kratos-cli material crow.json add ID --preset clay_shallow` starts from one
   instead of typing every variable. Add `--model linear-elastic` to get it as a linear
   elastic soil.
 
@@ -510,24 +506,9 @@ To look at a stage, or change one:
 kratos-cli stages crow.json show dig_2                             # what is in the model during that stage
 ```
 
-```powershell
-kratos-cli stages crow.json set dig_1 --max-iterations 600         # more iterations for the first dig
-```
-
-```powershell
-kratos-cli stages crow.json deactivate dig_3 strut                 # take the strut out of dig_3 alone
-```
-
-```powershell
-kratos-cli undo                                          # ...and put it back
-```
-
-```powershell
-kratos-cli undo                                          # ...and the first dig back to 500
-```
-
-`undo` takes back one command that changed the project. A command that changed nothing (for
-example setting a value it already has) is not a step.
+With the `set` and `deactivate` commands, a stage can be adjusted as needed.  For instance,
+`stages set dig_1 --max-iterations 600` increases the number of iterations for the first dig, and
+`stages deactivate dig_3 strut` takes out the strut during the third excavation.
 
 ### Part 4: the deck and the run
 
@@ -536,7 +517,7 @@ example setting a value it already has) is not a step.
 ```powershell
 kratos-cli check crow.json
 ```
-> <pre>ok: CROW excavation wall (2D section at z = 5, SI)</pre>
+> <pre>ok: CROW excavation wall (2D section at z = 0, SI)</pre>
 
 ```powershell
 kratos-cli export crow.json --out deck
@@ -822,7 +803,7 @@ $env:KRATOS_GUI_RUNS = "$HOME\crow"; <repo>\run.bat
 ```powershell
 kratos-cli script crow.json --out crow.py
 ```
-> <pre>wrote crow.py: CROW excavation wall (2D section at z = 5, SI)
+> <pre>wrote crow.py: CROW excavation wall (2D section at z = 0, SI)
 > next: run crow.py in the GUI's command box, or python crow.py --out deck/</pre>
 
 `crow.py` holds the whole model as readable Python, every value typed out, like the
