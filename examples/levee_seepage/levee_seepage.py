@@ -54,6 +54,8 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# These imports need ROOT on the path, so they come after the lines above. `noqa: E402`
+# tells the linter (ruff) that an import below other code is intended here.
 from core import scripting  # noqa: E402
 from core.model.schemas import (CustomPart, Domain, Fluid, Material,  # noqa: E402
                                 MeshSettings, Project, SeepageCondition, SoilLayer, Stage,
@@ -170,7 +172,12 @@ def soil(id_: str, name: str, color: str) -> Material:
 
 def drawn(key: str, label: str, material: str,
           corners: list[tuple[float, float]]) -> CustomPart:
-    """A polygon drawn in the section, extruded over the model's depth as the GUI does."""
+    """A polygon drawn in the section and extruded through the model's depth, as the GUI
+    does it.
+
+    The polygon is drawn at the back of the domain (z = -10) and extruded to the front
+    (z = 10). The 2D section is at z = 0, in the middle, so it cuts through the drawn
+    part."""
     return CustomPart(
         key=key, label=label, source="gui", mat=material,
         recipe={"kind": "polygon_extrude", "label": label, "material": material,

@@ -91,7 +91,7 @@ Kratos' sign: suction positive):
 (negative) or lets out (positive), per meter of the section. Kratos' sign for the water
 pressure is suction positive.
 
-## In the GUI
+## In the Styx GUI
 
 1. Open `levee_seepage.json` with **File > Open project…**, or type
    `run examples/levee_seepage/levee_seepage.py` in the command box.
@@ -99,7 +99,7 @@ pressure is suction positive.
 3. In **Results**, show **Pore pressure**, **Hydraulic head**, **Effective saturation** or
    **Nodal water flow rate**.
 
-## From the command line
+## From the Styx command line
 
 ```bash
 kratos-cli.bat check levee_seepage.json        # Windows; ./kratos-cli.sh on Linux, macOS, Git Bash
@@ -115,8 +115,9 @@ python levee_seepage.py --out deck/            # write the Kratos deck
 python levee_seepage.py --calculate            # write the deck, run it, print the results
 ```
 
-`python` is the environment `kratos-cli` runs in: `..\..\.venv-windows\Scripts\python.exe`
-on Windows, `../../.venv-linux/bin/python` on Linux.
+`python` is the environment `kratos-cli` runs in: `<repo>\.venv-windows\Scripts\python.exe`
+on Windows, `<repo>/.venv-linux/bin/python` on Linux, where `<repo>` is the folder you
+cloned the repository into.
 
 [docs/cli_tutorials/levee_seepage_case.md](../../docs/cli_tutorials/levee_seepage_case.md)
 builds this model command by command. The commands are all in

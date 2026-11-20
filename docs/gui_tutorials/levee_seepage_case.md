@@ -6,11 +6,12 @@ flow in the soil. You use only the windows, the tool rail and the explorers of t
 tutorial is for a geotechnical engineer who has not used Styx before.
 
 The model is the same model as the
-[`kratos-cli` tutorial of the levee seepage case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/levee_seepage_case.md).
-Its results are compared with a reference calculation of the same section.
+[levee seepage example](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/examples/levee_seepage/README.md).
 
-Each step has a screenshot. An orange outline on the screenshot shows the button, field or
-row to use.
+Before you start, install Styx and start it: see
+[INSTALLATION.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/INSTALLATION.md) if you don't have Styx installed already.
+
+Each step has a screenshot. An orange outline on the screenshot shows the button, field or row to use.
 
 ## What you build
 
@@ -30,13 +31,7 @@ ground surface is at y = 0.
 - One calculation stage of the type Flow (Pw). It calculates only the water pressures, not
   the displacements.
 
-## Before you start
-
-- Install Styx and start it with `run.bat` (Windows) or `run.sh` (Linux and macOS). See
-  [INSTALLATION.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/INSTALLATION.md). Styx opens in your browser with an empty 2D project.
-- Step 8 calculates the model, and for that Styx needs Kratos. If Kratos is not set up
-  yet, follow [KRATOS_SETUP.md](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/KRATOS_SETUP.md). You can do steps 1 to 7 without
-  Kratos.
+## How to type values
 
 How the GUI takes the values that you type:
 

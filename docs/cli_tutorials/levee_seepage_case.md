@@ -5,8 +5,14 @@ the command line in PowerShell. Following the commands to build the example mode
 [`examples/levee_seepage/levee_seepage.py`](../../examples/levee_seepage/levee_seepage.py):
 the Kratos input files they write are identical.
 
-For the ready-made model and a comparison of its results with a reference calculation are in
+The ready-made model is in
 [`examples/levee_seepage/`](../../examples/levee_seepage/README.md).
+
+Before you start, prepare PowerShell as described in
+[Prepare PowerShell for the tutorials](../INSTALLATION.md#prepare-powershell-for-the-tutorials).
+Every command below can then be pasted as it is. Each command is in a block of its own,
+which the copy button copies ready to run; what `kratos-cli` prints in reply follows it,
+indented behind a quote bar and without a copy button.
 
 ## What you build
 
@@ -23,23 +29,6 @@ A 2D plane-strain section, 90 m wide and 28 m high, in SI units (m, N, Pa, kg/m�
   seepage face. The crest and the bottom are closed.
 - One stage of the type Groundwater flow. There is no construction sequence, so this
   tutorial does not go into stages.
-
-## Before you start
-
-- Kratos must be set up on this machine: see [Setting up Kratos](../KRATOS_SETUP.md).
-- Work in a folder of your own, so the files stay out of the repository.
-- In the commands, `kratos-cli` is `<repo>\kratos-cli.bat`, where `<repo>` is the folder
-  you cloned this repository into. It is convenient to make it a name in your PowerShell, and write the runs
-  into your folder too:
-
-```powershell
-Set-Alias kratos-cli <repo>\kratos-cli.bat
-$env:KRATOS_GUI_RUNS = (Get-Location)
-```
-
-Every command below can then be pasted as it is. Each command is in a block of its own,
-which the copy button copies ready to run; what `kratos-cli` prints in reply follows it,
-indented behind a quote bar and without a copy button.
 
 ## Step 1. The project and the section
 
@@ -59,7 +48,7 @@ The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`).
 
 The water in the soils' pores is the project's, one for every soil. Its unit weight is
 the water level's specific weight, 10 kN/m³ in a new project, so Kratos gets a water
-density of 10 000 / 9.81 = 1019.367991845056 kg/m³. Its bulk modulus and viscosity are
+density of 10 000 / 9.81 ≈ 1019.37 kg/m³. Its bulk modulus and viscosity are
 set here; the water is taken as incompressible:
 
 ```powershell
@@ -72,17 +61,17 @@ All four soil bodies share one set of flow properties, as in the model script:
 | Property | Value |
 |---|---|
 | saturated hydraulic conductivity K | 1 m/day, isotropic |
-| `PERMEABILITY_XX`, `_YY` | K μ / (ρw g) = 1.1574074074074074e-12 m², with the water's viscosity μ = 1e-3 Pa s and unit weight ρw g = 10 kN/m³ |
+| `PERMEABILITY_XX`, `_YY` | K μ / (ρw g) ≈ 1.157e-12 m², with the water's viscosity μ = 1e-3 Pa s and unit weight ρw g = 10 kN/m³ |
 | `RETENTION_LAW` | `VanGenuchtenLaw` |
-| `VAN_GENUCHTEN_AIR_ENTRY_PRESSURE` | 10 000 / ga = 2610.9660574412533 Pa, with ga = 3.83 1/m |
+| `VAN_GENUCHTEN_AIR_ENTRY_PRESSURE` | 10 000 / ga ≈ 2611 Pa, with ga = 3.83 1/m |
 | `VAN_GENUCHTEN_GN`, `_GL` | 1.3774, 1.25 |
-| `RESIDUAL_SATURATION` | 0.0620347394540943 |
+| `RESIDUAL_SATURATION` | ≈ 0.062 |
 | `MINIMUM_RELATIVE_PERMEABILITY` | 1e-4 |
 
 Only the permeability and the retention law, with the water's viscosity and density,
 change the flow. Kratos' flow element checks that the other values, such as Young's
-modulus and Poisson's ratio, are there. The values are typed out in full, so they are the
-script's to the last digit.
+modulus and Poisson's ratio, are there. The table rounds the values. The commands below
+type them out in full, so they are the script's to the last digit.
 
 ```powershell
 kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
@@ -148,10 +137,10 @@ kratos-cli volume levee.json add polygon --label "Levee outer layer" --material 
 ```
 > <pre>added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json</pre>
 
-`volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's color
-and keeps its label in its recipe. The model script names the parts `levee_core` and
-`levee_outer`, draws them gray. These lines make the
-parts the script's:
+`volume add` names the drawn parts `drawn_0`, `drawn_1`, and so on. It gives each part the
+color of its material and keeps the label. The model script names the parts `levee_core`
+and `levee_outer` and colors them gray. The next four commands give the parts the same
+names and color as in the script:
 
 ```powershell
 kratos-cli set levee.json "custom_parts[drawn_0].key" levee_core
@@ -181,7 +170,8 @@ kratos-cli parts levee.json
 > levee_core  Levee core (soil of m_clay)
 > levee_outer  Levee outer layer (soil of m_clay)</pre>
 
-The `key` is what the stages and the deck's part names use; the `color` shows in the GUI.
+The `key` is the name that the stages and the deck's part names use; the `color` is only
+for display.
 
 ## Step 5. The water
 
@@ -387,25 +377,15 @@ kratos-cli export script.json --out deck_script
 The two decks, `levee_seepage.mdpa`, `ProjectParameters.json`, `MaterialParameters.json`
 and `kratos_gui_units.json`, are identical: Kratos calculates the same model.
 
-## In the GUI
+## What to do next
 
-Open `levee.json` with **File > Open project…** and click **Calculate**. To see the runs
-made above, start the GUI with the runs root set to your folder:
-
-```powershell
-$env:KRATOS_GUI_RUNS = (Get-Location); <repo>\run.bat
-```
-
-In **Results**, show **Pore pressure**, **Hydraulic head**, **Effective saturation** or
-**Nodal water flow rate**. The seepage face is in **Model conditions > Boundary
-conditions** in the Model explorer.
-
-## In the shell
-
-The same commands work in `kratos-cli shell`, one per line, without `kratos-cli` and the
-project file: `new levee.json --force --dim 2 --name levee_seepage`, then
-`domain --x -36 54 --y -22 6`, and so on. See also [CROW_case.md](CROW_case.md) for the
-shell, and [CLI.md](../CLI.md) for every command.
+- Change one value and calculate again, for example the river level, or the permeability
+  of the cover.
+- Type the same commands in `kratos-cli shell`, one per line, without `kratos-cli` and the
+  project file: `new levee.json --force --dim 2 --name levee_seepage`, then
+  `domain --x -36 54 --y -22 6`, and so on. [CROW_case.md](CROW_case.md) shows how the
+  shell works.
+- Look up every command in [CLI.md](../CLI.md).
 
 
 
