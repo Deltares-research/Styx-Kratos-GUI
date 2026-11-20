@@ -222,12 +222,12 @@ Draw the first line with points that you type:
 2. In the command box at the bottom of the window, type `0 -2` and press Enter.
 3. Type `5 -2` and press Enter.
 
-   ![The two points of the first line, typed in the command box. The Create line tool and the command box are outlined.](images/crow/06_lines_drawn.png)
+    ![The two points of the first line, typed in the command box. The Create line tool and the command box are outlined.](images/crow/06_lines_drawn.png)
 
 4. Press Enter in the empty command box. The Create line window opens with the two points.
 5. In **Name**, type `Floor of lift 1`.
 
-   ![The Create line window of the first line.](images/crow/06_lines_drawn_window.png)
+    ![The Create line window of the first line.](images/crow/06_lines_drawn_window.png)
 
 6. Click **Save**.
 
@@ -307,14 +307,14 @@ anchor.
    **Free (attached to the mesh)**: it is a node of the soil mesh. The tail of this strut
    is in the pit, where the soil is removed, so it must be a fixed support.
 
-   ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
+    ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
 
 5. Click **Save**. Styx adds the strut and selects it.
 6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
 
    Leave **Compression limit** empty. The strut then has no force limits.
 
-   ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
+    ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
 
 The head of the strut is on the wall, so it becomes a node of the wall. The tail is a fixed
 support.
@@ -330,7 +330,7 @@ by the soil's own **Rinter** from step 2.
 3. In **Side**, select **Both sides**.
 4. Click **Save**.
 
-   ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
+    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
 5. In the Selection explorer of the interface, in **Law**, select **Coulomb**.
 6. Keep the other values of a new interface. **Stiffness** shows **From the soil** and
@@ -537,23 +537,23 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
    effective stress.
 
-![The horizontal effective stress after the third excavation. The Stage and Field lists of the Results explorer are outlined.](images/crow/14_contours_horizontal.png)
+    ![The horizontal effective stress after the third excavation. The Stage and Field lists of the Results explorer are outlined.](images/crow/14_contours_horizontal.png)
 
-The colours show the stress on the mesh, and the legend at the right gives the values.
-Compression is negative. The horizontal stress goes from about −9 kPa near the ground
-surface to about −275 kPa at the bottom of the model. The pit, at the left of the wall, has
-no colours, because its soil is excavated. Under the pit floor the stresses are small,
-because the soil above that floor is gone.
+    The colours show the stress on the mesh, and the legend at the right gives the values.
+    Compression is negative. The horizontal stress goes from about −9 kPa near the ground
+    surface to about −275 kPa at the bottom of the model. The pit, at the left of the wall, has
+    no colours, because its soil is excavated. Under the pit floor the stresses are small,
+    because the soil above that floor is gone.
 
 4. In **Field**, select **Effective stresses · σyy (Pa)**. This is the vertical effective
    stress.
 
-![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
+    ![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
 
-The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
-bottom. Deep in the sand, the horizontal stress is about half of the vertical stress: at the
-bottom, −275 kPa against −600 kPa. This ratio is close to K0 of the sand, 0.46. Near the
-ground surface and near the wall, the ratio is different.
+    The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
+    bottom. Deep in the sand, the horizontal stress is about half of the vertical stress: at the
+    bottom, −275 kPa against −600 kPa. This ratio is close to K0 of the sand, 0.46. Near the
+    ground surface and near the wall, the ratio is different.
 
 5. In **Field**, select **Deformations · |u| (m)**. This is the magnitude of the total
    displacement since the wall installation, the stage that resets the displacements.
