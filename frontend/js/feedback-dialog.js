@@ -12,8 +12,9 @@
    The window asks for little: the kind, a few sentences, and a name if the user wants to
    give one (kept in this browser for the next report). Files of their own may be added: a
    screenshot pasted in (Ctrl+V), or any file dropped on the window or chosen. The rest is
-   added without asking: where in the app it was written, a picture of the view, the
-   Session log, the Model history and the errors seen. The server adds the model, its own log and the open
+   added without asking: where in the app it was written, a picture of the whole Styx
+   window (the windows open, what is typed in them, the Session log), a picture of the
+   view, the Session log, the Model history and the errors seen. The server adds the model, its own log and the open
    run's files, and adds the report to the writer's ZIP file of the day, in the feedback
    folder on this computer. Nothing is sent over the internet.
    ══════════════════════════════════════════════════════════════════ */
@@ -113,6 +114,85 @@ App.FeedbackDialog = (function () {
     }).catch(function () { return null; });
   }
 
+  /* html2canvas (frontend/vendor), which draws the page on a canvas. Loaded the first
+     time a report is written, not when the app starts: most sessions never need it. */
+  var DRAWER_URL = '/vendor/html2canvas.min.js';
+  var drawerLoading = null;
+
+  function pageDrawer(url) {
+    if (window.html2canvas) return Promise.resolve(window.html2canvas);
+    if (!drawerLoading) {
+      drawerLoading = new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = url || DRAWER_URL;
+        script.onload = function () { resolve(window.html2canvas); };
+        script.onerror = function () {
+          drawerLoading = null;
+          reject(new Error('html2canvas could not be loaded.'));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return drawerLoading;
+  }
+
+  var LEAVE_OUT = 'feedback-leave-out';     // the Feedback window and its scrim
+  var FRAME_MARK = 'data-feedback-frame';   // a view canvas, matched in the copy
+
+  /* In the copy of the page html2canvas draws: each canvas of the view becomes a picture
+     of the frame read before (`frames`). Drawn from the copy, the canvas would be empty.
+     html2canvas waits for the pictures of the copy itself, so this does not. */
+  function putFrames(copy, frames) {
+    frames.forEach(function (frame, i) {
+      var canvas = copy.querySelector('[' + FRAME_MARK + '="' + i + '"]');
+      if (!canvas) return;
+      var image = copy.createElement('img');
+      image.className = canvas.className;
+      image.style.cssText = canvas.style.cssText;
+      image.style.width = frame.width + 'px';
+      image.style.height = frame.height + 'px';
+      image.src = frame.url;
+      canvas.parentNode.replaceChild(image, canvas);
+    });
+  }
+
+  /* A picture of the whole Styx window as base64 PNG, or null: the windows open, what is
+     typed in them and the Session log, as on screen. The Feedback window is left out. The
+     view's frames are read now, before the Feedback window opens over them. */
+  function windowPicture() {
+    var frames = [];
+    try {
+      frames = App.Viewport && App.Viewport.canvasPictures ? App.Viewport.canvasPictures() : [];
+    } catch (err) { frames = []; }
+    frames = frames.map(function (frame, i) {
+      var box = frame.canvas.getBoundingClientRect();
+      frame.canvas.setAttribute(FRAME_MARK, String(i));
+      return { canvas: frame.canvas, url: frame.url, width: box.width, height: box.height };
+    });
+    function unmark() {
+      frames.forEach(function (frame) { frame.canvas.removeAttribute(FRAME_MARK); });
+    }
+    return pageDrawer().then(function (draw) {
+      return draw(document.body, {
+        logging: false, scale: 1,
+        width: window.innerWidth, height: window.innerHeight,
+        windowWidth: window.innerWidth, windowHeight: window.innerHeight,
+        x: window.scrollX, y: window.scrollY,
+        ignoreElements: function (node) {
+          return !!(node.classList && node.classList.contains(LEAVE_OUT)) || node.id === NOTE_ID;
+        },
+        onclone: function (copy) { putFrames(copy, frames); }
+      });
+    }).then(function (drawn) {
+      unmark();
+      var url = drawn.toDataURL('image/png');
+      return url.slice(url.indexOf(',') + 1) || null;
+    }).catch(function () {
+      unmark();
+      return null;
+    });
+  }
+
   function rememberedName() {
     try { return window.localStorage.getItem(NAME_KEY) || ''; } catch (e) { return ''; }
   }
@@ -145,6 +225,7 @@ App.FeedbackDialog = (function () {
     }
     var el = App.UI.el;
     var picture = screenshot();      // started now: the view as it is, before typing
+    var whole = windowPicture();     // and the whole window, before this one covers it
     var where = snapshot(opts.window);
     var chosen = App.Feedback.kind(opts.kind) ? opts.kind : 'bug';
     var text, name, withPicture, withModel, message, saveButton, saving = false;
@@ -258,12 +339,14 @@ App.FeedbackDialog = (function () {
       message.textContent = 'Saving the report…';
       if (saveButton) saveButton.disabled = true;
       rememberName(name.value.trim());
-      (withPicture.checked ? picture : Promise.resolve(null)).then(function (png) {
+      var pictures = withPicture.checked ? [picture, whole] : [null, null];
+      Promise.all(pictures).then(function (pngs) {
         return App.Api.post('/api/feedback', App.Feedback.payload({
           kind: chosen, message: text.value, name: name.value, error: opts.error || null,
           context: App.Feedback.context(where),
           sessionLog: linesOf('cmd-log'), modelHistory: linesOf('cmd-history'),
-          view: png, attachments: added, includeProject: withModel.checked,
+          view: pngs[0], windowPicture: pngs[1], attachments: added,
+          includeProject: withModel.checked,
           run: App.Results && App.Results.current ? App.Results.current() : null
         }));
       }).then(function (answer) {
@@ -336,7 +419,7 @@ App.FeedbackDialog = (function () {
         withModel = el('input', { type: 'checkbox', name: 'feedback-model' });
         withModel.checked = true;
         body.appendChild(el('div.feedback-options', null, [
-          el('label', null, [withPicture, el('span', { text: 'Add a picture of the view' })]),
+          el('label', null, [withPicture, el('span', { text: 'Add pictures of the Styx window and the view' })]),
           el('label', null, [withModel, el('span', { text: 'Add the model' })])
         ]));
 
@@ -355,7 +438,9 @@ App.FeedbackDialog = (function () {
         body.appendChild(message);
       }
     });
-    shell.dialog.classList.add('feedback-window');
+    shell.dialog.classList.add('feedback-window', LEAVE_OUT);
+    var scrim = shell.dialog.previousElementSibling;
+    if (scrim && scrim.classList.contains('scrim')) scrim.classList.add(LEAVE_OUT);
     saveButton = shell.dialog.querySelector('.dlg-foot .btn-primary');
     drawFiles();
     shell.dialog.addEventListener('dragover', onDragOver);
@@ -497,6 +582,7 @@ App.FeedbackDialog = (function () {
   return {
     TITLE: TITLE, open: open, command: command, offer: offer, saved: saved, showFolder: showFolder,
     hideNote: hideNote, snapshot: snapshot, screenshot: screenshot,
+    windowPicture: windowPicture, putFrames: putFrames, pageDrawer: pageDrawer,
     addWindowButton: addWindowButton, watchWindows: watchWindows, install: install,
     isOpen: function () { return !!openShell; }
   };

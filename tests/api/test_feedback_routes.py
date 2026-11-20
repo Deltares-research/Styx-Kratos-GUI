@@ -66,6 +66,7 @@ def test_a_report_holds_what_the_page_sent_and_what_the_server_knows(client, rep
         "kind": "bug", "message": "The mesh did not show.", "name": "Ben",
         "context": {"mode": "Mesh"}, "session_log": "> mesh",
         "model_history": "> water -1", "view": "data:image/png;base64," + PNG,
+        "window_picture": PNG,
         "attachments": [{"name": "shot.jpg", "data": "data:image/jpeg;base64," + JPEG},
                         {"name": "notes.docx", "data": base64.b64encode(b"PK doc").decode()},
                         {"name": "notes.docx", "data": base64.b64encode(b"again").decode()}]})
@@ -78,6 +79,7 @@ def test_a_report_holds_what_the_page_sent_and_what_the_server_knows(client, rep
     assert said["reports"] == 1
     assert said["files"] == [said["report"] + "/" + name for name in files]
     assert files["view.png"].startswith(b"\x89PNG")
+    assert files["window.png"].startswith(b"\x89PNG")
     assert files["attachments/shot.jpg"].startswith(b"\xff\xd8")
     assert files["attachments/notes.docx"] == b"PK doc"
     assert files["attachments/notes-2.docx"] == b"again", "the same name twice keeps both"
@@ -110,6 +112,9 @@ def test_the_next_report_goes_in_the_same_file(client, reports):
     ({"kind": "bug", "message": " "}, "Write what happened"),
     ({"kind": "bug", "message": "x", "view": "not base64!"}, "picture of the view is not base64"),
     ({"kind": "bug", "message": "x", "view": JPEG}, "view is not a PNG"),
+    ({"kind": "bug", "message": "x", "window_picture": "not base64!"},
+     "picture of the Styx window is not base64"),
+    ({"kind": "bug", "message": "x", "window_picture": JPEG}, "Styx window is not a PNG"),
     ({"kind": "bug", "message": "x", "attachments": [{"name": "a", "data": "not base64!"}]},
      "file a is not base64"),
 ])

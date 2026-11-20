@@ -148,6 +148,17 @@
 
   /* ── The screen as shapes ────────────────────────────────────────────── */
 
+  test('picture live: the view canvases are read as PNG frames for the picture of the window', function () {
+    return ready().then(function () {
+      var frames = App.Viewport.canvasPictures();
+      T.ok(frames.length >= 1, 'at least the scene');
+      T.eq(frames[0].canvas, App.Viewport.getCanvas());
+      frames.forEach(function (frame) {
+        T.ok(/^data:image\/png;base64,/.test(frame.url), frame.url.slice(0, 30));
+      });
+    });
+  });
+
   test('picture live: the stage on screen is drawn with its title, its rulers and its labels', function () {
     return ready().then(function () {
       return new Promise(function (resolve) { App.Viewport.setLabels('nodes', true, resolve); });
