@@ -96,8 +96,8 @@ The model has two Mohr-Coulomb soils:
 - Kratos calculates the unit weight of the soil from the density of the solid
   ρ<sub>s</sub>, the density of the water ρ<sub>w</sub> and the porosity n:
 
-  - Dry unit weight: γ<sub>dry</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>res</sub> · ρ<sub>w</sub>) · g
-  - Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>sat</sub> · ρ<sub>w</sub>) · g
+    * Dry unit weight: γ<sub>dry</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>res</sub> · ρ<sub>w</sub>) · g
+    * Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>sat</sub> · ρ<sub>w</sub>) · g
 
   With n = 0, the two are the same: γ = ρ<sub>s</sub> · g. The densities in the table give
   γ = 18 kN/m³ for the clay and 20 kN/m³ for the sand, the unit weights of the CROW case.
@@ -291,15 +291,15 @@ anchor.
 1. On the tool rail, click **Create anchor…**. The **Create anchor** window opens.
 2. Type these values:
 
-   | Field | Value |
-   |---|---|
-   | **Name** | `Strut` |
-   | **Head x**, **Head y** (m) | `5`, `-1.5` |
-   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
-   | **YOUNG_MODULUS** (Pa) | `210000000000` |
-   | **CROSS_AREA** (m²) | `4.7619e-05` |
-   | **DENSITY** (kg/m³) | `0` |
-   | **Spacing** (m) | `1` |
+    | Field | Value |
+    |---|---|
+    | **Name** | `Strut` |
+    | **Head x**, **Head y** (m) | `5`, `-1.5` |
+    | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
+    | **YOUNG_MODULUS** (Pa) | `210000000000` |
+    | **CROSS_AREA** (m²) | `4.7619e-05` |
+    | **DENSITY** (kg/m³) | `0` |
+    | **Spacing** (m) | `1` |
 
 3. Leave **Head end** at **Free (attached to the mesh)**. The head is on the wall, so it
    becomes a node of the wall.
@@ -312,7 +312,7 @@ anchor.
 5. Click **Save**. Styx adds the strut and selects it.
 6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
 
-   Leave **Compression limit** empty. The strut then has no force limits.
+    Leave **Compression limit** empty. The strut then has no force limits.
 
     ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
 
@@ -357,12 +357,12 @@ The surcharge is 20 kN/m on the retained ground surface, from the wall to the ri
    **Line load**.
 2. Type these values:
 
-   | Field | Value |
-   |---|---|
-   | **Name** | `Load` |
-   | **x min**, **x max** (m) | `5`, `80` |
-   | **y** (m) | `0` |
-   | **qx**, **qy** (N/m) | `0`, `-20000` |
+    | Field | Value |
+    |---|---|
+    | **Name** | `Load` |
+    | **x min**, **x max** (m) | `5`, `80` |
+    | **y** (m) | `0` |
+    | **qx**, **qy** (N/m) | `0`, `-20000` |
 
 3. Click **Save**.
 
