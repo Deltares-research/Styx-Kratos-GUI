@@ -56,37 +56,6 @@ slope from an exit point at x = 19.2 m (y = 0.95 m), and the whole polder surfac
   meter, in and out. 2.03 of it leaves through the seepage face and 0.84 through the
   right side. None of it goes through the crest.
 
-The water pressures, compared with the reference calculation at its 4007 nodes (in kPa,
-Kratos' sign: suction positive):
-
-| Soil | Saturated: RMS / largest difference | Unsaturated: RMS / largest difference |
-|---|---|---|
-| Aquifer | 0.10 / 0.32 | — |
-| Cover | 0.14 / 0.56 | 0.03 / 0.12 |
-| Levee core | 0.33 / 0.86 | 0.77 / 1.42 |
-| Levee outer layer | 0.20 / 1.18 | 3.14 / 8.88 |
-
-- The fixed heads hold exactly: −270 kPa at the bottom left corner, −215 kPa at the
-  bottom right, 10 kPa at the crest's outer corner (0, 6).
-- The phreatic line lies within 0.07 m of the reference calculation's, from the outer
-  slope to the exit point: 4.15 against 4.08 m at x = 0, 1.23 against 1.23 m at x = 18.
-- The exit point on the inner slope is at x = 19.4 m in the reference calculation.
-- The flow through a vertical section agrees to within about 3 % at x = −25 and 9 % at
-  x = 30, measured from the elements' Darcy velocities, which is as close as that
-  measure goes.
-- The one real difference is the suction in the dry soil of the outer layer under the
-  crest: at (4, 6) it is 16.8 kPa here against 25.7 kPa in the reference calculation.
-  It comes from Kratos' flow element, not from the model: the element weighs the
-  water's weight by the Bishop coefficient, which `VanGenuchtenLaw` takes equal to the
-  effective saturation (`UPwSmallStrainElement::CalculateFluidBodyFlow`). Above the
-  phreatic line, where the water hardly moves, the suction then grows with height by
-  Se × 10 kPa/m instead of 10 kPa/m. From the phreatic line at x = 4 (y = 3.42 m) up to
-  the crest that gives 16.3 kPa against 25.8 kPa, the two results. Kratos' Van
-  Genuchten law itself is the same function as the reference calculation's (its
-  saturation and relative permeability match it to machine precision), and the
-  difference stays with a finer, quadratic mesh and a tighter tolerance. Below the
-  phreatic line Se = 1, and the two agree.
-
 `flow_rate` (**Nodal water flow rate** in Results) is the water each node takes in
 (negative) or lets out (positive), per meter of the section. Kratos' sign for the water
 pressure is suction positive.
