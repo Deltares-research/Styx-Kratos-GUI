@@ -442,19 +442,14 @@ kratos-cli stages crow.json set initial --stress-initialisation k0
 > <pre>changed stage initial; wrote ...\crow.json</pre>
 
 ```powershell
-kratos-cli stages crow.json add null_step --name "Null step" --max-iterations 150
-```
-> <pre>added stage (id null_step, name Null step) after initial; wrote ...\crow.json</pre>
-
-```powershell
 kratos-cli stages crow.json deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
 ```
 > <pre>sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json</pre>
 
 ```powershell
-kratos-cli stages crow.json deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
+kratos-cli stages crow.json add null_step --name "Null step" --max-iterations 150
 ```
-> <pre>sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json</pre>
+> <pre>added stage (id null_step, name Null step) after initial; wrote ...\crow.json</pre>
 
 ```powershell
 kratos-cli stages crow.json add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
