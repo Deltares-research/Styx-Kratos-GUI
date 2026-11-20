@@ -93,8 +93,8 @@ Do these steps in this order. Each step has its own guide.
    shows how to install Kratos and how to tell Styx where it is.
 3. Use the command line (optional). `kratos-cli` does the same work as the browser app, from
    a new model to its results, in a terminal. [CLI.md](docs/CLI.md) lists every command. The
-   [CLI tutorial](docs/cli_tutorials/README.md) builds a first model, a sheet pile in a soil
-   block, from the first command to its results.
+   [CLI tutorials](docs/cli_tutorials/README.md) build models from the first command to
+   their results. Start with the simple dike, a sheet pile in a soil block.
 
 ## Documentation
 
@@ -106,7 +106,7 @@ Do these steps in this order. Each step has its own guide.
 | [Kratos setup](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
 | [Usage](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results and use scripts |
 | [GUI tutorials](docs/gui_tutorials/index.md) | The CROW excavation wall, built in the GUI step by step from an empty project to the bending moment in the wall, with a screenshot of each step |
-| [CLI tutorials](docs/cli_tutorials/README.md) | Models built and run with `kratos-cli` in a terminal: a [simple dike](docs/cli_tutorials/README.md), the [CROW excavation wall](docs/cli_tutorials/CROW_case.md) and the [Muskat groundwater flow case](docs/cli_tutorials/Muskat_case.md). [CLI.md](docs/CLI.md) lists every command. |
+| [CLI tutorials](docs/cli_tutorials/README.md) | Three models built and run with `kratos-cli` in a terminal, command by command: a simple dike, the CROW excavation wall and the Muskat groundwater flow case. [CLI.md](docs/CLI.md) lists every command. |
 | [Features](docs/FEATURES.md) | What works, feature by feature, and where the code is |
 
 All these pages are also on the documentation site. It is published from `main` on GitHub
@@ -160,6 +160,7 @@ The following people have contributed directly to the development of Styx:
 - Gennady Markelov ([@markelov208](https://github.com/markelov208))
 - Wijtze Pieter Kikstra ([@WPK4FEM](https://github.com/WPK4FEM))
 - Richard Faasse ([@rfaasse](https://github.com/rfaasse))
+- Anne van de Graaf ([@avdg81](https://github.com/avdg81))
 
 Styx first started in the private repository `indigocoral/Kratos-GUI`. To cite Styx, use
 [CITATION.cff](CITATION.cff).

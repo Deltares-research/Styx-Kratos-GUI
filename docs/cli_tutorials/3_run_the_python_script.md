@@ -1,6 +1,6 @@
 # Simple dike, way 3: run the Python script
 
-Part of [Simple dike with `kratos-cli`](README.md), which describes the model and the other
+Part of [Simple dike with `kratos-cli`](simple_dike.md), which describes the model and the other
 two ways to work with it.
 
 In the commands below, `<repo>` is the folder you cloned this repository into, such as
@@ -54,4 +54,4 @@ In the PowerShell from [Before ways 2 and 3](#before-ways-2-and-3):
 and the bending moment along the sheet pile. To look further, open the model in the shell
 ([way 2](2_open_in_the_shell.md)) and use its `results` lines.
 
-What ends up in the folder is listed in [What gets written](README.md#what-gets-written).
+What ends up in the folder is listed in [What gets written](simple_dike.md#what-gets-written).

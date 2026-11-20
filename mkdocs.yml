@@ -38,10 +38,12 @@ nav:
       - Overview: docs/gui_tutorials/index.md
       - CROW excavation wall: docs/gui_tutorials/CROW_case.md
   - CLI tutorials:
-      - Simple dike: docs/cli_tutorials/README.md
-      - "Simple dike 1: build from scratch": docs/cli_tutorials/1_build_from_scratch.md
-      - "Simple dike 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
-      - "Simple dike 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
+      - Overview: docs/cli_tutorials/README.md
+      - Simple dike:
+          - The model: docs/cli_tutorials/simple_dike.md
+          - "Way 1: build from scratch": docs/cli_tutorials/1_build_from_scratch.md
+          - "Way 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
+          - "Way 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
       - CROW excavation wall: docs/cli_tutorials/CROW_case.md
       - Muskat groundwater flow: docs/cli_tutorials/Muskat_case.md
       - Command reference: docs/CLI.md

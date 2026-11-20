@@ -1,6 +1,6 @@
 # Simple dike, way 2: open the ready-made model in the shell
 
-Part of [Simple dike with `kratos-cli`](README.md), which describes the model and the other
+Part of [Simple dike with `kratos-cli`](simple_dike.md), which describes the model and the other
 two ways to work with it.
 
 In the commands below, `<repo>` is the folder you cloned this repository into, such as
@@ -98,4 +98,4 @@ command name. In the model's folder:
 & $cli results field 1 uy --runs-dir .       # read a result
 ```
 
-What ends up in the folder is listed in [What gets written](README.md#what-gets-written).
+What ends up in the folder is listed in [What gets written](simple_dike.md#what-gets-written).

@@ -1,6 +1,6 @@
 # Simple dike, way 1: build the model from scratch
 
-Part of [Simple dike with `kratos-cli`](README.md), which describes the model and the other
+Part of [Simple dike with `kratos-cli`](simple_dike.md), which describes the model and the other
 two ways to work with it.
 
 Here you type the model command by command, from the geometry to the results, in a new
@@ -190,4 +190,4 @@ To make a model of your own, copy `simple_dike.json`, change its values (sizes,
 materials, stages, ...) and `open` your copy instead. `check` tells you whether it can be
 meshed and staged.
 
-What ends up in the folder is listed in [What gets written](README.md#what-gets-written).
+What ends up in the folder is listed in [What gets written](simple_dike.md#what-gets-written).

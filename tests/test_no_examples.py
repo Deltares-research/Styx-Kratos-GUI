@@ -36,6 +36,7 @@ SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".gz", ".zip", ".woff"
 EXAMPLES = "exam" + "ples/"
 ALLOWED = ("README.md", "docs/CLI.md", "docs/developer/README.md",
            "docs/cli_tutorials/README.md",
+           "docs/cli_tutorials/simple_dike.md",
            "docs/cli_tutorials/1_build_from_scratch.md",
            "docs/cli_tutorials/2_open_in_the_shell.md",
            "docs/cli_tutorials/3_run_the_python_script.md",
