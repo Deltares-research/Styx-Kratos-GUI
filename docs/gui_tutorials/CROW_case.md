@@ -96,8 +96,8 @@ The model has two Mohr-Coulomb soils:
 - Kratos calculates the unit weight of the soil from the density of the solid
   ρ<sub>s</sub>, the density of the water ρ<sub>w</sub> and the porosity n:
 
-  - Dry unit weight: γ<sub>dry</sub> = (1 − n) · ρ<sub>s</sub> · g
-  - Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · ρ<sub>w</sub>) · g
+  - Dry unit weight: γ<sub>dry</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>res</sub> · ρ<sub>w</sub>) · g
+  - Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>sat</sub> · ρ<sub>w</sub>) · g
 
   With n = 0, the two are the same: γ = ρ<sub>s</sub> · g. The densities in the table give
   γ = 18 kN/m³ for the clay and 20 kN/m³ for the sand, the unit weights of the CROW case.
