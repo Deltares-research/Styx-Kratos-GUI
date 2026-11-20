@@ -27,7 +27,7 @@ file runs from anywhere: in the repository, or copied into a folder of your own.
 
 SI units (N, m, s), plane strain. The four soil bodies share one set of flow properties:
 a saturated hydraulic conductivity of 1 m/day, isotropic, and a Van Genuchten retention
-curve (ga = 3.83 1/m, gn = 1.3774, gl = 1.25, residual saturation 0.062).
+curve (ga = 3.83 1/m, gn = 1.377, gl = 1.25, residual saturation 0.06203).
 """
 
 from __future__ import annotations
@@ -152,7 +152,7 @@ def soil(id_: str, name: str, color: str) -> Material:
                         "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
                         "RETENTION_LAW": "VanGenuchtenLaw",
                         "SATURATED_SATURATION": 1.0,
-                        "RESIDUAL_SATURATION": 0.0620347394540943,
+                        "RESIDUAL_SATURATION": 0.06203,
                         "YOUNG_MODULUS": 1.0e4,
                         "POISSON_RATIO": 0.3,
                         "DENSITY_SOLID": 2.65e3,
@@ -164,7 +164,7 @@ def soil(id_: str, name: str, color: str) -> Material:
                         "BIOT_COEFFICIENT": 1.0,
                         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE":
                             WATER_UNIT_WEIGHT / VAN_GENUCHTEN_GA,   # Pa
-                        "VAN_GENUCHTEN_GN": 1.3774,
+                        "VAN_GENUCHTEN_GN": 1.377,
                         "VAN_GENUCHTEN_GL": 1.25,
                         "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4,
                     })

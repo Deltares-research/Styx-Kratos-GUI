@@ -19,7 +19,7 @@ Importing    KratosGeoMechanicsApplication
   //    / / //       //   / /          
  ((____/ / ((____   ((___/ /  MECHANICS
  Initializing KratosGeoMechanicsApplication...
-GeoMechanics Analysis: Fri Nov 20 13:58:52 2026 
+GeoMechanics Analysis: Fri Nov 20 14:38:53 2026 
 GeoMechanics Analysis: OpenMP parallel configuration | number of threads = 1 
 [WARNING] ProcessUtilities: 'processes_sub_model_part_list' is deprecated. This list is built automatically from the model parts used in all processes.
 ::[GeoMechanicalSolver]:: : Construction finished 
@@ -218,95 +218,95 @@ GeoMechanics Analysis: cycle:  1
 GeoMechanics Analysis: STEP      :  1 
 GeoMechanics Analysis: DELTA_TIME:  1.0 
 GeoMechanics Analysis: TIME      :  1.0 
-ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0039512 [s]
-ResidualBasedNewtonRaphsonStrategy: Setup System Time: 0.0001167 [s]
-ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0088899 [s]
-ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0130868 [s]
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0170164 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0172902 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 1.31423; Expected ratio = 0.0001; Absolute norm = 1.15703e-08; Expected norm =  1e-09]
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0186222 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0118468 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.039759; Expected ratio = 0.0001; Absolute norm = 3.50169e-10; Expected norm =  1e-09]
+ResidualBasedNewtonRaphsonStrategy: Setup Dofs Time: 0.0030851 [s]
+ResidualBasedNewtonRaphsonStrategy: Setup System Time: 1.32e-05 [s]
+ResidualBasedNewtonRaphsonStrategy: System Matrix Resize Time: 0.0071427 [s]
+ResidualBasedNewtonRaphsonStrategy: System Construction Time: 0.0103593 [s]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0137243 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0102462 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 1.31272; Expected ratio = 0.0001; Absolute norm = 1.1557e-08; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0131527 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0093943 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0397145; Expected ratio = 0.0001; Absolute norm = 3.49777e-10; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0169549 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0105199 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0281405; Expected ratio = 0.0001; Absolute norm = 2.47938e-10; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0178659 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0098875 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0281542; Expected ratio = 0.0001; Absolute norm = 2.4806e-10; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0166312 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0104062 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0100115; Expected ratio = 0.0001; Absolute norm = 8.82432e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0118669 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.010284 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0100211; Expected ratio = 0.0001; Absolute norm = 8.83279e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0162429 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0114934 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0254729; Expected ratio = 0.0001; Absolute norm = 2.24612e-10; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.011512 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0095309 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0254777; Expected ratio = 0.0001; Absolute norm = 2.24655e-10; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0141223 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0100284 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0125037; Expected ratio = 0.0001; Absolute norm = 1.10297e-10; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0125983 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0072045 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.012517; Expected ratio = 0.0001; Absolute norm = 1.10415e-10; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0182048 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0115899 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0116314; Expected ratio = 0.0001; Absolute norm = 1.02643e-10; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0134793 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0107317 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0116507; Expected ratio = 0.0001; Absolute norm = 1.02813e-10; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0147548 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0092916 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00435095; Expected ratio = 0.0001; Absolute norm = 3.84106e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0147073 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0097077 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00435956; Expected ratio = 0.0001; Absolute norm = 3.84867e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0144552 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0089743 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00419826; Expected ratio = 0.0001; Absolute norm = 3.70772e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0119977 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0110266 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00421137; Expected ratio = 0.0001; Absolute norm = 3.71931e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0142739 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0088325 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00757522; Expected ratio = 0.0001; Absolute norm = 6.69276e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0152824 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0097899 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00761014; Expected ratio = 0.0001; Absolute norm = 6.72361e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0122364 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0081236 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00652726; Expected ratio = 0.0001; Absolute norm = 5.76915e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.016072 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.011913 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00654688; Expected ratio = 0.0001; Absolute norm = 5.7865e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0138249 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0098598 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00654232; Expected ratio = 0.0001; Absolute norm = 5.78474e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0148897 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0106302 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00656766; Expected ratio = 0.0001; Absolute norm = 5.80715e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0181553 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0099381 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00252297; Expected ratio = 0.0001; Absolute norm = 2.2317e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0131304 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.008595 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00252595; Expected ratio = 0.0001; Absolute norm = 2.23434e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0130202 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0084191 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00163681; Expected ratio = 0.0001; Absolute norm = 1.44842e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0140917 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0070167 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00163409; Expected ratio = 0.0001; Absolute norm = 1.44601e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0119254 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0109532 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000586752; Expected ratio = 0.0001; Absolute norm = 5.19423e-12; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0145683 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0082473 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000585319; Expected ratio = 0.0001; Absolute norm = 5.18156e-12; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.014267 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0084109 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000585343; Expected ratio = 0.0001; Absolute norm = 5.18381e-12; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0145285 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0090033 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000584372; Expected ratio = 0.0001; Absolute norm = 5.17521e-12; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.009696 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0094619 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000328367; Expected ratio = 0.0001; Absolute norm = 2.90917e-12; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0171311 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0121552 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.000329524; Expected ratio = 0.0001; Absolute norm = 2.91943e-12; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0111387 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0100791 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00689395; Expected ratio = 0.0001; Absolute norm = 6.11013e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0164019 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0114589 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00690615; Expected ratio = 0.0001; Absolute norm = 6.12095e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.0134579 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.0084897 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00244187; Expected ratio = 0.0001; Absolute norm = 2.16509e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.010523 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0191942 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00244363; Expected ratio = 0.0001; Absolute norm = 2.16665e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
-ResidualBasedBlockBuilderAndSolver: Build time: 0.014037 [s]
-ResidualBasedBlockBuilderAndSolver: System solve time: 0.009514 [s]
-RESIDUAL CRITERION:  :: [ Obtained ratio = 0.00136974; Expected ratio = 0.0001; Absolute norm = 1.21496e-11; Expected norm =  1e-09]
+ResidualBasedBlockBuilderAndSolver: Build time: 0.0128423 [s]
+ResidualBasedBlockBuilderAndSolver: System solve time: 0.0089473 [s]
+RESIDUAL CRITERION:  :: [ Obtained ratio = 0.0013696; Expected ratio = 0.0001; Absolute norm = 1.21484e-11; Expected norm =  1e-09]
 RESIDUAL CRITERION: Convergence is achieved
 GeoMechanicsNewtonRaphsonStrategyWithSeepage: Convergence achieved after 20 / 300 iterations
 BuilderAndSolver: Clear Function called
 GeoMechanics Analysis: Analysis -END-  
 BuilderAndSolver: Clear Function called
-GeoMechanics Analysis: Analysis Completed. Elapsed Time = 1.363  seconds. 
-GeoMechanics Analysis: Fri Nov 20 13:58:54 2026 
+GeoMechanics Analysis: Analysis Completed. Elapsed Time = 1.318  seconds. 
+GeoMechanics Analysis: Fri Nov 20 14:38:55 2026 
 [kratos-gui] stage end 1/1 1_Flow
 BuilderAndSolver: Clear Function called
 BuilderAndSolver: Clear Function called

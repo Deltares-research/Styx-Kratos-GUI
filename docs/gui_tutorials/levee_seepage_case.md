@@ -73,9 +73,9 @@ model have the same values:
 | **Density of the solid** (kg/m³) | `2650` | `2650` |
 | **Porosity** | `0.3333` | `0.3333` |
 | **Saturated saturation** | `1` | `1` |
-| **Residual saturation** | `0.0620347394540943` | `0.0620347394540943` |
+| **Residual saturation** | `0.06203` | `0.06203` |
 | **Air entry pressure** (Pa) | `2610.9660574412533` | `2610.9660574412533` |
-| **Pore size distribution index g_n** | `1.3774` | `1.3774` |
+| **Pore size distribution index g_n** | `1.377` | `1.377` |
 | **Intrinsic permeability xx** (m²) | `1.1574074074074074e-12` | `1.1574074074074074e-12` |
 | **Intrinsic permeability yy** (m²) | `1.1574074074074074e-12` | `1.1574074074074074e-12` |
 | **Minimum relative permeability** | `0.0001` | `0.0001` |

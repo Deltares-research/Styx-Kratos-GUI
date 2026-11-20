@@ -26,7 +26,7 @@ boundary conditions, and its water pressures are compared with that calculation 
 - **Flow properties**: all four bodies share them. The saturated hydraulic conductivity
   is 1 m/day, isotropic (an intrinsic permeability of 1.157e-12 m² with a water unit
   weight of 10 kN/m³). The retention curve is Van Genuchten, with ga = 3.83 1/m (an air
-  entry pressure of 2.611 kPa), gn = 1.3774, gl = 1.25, a residual saturation of 0.062 and
+  entry pressure of 2.611 kPa), gn = 1.377, gl = 1.25, a residual saturation of 0.06203 and
   a lower limit on relative permeability of 1e-4.
 - **Water**:
   - the left side, the river bottom and the dike outer slope up to the crest are held at a water

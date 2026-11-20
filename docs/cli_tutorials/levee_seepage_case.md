@@ -64,8 +64,8 @@ All four soil bodies share one set of flow properties, as in the model script:
 | `PERMEABILITY_XX`, `_YY` | K μ / (ρw g) ≈ 1.157e-12 m², with the water's viscosity μ = 1e-3 Pa s and unit weight ρw g = 10 kN/m³ |
 | `RETENTION_LAW` | `VanGenuchtenLaw` |
 | `VAN_GENUCHTEN_AIR_ENTRY_PRESSURE` | 10 000 / ga ≈ 2611 Pa, with ga = 3.83 1/m |
-| `VAN_GENUCHTEN_GN`, `_GL` | 1.3774, 1.25 |
-| `RESIDUAL_SATURATION` | ≈ 0.062 |
+| `VAN_GENUCHTEN_GN`, `_GL` | 1.377, 1.25 |
+| `RESIDUAL_SATURATION` | 0.06203 |
 | `MINIMUM_RELATIVE_PERMEABILITY` | 1e-4 |
 
 Only the permeability and the retention law, with the water's viscosity and density,
@@ -74,12 +74,12 @@ modulus and Poisson's ratio, are there. The table rounds the values. The command
 type them out in full, so they are the script's to the last digit.
 
 ```powershell
-kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
+kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.06203 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.377 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 ```
 > <pre>added material m_sand; wrote levee.json</pre>
 
 ```powershell
-kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
+kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 POROSITY=0.3333 BULK_MODULUS_SOLID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.06203 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.377 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 ```
 > <pre>added material m_clay; wrote levee.json</pre>
 
@@ -315,7 +315,7 @@ kratos-cli calculate levee.json
 kratos-cli results show 1
 ```
 > <pre>levee_seepage_&lt;YYYY-MM-DD&gt;_&lt;hh-mm&gt;  (deck levee_seepage, started &lt;YYYY-MM-DD&gt;T&lt;hh:mm&gt;)
->   complete, SI units, 8 files, 1013.5 KB
+>   complete, SI units, 8 files, 1.0 MB
 >     1  Flow                          results</pre>
 
 `calculate` meshes the model, writes the deck into a new run folder and runs Kratos there.
@@ -330,24 +330,25 @@ folder `KRATOS_GUI_RUNS` is set to.
 ```powershell
 kratos-cli results field 1 pw
 ```
-> <pre>Pore pressure (Pa), stage 1 (Flow): -2.70e+5 to 16796 over 2628 nodes
+> <pre>Pore pressure (Pa), stage 1 (Flow): -2.70e+5 to 16802 over 2628 nodes
 >   min -2.70e+5 at node 9
->   max 16796 at node 16
+>   max 16802 at node 16
 > `--csv` writes every value.</pre>
 
 ```powershell
 kratos-cli results field 1 flow_rate
 ```
-> <pre>Nodal water flow rate (m³/s/m), stage 1 (Flow): -3.08e-6 to 6.10e-6 over 2628 nodes
+> <pre>Nodal water flow rate (+ out) (m³/s/m), stage 1 (Flow): -3.08e-6 to 6.10e-6 over 2628 nodes
 >   min -3.08e-6 at node 236
 >   max 6.10e-6 at node 15
+>   out 3.33e-5, in 3.33e-5, out - in 1.73e-11 m³/s/m
 > `--csv` writes every value.</pre>
 
 ```powershell
 kratos-cli results field 1 effective_saturation
 ```
-> <pre>Effective saturation (-), stage 1 (Flow): 0.4838 to 1.04 over 2628 nodes
->   min 0.4838 at node 16
+> <pre>Effective saturation (-), stage 1 (Flow): 0.4841 to 1.04 over 2628 nodes
+>   min 0.4841 at node 16
 >   max 1.04 at node 2565
 > `--csv` writes every value.</pre>
 
