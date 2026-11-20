@@ -138,7 +138,7 @@ CONTRACTS = [
              lambda c: c.patch("/api/project/materials",
                                json={"materials": _project(c)["materials"]}),
              EDITED,
-             bad=lambda c: c.patch("/api/project/materials", json={"materials": []}),
+             bad=lambda c: c.patch("/api/project/materials", json={}),
              bad_status=422),
     Contract("PATCH", "/api/project/structures",
              lambda c: c.patch("/api/project/structures", json=_structures(c)),

@@ -1060,6 +1060,18 @@ def test_patch_materials_rejects_out_of_range_values(client):
     assert client.get("/api/project").json()["materials"][0]["r_inter"] == 0.70
 
 
+def test_patch_materials_accepts_the_empty_library_of_a_blank_project(client):
+    """A blank project has no materials. Pressing OK in its Soil materials window sends
+    that empty library back, and it must be saved, not refused (feedback, 2026-11-20)."""
+    client.post("/api/project/new")
+
+    response = client.patch("/api/project/materials", json={"materials": []})
+    assert response.status_code == 200
+    assert client.get("/api/project").json()["materials"] == []
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
 # ── Custom soil volumes ─────────────────────────────────────────────────────
 
 EMBANKMENT = {
