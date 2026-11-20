@@ -3,7 +3,7 @@
   "returncode": 0,
   "stopped": false,
   "stage": null,
-  "seconds": 25.4,
+  "seconds": 2.0,
   "inputs": [
     "levee_seepage.mdpa",
     "MaterialParameters.json",
@@ -13,7 +13,7 @@
   "outputs": [
     "levee_seepage_1_Flow.post.msh",
     "levee_seepage_1_Flow.post.res",
-    "levee_seepage_2026-11-19_09-49.post.lst"
+    "levee_seepage_2026-11-20_13-58.post.lst"
   ],
   "log": "kratos.log",
   "error": null

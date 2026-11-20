@@ -71,7 +71,7 @@ model have the same values:
 | **Young's modulus** (Pa) | `10000` | `10000` |
 | **Poisson's ratio** | `0.3` | `0.3` |
 | **Density of the solid** (kg/m³) | `2650` | `2650` |
-| **Porosity** | `0.3333333333333333` | `0.3333333333333333` |
+| **Porosity** | `0.3333` | `0.3333` |
 | **Saturated saturation** | `1` | `1` |
 | **Residual saturation** | `0.0620347394540943` | `0.0620347394540943` |
 | **Air entry pressure** (Pa) | `2610.9660574412533` | `2610.9660574412533` |

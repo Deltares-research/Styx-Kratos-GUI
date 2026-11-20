@@ -156,7 +156,7 @@ def soil(id_: str, name: str, color: str) -> Material:
                         "YOUNG_MODULUS": 1.0e4,
                         "POISSON_RATIO": 0.3,
                         "DENSITY_SOLID": 2.65e3,
-                        "POROSITY": 1.0 / 3.0,
+                        "POROSITY": 0.3333,
                         "BULK_MODULUS_SOLID": 1.0e20,
                         "PERMEABILITY_XX": PERMEABILITY,
                         "PERMEABILITY_YY": PERMEABILITY,
