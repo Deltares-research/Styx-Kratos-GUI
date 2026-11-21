@@ -78,8 +78,8 @@ pull request.
   The release notes are grouped by these labels.
 - All required checks must pass before the pull request can be merged into `main`.
 
-The project's license is still to be decided (see [LICENSE](LICENSE)). Contributions are
-released under the license the project chooses.
+Styx is released under the MIT License (see [LICENSE](LICENSE)). By opening a pull request,
+you agree that your contribution is released under the same license.
 
 ## For maintainers
 
