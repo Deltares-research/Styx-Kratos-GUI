@@ -26,7 +26,7 @@
 
    ── The files ────────────────────────────────────────────────────────────
 
-   Besides the picture of the view, the writer may add files of their own: paste a
+   Besides the pictures of the whole window and of the view, the writer may add files of their own: paste a
    screenshot (taken with Win+Shift+S, say) into the window, drop files on it, or choose
    them. Any kind of file goes: a picture, a document, a model. `filesIn` finds the files
    among what was pasted or dropped; `fileRefusal` says why one cannot go.
@@ -164,7 +164,8 @@ App.Feedback = (function () {
 
   /* The body of POST /api/feedback. `fields`: kind, message, name, context (from `context`),
      sessionLog and modelHistory (arrays of lines), view (the picture of the view, base64
-     PNG, or null), attachments (the writer's files, each {name, data}: data a data URL),
+     PNG, or null), windowPicture (the picture of the whole Styx window, the same),
+     attachments (the writer's files, each {name, data}: data a data URL),
      includeProject, run
      (the open run's id or null), error (the entry the report is about, or null: it goes
      first). */
@@ -186,6 +187,7 @@ App.Feedback = (function () {
       session_log: lastLines(f.sessionLog),
       model_history: lastLines(f.modelHistory),
       view: f.view || null,
+      window_picture: f.windowPicture || null,
       attachments: (f.attachments || []).map(function (a) { return { name: a.name, data: a.data }; }),
       include_project: f.includeProject !== false,
       run: f.run || null

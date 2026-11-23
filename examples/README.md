@@ -8,6 +8,7 @@ the GUI, run it with `kratos-cli`, or copy it as the start of your own model.
 |---|---|---|
 | [Simple dike](simple_dike) | A soil block with a sheet pile and a line load on its surface, in three stages | [CLI](../docs/cli_tutorials/simple_dike.md) |
 | [CROW excavation wall](CROW_case/README.md) | A staged sheet-pile excavation in clay and sand, with a strut, an interface, water loads and Mohr-Coulomb soils | [GUI](../docs/gui_tutorials/CROW_case.md), [CLI](../docs/cli_tutorials/CROW_case.md) |
+| [Levee seepage](levee_seepage/README.md) | A steady-state groundwater flow under and through a clay levee, with a seepage face and Van Genuchten soils | [GUI](../docs/gui_tutorials/levee_seepage_case.md), [CLI](../docs/cli_tutorials/levee_seepage_case.md) |
 | [Muskat groundwater flow](Muskat_case/README.md) | Three steady-state groundwater flow models of one soil column: saturated, unsaturated, and with a seepage face | [CLI](../docs/cli_tutorials/Muskat_case.md) |
 
 The tutorials build these models step by step. The example folders hold the end result.

@@ -125,6 +125,46 @@ app, and it gives the commands `deltaresstyx` and `kratos-cli`. Kratos is a pack
 own, and since the names of the packages on Nexus and PyPI are not consistent yet, it is not
 added as a dependency in the wheel.
 
+## Prepare PowerShell for the tutorials
+
+The `kratos-cli` tutorials type their commands in PowerShell. Prepare PowerShell as shown
+below before you start a tutorial.
+
+> [!IMPORTANT]
+> PowerShell forgets these settings when you close the window. Do these steps again each
+> time you open a new PowerShell window.
+
+1. Make a folder for your work and go into it. The commands write their files into the
+   folder where you run them, so run every command of the tutorial in this folder. This
+   keeps the files out of the repository.
+
+   ```powershell
+   mkdir $HOME\styx-work
+   cd $HOME\styx-work
+   ```
+
+2. Make `kratos-cli` a command in this window, and tell Styx to write the Kratos runs into
+   this folder too. Use the lines that fit how you installed Styx.
+
+   - With a copy of the repository, where `<repo>` is the folder you cloned it into:
+
+     ```powershell
+     Set-Alias kratos-cli <repo>\kratos-cli.bat
+     $env:KRATOS_GUI_RUNS = (Get-Location)
+     ```
+
+   - With the install from the Deltares package server, where `<uv-project>` is the
+     folder of the uv project you made:
+
+     ```powershell
+     function kratos-cli { uv run --project <uv-project> kratos-cli @args }
+     $env:KRATOS_GUI_RUNS = (Get-Location)
+     ```
+
+You can now paste the commands of the tutorial as they are. To calculate, Kratos must be
+set up: see [KRATOS_SETUP.md](KRATOS_SETUP.md). The install from the package server
+already includes Kratos.
+
 ## Next steps
 
 - To run models with **Calculate**, install Kratos and connect it to Styx:

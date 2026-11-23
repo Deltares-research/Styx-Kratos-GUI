@@ -42,15 +42,20 @@ ALLOWED = ("README.md", "docs/CLI.md", "docs/developer/README.md",
            "docs/cli_tutorials/3_run_the_python_script.md",
            "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md",
            "docs/cli_tutorials/Muskat_case.md",
+           "docs/cli_tutorials/levee_seepage_case.md",
            "docs/superpowers/specs/2026-11-03-" + _CASES[0] + "-gui-tutorial-design.md",
            "docs/gui_tutorials/" + _CASES[0].upper() + "_case.md",
+           "docs/gui_tutorials/" + _CASES[0] + "_model.svg",
+           "docs/gui_tutorials/levee_seepage_case.md",
            "docs/gui_tutorials/index.md",
            "mkdocs.yml",
            "docs/developer/code-map/GRAPH_REPORT.md",
            "docs/developer/code-map/GRAPH_TREE.html")
 """Besides the files under `EXAMPLES`, what may name them: the pages that point at them,
 the GUI tutorial built on the same case (its design, its page, and the site's index and
-settings that list the page), and the generated code map, which lists every tracked file
+settings that list the page), the levee seepage GUI tutorial page, which
+shows the one picture of the levee model in its example folder, and the generated code
+map, which lists every tracked file
 and so names them too."""
 
 KRATOS_REFERENCE = ("benchmarks/cases.py",

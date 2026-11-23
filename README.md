@@ -105,8 +105,8 @@ Do these steps in this order. Each step has its own guide.
 | [Installation](docs/INSTALLATION.md) | What to install on Windows, Linux or macOS, and how to start Styx with `run.bat` or `run.sh` |
 | [Kratos setup](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
 | [Usage](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results and use scripts |
-| [GUI tutorials](docs/gui_tutorials/index.md) | The CROW excavation wall, built in the GUI step by step from an empty project to the bending moment in the wall, with a screenshot of each step |
-| [CLI tutorials](docs/cli_tutorials/README.md) | Three models built and run with `kratos-cli` in a terminal, command by command: a simple dike, the CROW excavation wall and the Muskat groundwater flow case. [CLI.md](docs/CLI.md) lists every command. |
+| [GUI tutorials](docs/gui_tutorials/index.md) | Two models built in the GUI step by step, with a screenshot of each step: the CROW excavation wall and the levee seepage case |
+| [CLI tutorials](docs/cli_tutorials/README.md) | Four models built and run with `kratos-cli` in a terminal, command by command: a simple dike, the CROW excavation wall, the levee seepage case and the Muskat groundwater flow case. [CLI.md](docs/CLI.md) lists every command. |
 | [Features](docs/FEATURES.md) | What works, feature by feature, and where the code is |
 
 All these pages are also on the documentation site. It is published from `main` on GitHub
