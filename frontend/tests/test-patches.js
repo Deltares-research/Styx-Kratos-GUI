@@ -1020,6 +1020,204 @@
   });
 })();
 
+/* In 2D a soil surface is drawn: Create soil surface… starts the outline tool, and the
+   soil-surface window opens on the corners clicked, to name it and give it a material.
+   A 3D volume has no plane to draw on, so its window opens straight away, and the
+   rail's flyout keeps typing the corners in 2D one click away. */
+(function () {
+  function withSoilTools(modelMode, body) {
+    var saved = { action: App.runAction, command: App.Command, draw: App.DrawInput,
+                  dialog: App.SoilVolumeDialog, state: App.state };
+    var seen = { drawn: [], opened: [], notes: [] };
+    App.runAction = function () {};
+    App.Command = { note: function (t) { seen.notes.push(t); }, ok: function () {},
+                    err: function () {}, write: function () {}, run: function () {} };
+    App.DrawInput = {
+      start: function (mode, options) { seen.drawn.push({ mode: mode, options: options }); },
+      cancel: function () {}
+    };
+    App.SoilVolumeDialog = {
+      open: function (part, options) { seen.opened.push({ part: part, options: options }); }
+    };
+    App.LivePatches.install();
+    App.state = Object.assign({}, saved.state, { modelMode: modelMode });
+    try { return body(seen); }
+    finally {
+      App.runAction = saved.action; App.Command = saved.command;
+      App.DrawInput = saved.draw; App.SoilVolumeDialog = saved.dialog;
+      App.state = saved.state;
+      App.LivePatches.resetForTests();
+    }
+  }
+
+  test('in 2D, Create soil surface draws the outline, then opens the window on it',
+       function () {
+    withSoilTools('2d', function (seen) {
+      App.runAction({ action: 'createSoilVolume', tip: 'Create soil surface…' });
+      T.eq(seen.drawn.length, 1, 'the draw tool starts');
+      T.eq(seen.drawn[0].mode, 'polygon');
+      T.eq(seen.opened, [], 'the window waits for the outline');
+
+      var corners = [[0, 0, 0], [12, 0, 0], [12, 3, 0]];
+      seen.drawn[0].options.onComplete(corners);
+      T.eq(seen.opened.length, 1);
+      T.eq(seen.opened[0].part, null, 'a new body, not an edit');
+      T.eq(seen.opened[0].options.vertices, corners);
+    });
+  });
+
+  test('the rail flyout draws, or opens the window to type the corners', function () {
+    withSoilTools('2d', function (seen) {
+      App.runAction({ action: 'drawSoilSurface' });
+      T.eq(seen.drawn.length, 1);
+      App.runAction({ action: 'createSoilBodyByCoordinates' });
+      T.eq(seen.drawn.length, 1, 'typing does not start the draw tool');
+      T.eq(seen.opened.length, 1);
+      T.eq(seen.opened[0].options, undefined, 'it opens on the worked example');
+    });
+  });
+
+  test('in 3D, Create soil volume opens its window and there is nothing to draw',
+       function () {
+    withSoilTools('3d', function (seen) {
+      App.runAction({ action: 'createSoilVolume', tip: 'Create soil volume…' });
+      T.eq(seen.drawn, []);
+      T.eq(seen.opened.length, 1);
+
+      App.runAction({ action: 'drawSoilSurface', label: 'Draw soil surface' });
+      T.eq(seen.drawn, [], 'drawing an outline is refused in 3D');
+      T.eq(seen.opened.length, 1);
+    });
+  });
+
+  test('the soil rail tool carries the flyout, named and greyed with the mode',
+       function () {
+    withSoilTools('2d', function () {
+      var tool = App.RAILS.soil.filter(function (t) {
+        return t && t.action === 'createSoilVolume';
+      })[0];
+      T.eq(tool.flyout.map(function (i) { return i.action; }),
+           ['drawSoilSurface', 'createSoilBodyByCoordinates']);
+
+      App.LivePatches.nameSoilBodyActions('2d');
+      App.LivePatches.syncDimensionAvailability(true);
+      T.eq(tool.flyout[1].label, 'Soil surface by coordinates…');
+      T.eq(tool.flyout[0].disabled, false);
+
+      App.LivePatches.nameSoilBodyActions('3d');
+      App.LivePatches.syncDimensionAvailability(false);
+      T.eq(tool.flyout[1].label, 'Soil volume by coordinates…');
+      T.eq(tool.flyout[0].disabled, true, 'no outline to draw in 3D');
+      T.eq(tool.flyout[1].disabled, false);
+    });
+  });
+})();
+
+/* Right-click on a drawn soil surface: Intersect with > each soil surface it overlaps,
+   which the server splits into the part of each outside the other and the overlap. */
+(function () {
+  function surface(key, label, x0) {
+    return { key: key, label: label, mat: 'sand', recipe: { kind: 'polygon_extrude',
+      extrusion: [0, 0, 1], vertices: [[x0, 0, 0], [x0 + 3, 0, 0], [x0 + 3, 3, 0], [x0, 3, 0]] } };
+  }
+
+  function withSurfaces(body) {
+    var names = ['PROJECT', 'state', 'Api', 'Model', 'Viewport', 'Explorer', 'Command', 'Menu',
+                 'viewportContextMenu', 'runAction'];
+    var saved = {};
+    names.forEach(function (n) { saved[n] = App[n]; });
+    var seen = { posts: [], lines: [], loads: 0, refreshes: 0, menu: null };
+    App.PROJECT = { custom_parts: [surface('drawn_0', 'Sand', 0), surface('drawn_1', 'Clay', 2),
+                                   surface('drawn_2', 'Far', 20)] };
+    App.state = { mode: 'soil', modelMode: '2d' };
+    App.runAction = function () {};
+    App.Api = { post: function (path, body) {
+      seen.posts.push({ path: path, body: body });
+      return seen.refuse ? Promise.reject(new Error(seen.refuse)) : Promise.resolve({});
+    } };
+    App.Model = { load: function () { seen.loads += 1; return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { seen.refreshes += 1; return Promise.resolve(); } };
+    App.Explorer = { mountTree: function () {} };
+    App.Command = { note: function (t) { seen.lines.push('note:' + t); },
+                    ok: function (t) { seen.lines.push('ok:' + t); },
+                    err: function (t) { seen.lines.push('err:' + t); },
+                    write: function () {}, run: function () {} };
+    App.Menu = { openAt: function (items, x, y, onPick) {
+      seen.menu = { items: items, pick: onPick };
+    } };
+    App.viewportContextMenu = function (event, key) {
+      App.Menu.openAt([{ title: key }, { label: 'Zoom to fit', action: 'zoomFit' }],
+                      0, 0, function () {});
+    };
+    App.LivePatches.resetForTests();
+    App.LivePatches.install();
+    function restore() {
+      App.LivePatches.resetForTests();
+      names.forEach(function (n) { App[n] = saved[n]; });
+    }
+    var result;
+    try { result = body(seen); } catch (e) { restore(); throw e; }
+    return Promise.resolve(result).then(restore, function (e) { restore(); throw e; });
+  }
+
+  function row(items) {
+    return items.filter(function (item) {
+      return item && /^Intersect with/.test(item.label || '');
+    })[0];
+  }
+
+  test('right-click on a soil surface offers the surfaces it overlaps', function () {
+    return withSurfaces(function (seen) {
+      App.viewportContextMenu({}, 'drawn_0');
+      var intersect = row(seen.menu.items);
+      T.ok(intersect, 'the row is there');
+      T.eq(seen.menu.items.indexOf(intersect), 1, 'right under the title');
+      T.eq(intersect.sub.map(function (item) { return item.label; }), ['Clay']);
+      T.eq(intersect.sub[0].surfaceKey, 'drawn_0');
+      T.eq(intersect.sub[0].otherKey, 'drawn_1');
+    });
+  });
+
+  test('a surface nothing overlaps says so, and a part that is not one has no row',
+       function () {
+    return withSurfaces(function (seen) {
+      App.viewportContextMenu({}, 'drawn_2');
+      T.eq(row(seen.menu.items).disabled, true);
+      App.viewportContextMenu({}, 'wall');
+      T.eq(row(seen.menu.items), undefined);
+      App.state.mode = 'results';
+      App.viewportContextMenu({}, 'drawn_0');
+      T.eq(row(seen.menu.items), undefined, 'nothing to edit in Results');
+    });
+  });
+
+  test('picking a surface intersects the two and redraws the model', function () {
+    return withSurfaces(function (seen) {
+      App.viewportContextMenu({}, 'drawn_0__part1');
+      var pick = row(seen.menu.items).sub[0];
+      T.eq(pick.surfaceKey, 'drawn_0', 'a piece stands for its whole surface');
+      return Promise.resolve(seen.menu.pick(pick)).then(function () {
+        T.eq(seen.posts, [{ path: '/api/geometry/intersect',
+                            body: { key: 'drawn_0', other: 'drawn_1' } }]);
+        T.eq([seen.loads, seen.refreshes], [1, 1]);
+        T.ok(/^ok:Intersected "Sand" with "Clay"/.test(seen.lines[seen.lines.length - 1]),
+             seen.lines.join(' | '));
+      });
+    });
+  });
+
+  test('a refused intersection says why in the command log', function () {
+    return withSurfaces(function (seen) {
+      seen.refuse = "'Sand' and 'Clay' do not overlap";
+      return App.LivePatches.intersectSurfaces('drawn_0', 'drawn_1').then(function () {
+        T.eq(seen.lines[seen.lines.length - 1],
+             "err:Intersect failed: 'Sand' and 'Clay' do not overlap");
+        T.eq(seen.refreshes, 0);
+      });
+    });
+  });
+})();
+
 (function () {
   /* There is no menu item for an example model, and that is the point. Models are
      opened by running the Python that builds them -- `run models/pit.py` in the

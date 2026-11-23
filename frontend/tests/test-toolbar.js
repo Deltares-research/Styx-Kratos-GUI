@@ -70,9 +70,11 @@
        the screen edges are three axes mixed by the orbit. See test-ruler.js. */
     /* And a boundary condition drawn along a line or at a point, which the section
        embeds as a normal load's line is. */
+    /* And a soil surface drawn as an outline: a 3D body has no plane to draw it on,
+       so its corners are typed. */
     T.eq(App.LivePatches.TWO_D_ONLY,
          ['interface', 'createNormalLoad', 'drawLine', 'createLineByCoordinates',
-          'toggleRuler', 'createSupportLine',
+          'drawSoilSurface', 'toggleRuler', 'createSupportLine',
           'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint',
           'createSeepageLine']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);

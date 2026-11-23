@@ -99,10 +99,59 @@
     T.eq(D.measure(project, along).label, 'Volume');
   });
 
+  /* The window opens on the corners clicked in the viewport, so they have to be
+     fit to type over: no 12.3456789, and no corner given twice. */
+  test('drawn corners are rounded, and a repeated click is kept once', function () {
+    T.eq(D.drawnOutline([[0.00012, 1.23456], [12, 0], [12, 3]]),
+         [[0, 1.235], [12, 0], [12, 3]]);
+    T.eq(D.drawnOutline([[0, 0], [12, 0], [12, 0], [12, 3]]),
+         [[0, 0], [12, 0], [12, 3]], 'a double click');
+    T.eq(D.drawnOutline([[0, 0], [12, 0], [12, 3], [0, 0]]),
+         [[0, 0], [12, 0], [12, 3]], 'closed on the first corner');
+    T.eq(D.drawnOutline([]), []);
+  });
+
   test('the title says which thing is being made', function () {
     T.eq(D.titleFor('surface', false), 'Create soil surface');
     T.eq(D.titleFor('surface', true), 'Edit soil surface');
     T.eq(D.titleFor('volume', false), 'Create soil volume');
     T.eq(D.titleFor('volume', true), 'Edit soil volume');
+  });
+
+  /* Right-click > Intersect with offers the other soil surfaces that share ground with
+     the one clicked; the server is the one that splits them. */
+  function surface(key, label, outline, extra) {
+    return Object.assign({ key: key, label: label, mat: 'sand', recipe: {
+      kind: 'polygon_extrude', extrusion: [0, 0, 40],
+      vertices: outline.map(function (p) { return [p[0], p[1], 0]; }) } }, extra || {});
+  }
+  function square(x, y, size) {
+    return [[x, y], [x + size, y], [x + size, y + size], [x, y + size]];
+  }
+
+  test('outlines overlap when they share ground, not when they only touch', function () {
+    T.ok(D.outlinesOverlap(square(0, 0, 4), square(2, 2, 4)), 'corners overlap');
+    T.ok(D.outlinesOverlap(square(0, 0, 4), square(2, 0, 4)), 'overlap along a shared edge line');
+    T.ok(D.outlinesOverlap(square(0, 0, 10), square(4, 4, 2)), 'one wholly inside the other');
+    T.ok(D.outlinesOverlap(square(4, 4, 2), square(0, 0, 10)), 'the other way round');
+    T.ok(!D.outlinesOverlap(square(0, 0, 4), square(4, 0, 4)), 'side by side');
+    T.ok(!D.outlinesOverlap(square(0, 0, 4), square(4, 4, 4)), 'corner to corner');
+    T.ok(!D.outlinesOverlap(square(0, 0, 4), square(9, 9, 1)), 'apart');
+  });
+
+  test('a soil surface lists the other surfaces it overlaps, and nothing else', function () {
+    var p = { custom_parts: [
+      surface('drawn_0', 'Sand', square(0, 0, 4)),
+      surface('drawn_1', 'Clay', square(2, 2, 4)),
+      surface('drawn_2', 'Far', square(20, 20, 2)),
+      surface('drawn_3', 'Plain', square(1, 1, 1), { mat: null }),
+      { key: 'imported_0', label: 'Step', mat: 'sand', recipe: null }
+    ] };
+    T.eq(D.overlappingSurfaces(p, 'drawn_0'), [{ key: 'drawn_1', label: 'Clay' }]);
+    T.eq(D.overlappingSurfaces(p, 'drawn_0__part2'), [{ key: 'drawn_1', label: 'Clay' }],
+         'a piece a line cut off stands for its whole surface');
+    T.eq(D.overlappingSurfaces(p, 'drawn_3'), null, 'a part with no material is not soil');
+    T.eq(D.overlappingSurfaces(p, 'imported_0'), null);
+    T.eq(D.overlappingSurfaces(p, 'drawn_2'), []);
   });
 })();

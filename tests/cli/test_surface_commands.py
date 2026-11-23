@@ -87,3 +87,33 @@ def test_a_3d_model_has_volumes_not_surfaces(cli, tmp_path):
     assert "`volume list`" in cli("surface", path, "list").out
     ran = square(cli, path)
     assert ran.code != 0 and "volume add polygon" in ran.err
+
+
+def overlapping(cli, path):
+    """Sand from 0 to 3, clay from 2 to 5: they overlap in a 1 m wide band."""
+    assert square(cli, path, "--label", "Sand").code == 0
+    assert cli("surface", path, "add", "--points", "2", "0", "5", "0", "5", "3", "2", "3",
+               "--material", "clay", "--label", "Clay").code == 0
+
+
+def test_two_overlapping_surfaces_are_intersected_into_three(cli, empty):
+    """What right-click > Intersect with does in the viewport."""
+    overlapping(cli, empty)
+    ran = cli("surface", empty, "intersect", "drawn_0", "drawn_1")
+    assert ran.code == 0, ran.err
+    assert "intersected Sand with Clay: Sand, Clay, Sand & Clay" in ran.out
+    project = session.load(empty)
+    assert [(p.key, p.label, p.mat) for p in project.custom_parts] == [
+        ("drawn_0", "Sand", "sand"), ("drawn_1", "Clay", "clay"),
+        ("drawn_2", "Sand & Clay", "sand")]
+    assert all(part.source_file and part.bbox for part in project.custom_parts)
+    assert project.custom_parts[2].bbox[0] == pytest.approx(2.0)
+    assert project.custom_parts[2].bbox[3] == pytest.approx(3.0)
+
+
+def test_surfaces_that_do_not_overlap_are_not_intersected(cli, empty):
+    assert square(cli, empty).code == 0
+    assert cli("surface", empty, "add", "--points", "5", "0", "6", "0", "6", "1",
+               "--material", "clay").code == 0
+    ran = cli("surface", empty, "intersect", "drawn_0", "drawn_1")
+    assert ran.code != 0 and "do not overlap" in ran.err
