@@ -140,8 +140,10 @@ Styx is released under the MIT License. See [LICENSE](LICENSE) for the full text
 
 Styx relies on third-party software under its own licenses. Gmsh, which the launcher installs
 from PyPI, is licensed under the GNU GPL v2 or later. three.js and html2canvas (both bundled
-in `frontend/vendor/`) are MIT-licensed, and Kratos Multiphysics, installed separately, is
-BSD-licensed.
+in `frontend/vendor/`) are MIT-licensed. Kratos Multiphysics, installed separately, is
+released under the 4-clause BSD license (BSD-4-Clause). This license has an advertising
+clause: material that mentions features or use of Kratos must carry the line "This product
+includes Kratos Multi-Physics technology".
 
 ## Contact
 
