@@ -155,8 +155,8 @@ def test_going_to_3d_carries_the_soil_law_with_it(client):
 
 def test_a_law_this_application_cannot_pair_is_kept_and_named(client):
     data = excavation.excavation_project(staged=False).model_dump(mode="json")
-    data["materials"][0]["constitutive_law"] = "SmallStrainUDSM2DPlaneStrainLaw"
+    data["materials"][0]["constitutive_law"] = "SmallStrainUMAT2DPlaneStrainLaw"
     put(client, Project.model_validate(data))
     answer = client.patch("/api/project/dimension", json={"dimension": 3}).json()
-    assert current(client).materials[0].constitutive_law == "SmallStrainUDSM2DPlaneStrainLaw"
-    assert any("SmallStrainUDSM2DPlaneStrainLaw" in note for note in answer["notes"])
+    assert current(client).materials[0].constitutive_law == "SmallStrainUMAT2DPlaneStrainLaw"
+    assert any("SmallStrainUMAT2DPlaneStrainLaw" in note for note in answer["notes"])

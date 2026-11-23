@@ -1043,7 +1043,7 @@ def update_material(project: Project, id: str, *, name: str | None = None,
                     color: str | None = None, law: str | None = None,
                     model: str | None = None, variables: dict | None = None,
                     unset: Sequence[str] = (), notes: list[str] | None = None,
-                    r_inter: float | None = None) -> Project:
+                    r_inter: float | None = None, udsm: str | None = None) -> Project:
     """The material `id` with the fields and variables given; `unset` names variables to
     leave out, so the export derives them where it can. `r_inter` is the factor an
     interface puts on this soil's strength.
@@ -1052,9 +1052,24 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     project's dimension. What the soil then lists and lacks gets the model's default, as
     the material window fills it (`soil_models.fill_choice`), and `notes` says which: a
     soil still being filled in by hand, as `material add` makes one, gets no number its
-    law must have."""
+    law must have.
+
+    `udsm` makes it that UDSM model (`soil_models.udsm_by_id`, `MohrCoulomb64:1`), with
+    its start values, as the window's UDSM model list does. A UDSM soil takes its
+    model's parameters by their keys among `variables` (`E=2e7`,
+    `soil_models.udsm_assign`)."""
     if model is not None and law is not None:
         raise EditRefused("give a soil model or a law, not both")
+    if udsm is not None:
+        if law is not None or model not in (None, soil_models.UDSM):
+            raise EditRefused("a UDSM model is the UDSM soil model: give --udsm without "
+                              "another model or law")
+        try:
+            chosen = soil_models.udsm_by_id(udsm)
+        except LookupError as failure:
+            raise EditRefused(str(failure)) from None
+        if soil_models.model_of(project.material(id).constitutive_law) != soil_models.UDSM:
+            model = soil_models.UDSM
     if model is not None:
         try:
             law = soil_models.law(model, project.dimension)
@@ -1071,6 +1086,21 @@ def update_material(project: Project, id: str, *, name: str | None = None,
         # As the window's Soil model list: what the model does not read is left out.
         for variable in soil_models.unread(law, record["variables"]):
             del record["variables"][variable]
+    picked: list[str] = []
+    if soil_models.model_of(record["constitutive_law"]) == soil_models.UDSM:
+        # The UDSM model first, so that its parameters can be given by their keys.
+        if udsm is not None:
+            picked = soil_models.udsm_choose(record["variables"], chosen, project.unit_system)
+        elif "UMAT_PARAMETERS" not in record["variables"]:
+            first = (soil_models.udsm_model(record["variables"])
+                     or soil_models.udsm_first())
+            if first is not None:
+                picked = soil_models.udsm_choose(record["variables"], first,
+                                                 project.unit_system)
+        try:
+            variables = soil_models.udsm_assign(record["variables"], variables or {})
+        except ValueError as failure:
+            raise EditRefused(str(failure)) from None
     record["variables"].update(variables or {})
     for variable in unset:
         if variable not in record["variables"]:
@@ -1080,6 +1110,7 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     filled = soil_models.fill_choice(before_law, before, record["constitutive_law"],
                                      record["variables"], project.unit_system,
                                      flow=drafts.reads_flow(project), skip=tuple(unset))
+    filled = [*picked, *filled]
     note = soil_models.filled_note(soil_models.model_of(record["constitutive_law"]), filled)
     if note and notes is not None:
         notes.append(note)

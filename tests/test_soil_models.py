@@ -48,7 +48,8 @@ def deck(project: Project, k0: bool = False) -> dict:
 def test_the_mohr_coulomb_laws_are_the_ones_kratos_registers_now():
     assert (MC_2D, MC_3D) == ("GeoMohrCoulombLawPlaneStrain", "GeoMohrCoulombLaw3D")
     assert soil_models.model_of("GeoMohrCoulombWithTensionCutOff2D") == soil_models.MOHR_COULOMB
-    assert soil_models.model_of("SmallStrainUDSM2DPlaneStrainLaw") == soil_models.OTHER
+    assert soil_models.model_of("SmallStrainUMAT2DPlaneStrainLaw") == soil_models.OTHER
+    assert soil_models.model_of("SmallStrainUDSM3DLaw") == soil_models.UDSM
     assert soil_models.law_dimension("GeoMohrCoulombWithTensionCutOff3D") == 3
 
 
@@ -225,7 +226,7 @@ def test_a_soil_made_linear_elastic_leaves_out_the_strength_it_does_not_read():
     assert typed.material("m2").variables["GEO_COHESION"] == 5.0, "typed with it: kept"
     preset, _ = drafts.soil(project, "x", preset="embankment", model=soil_models.LINEAR_ELASTIC)
     assert "GEO_COHESION" not in preset.variables
-    assert soil_models.unread("SmallStrainUDSM2DPlaneStrainLaw", {"GEO_COHESION": 1.0}) == []
+    assert soil_models.unread("SmallStrainUMAT2DPlaneStrainLaw", {"GEO_COHESION": 1.0}) == []
 
 
 def test_a_choice_changed_fills_what_it_lists_and_a_left_out_value_stays_out():
@@ -313,10 +314,10 @@ def test_a_law_of_no_model_is_written_as_typed():
     payload = project.model_dump(mode="json")
     payload["materials"][1] = Material(
         id="m2", name="udsm", color="#000000",
-        constitutive_law="SmallStrainUDSM2DPlaneStrainLaw",
+        constitutive_law="SmallStrainUMAT2DPlaneStrainLaw",
         variables={"UDSM_NAME": "mc.dll"}).model_dump(mode="json")
     assert deck(Project.model_validate(payload))["constitutive_law"]["name"] == \
-        "SmallStrainUDSM2DPlaneStrainLaw"
+        "SmallStrainUMAT2DPlaneStrainLaw"
 
 
 def test_interface_materials_preserve_user_values_and_refuse_unresolvable_stiffness():

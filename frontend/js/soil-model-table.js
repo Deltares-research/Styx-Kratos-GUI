@@ -11,12 +11,29 @@ App.SOIL_MODEL_TABLE =
 {
   "order": [
     "linear_elastic",
-    "mohr_coulomb"
+    "mohr_coulomb",
+    "udsm"
   ],
   "other": "other",
   "flowing": [
     "FULLY_COUPLED"
   ],
+  "udsm": {
+    "model": "udsm",
+    "variables": [
+      "UDSM_NAME",
+      "UDSM_NUMBER",
+      "IS_FORTRAN_UDSM",
+      "UMAT_PARAMETERS",
+      "INDEX_OF_UMAT_C_PARAMETER",
+      "INDEX_OF_UMAT_PHI_PARAMETER"
+    ],
+    "required": [
+      "UDSM_NAME",
+      "UDSM_NUMBER",
+      "UMAT_PARAMETERS"
+    ]
+  },
   "unsaturated": [
     "SaturatedBelowPhreaticLevelLaw",
     "VanGenuchtenLaw"
@@ -566,6 +583,195 @@ App.SOIL_MODEL_TABLE =
                 "name": "GEO_COULOMB_HARDENING_TYPE",
                 "values": [
                   "Linear"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "Initial stresses",
+          "parameters": [
+            {
+              "name": "K0_NC",
+              "label": "K0, normally consolidated"
+            }
+          ]
+        }
+      ]
+    },
+    "udsm": {
+      "label": "User-defined (UDSM)",
+      "laws": {
+        "2": "SmallStrainUDSM2DPlaneStrainLaw",
+        "3": "SmallStrainUDSM3DLaw"
+      },
+      "old_laws": {},
+      "groups": [
+        {
+          "title": "Drainage",
+          "parameters": [
+            {
+              "name": "GEO_DRAINAGE_TYPE",
+              "label": "Drainage type",
+              "default": "CONSTANT_PW_FIELD",
+              "choices": [
+                "CONSTANT_PW_FIELD",
+                "FULLY_COUPLED"
+              ],
+              "choice_text": {
+                "CONSTANT_PW_FIELD": {
+                  "label": "Mechanical only",
+                  "note": "Solves displacements with prescribed pore pressures"
+                },
+                "FULLY_COUPLED": {
+                  "label": "Fully coupled",
+                  "note": "Solves pore pressures and displacements coupled with a UPw formulation"
+                }
+              },
+              "absent": "CONSTANT_PW_FIELD"
+            }
+          ]
+        },
+        {
+          "title": "Weight",
+          "parameters": [
+            {
+              "name": "DENSITY_SOLID",
+              "label": "Density of the solid",
+              "default": 1732.9255861365953,
+              "required": true
+            },
+            {
+              "name": "POROSITY",
+              "label": "Porosity",
+              "default": 0.0,
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Saturation",
+          "parameters": [
+            {
+              "name": "RETENTION_LAW",
+              "label": "Retention law",
+              "default": "SaturatedBelowPhreaticLevelLaw",
+              "choices": [
+                "SaturatedLaw",
+                "SaturatedBelowPhreaticLevelLaw",
+                "VanGenuchtenLaw"
+              ],
+              "absent": "SaturatedLaw"
+            },
+            {
+              "name": "SATURATED_SATURATION",
+              "label": "Saturated saturation",
+              "default": 1.0,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "SaturatedBelowPhreaticLevelLaw",
+                  "VanGenuchtenLaw"
+                ]
+              }
+            },
+            {
+              "name": "RESIDUAL_SATURATION",
+              "label": "Residual saturation",
+              "default": 1e-10,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "SaturatedBelowPhreaticLevelLaw",
+                  "VanGenuchtenLaw"
+                ]
+              }
+            },
+            {
+              "name": "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
+              "label": "Air entry pressure",
+              "default": 2611.0,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "VanGenuchtenLaw"
+                ]
+              }
+            },
+            {
+              "name": "VAN_GENUCHTEN_GN",
+              "label": "Pore size distribution index g_n",
+              "default": 1.377,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "VanGenuchtenLaw"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "title": "Flow",
+          "parameters": [
+            {
+              "name": "PERMEABILITY_XX",
+              "label": "Intrinsic permeability xx",
+              "default": 1.1574074074074074e-12,
+              "flow": true
+            },
+            {
+              "name": "PERMEABILITY_YY",
+              "label": "Intrinsic permeability yy",
+              "flow": true
+            },
+            {
+              "name": "MINIMUM_RELATIVE_PERMEABILITY",
+              "label": "Minimum relative permeability",
+              "default": 0.0001,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "SaturatedBelowPhreaticLevelLaw",
+                  "VanGenuchtenLaw"
+                ]
+              },
+              "flow": true
+            },
+            {
+              "name": "VAN_GENUCHTEN_GL",
+              "label": "Relative permeability exponent g_l",
+              "default": 1.25,
+              "when": {
+                "name": "RETENTION_LAW",
+                "values": [
+                  "VanGenuchtenLaw"
+                ]
+              },
+              "flow": true
+            }
+          ]
+        },
+        {
+          "title": "Grain-water interaction",
+          "parameters": [
+            {
+              "name": "BULK_MODULUS_SOLID",
+              "label": "Bulk modulus of the grains",
+              "when": {
+                "name": "GEO_DRAINAGE_TYPE",
+                "values": [
+                  "FULLY_COUPLED"
+                ]
+              }
+            },
+            {
+              "name": "BIOT_COEFFICIENT",
+              "label": "Biot coefficient",
+              "when": {
+                "name": "GEO_DRAINAGE_TYPE",
+                "values": [
+                  "FULLY_COUPLED"
                 ]
               }
             }

@@ -47,8 +47,8 @@
   });
 
   T.test('a law nobody here knows is the user\'s business', function () {
-    T.eq(P.validate('soil', { constitutive_law: 'SmallStrainUDSM2DPlaneStrainLaw',
-                              variables: { UDSM_NAME: 'mc.dll', UDSM_PARAMETERS: [1, 2] } }), null);
+    T.eq(P.validate('soil', { constitutive_law: 'SmallStrainUMAT2DPlaneStrainLaw',
+                              variables: { UDSM_NAME: 'mc.dll', UMAT_PARAMETERS: [1, 2] } }), null);
   });
 
   T.test('what Kratos could not read is refused', function () {

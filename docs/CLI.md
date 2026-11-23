@@ -73,7 +73,7 @@ Genuchten soil.
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last. In the GUI: **File** > **Project properties…** |
-| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset clay_shallow] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
+| `material P list\|presets\|models\|udsm\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset clay_shallow] [--model mohr-coulomb] [--udsm MohrCoulomb64:1] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults, `udsm` each UDSM model with its parameters |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
 | `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
@@ -249,8 +249,15 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   the defaults of the values it brings in the same way. `material P models` lists each
   model: its laws, its parameters in groups, each default in the project's units, the
   values a choice can take and when a parameter is used. `--law` is for any other law,
-  for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
+  for example a UMAT. It is written as you type it. `--model` and `--law` cannot be
   given together.
+- **UDSM soils**: `material P udsm` lists the models of the UDSM libraries that come with
+  Styx, each with its parameters: the key to type, the start value in the project's
+  units, and the name the library gives. `material P add clay --udsm MohrCoulomb64:1
+  E=3e7 phi_peak=33` adds a soil of that model (the **UDSM model** list of the Soil
+  material window), with its start values and the parameters given by key.
+  `material P set clay c=2500` changes one parameter; `--udsm` on `set` chooses another
+  model, with its start values. `--model udsm` alone takes the first model.
 - **Lines** split the soil. Where a line crosses a layer or a soil surface from one edge to
   another, it becomes separate soil bodies, and each is a SubModelPart that a stage can
   switch off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of

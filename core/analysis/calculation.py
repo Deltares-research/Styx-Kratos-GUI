@@ -47,6 +47,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -210,6 +211,11 @@ def write_deck(export: dict, directory: Path) -> list[str]:
     # (`core.kratos.deck_files.PRESTRESS_WORKAROUND_NAME`).
     for name, text in (export.get("process_files") or {}).items():
         write_text(directory / name, text)
+        written.append(name)
+    # The UDSM libraries the soils use, where their `UDSM_NAME` says (`udsm/<file>`).
+    for name, source in (export.get("library_files") or {}).items():
+        (directory / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, directory / name)
         written.append(name)
     if export.get("unit_system"):
         write_text(directory / UNITS_NAME, json.dumps({"unit_system": export["unit_system"]}))

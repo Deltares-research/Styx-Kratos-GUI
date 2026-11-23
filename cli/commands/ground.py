@@ -24,6 +24,7 @@ from cli.terminal.words import (NAME_HELP, action, assignments, coordinates, edi
 from core import session
 from core.model import drafts, soil_models, units
 from core.model.schemas import Project
+from core.model import udsm
 
 
 def register(commands, common: argparse.ArgumentParser) -> None:
@@ -52,6 +53,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(material, common, "models", list_models, writes=False,
             help="the soil models (--model), each with its parameters and defaults in "
                  "the project's units")
+    action(material, common, "udsm", list_udsm, writes=False,
+           help="the UDSM models (--udsm) in the libraries that come with Styx, each with "
+                "its parameters: the KEY=VALUE words a UDSM soil takes, and their start "
+                "values in the project's units")
     add = action(material, common, "add", add_material, variables=True,
                   help="a soil: the blank soil Create soil makes, or a library preset, of a "
                        "soil model, then NAME=VALUE variables of its own")
@@ -146,6 +151,10 @@ def _material_fields(parser: argparse.ArgumentParser) -> None:
                              "defaults for what the soil lacks (see `models`)")
     parser.add_argument("--law", help="any other Kratos constitutive law, written as typed "
                                       "(default: linear elastic for the model's dimension)")
+    parser.add_argument("--udsm", metavar="MODEL",
+                        help="a UDSM model (see `udsm`), e.g. MohrCoulomb64:1: the soil "
+                             "becomes the udsm soil model with this model's start values; "
+                             "its parameters are then given as KEY=VALUE, e.g. E=2e7")
     parser.add_argument("--r-inter", type=float,
                         help="the factor an interface puts on this soil's cohesion and "
                              "tan(phi), above 0 and at most 1 (default 0.7)")
@@ -248,10 +257,33 @@ def list_materials(args: argparse.Namespace) -> Answer:
     project = read(args)
     return Answer(data=[m.model_dump(mode="json") for m in project.materials],
                   lines=[f"{m.id}  {m.name}  "
-                         f"{soil_models.label(soil_models.model_of(m.constitutive_law))} "
+                         f"{soil_models.label(soil_models.model_of(m.constitutive_law))}"
+                         f"{_udsm_name(m.variables)} "
                          f"({m.constitutive_law}), {len(m.variables)} variables"
                          for m in project.materials]
                   or ["No materials yet."])
+
+
+def _udsm_name(variables: dict) -> str:
+    """` Mohr-Coulomb (MohrCoulomb64:1)` for a UDSM soil, nothing for another."""
+    model = soil_models.udsm_model(variables)
+    return f" {model.name} ({model.id})" if model is not None else ""
+
+
+def list_udsm(args: argparse.Namespace) -> Answer:
+    system = read(args).unit_system
+    lines = []
+    for model in udsm.models():
+        lines.append(f"{model.id}  {model.name}  ({model.file}, UDSM_NUMBER {model.number})")
+        for i, p in enumerate(model.parameters):
+            unit = udsm.unit_label(p, system)
+            value = soil_models.udsm_default(model, i, system)
+            lines.append(f"  {p.key} = {_shown(value)}" + (f" {unit}" if unit else "")
+                         + f"  ({p.label})")
+        if not model.known:
+            lines.append("  No start values are known for this model: give every value.")
+    lines += [f"Left out: {problem}" for problem in udsm.problems()]
+    return Answer(data=udsm.table(), lines=lines or ["No UDSM models on this system."])
 
 
 def list_models(args: argparse.Namespace) -> Answer:
@@ -335,16 +367,19 @@ def _show_preset(args: argparse.Namespace) -> Answer:
 @named_ids(required=True)
 def add_material(args: argparse.Namespace) -> Answer:
     project = read(args)
+    model = _model(args)
+    if args.udsm is not None and model is None and args.law is None:
+        model = soil_models.UDSM
     try:
         material, notes = drafts.soil(project, args.id, name=args.name, preset=args.preset,
-                                      color=args.color, law=args.law, model=_model(args))
+                                      color=args.color, law=args.law, model=model)
     except drafts.DraftError as failure:
         raise CommandError(str(failure)) from None
     project = session.add_material(project, material)
     variables = assignments(args.variables)
-    if variables or args.r_inter is not None:
+    if variables or args.r_inter is not None or args.udsm is not None:
         project = session.update_material(project, args.id, variables=variables,
-                                          r_inter=args.r_inter)
+                                          r_inter=args.r_inter, udsm=args.udsm)
     answer = edited(args, project, f"added material {args.id}")
     answer.lines += notes
     # A new soil is blank, as the GUI's Create soil makes it: said, as its window says it.
@@ -363,7 +398,7 @@ def update_material(args: argparse.Namespace) -> Answer:
                                       model=_model(args),
                                       variables=assignments(args.variables),
                                       unset=args.unset, notes=notes,
-                                      r_inter=args.r_inter)
+                                      r_inter=args.r_inter, udsm=args.udsm)
     answer = edited(args, project, f"changed material {args.id}")
     answer.lines += notes
     return answer

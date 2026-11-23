@@ -25,6 +25,25 @@
   /* The soil models: the same table is generated for both sides (soil-model-table.js);
      these hold the functions that read it to the Python's answers. */
   var M = F.soil_models;
+  /* The UDSM models the Python answered for, in place of the server's
+     (GET /api/udsm/library.js). */
+  App.UDSM_LIBRARY = M.udsm_library;
+
+  M.udsm_choose.forEach(function (c) {
+    T.test('a UDSM model is chosen as on the command line: ' + c.title, function () {
+      var after = JSON.parse(JSON.stringify(c.before));
+      var names = App.SoilModels.udsmChoose(after, App.SoilModels.udsmById(c.id), c.system);
+      T.eq(names, c.names);
+      T.eq(after, c.after);
+    });
+  });
+
+  T.test('a UDSM soil changes units as on the command line', function () {
+    M.udsm_convert.forEach(function (c) {
+      T.eq(App.Units.convertVariables(c.variables, c.source, c.target), c.result,
+           JSON.stringify(c.variables));
+    });
+  });
 
   T.test('each soil model starts a new soil from the same variables as on the command line', function () {
     Object.keys(M.defaults).forEach(function (model) {

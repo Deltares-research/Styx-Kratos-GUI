@@ -200,7 +200,15 @@ law and its parameters.
 - The water is the same in every soil. Its bulk modulus and viscosity are under **Water**
   in the Soil materials window; its unit weight is that of the water level. Empty, each is
   the value of water at 20 °C.
-- For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
+- To use a user-defined soil model (UDSM), select **User-defined (UDSM)** in **Soil
+  model**. Then select the model in **UDSM model**. The list shows the models of the UDSM
+  libraries that come with Styx (today `MohrCoulomb64.dll`, on Windows). Under **UDSM
+  parameters**, the window shows one row per parameter, with the name and unit the
+  library gives. Hover a name to see the library's own name and its place in
+  `UMAT_PARAMETERS`. A new UDSM soil starts from the model's known start values; type your
+  own. The calculation copies the library beside the deck. The K0 stage runs the soil
+  elastic, with the Young's modulus and Poisson's ratio of its parameters.
+- For any other Kratos law, for example a UMAT, select **Other** in **Soil model** and type
   the law name. Styx writes it as you type it, with the variables you give it: only here
   can you add variables of your own.
 - Click **OK** to save the materials, or **Cancel** to forget your changes.

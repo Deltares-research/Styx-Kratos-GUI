@@ -1,8 +1,9 @@
 """The soil models a material can be, and what each one asks of its property set.
 
 A soil is a Kratos property set: a law and its `Variables` (`schemas.Material`). The
-material window offers a *soil model* first -- linear elastic or Mohr-Coulomb -- and
-this table is what follows from that choice: the law per dimension, the variables the
+material window offers a *soil model* first -- linear elastic, Mohr-Coulomb, or a
+user-defined soil model (UDSM) from a library that comes with Styx -- and this table is
+what follows from that choice: the law per dimension, the variables the
 window lists, in groups, with the value a new soil starts from, the text values Kratos
 accepts for each choice, and when a variable is shown at all (a tensile strength only
 with the tension cut-off on). A law this table does not know is the user's own ("Other")
@@ -24,8 +25,12 @@ answers.
 Defaults are in SI and expressed in the project's system when used. A parameter without
 a default is left out of a new soil: the export derives it (`derived`), or Kratos does.
 
+A UDSM soil's own parameters are its library's (`core.model.udsm`): the window lists the
+parameters the library names, and the soil holds them as Kratos reads them, in
+`UMAT_PARAMETERS`, with the library and the model in it (`udsm_choose`).
+
 What Kratos reads was checked in its GeoMechanicsApplication source: the laws registered
-in `geo_mechanics_application.cpp`, `MohrCoulombLaw::Check`,
+in `geo_mechanics_application.cpp`, `MohrCoulombLaw::Check`, `SmallStrainUDSMLaw::Check`,
 `CoulombYieldSurface::CheckMaterialProperties`, `ConstitutiveLawUtilities::
 StringToDrainageType` and `RetentionLawFactory::Clone`.
 """
@@ -38,11 +43,20 @@ from collections.abc import Iterable
 from typing import Any
 
 from core.model import units
+from core.model import udsm
 
 LINEAR_ELASTIC = "linear_elastic"
 MOHR_COULOMB = "mohr_coulomb"
+UDSM = "udsm"
 OTHER = "other"
-"""A law no model here is: the user's own, typed by name (a UDSM, say)."""
+"""A law no model here is: the user's own, typed by name (a UMAT, say)."""
+
+UDSM_VARIABLES = udsm.VARIABLES
+"""What a UDSM soil holds of its law (`core.model.udsm.VARIABLES`). The window shows
+them as the UDSM model and its parameters, not one by one."""
+
+UDSM_REQUIRED = ("UDSM_NAME", "UDSM_NUMBER", "UMAT_PARAMETERS")
+"""What `SmallStrainUDSMLaw::Check` will not run without."""
 
 DRAINAGE_TYPES = ("CONSTANT_PW_FIELD", "FULLY_COUPLED")
 """The `GEO_DRAINAGE_TYPE`s a soil can have, as Kratos names them and the deck writes
@@ -327,6 +341,19 @@ MODELS: dict[str, SoilModel] = {
             ("Hardening", _hardening()),
             ("Initial stresses", _initial_stresses()),
         )),
+    UDSM: SoilModel(
+        id=UDSM, label="User-defined (UDSM)",
+        laws={2: "SmallStrainUDSM2DPlaneStrainLaw", 3: "SmallStrainUDSM3DLaw"},
+        old_laws={},
+        # No stiffness and no strength: the library holds those, in UMAT_PARAMETERS.
+        groups=(
+            ("Drainage", _drainage()),
+            ("Weight", _weight()),
+            ("Saturation", _saturation()),
+            ("Flow", _flow()),
+            ("Grain-water interaction", _grain_water()),
+            ("Initial stresses", _initial_stresses()),
+        )),
 }
 
 _BY_LAW = {law: model.id for model in MODELS.values()
@@ -384,9 +411,15 @@ def unread(law: str, variables: dict) -> list[str]:
     model = model_of(law)
     if model == OTHER:
         return []
-    reads = {p.name for p in parameters(model)}
-    listed = {p.name for other in MODELS for p in parameters(other)}
-    return [name for name in variables if name in listed and name not in reads]
+    listed = {p.name for other in MODELS for p in parameters(other)} | set(UDSM_VARIABLES)
+    return [name for name in variables if name in listed and name not in reads(model)]
+
+
+def reads(model: str) -> set[str]:
+    """Every variable a soil of `model` reads: its parameters, and a UDSM soil's
+    `UDSM_VARIABLES`."""
+    own = set(UDSM_VARIABLES) if model == UDSM else set()
+    return {p.name for p in parameters(model)} | own
 
 
 def _value(name: str, variables: dict, model: str) -> Any:
@@ -417,7 +450,22 @@ def shown(model: str, variables: dict, flow: bool = False) -> list[Parameter]:
 
 def required(name: str, variables: dict) -> list[str]:
     """What the law `name` cannot run without, for a soil holding `variables`."""
-    return [p.name for p in shown(model_of(name), variables) if p.required]
+    model = model_of(name)
+    own = list(UDSM_REQUIRED) if model == UDSM else []
+    return own + [p.name for p in shown(model, variables) if p.required]
+
+
+def _given(name: str, value: Any) -> bool:
+    """Whether `value` is something the law can run with: a library's name, a list of
+    numbers, a whole model number, or a number."""
+    if name == "UDSM_NAME":
+        return isinstance(value, str) and bool(value.strip())
+    if name == "UMAT_PARAMETERS":
+        return (isinstance(value, list) and bool(value)
+                and all(_number(v) is not None for v in value))
+    if name == "UDSM_NUMBER":
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+    return _number(value) is not None
 
 
 def fill(before_law: str | None, before: dict, after_law: str, after: dict,
@@ -443,6 +491,11 @@ def fill(before_law: str | None, before: dict, after_law: str, after: dict,
     if before_law is not None and model_of(before_law) == model:
         old = {p.name for p in shown(model, before, flow)}
     filled: list[str] = []
+    if model == UDSM and "UMAT_PARAMETERS" not in after and "UMAT_PARAMETERS" not in skip:
+        # The soil's own model when it names one, else the first the libraries hold.
+        chosen = udsm_model(after) or udsm_first()
+        if chosen is not None:
+            filled += udsm_choose(after, chosen, system)
     while True:
         # Listed anew after each fill: a retention law filled lists its saturations.
         for p in shown(model, after, flow):
@@ -458,7 +511,7 @@ def fill(before_law: str | None, before: dict, after_law: str, after: dict,
 def missing(name: str, variables: dict) -> list[str]:
     """What the law `name` cannot run without and a soil holding `variables` leaves
     blank: what the window says is still to fill in."""
-    return [n for n in required(name, variables) if _number(variables.get(n)) is None]
+    return [n for n in required(name, variables) if not _given(n, variables.get(n))]
 
 
 def fill_choice(before_law: str, before: dict, after_law: str, after: dict, system: str,
@@ -560,7 +613,8 @@ def k0(law: str, variables: dict) -> float | None:
     if model_of(law) == LINEAR_ELASTIC:
         poisson = _number(variables.get("POISSON_RATIO"))
         return None if poisson is None or poisson >= 1 else poisson / (1.0 - poisson)
-    phi = _number(variables.get("GEO_FRICTION_ANGLE"))
+    phi = (udsm_parameter(variables, variables.get("INDEX_OF_UMAT_PHI_PARAMETER"))
+           if model_of(law) == UDSM else _number(variables.get("GEO_FRICTION_ANGLE")))
     return None if phi is None else 1.0 - math.sin(math.radians(phi))
 
 
@@ -696,7 +750,10 @@ def computed(law: str, variables: dict, water_variables: dict, system: str,
 def problem(name: str, variables: dict) -> str | None:
     """Why Kratos would refuse the soil, beyond a missing variable: the bounds
     `MohrCoulombLaw::Check` and `CoulombYieldSurface` hold between its variables, and
-    on a hardening's slopes."""
+    on a hardening's slopes; for a UDSM soil, parameters that are not as many as its
+    model reads."""
+    if model_of(name) == UDSM:
+        return udsm_problem(variables)
     if model_of(name) != MOHR_COULOMB:
         return None
 
@@ -747,6 +804,8 @@ def table() -> dict:
         return out
 
     return {"order": list(MODELS), "other": OTHER, "flowing": list(FLOWING),
+            "udsm": {"model": UDSM, "variables": list(UDSM_VARIABLES),
+                     "required": list(UDSM_REQUIRED)},
             "unsaturated": list(UNSATURATED),
             "blank": blank_si(),
             "palette": list(PALETTE),
@@ -768,3 +827,109 @@ def table() -> dict:
                                        "parameters": [parameter(p) for p in group]}
                                       for title, group in model.groups]}
                 for model in MODELS.values()}}
+
+
+# ── A UDSM soil: its library's model and parameters ─────────────────────────
+
+def udsm_first() -> udsm.Model | None:
+    """The model a soil made UDSM starts as: the first the libraries hold."""
+    return next(iter(udsm.models()), None)
+
+
+def udsm_by_id(word: str) -> udsm.Model:
+    """The UDSM model `word` names (`MohrCoulomb64:1`); LookupError, naming the models
+    there are, when none."""
+    return udsm.by_id(word)
+
+
+def udsm_model(variables: dict) -> udsm.Model | None:
+    """The library model a soil holding `variables` is (`UDSM_NAME`, `UDSM_NUMBER`), or
+    None when it names none the libraries hold."""
+    return udsm.find(variables.get("UDSM_NAME"), variables.get("UDSM_NUMBER"))
+
+
+def udsm_default(model: udsm.Model, index: int, system: str) -> float:
+    """The start value of `model`'s parameter `index` (0-based) in `system`."""
+    value = float(model.defaults[index])
+    quantity = model.parameters[index].quantity
+    return value if quantity is None else units.convert(value, quantity, "SI", system)
+
+
+def udsm_choose(variables: dict, model: udsm.Model, system: str) -> list[str]:
+    """Make the soil holding `variables` the UDSM model `model`: its library, its number,
+    its start values in `system`, and which parameters are the cohesion and the friction
+    angle when that is known. Returns the names set, in `UDSM_VARIABLES`' order."""
+    variables["UDSM_NAME"] = model.file
+    variables["UDSM_NUMBER"] = model.number
+    variables["IS_FORTRAN_UDSM"] = True
+    variables["UMAT_PARAMETERS"] = [udsm_default(model, i, system)
+                                    for i in range(len(model.parameters))]
+    for name, role in (("INDEX_OF_UMAT_C_PARAMETER", "GEO_COHESION"),
+                       ("INDEX_OF_UMAT_PHI_PARAMETER", "GEO_FRICTION_ANGLE")):
+        if role in model.roles:
+            variables[name] = model.roles[role]
+        else:
+            variables.pop(name, None)
+    return [name for name in UDSM_VARIABLES if name in variables]
+
+
+def udsm_parameter(variables: dict, index: Any) -> float | None:
+    """`UMAT_PARAMETERS[index - 1]`, `index` 1-based as Kratos' indices are; None when
+    there is no such number."""
+    values = variables.get("UMAT_PARAMETERS")
+    if isinstance(index, bool) or not isinstance(index, int) or not isinstance(values, list) \
+            or not 1 <= index <= len(values):
+        return None
+    return _number(values[index - 1])
+
+
+def udsm_equivalents(variables: dict) -> dict:
+    """What a UDSM soil's parameters say of its stiffness and strength, under the names
+    the built-in models use (`YOUNG_MODULUS`, `GEO_COHESION`, ...). The K0 stage's
+    elastic law and a contact along the soil read them. Empty for a model whose
+    parameters' roles are not known (`core.model.udsm.KNOWN`)."""
+    model = udsm_model(variables)
+    if model is None:
+        return {}
+    out = {}
+    for name, index in model.roles.items():
+        value = udsm_parameter(variables, index)
+        if value is not None:
+            out[name] = value
+    return out
+
+
+def udsm_problem(variables: dict) -> str | None:
+    """Why Kratos would refuse a UDSM soil holding `variables`: its parameters are not as
+    many as its model reads."""
+    model = udsm_model(variables)
+    values = variables.get("UMAT_PARAMETERS")
+    if model is None or not isinstance(values, list) or len(values) == len(model.parameters):
+        return None
+    return (f"UMAT_PARAMETERS has {len(values)} values, and {model.name} in {model.file} "
+            f"reads {len(model.parameters)}: "
+            + ", ".join(p.label for p in model.parameters) + ".")
+
+
+def udsm_assign(variables: dict, given: dict) -> dict:
+    """Put into a UDSM soil holding `variables` the values in `given` named by its
+    model's parameter keys (`E=2e7 phi_peak=32`, as `kratos-cli material set` takes
+    them). Returns the rest of `given`: Kratos variables, written as they are."""
+    model = udsm_model(variables)
+    if model is None:
+        return dict(given)
+    values = variables.get("UMAT_PARAMETERS")
+    values = list(values) if isinstance(values, list) else []
+    values += [0.0] * (len(model.parameters) - len(values))
+    rest = {}
+    for name, value in given.items():
+        index = model.index(name)
+        if index is None:
+            rest[name] = value
+        elif _number(value) is None:
+            raise ValueError(f"{name} must be a number, not {value!r}")
+        else:
+            values[index] = float(value)
+    if len(rest) < len(given):
+        variables["UMAT_PARAMETERS"] = values
+    return rest

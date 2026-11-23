@@ -435,11 +435,11 @@ def test_each_material_is_written_with_its_own_law(solid):
 def test_a_law_this_application_does_not_know_is_written_as_given(session):
     project = seed_project()
     for material in project.materials:
-        material.constitutive_law = "SmallStrainUDSM3DLaw"
+        material.constitutive_law = "SmallStrainUMAT3DLaw"
         material.variables["UDSM_NAME"] = "MohrCoulomb64.dll"
     exported = writer.export_project(project, MeshRequest(element_size=8.0, order=1))
     entries = json.loads(exported["materials"])["properties"]
-    assert {e["Material"]["constitutive_law"]["name"] for e in entries} == {"SmallStrainUDSM3DLaw"}
+    assert {e["Material"]["constitutive_law"]["name"] for e in entries} == {"SmallStrainUMAT3DLaw"}
     assert all(e["Material"]["Variables"]["UDSM_NAME"] == "MohrCoulomb64.dll" for e in entries)
 
 

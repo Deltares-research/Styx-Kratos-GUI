@@ -158,7 +158,7 @@ window.DRAFTS_FIXTURE =
       },
       {
         "title": "a law of no model with a friction angle",
-        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
         "variables": {
           "GEO_FRICTION_ANGLE": 25.0
         },
@@ -269,6 +269,50 @@ window.DRAFTS_FIXTURE =
           "VAN_GENUCHTEN_GL": 1.25
         },
         "computed": {}
+      },
+      {
+        "title": "a UDSM soil's K0 from its friction angle",
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "system": "SI",
+        "flow": false,
+        "gravity": null,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "K0_NC": 0.5
+        },
+        "computed": {
+          "UNIT_WEIGHT_DRY": 17000.0,
+          "UNIT_WEIGHT_SATURATED": 17000.0
+        }
       },
       {
         "title": "a coupled soil in a project with g = 10 m/s2",
@@ -497,6 +541,48 @@ window.DRAFTS_FIXTURE =
           "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": 0.0,
           "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0
         }
+      },
+      {
+        "title": "a blank soil made UDSM gets its model",
+        "before_law": "GeoLinearElasticPlaneStrain2DLaw",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {},
+        "system": "kN",
+        "filled": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000.0,
+            0.3,
+            1.0,
+            30.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4
+        }
       }
     ],
     "shown": [
@@ -623,6 +709,29 @@ window.DRAFTS_FIXTURE =
         "GEO_FRICTION_ANGLE": 30.0,
         "GEO_DILATANCY_ANGLE": 0.0,
         "GEO_ENABLE_TENSION_CUT_OFF": false
+      },
+      "udsm": {
+        "UDSM_NAME": "MohrCoulomb64.dll",
+        "UDSM_NUMBER": 1,
+        "IS_FORTRAN_UDSM": true,
+        "UMAT_PARAMETERS": [
+          10000000.0,
+          0.3,
+          1000.0,
+          30.0,
+          0.0,
+          1000.0,
+          1.0,
+          0.0
+        ],
+        "INDEX_OF_UMAT_C_PARAMETER": 3,
+        "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "DENSITY_SOLID": 1732.9255861365953,
+        "POROSITY": 0.0,
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1e-10
       }
     },
     "fill": [
@@ -922,7 +1031,7 @@ window.DRAFTS_FIXTURE =
         "before": {
           "YOUNG_MODULUS": 1.0
         },
-        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "after_law": "SmallStrainUMAT2DPlaneStrainLaw",
         "changes": {},
         "system": "SI",
         "skip": [],
@@ -969,6 +1078,198 @@ window.DRAFTS_FIXTURE =
           "GEO_ENABLE_TENSION_CUT_OFF": false
         },
         "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+      },
+      {
+        "title": "a new UDSM soil",
+        "before_law": null,
+        "before": {},
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {},
+        "system": "kN",
+        "skip": [],
+        "filled": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER",
+          "GEO_DRAINAGE_TYPE",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION"
+        ],
+        "after": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000.0,
+            0.3,
+            1.0,
+            30.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "note": "Filled in from the User-defined (UDSM) defaults: UDSM_NAME, UDSM_NUMBER, IS_FORTRAN_UDSM, UMAT_PARAMETERS, INDEX_OF_UMAT_C_PARAMETER, INDEX_OF_UMAT_PHI_PARAMETER, GEO_DRAINAGE_TYPE, DENSITY_SOLID, POROSITY, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION."
+      },
+      {
+        "title": "a Mohr-Coulomb soil made UDSM",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {},
+        "system": "SI",
+        "skip": [],
+        "filled": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4
+        },
+        "note": "Filled in from the User-defined (UDSM) defaults: UDSM_NAME, UDSM_NUMBER, IS_FORTRAN_UDSM, UMAT_PARAMETERS, INDEX_OF_UMAT_C_PARAMETER, INDEX_OF_UMAT_PHI_PARAMETER."
+      },
+      {
+        "title": "a UDSM soil without parameters gets its own model's",
+        "before_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "before": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {
+          "UDSM_NAME": "Creep.dll",
+          "UDSM_NUMBER": 2
+        },
+        "system": "SI",
+        "skip": [],
+        "filled": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS"
+        ],
+        "after": {
+          "UDSM_NAME": "Creep.dll",
+          "UDSM_NUMBER": 2,
+          "IS_FORTRAN_UDSM": true,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "UMAT_PARAMETERS": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "note": "Filled in from the User-defined (UDSM) defaults: UDSM_NAME, UDSM_NUMBER, IS_FORTRAN_UDSM, UMAT_PARAMETERS."
+      },
+      {
+        "title": "a UDSM soil's parameters left out on purpose",
+        "before_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "before": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {},
+        "system": "SI",
+        "skip": [
+          "UMAT_PARAMETERS"
+        ],
+        "filled": [],
+        "after": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "note": null
       }
     ],
     "problem": [
@@ -1212,6 +1513,84 @@ window.DRAFTS_FIXTURE =
           "GEO_COHESION_FUNCTION_COEFFICIENTS": -1.0
         },
         "problem": null
+      },
+      {
+        "title": "a default UDSM soil",
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "problem": null
+      },
+      {
+        "title": "a UDSM soil with too few parameters",
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            1.0,
+            2.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "problem": "UMAT_PARAMETERS has 2 values, and Mohr-Coulomb in MohrCoulomb64.dll reads 8: E, ν_ur, c', φ_peak, ψ_peak, σ_t, cut-off, yield function (MC=1; DP=2; MNC=3; MN=4), ν_un (UMAT)."
+      },
+      {
+        "title": "a UDSM soil of a library Styx does not have",
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "UDSM_NAME": "Other.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "problem": null
       }
     ],
     "required": [
@@ -1270,9 +1649,20 @@ window.DRAFTS_FIXTURE =
         ]
       },
       {
-        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
         "variables": {},
         "required": []
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {},
+        "required": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "UMAT_PARAMETERS",
+          "DENSITY_SOLID",
+          "POROSITY"
+        ]
       }
     ],
     "fresh_color": [
@@ -1364,6 +1754,40 @@ window.DRAFTS_FIXTURE =
       {
         "law": "GeoLinearElasticPlaneStrain2DLaw",
         "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "unread": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER"
+        ]
+      },
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
           "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
           "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
@@ -1410,6 +1834,40 @@ window.DRAFTS_FIXTURE =
       {
         "law": "GeoMohrCoulombLawPlaneStrain",
         "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "unread": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER"
+        ]
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
           "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
           "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
@@ -1446,6 +1904,110 @@ window.DRAFTS_FIXTURE =
       {
         "law": "SmallStrainUDSM2DPlaneStrainLaw",
         "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "unread": []
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 14000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1834.8623853211009,
+          "PERMEABILITY_XX": 1.1574074074074074e-14,
+          "POROSITY": 0.0,
+          "GEO_COHESION": 7000,
+          "GEO_FRICTION_ANGLE": 30
+        },
+        "unread": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE"
+        ]
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0,
+          "MY_OWN": 2.0,
+          "PERMEABILITY_ZZ": 1e-12
+        },
+        "unread": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF",
+          "GEO_COULOMB_HARDENING_TYPE",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS"
+        ]
+      },
+      {
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "unread": []
+      },
+      {
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
+        "variables": {
           "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
           "YOUNG_MODULUS": 14000000.0,
           "POISSON_RATIO": 0.3,
@@ -1458,7 +2020,7 @@ window.DRAFTS_FIXTURE =
         "unread": []
       },
       {
-        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
         "variables": {
           "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 10000000.0,
@@ -1522,6 +2084,16 @@ window.DRAFTS_FIXTURE =
         "result": "GeoMohrCoulombLaw3D"
       },
       {
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
+        "dimension": 2,
+        "result": "SmallStrainUMAT2DPlaneStrainLaw"
+      },
+      {
+        "law": "SmallStrainUMAT2DPlaneStrainLaw",
+        "dimension": 3,
+        "result": "SmallStrainUMAT2DPlaneStrainLaw"
+      },
+      {
         "law": "SmallStrainUDSM2DPlaneStrainLaw",
         "dimension": 2,
         "result": "SmallStrainUDSM2DPlaneStrainLaw"
@@ -1529,9 +2101,328 @@ window.DRAFTS_FIXTURE =
       {
         "law": "SmallStrainUDSM2DPlaneStrainLaw",
         "dimension": 3,
-        "result": "SmallStrainUDSM2DPlaneStrainLaw"
+        "result": "SmallStrainUDSM3DLaw"
       }
-    ]
+    ],
+    "udsm_choose": [
+      {
+        "title": "the known model, in kN",
+        "id": "MohrCoulomb64:1",
+        "system": "kN",
+        "before": {
+          "POROSITY": 0.2
+        },
+        "after": {
+          "POROSITY": 0.2,
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000.0,
+            0.3,
+            1.0,
+            30.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4
+        },
+        "names": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS",
+          "INDEX_OF_UMAT_C_PARAMETER",
+          "INDEX_OF_UMAT_PHI_PARAMETER"
+        ]
+      },
+      {
+        "title": "a model of no start values, after the known one",
+        "id": "Creep:2",
+        "system": "SI",
+        "before": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after": {
+          "UDSM_NAME": "Creep.dll",
+          "UDSM_NUMBER": 2,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "names": [
+          "UDSM_NAME",
+          "UDSM_NUMBER",
+          "IS_FORTRAN_UDSM",
+          "UMAT_PARAMETERS"
+        ]
+      }
+    ],
+    "udsm_convert": [
+      {
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "source": "SI",
+        "target": "kN",
+        "result": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            10000.0,
+            0.3,
+            1.0,
+            30.0,
+            0.0,
+            1.0,
+            1.0,
+            0.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        }
+      },
+      {
+        "variables": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            1.0,
+            2.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "source": "SI",
+        "target": "kN",
+        "result": {
+          "UDSM_NAME": "MohrCoulomb64.dll",
+          "UDSM_NUMBER": 1,
+          "IS_FORTRAN_UDSM": true,
+          "UMAT_PARAMETERS": [
+            1.0,
+            2.0
+          ],
+          "INDEX_OF_UMAT_C_PARAMETER": 3,
+          "INDEX_OF_UMAT_PHI_PARAMETER": 4,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        }
+      },
+      {
+        "variables": {
+          "UDSM_NAME": "Other.dll",
+          "UDSM_NUMBER": 1,
+          "UMAT_PARAMETERS": [
+            1000.0
+          ]
+        },
+        "source": "SI",
+        "target": "kN",
+        "result": {
+          "UDSM_NAME": "Other.dll",
+          "UDSM_NUMBER": 1,
+          "UMAT_PARAMETERS": [
+            1000.0
+          ]
+        }
+      }
+    ],
+    "udsm_library": {
+      "models": [
+        {
+          "id": "MohrCoulomb64:1",
+          "file": "MohrCoulomb64.dll",
+          "number": 1,
+          "name": "Mohr-Coulomb",
+          "known": true,
+          "source": "Kratos GeoMechanicsApplication, tests/C-Phi_reduction_process/Mohr_Coulomb_model64/MaterialParameters_stage2.json",
+          "defaults": [
+            10000000.0,
+            0.3,
+            1000.0,
+            30.0,
+            0.0,
+            1000.0,
+            1.0,
+            0.0
+          ],
+          "roles": {
+            "YOUNG_MODULUS": 1,
+            "POISSON_RATIO": 2,
+            "GEO_COHESION": 3,
+            "GEO_FRICTION_ANGLE": 4,
+            "GEO_DILATANCY_ANGLE": 5
+          },
+          "parameters": [
+            {
+              "name": "E",
+              "label": "E",
+              "key": "E",
+              "unit": "F/L^2#",
+              "quantity": "stress"
+            },
+            {
+              "name": "@n#_ur",
+              "label": "ν_ur",
+              "key": "nu_ur",
+              "unit": "-",
+              "quantity": "dimensionless"
+            },
+            {
+              "name": "c'",
+              "label": "c'",
+              "key": "c",
+              "unit": "F/L^2#",
+              "quantity": "stress"
+            },
+            {
+              "name": "@f#_peak#",
+              "label": "φ_peak",
+              "key": "phi_peak",
+              "unit": "deg",
+              "quantity": "angle"
+            },
+            {
+              "name": "@y#_peak#",
+              "label": "ψ_peak",
+              "key": "psi_peak",
+              "unit": "deg",
+              "quantity": "angle"
+            },
+            {
+              "name": "|@s#_t, cut-off#|",
+              "label": "σ_t, cut-off",
+              "key": "sigma_t_cut_off",
+              "unit": "F/L^2#",
+              "quantity": "stress"
+            },
+            {
+              "name": "yield function (MC=1; DP=2; MNC=3; MN=4)",
+              "label": "yield function (MC=1; DP=2; MNC=3; MN=4)",
+              "key": "yield_function",
+              "unit": "-",
+              "quantity": "dimensionless"
+            },
+            {
+              "name": "@n#_un# (UMAT)",
+              "label": "ν_un (UMAT)",
+              "key": "nu_un",
+              "unit": "-",
+              "quantity": "dimensionless"
+            }
+          ]
+        },
+        {
+          "id": "Creep:2",
+          "file": "Creep.dll",
+          "number": 2,
+          "name": "Soft clay creep",
+          "known": false,
+          "source": "",
+          "defaults": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "roles": {},
+          "parameters": [
+            {
+              "name": "@l#*",
+              "label": "λ*",
+              "key": "lambda",
+              "unit": "-",
+              "quantity": "dimensionless"
+            },
+            {
+              "name": "p_ref",
+              "label": "p_ref",
+              "key": "p_ref",
+              "unit": "F/L^2#",
+              "quantity": "stress"
+            },
+            {
+              "name": "t_ref",
+              "label": "t_ref",
+              "key": "t_ref",
+              "unit": "T",
+              "quantity": "time"
+            }
+          ]
+        }
+      ],
+      "problems": []
+    }
   },
   "library": [
     {

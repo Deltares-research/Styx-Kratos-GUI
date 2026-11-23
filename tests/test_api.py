@@ -998,14 +998,14 @@ def test_patch_materials_keeps_every_variable_the_user_typed(client):
     replaced wholesale, so the Kratos block goes back exactly as it came -- a variable
     added, a string, a list, a law nobody here knows."""
     materials = [m.model_dump() for m in seed_project().materials]
-    materials[0]["variables"].update(POROSITY=0.42, K0_NC=0.62, UDSM_PARAMETERS=[1.0, 2.0])
-    materials[0]["constitutive_law"] = "SmallStrainUDSM3DLaw"
+    materials[0]["variables"].update(POROSITY=0.42, K0_NC=0.62, UMAT_PARAMETERS=[1.0, 2.0])
+    materials[0]["constitutive_law"] = "SmallStrainUMAT3DLaw"
 
     assert client.patch("/api/project/materials",
                         json={"materials": materials}).status_code == 200
     saved = client.get("/api/project").json()["materials"][0]
     assert saved["variables"] == materials[0]["variables"]
-    assert saved["constitutive_law"] == "SmallStrainUDSM3DLaw"
+    assert saved["constitutive_law"] == "SmallStrainUMAT3DLaw"
 
     # And a variable taken out is gone, not kept: what is absent is derived.
     del materials[0]["variables"]["POROSITY"]

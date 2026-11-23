@@ -118,7 +118,10 @@ App.MaterialSets = (function () {
 
   function labels(m, names) {
     var model = S.modelOf(m.constitutive_law);
-    return names.map(function (name) { return S.find(model, name).label; });
+    return names.map(function (name) {
+      var p = S.find(model, name);
+      return p ? p.label : name;
+    });
   }
 
   function duplicateMaterial(source) {
@@ -549,6 +552,61 @@ App.MaterialSets = (function () {
       return typedRow(name, p.label, derived[name]);
     }
 
+    /* A UDSM soil's own rows: the UDSM model, from the libraries that come with Styx
+       (App.UDSM_LIBRARY), and its parameters as the library names them, each one entry
+       of UMAT_PARAMETERS, in the project's units. A soil naming a library Styx does not
+       have keeps its parameters as one typed list. */
+    function udsmRows() {
+      var system = App.Units.current();
+      var current = S.udsmModel(m.variables);
+      var options = S.udsmModels().map(function (u) {
+        return { value: u.id, text: u.name + ' (' + u.file + ')' };
+      });
+      if (!current) {
+        var named = m.variables.UDSM_NAME;
+        options.unshift({ value: '', text: named ? named + ', model ' + m.variables.UDSM_NUMBER +
+                          ' (not a library of Styx)' : 'None on this system' });
+      }
+      var row = field('UDSM model', select(options, current ? current.id : '',
+        { 'data-field': 'udsm-model' }, function (chosen) {
+          var u = S.udsmById(chosen);
+          if (u) choose(function () { S.udsmChoose(m.variables, u, system); });
+        }), '', 'UDSM_NAME, UDSM_NUMBER');
+      grid.appendChild(row);
+      var problems = (App.UDSM_LIBRARY && App.UDSM_LIBRARY.problems) || [];
+      if (!S.udsmModels().length && problems.length) {
+        grid.appendChild(el('div.pgrid-note', { text: problems.join(' '), 'data-note': 'udsm' }));
+      }
+      grid.appendChild(el('h4', { text: 'UDSM parameters' }));
+      if (!current) {
+        grid.appendChild(typedRow('UMAT_PARAMETERS', 'Parameters'));
+        return;
+      }
+      if (!current.known) {
+        grid.appendChild(el('div.pgrid-note', { 'data-note': 'udsm-defaults',
+          text: 'No start values are known for this model: type every value.' }));
+      }
+      current.parameters.forEach(function (p, i) {
+        var values = m.variables.UMAT_PARAMETERS || [];
+        var input = textInput(number(values[i]), function (text) {
+          var parsed = P.parse(text);
+          if (typeof parsed !== 'number') {
+            say(p.label + ' must be a number.');
+            draw();
+            return;
+          }
+          attempt(function () {
+            var list = (m.variables.UMAT_PARAMETERS || []).slice();
+            list[i] = parsed;
+            m.variables.UMAT_PARAMETERS = list;
+          });
+          draw();
+        }, { 'data-udsm-parameter': p.key });
+        grid.appendChild(field(p.label, input, S.udsmUnit(p, system),
+                               p.name + ' (UMAT_PARAMETERS, entry ' + (i + 1) + ')'));
+      });
+    }
+
     /* The grid is rebuilt whole; where it was scrolled to is kept, so a choice that
        lists more or less does not throw the window back to the top. */
     function draw() {
@@ -581,6 +639,7 @@ App.MaterialSets = (function () {
       // A model's law follows from the model and the dimension: named on hover, not shown.
       if (!other) modelRow.title = m.constitutive_law;
       grid.appendChild(modelRow);
+      if (model === S.UDSM) udsmRows();
       if (other) {
         var laws = el('datalist', { id: 'material-laws' });
         S.order().forEach(function (id) {
@@ -622,7 +681,7 @@ App.MaterialSets = (function () {
       // or the command line -- is named in one line, given no fields, and can be left
       // out; nothing is added to it here. A law of no model is the user's own: its
       // variables are typed and added freely.
-      var parameters = S.parameters(model).map(function (p) { return p.name; });
+      var parameters = S.reads(model);
       var rest = Object.keys(m.variables).filter(function (n) { return parameters.indexOf(n) < 0; });
       if (!other && rest.length) {
         grid.appendChild(el('div.pgrid-row', { 'data-unread': rest.join(' '),

@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import server_log
 from backend.middleware import do_not_cache_sources, keep_api_requests, only_this_browser_tab
-from backend.routes import decks, feedback, files, geometry, mesh, project, results
+from backend.routes import decks, feedback, files, geometry, mesh, project, results, udsm
 from core import gmsh_worker, version
 
 # Try to get frontend path from installed package, fall back to development path
@@ -119,6 +119,7 @@ app.include_router(decks.router)
 app.include_router(results.router)
 app.include_router(files.router)
 app.include_router(feedback.router)
+app.include_router(udsm.router)
 
 
 @app.get("/api/health")

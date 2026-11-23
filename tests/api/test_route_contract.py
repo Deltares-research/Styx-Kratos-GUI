@@ -332,6 +332,14 @@ CONTRACTS = [
              bad_status=422),
     Contract("POST", "/api/feedback/folder", lambda c: c.post("/api/feedback/folder"),
              {"opened", "folder"}),
+    Contract("GET", "/api/udsm/library", lambda c: c.get("/api/udsm/library"),
+             {"models", "problems"}),
+    Contract("GET", "/api/udsm/library.js", lambda c: c.get("/api/udsm/library.js"), set(),
+             content_type="text/javascript"),
+    Contract("GET", "/api/udsm/files/{name}",
+             lambda c: c.get("/api/udsm/files/MohrCoulomb64.dll"), set(),
+             content_type="application/octet-stream",
+             bad=lambda c: c.get("/api/udsm/files/Other.dll"), bad_status=404),
     Contract("GET", "/", lambda c: c.get("/"), set(), content_type="text/html"),
 ]
 

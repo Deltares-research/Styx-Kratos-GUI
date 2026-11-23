@@ -117,6 +117,39 @@ test('the real export save writes its archive to the picked file', function () {
   });
 });
 
+test('the UDSM libraries the soils use go into the archive, by the path UDSM_NAME says', function () {
+  var fetch = App.Export.fetchLibrary, asked = [];
+  App.Export.fetchLibrary = function (file) {
+    asked.push(file);
+    return Promise.resolve(new Uint8Array([77, 90]));
+  };
+  var result = { library_files: { 'udsm/MohrCoulomb64.dll': 'C:/styx/MohrCoulomb64.dll' } };
+  return App.Export.libraries(result).then(function (files) {
+    App.Export.fetchLibrary = fetch;
+    T.eq(asked, ['MohrCoulomb64.dll'], 'asked of the server by the file name alone');
+    T.eq(files.map(function (f) { return f.name; }), ['udsm/MohrCoulomb64.dll']);
+    T.eq(Array.prototype.slice.call(files[0].text), [77, 90]);
+  }, function (error) { App.Export.fetchLibrary = fetch; throw error; });
+});
+
+test('a UDSM library is fetched from the server as bytes, and a missing one fails', function () {
+  var real = window.fetch;
+  window.fetch = function (url) {
+    var ok = url === '/api/udsm/files/MohrCoulomb64.dll';
+    return Promise.resolve({ ok: ok, arrayBuffer: function () {
+      return Promise.resolve(new Uint8Array([1, 2, 3]).buffer);
+    } });
+  };
+  return App.Export.fetchLibrary('MohrCoulomb64.dll').then(function (bytes) {
+    T.eq(Array.prototype.slice.call(bytes), [1, 2, 3]);
+    return App.Export.fetchLibrary('Other.dll').then(function () {
+      T.ok(false, 'a library the server does not have is refused');
+    }, function (error) {
+      T.ok(error.message.indexOf('Other.dll') >= 0, error.message);
+    });
+  }).then(function () { window.fetch = real; }, function (error) { window.fetch = real; throw error; });
+});
+
 test('an export without materials or process metadata carries only the deck', function () {
   var bare = { mdpa: 'Begin Properties 0\r\n', materials: null, project_parameters: null };
   T.eq(App.Export.files(bare, 'model.mdpa').length, 1);

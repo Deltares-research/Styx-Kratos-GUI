@@ -43,8 +43,8 @@
   });
 
   T.test('a variable the table does not know has no label rather than a wrong one', function () {
-    T.eq(U.quantityOf('UDSM_PARAMETERS'), null);
-    T.eq(U.variableLabel('UDSM_PARAMETERS', 'SI'), '');
+    T.eq(U.quantityOf('UMAT_PARAMETERS'), null);
+    T.eq(U.variableLabel('UMAT_PARAMETERS', 'SI'), '');
   });
 
   T.test('values convert between the systems the way the server converts them', function () {

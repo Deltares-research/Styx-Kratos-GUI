@@ -583,6 +583,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # go under beside the deck. Today there is one, and it is TEMPORARY: the prestress
         # workaround, for a deck that carries a prestressed anchor into a later stage
         # (`parameters._exclude_prestress`).
+        # The UDSM libraries the soils use, by the path they go under beside the deck
+        # (`udsm/<file>`, which their `UDSM_NAME` says) -> the file to copy there.
+        "library_files": (materials.library_files(project, [m for _, m in part_materials])
+                          if include_materials else {}),
         "process_files": ({deck_files.PRESTRESS_WORKAROUND_NAME:
                            deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
                           if any(stage.prestressed for stage in kratos_stages) else {}),

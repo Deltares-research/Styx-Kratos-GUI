@@ -160,11 +160,35 @@ def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+WHOLE_NUMBERS = ("UDSM_NUMBER", "INDEX_OF_UMAT_C_PARAMETER", "INDEX_OF_UMAT_PHI_PARAMETER")
+"""Counts and positions, not quantities: kept as they are, whole, as Kratos reads them."""
+
+
+def _udsm_quantities(variables: dict) -> list[Quantity | None] | None:
+    """The quantity of each of a UDSM soil's `UMAT_PARAMETERS`, from its library's model
+    (`core.model.udsm`); None when the soil names no model the libraries hold."""
+    if "UMAT_PARAMETERS" not in variables:
+        return None
+    from core.model import udsm
+    model = udsm.find(variables.get("UDSM_NAME"), variables.get("UDSM_NUMBER"))
+    return None if model is None else [p.quantity for p in model.parameters]
+
+
 def convert_variables(variables: dict, source: str, target: str) -> tuple[dict, list[str]]:
     """A Kratos `Variables` block in `target`, and the names of the numeric entries it
-    could not convert because their dimension is not known here. Order is kept."""
+    could not convert because their dimension is not known here. Order is kept. A UDSM
+    soil's `UMAT_PARAMETERS` convert each by its library's unit."""
     out, unknown = {}, []
+    udsm = _udsm_quantities(variables)
     for name, value in variables.items():
+        if name in WHOLE_NUMBERS:
+            out[name] = value
+            continue
+        if name == "UMAT_PARAMETERS" and udsm is not None and isinstance(value, list) \
+                and len(value) == len(udsm):
+            out[name] = [convert(float(v), q, source, target) if q and _is_number(v) else v
+                         for v, q in zip(value, udsm)]
+            continue
         quantity = VARIABLES.get(name)
         if quantity is not None and _is_number(value):
             out[name] = convert(float(value), quantity, source, target)

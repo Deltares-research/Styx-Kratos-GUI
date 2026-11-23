@@ -25,6 +25,86 @@ App.SoilModels = (function () {
   function models() { return table().models; }
 
   var OTHER = 'other';
+  var UDSM = 'udsm';
+
+  /* ── A UDSM soil: its library's model and parameters ─────────────────
+     The models are the server's (core/model/udsm.py), loaded as App.UDSM_LIBRARY
+     (GET /api/udsm/library.js); these are core/model/soil_models.py's `udsm_*`. */
+
+  function udsmModels() {
+    return (App.UDSM_LIBRARY && App.UDSM_LIBRARY.models) || [];
+  }
+
+  function basename(file) { return String(file).replace(/\\/g, '/').split('/').pop().toLowerCase(); }
+
+  /* The library model a soil holding `variables` is, or null. */
+  function udsmModel(variables) {
+    variables = variables || {};
+    var file = variables.UDSM_NAME, number = variables.UDSM_NUMBER;
+    if (typeof file !== 'string' || typeof number !== 'number') return null;
+    return udsmModels().filter(function (m) {
+      return m.file.toLowerCase() === basename(file) && m.number === number;
+    })[0] || null;
+  }
+
+  /* The model named `id` (`MohrCoulomb64:1`), or null. */
+  function udsmById(id) {
+    return udsmModels().filter(function (m) { return m.id === id; })[0] || null;
+  }
+
+  /* The start value of `model`'s parameter `index` (0-based) in `system`. */
+  function udsmDefault(model, index, system) {
+    var q = model.parameters[index].quantity;
+    return q ? App.Units.fromSI(model.defaults[index], q, system) : model.defaults[index];
+  }
+
+  /* Make the soil holding `variables` the UDSM model `model`, with its start values in
+     `system`. Returns the names set. */
+  function udsmChoose(variables, model, system) {
+    variables.UDSM_NAME = model.file;
+    variables.UDSM_NUMBER = model.number;
+    variables.IS_FORTRAN_UDSM = true;
+    variables.UMAT_PARAMETERS = model.parameters.map(function (p, i) {
+      return udsmDefault(model, i, system);
+    });
+    [['INDEX_OF_UMAT_C_PARAMETER', 'GEO_COHESION'],
+     ['INDEX_OF_UMAT_PHI_PARAMETER', 'GEO_FRICTION_ANGLE']].forEach(function (pair) {
+      if (Object.prototype.hasOwnProperty.call(model.roles, pair[1])) {
+        variables[pair[0]] = model.roles[pair[1]];
+      } else {
+        delete variables[pair[0]];
+      }
+    });
+    return table().udsm.variables.filter(function (name) {
+      return Object.prototype.hasOwnProperty.call(variables, name);
+    });
+  }
+
+  /* UMAT_PARAMETERS[index - 1], `index` 1-based; null when there is no such number. */
+  function udsmParameter(variables, index) {
+    var values = (variables || {}).UMAT_PARAMETERS;
+    if (typeof index !== 'number' || index % 1 !== 0 || !Array.isArray(values) ||
+        index < 1 || index > values.length) return null;
+    var v = values[index - 1];
+    return typeof v === 'number' && isFinite(v) ? v : null;
+  }
+
+  /* Why Kratos would refuse a UDSM soil: its parameters are not as many as its model
+     reads. */
+  function udsmProblem(variables) {
+    var model = udsmModel(variables);
+    var values = (variables || {}).UMAT_PARAMETERS;
+    if (!model || !Array.isArray(values) || values.length === model.parameters.length) return null;
+    return 'UMAT_PARAMETERS has ' + values.length + ' values, and ' + model.name + ' in ' +
+           model.file + ' reads ' + model.parameters.length + ': ' +
+           model.parameters.map(function (p) { return p.label; }).join(', ') + '.';
+  }
+
+  /* The unit of a library parameter in `system`, or the library's own. */
+  function udsmUnit(parameter, system) {
+    return parameter.quantity ? App.Units.label(parameter.quantity, system)
+                              : String(parameter.unit).replace(/#/g, '');
+  }
 
   /* The model `law` is, under any of its names, or 'other'. */
   function modelOf(law) {
@@ -91,11 +171,19 @@ App.SoilModels = (function () {
     var model = modelOf(law);
     if (model === OTHER) return [];
     var names = function (id) { return parameters(id).map(function (p) { return p.name; }); };
-    var reads = names(model);
-    var listed = table().order.reduce(function (all, id) { return all.concat(names(id)); }, []);
+    var own = reads(model);
+    var listed = table().order.reduce(function (all, id) { return all.concat(names(id)); },
+                                      table().udsm.variables.slice());
     return Object.keys(variables || {}).filter(function (name) {
-      return listed.indexOf(name) >= 0 && reads.indexOf(name) < 0;
+      return listed.indexOf(name) >= 0 && own.indexOf(name) < 0;
     });
+  }
+
+  /* Every variable a soil of `model` reads: its parameters, and a UDSM soil's
+     UDSM_VARIABLES (core/model/soil_models.py `reads`). */
+  function reads(model) {
+    var names = parameters(model).map(function (p) { return p.name; });
+    return model === UDSM ? names.concat(table().udsm.variables) : names;
   }
 
   /* `name` as the deck reads it: the soil's, or what Kratos takes when it is left out. */
@@ -132,8 +220,23 @@ App.SoilModels = (function () {
 
   /* What the law `name` cannot run without, for a soil holding `variables`. */
   function required(name, variables) {
-    return shown(modelOf(name), variables).filter(function (p) { return p.required; })
-      .map(function (p) { return p.name; });
+    var model = modelOf(name);
+    var own = model === UDSM ? table().udsm.required.slice() : [];
+    return own.concat(shown(model, variables).filter(function (p) { return p.required; })
+      .map(function (p) { return p.name; }));
+  }
+
+  /* Whether `value` is something the law can run with (core/model/soil_models.py
+     `_given`). */
+  function given(name, value) {
+    if (name === 'UDSM_NAME') return typeof value === 'string' && value.trim() !== '';
+    if (name === 'UMAT_PARAMETERS') {
+      return Array.isArray(value) && value.length > 0 && value.every(function (v) {
+        return typeof v === 'number' && isFinite(v);
+      });
+    }
+    if (name === 'UDSM_NUMBER') return typeof value === 'number' && value % 1 === 0 && value >= 1;
+    return typeof value === 'number' && isFinite(value);
   }
 
   function find(model, name) {
@@ -162,6 +265,11 @@ App.SoilModels = (function () {
     }
     skip = skip || [];
     var filled = [];
+    if (model === UDSM && !has(after, 'UMAT_PARAMETERS') && skip.indexOf('UMAT_PARAMETERS') < 0) {
+      // The soil's own model when it names one, else the first the libraries hold.
+      var chosen = udsmModel(after) || udsmModels()[0];
+      if (chosen) filled = filled.concat(udsmChoose(after, chosen, system));
+    }
     for (;;) {
       var next = shown(model, after, flow).filter(function (p) {
         return !has(after, p.name) && skip.indexOf(p.name) < 0 && p.default !== undefined &&
@@ -183,7 +291,7 @@ App.SoilModels = (function () {
   /* What the law `name` cannot run without and a soil holding `variables` leaves blank. */
   function missing(name, variables) {
     variables = variables || {};
-    return required(name, variables).filter(function (n) { return number(variables, n) === null; });
+    return required(name, variables).filter(function (n) { return !given(n, variables[n]); });
   }
 
   /* `fill`, as a choice in the material window fills -- a model, a drainage type, a
@@ -252,7 +360,9 @@ App.SoilModels = (function () {
       var poisson = number(variables, 'POISSON_RATIO');
       return poisson === null || poisson >= 1 ? null : poisson / (1.0 - poisson);
     }
-    var phi = number(variables, 'GEO_FRICTION_ANGLE');
+    var phi = modelOf(law) === UDSM
+      ? udsmParameter(variables, variables.INDEX_OF_UMAT_PHI_PARAMETER)
+      : number(variables, 'GEO_FRICTION_ANGLE');
     return phi === null ? null : 1.0 - Math.sin(phi * Math.PI / 180);
   }
 
@@ -337,8 +447,9 @@ App.SoilModels = (function () {
 
   /* Why Kratos would refuse the soil, beyond a missing variable. */
   function problem(name, variables) {
-    if (modelOf(name) !== 'mohr_coulomb') return null;
     variables = variables || {};
+    if (modelOf(name) === UDSM) return udsmProblem(variables);
+    if (modelOf(name) !== 'mohr_coulomb') return null;
     var phi = number(variables, 'GEO_FRICTION_ANGLE'), psi = number(variables, 'GEO_DILATANCY_ANGLE');
     var cohesion = number(variables, 'GEO_COHESION'), tension = number(variables, 'GEO_TENSILE_STRENGTH');
     if (phi !== null && !(phi < 90)) return 'GEO_FRICTION_ANGLE must be below 90 degrees.';
@@ -365,7 +476,10 @@ App.SoilModels = (function () {
     return null;
   }
 
-  return { OTHER: OTHER, order: function () { return table().order.slice(); },
+  return { OTHER: OTHER, UDSM: UDSM, order: function () { return table().order.slice(); },
+           udsmModels: udsmModels, udsmModel: udsmModel, udsmById: udsmById,
+           udsmDefault: udsmDefault, udsmChoose: udsmChoose, udsmParameter: udsmParameter,
+           udsmProblem: udsmProblem, udsmUnit: udsmUnit, reads: reads,
            modelOf: modelOf, label: label, law: law, lawIn: lawIn, parameters: parameters,
            find: find, unread: unread, freshColor: freshColor, shown: shown, groups: groups, required: required, fill: fill,
            defaultIn: defaultIn, defaultsSI: defaultsSI, filledNote: filledNote,

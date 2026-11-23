@@ -25,3 +25,7 @@ core/version.py     export-subst
 # A recorded Kratos run of a GUI tutorial (tests/fakes/replay_kratos.py): kept byte for
 # byte as Kratos wrote it, on every checkout.
 tests/fixtures/tutorial_runs/** -text
+
+# The UDSM soil libraries (core/model/udsm_libraries): compiled code, never diffed or merged as text.
+*.dll               binary
+*.so                binary

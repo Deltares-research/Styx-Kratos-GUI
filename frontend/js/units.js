@@ -62,8 +62,19 @@ App.Units = (function () {
      table does not know are kept as they are -- the server says which in its notes. */
   function convertVariables(variables, from, to) {
     var out = {};
+    // A UDSM soil's parameters, each by its library's unit (core/model/units.py
+    // `convert_variables`).
+    var udsm = App.SoilModels && Array.isArray(variables.UMAT_PARAMETERS)
+      ? App.SoilModels.udsmModel(variables) : null;
     Object.keys(variables).forEach(function (name) {
       var value = variables[name];
+      if (udsm && name === 'UMAT_PARAMETERS' && value.length === udsm.parameters.length) {
+        out[name] = value.map(function (v, i) {
+          var q = udsm.parameters[i].quantity;
+          return q && typeof v === 'number' ? convert(v, q, from, to) : v;
+        });
+        return;
+      }
       var quantity = quantityOf(name);
       out[name] = quantity && typeof value === 'number' ? convert(value, quantity, from, to)
                                                         : value;

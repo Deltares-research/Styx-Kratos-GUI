@@ -39,6 +39,7 @@ OWNERS = [
     (lambda path: path.startswith("/api/results/"), "backend.routes.results"),
     (lambda path: path.startswith("/api/files/"), "backend.routes.files"),
     (lambda path: path.startswith("/api/feedback"), "backend.routes.feedback"),
+    (lambda path: path.startswith("/api/udsm/"), "backend.routes.udsm"),
 ]
 """Which module a path belongs to, first match wins."""
 

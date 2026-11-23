@@ -37,6 +37,8 @@ include = ["backend*", "core*", "cli*"]
 
 [tool.setuptools.package-data]
 backend = ["../frontend/**/*"]
+# The UDSM soil libraries (core/model/udsm.py): binaries, not Python, so named here.
+core = ["model/udsm_libraries/*.dll", "model/udsm_libraries/*.so"]
 
 # Settings for the Python tools: pytest, coverage, mypy and ruff.
 

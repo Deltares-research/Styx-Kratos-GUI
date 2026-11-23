@@ -46,6 +46,7 @@ import json
 import math
 
 from core.model import soil_models, units
+from core.model import udsm
 from core.model.schemas import (AnchorSection, BeamSection, InterfaceSection,
                          KratosPropertySet, Material, PanelSection, Project)
 
@@ -192,11 +193,13 @@ def material_parameters(
         material = project.material(material_id)
         _check(material, f"material {material.name!r}")
         law = dimension_law(material.constitutive_law, dim)
+        variables = _variables(material, dim, k0, project, derived, flow)
+        if soil_models.model_of(law) == soil_models.UDSM:
+            _udsm_variables(material, variables, k0, derived, warnings)
         if k0 and law not in LINEAR_ELASTIC:
             elastic.append(f"material {material.name!r}")
             law = LINEAR_ELASTIC[0] if dim == 2 else LINEAR_ELASTIC[1]
-        add(part_name, law, _variables(material, dim, k0, project, derived, flow),
-            material.tables)
+        add(part_name, law, variables, material.tables)
     for part_name, section, beam_dim in beam_properties or []:
         _check(section, f"section {section.name!r}")
         add(part_name, section.constitutive_law,
@@ -253,8 +256,8 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
         parts.append(
             f"normal stiffness {variables['INTERFACE_NORMAL_STIFFNESS']:.4g} and shear "
             f"stiffness {variables['INTERFACE_SHEAR_STIFFNESS']:.4g} {stiffness}, 10 G / t "
-            f"and G / t (E = {soil.number('YOUNG_MODULUS'):.4g} {stress}, "
-            f"nu = {soil.number('POISSON_RATIO') or 0.0:g}, "
+            f"and G / t (E = {soil_number(soil, 'YOUNG_MODULUS'):.4g} {stress}, "
+            f"nu = {soil_number(soil, 'POISSON_RATIO') or 0.0:g}, "
             f"t = {section.virtual_thickness:g} m)")
     strength = [(name, label) for name, label in
                 (("GEO_COHESION", "cohesion"), ("GEO_FRICTION_ANGLE", "friction angle"))
@@ -265,10 +268,10 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
         for name, label in strength:
             if name == "GEO_COHESION":
                 shown.append(f"cohesion {variables[name]:.4g} {stress} = {r_inter:g} x "
-                             f"{soil.number(name):.4g}")
+                             f"{soil_number(soil, name):.4g}")
             else:
                 shown.append(f"friction angle {variables[name]:.3g} deg, tan reduced by "
-                             f"{r_inter:g} from {soil.number(name):g} deg")
+                             f"{r_inter:g} from {soil_number(soil, name):g} deg")
         if section.constitutive_law == INTERFACE_LAW:
             shown.append("read only by a Coulomb law")
         parts.append(", ".join(shown))
@@ -300,12 +303,61 @@ def translate_laws(materials: list[dict], dim: int, notes: list[str]) -> list[di
     return out
 
 
+def _udsm_variables(material: Material, variables: dict, k0: bool, derived: list[str],
+                    warnings: list[str]) -> None:
+    """A UDSM soil's variables as its deck reads them: `UDSM_NAME` as the copy of the
+    library beside the deck (`library_files`), and in the K0 stage, which runs it on the
+    linear elastic law, the Young's modulus and Poisson's ratio its parameters give."""
+    label = f"material {material.name!r}"
+    model = soil_models.udsm_model(material.variables)
+    if model is None:
+        warnings.append(
+            f"{label}: UDSM_NAME {material.variables.get('UDSM_NAME')!r} with UDSM_NUMBER "
+            f"{material.variables.get('UDSM_NUMBER')!r} is not a library that comes with "
+            "Styx; it is written as given, and Kratos opens it from the folder the deck "
+            "runs in.")
+    else:
+        variables["UDSM_NAME"] = f"{udsm.DECK_FOLDER}/{model.file}"
+    if not k0:
+        return
+    elastic = soil_models.udsm_equivalents(material.variables)
+    for name in ("YOUNG_MODULUS", "POISSON_RATIO"):
+        if name not in material.variables and name not in elastic:
+            raise MaterialError(
+                f"{label}: the K0 stage runs it on the linear elastic law, and which of its "
+                f"UDSM parameters is {name} is not known; give the soil {name} for that "
+                "stage")
+        _fill(variables, name, elastic.get(name), derived, label)
+
+
+def library_files(project: Project, material_ids: list[str]) -> dict[str, str]:
+    """The UDSM libraries the soils `material_ids` use, as a deck needs them beside its
+    other files: published path -> the file in `core/model/udsm_libraries`."""
+    out: dict[str, str] = {}
+    for material_id in dict.fromkeys(material_ids):
+        material = project.material(material_id)
+        if soil_models.model_of(material.constitutive_law) != soil_models.UDSM:
+            continue
+        model = soil_models.udsm_model(material.variables)
+        if model is not None:
+            out.update(udsm.deck_files(model))
+    return out
+
+
+def soil_number(soil: Material, name: str) -> float | None:
+    """A soil's `name` (`YOUNG_MODULUS`, `GEO_COHESION`, ...): its own variable, or for a
+    UDSM soil the parameter that is it (`soil_models.udsm_equivalents`)."""
+    value = soil.number(name)
+    if value is None and soil_models.model_of(soil.constitutive_law) == soil_models.UDSM:
+        value = soil_models.udsm_equivalents(soil.variables).get(name)
+    return value
+
+
 def _check(prop: KratosPropertySet, label: str) -> None:
     law = prop.constitutive_law
     soil = isinstance(prop, Material)
-    needed = (soil_models.required(law, prop.variables) if soil
-              else REQUIRED.get(law, ()))
-    missing = [name for name in needed if prop.number(name) is None]
+    missing = (soil_models.missing(law, prop.variables) if soil
+               else [name for name in REQUIRED.get(law, ()) if prop.number(name) is None])
     if missing:
         raise MaterialError(
             f"{label} ({law}) has no {', '.join(missing)}; Kratos cannot run it without "
@@ -428,8 +480,8 @@ def _interface_variables(section: InterfaceSection, project: Project,
     _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
     shear = section.number("INTERFACE_SHEAR_STIFFNESS")
     if shear is None or "INTERFACE_NORMAL_STIFFNESS" not in v:
-        modulus = soil.number("YOUNG_MODULUS") if soil is not None else None
-        poisson = (soil.number("POISSON_RATIO") or 0.0) if soil is not None else 0.0
+        modulus = soil_number(soil, "YOUNG_MODULUS") if soil is not None else None
+        poisson = (soil_number(soil, "POISSON_RATIO") or 0.0) if soil is not None else 0.0
         if shear is None:
             if modulus is None:
                 raise MaterialError(
@@ -447,10 +499,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
     if soil is not None and not (coulomb and elastic_soil):
         # The section's own Rinter, or -- left unset -- the soil's.
         r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
-        cohesion = soil.number("GEO_COHESION")
+        cohesion = soil_number(soil, "GEO_COHESION")
         if cohesion is not None:
             _fill(v, "GEO_COHESION", cohesion * r_inter, derived, label)
-        phi = soil.number("GEO_FRICTION_ANGLE")
+        phi = soil_number(soil, "GEO_FRICTION_ANGLE")
         if phi is not None:
             _fill(v, "GEO_FRICTION_ANGLE", math.degrees(
                 math.atan(math.tan(math.radians(phi)) * r_inter)), derived, label)
@@ -508,8 +560,8 @@ def own_strength(section: InterfaceSection, soil: Material | None, system: str) 
         soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC
     r_inter = (section.r_inter if section.r_inter is not None
                else soil.r_inter if soil is not None else 0.7)
-    cohesion = soil.number("GEO_COHESION") if soil is not None and gives else None
-    phi = soil.number("GEO_FRICTION_ANGLE") if soil is not None and gives else None
+    cohesion = soil_number(soil, "GEO_COHESION") if soil is not None and gives else None
+    phi = soil_number(soil, "GEO_FRICTION_ANGLE") if soil is not None and gives else None
     taken = {
         "GEO_COHESION": None if cohesion is None else cohesion * r_inter,
         "GEO_FRICTION_ANGLE": None if phi is None else math.degrees(

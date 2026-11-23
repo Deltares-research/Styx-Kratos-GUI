@@ -96,7 +96,7 @@
       T.eq(App.MATERIALS[0].variables.DENSITY_SOLID, 1.83486);
       T.ok(/DENSITY_SOLID/.test(hint(host).textContent));
       choose(field(host, 'soil-model'), 'other');
-      type(field(host, 'constitutive_law'), 'SmallStrainUDSM2DPlaneStrainLaw');
+      type(field(host, 'constitutive_law'), 'SmallStrainUMAT2DPlaneStrainLaw');
       host.querySelector('[data-field="new-variable"]').value = 'OCR';
       host.querySelector('[data-field="new-value"]').value = '1.5';
       host.querySelector('[data-action="add-variable"]').click();
@@ -174,6 +174,111 @@
     });
   });
 
+  /* Two UDSM models, as GET /api/udsm/library.js gives them: one with known start values
+     and roles, one without (core/model/udsm.py). */
+  var LIBRARY = { problems: [], models: [
+    { id: 'MohrCoulomb64:1', file: 'MohrCoulomb64.dll', number: 1, name: 'Mohr-Coulomb',
+      known: true, source: 'a Kratos test deck', defaults: [1.0e7, 0.3, 1000.0, 30.0],
+      roles: { YOUNG_MODULUS: 1, POISSON_RATIO: 2, GEO_COHESION: 3, GEO_FRICTION_ANGLE: 4 },
+      parameters: [
+        { name: 'E', label: 'E', key: 'E', unit: 'F/L^2#', quantity: 'stress' },
+        { name: '@n#_ur', label: 'ν_ur', key: 'nu_ur', unit: '-', quantity: 'dimensionless' },
+        { name: "c'", label: "c'", key: 'c', unit: 'F/L^2#', quantity: 'stress' },
+        { name: '@f#_peak#', label: 'φ_peak', key: 'phi_peak', unit: 'deg', quantity: 'angle' }] },
+    { id: 'Creep:2', file: 'Creep.dll', number: 2, name: 'Soft clay creep', known: false,
+      source: '', defaults: [0.0, 0.0], roles: {},
+      parameters: [
+        { name: '@l#*', label: 'λ*', key: 'lambda', unit: '-', quantity: 'dimensionless' },
+        { name: 'r', label: 'r', key: 'r', unit: '1/T', quantity: null }] }] };
+
+  function withLibrary(library, run) {
+    var saved = App.UDSM_LIBRARY;
+    App.UDSM_LIBRARY = library;
+    try { return run(); } finally { App.UDSM_LIBRARY = saved; }
+  }
+
+  function udsmInput(host, key) {
+    return host.querySelector('.material-variables [data-udsm-parameter="' + key + '"]');
+  }
+
+  T.test('a UDSM soil shows its model and its parameters, in the project\'s units', function () {
+    withLibrary(LIBRARY, function () {
+      withDialog(function (host) {
+        openProperties(host);
+        choose(field(host, 'soil-model'), 'udsm');
+        var m = App.MATERIALS[0];
+        T.eq(m.constitutive_law, 'SmallStrainUDSM2DPlaneStrainLaw');
+        T.eq(m.variables.UDSM_NAME, 'MohrCoulomb64.dll');
+        T.eq(m.variables.UMAT_PARAMETERS, [1.0e4, 0.3, 1.0, 30.0], 'in kN');
+        T.ok(!('YOUNG_MODULUS' in m.variables), 'the library holds the stiffness');
+        T.eq(field(host, 'udsm-model').value, 'MohrCoulomb64:1');
+        T.eq(udsmInput(host, 'E').value, '10000');
+        var row = udsmInput(host, 'E').closest('.pgrid-row');
+        T.eq(row.querySelector('.unit').textContent, 'kPa');
+        T.ok(udsmInput(host, 'phi_peak').closest('.pgrid-row').querySelector('.pgrid-key')
+               .title.indexOf('UMAT_PARAMETERS, entry 4') >= 0, 'its place, on hover');
+        T.ok(hint(host).textContent.indexOf('UDSM_NAME') >= 0, 'what was filled in is said');
+      });
+    });
+  });
+
+  T.test('a UDSM parameter is typed into its entry of UMAT_PARAMETERS', function () {
+    withLibrary(LIBRARY, function () {
+      withDialog(function (host) {
+        openProperties(host);
+        choose(field(host, 'soil-model'), 'udsm');
+        type(udsmInput(host, 'c'), '2.5');
+        T.eq(App.MATERIALS[0].variables.UMAT_PARAMETERS[2], 2.5);
+        type(udsmInput(host, 'c'), 'soft');
+        T.eq(App.MATERIALS[0].variables.UMAT_PARAMETERS[2], 2.5, 'a word is refused');
+        T.ok(hint(host).textContent.indexOf("c' must be a number") >= 0, hint(host).textContent);
+      });
+    });
+  });
+
+  T.test('another UDSM model takes its own parameters, and says when none are known', function () {
+    withLibrary(LIBRARY, function () {
+      withDialog(function (host) {
+        openProperties(host);
+        choose(field(host, 'soil-model'), 'udsm');
+        choose(field(host, 'udsm-model'), 'Creep:2');
+        var v = App.MATERIALS[0].variables;
+        T.eq([v.UDSM_NAME, v.UDSM_NUMBER, v.UMAT_PARAMETERS], ['Creep.dll', 2, [0, 0]]);
+        T.ok(!('INDEX_OF_UMAT_PHI_PARAMETER' in v), 'no friction angle is known');
+        T.ok(host.querySelector('[data-note="udsm-defaults"]'), 'type every value');
+        T.eq(udsmInput(host, 'r').closest('.pgrid-row').querySelector('.unit').textContent,
+             '1/T', 'a unit Styx does not know, as the library writes it');
+      });
+    });
+  });
+
+  T.test('a UDSM soil of a library Styx does not have keeps its parameters as one list', function () {
+    withLibrary(LIBRARY, function () {
+      withDialog(function (host) {
+        App.MATERIALS[0].constitutive_law = 'SmallStrainUDSM2DPlaneStrainLaw';
+        App.MATERIALS[0].variables = { DENSITY_SOLID: 1.8, POROSITY: 0.3,
+          UDSM_NAME: 'C:/own/x.dll', UDSM_NUMBER: 1, IS_FORTRAN_UDSM: true,
+          UMAT_PARAMETERS: [1, 2] };
+        openProperties(host);
+        T.ok(field(host, 'udsm-model').options[0].text.indexOf('not a library of Styx') >= 0);
+        T.ok(variableInput(host, 'UMAT_PARAMETERS'), 'typed as one list');
+        T.ok(!host.querySelector('[data-unread]'), 'its UDSM variables are read, not set aside');
+      });
+    });
+  });
+
+  T.test('with no library on this system the window says why', function () {
+    withLibrary({ models: [], problems: ['MohrCoulomb64.dll has no MohrCoulomb64.so beside it'] },
+      function () {
+        withDialog(function (host) {
+          openProperties(host);
+          choose(field(host, 'soil-model'), 'udsm');
+          T.eq(field(host, 'udsm-model').options[0].text, 'None on this system');
+          T.ok(host.querySelector('[data-note="udsm"]').textContent.indexOf('.so') >= 0);
+        });
+      });
+  });
+
   T.test('a soil model offers no variables to add: it lists what it reads', function () {
     withDialog(function (host) {
       openProperties(host);
@@ -185,15 +290,15 @@
     withDialog(function (host) {
       openProperties(host);
       choose(field(host, 'soil-model'), 'other');
-      type(field(host, 'constitutive_law'), 'SmallStrainUDSM2DPlaneStrainLaw');
+      type(field(host, 'constitutive_law'), 'SmallStrainUMAT2DPlaneStrainLaw');
       host.querySelector('[data-field="new-variable"]').value = 'ocr';
       host.querySelector('[data-field="new-value"]').value = '1.5';
       host.querySelector('[data-action="add-variable"]').click();
       T.eq(App.MATERIALS[0].variables.OCR, 1.5);
-      host.querySelector('[data-field="new-variable"]').value = 'UDSM_PARAMETERS';
+      host.querySelector('[data-field="new-variable"]').value = 'UMAT_PARAMETERS';
       host.querySelector('[data-field="new-value"]').value = '[1, 2]';
       host.querySelector('[data-action="add-variable"]').click();
-      T.eq(App.MATERIALS[0].variables.UDSM_PARAMETERS, [1, 2]);
+      T.eq(App.MATERIALS[0].variables.UMAT_PARAMETERS, [1, 2]);
       T.ok(variableInput(host, 'OCR'), 'the new variable has a row');
     });
   });
@@ -213,8 +318,8 @@
       choose(field(host, 'soil-model'), 'other');
       var law = field(host, 'constitutive_law');
       T.ok(!law.readOnly, 'typed');
-      type(law, 'SmallStrainUDSM2DPlaneStrainLaw');
-      T.eq(App.MATERIALS[0].constitutive_law, 'SmallStrainUDSM2DPlaneStrainLaw');
+      type(law, 'SmallStrainUMAT2DPlaneStrainLaw');
+      T.eq(App.MATERIALS[0].constitutive_law, 'SmallStrainUMAT2DPlaneStrainLaw');
       T.eq(field(host, 'soil-model').value, 'other');
       T.ok(variableInput(host, 'YOUNG_MODULUS'), 'what the soil carries is still listed');
       T.ok(!variableInput(host, 'K0_NC'), 'no model\'s list for a law of no model');

@@ -87,6 +87,24 @@ App.Export = (function () {
     return written;
   }
 
+  /* The UDSM libraries the soils use, as the deck's `udsm/` folder: their bytes, from
+     the server (GET /api/udsm/files/<name>), by the path the deck's UDSM_NAME says. */
+  function libraries(result) {
+    var names = Object.keys(result.library_files || {}).sort();
+    return Promise.all(names.map(function (name) {
+      return App.Export.fetchLibrary(name.split('/').pop()).then(function (bytes) {
+        return { name: name, text: bytes };
+      });
+    }));
+  }
+
+  function fetchLibrary(file) {
+    return fetch('/api/udsm/files/' + encodeURIComponent(file)).then(function (response) {
+      if (!response.ok) throw new Error('the UDSM library ' + file + ' cannot be read');
+      return response.arrayBuffer();
+    }).then(function (buffer) { return new Uint8Array(buffer); });
+  }
+
   function run(done) {
     if (inFlight) {
       log('note', 'An export is already running.');
@@ -117,8 +135,10 @@ App.Export = (function () {
         var deck = (result.deck_name || baseName(App.PROJECT)) + '.mdpa';
         // Through the module object, so a test can record what would be written
         // instead of making the browser save a file.
-        return Promise.resolve(App.Export.save(archive, App.Zip.create(files(result, deck)),
-                                               'application/zip')).then(function () {
+        return libraries(result).then(function (binary) {
+          return App.Export.save(archive, App.Zip.create(files(result, deck).concat(binary)),
+                                 'application/zip');
+        }).then(function () {
           inFlight = false;
           target = null;
           (result.notes || []).concat(result.warnings || []).forEach(function (line) {
@@ -139,5 +159,5 @@ App.Export = (function () {
   }
 
   return { run: run, meshRequest: meshRequest, baseName: baseName, save: save,
-           files: files };
+           files: files, libraries: libraries, fetchLibrary: fetchLibrary };
 })();

@@ -13,8 +13,10 @@
 
   function names(params) { return params.map(function (p) { return p.name; }); }
 
-  T.test('the models are linear elastic and Mohr-Coulomb, each with a law per dimension', function () {
-    T.eq(S.order(), ['linear_elastic', 'mohr_coulomb']);
+  T.test('the models are linear elastic, Mohr-Coulomb and UDSM, each with a law per dimension', function () {
+    T.eq(S.order(), ['linear_elastic', 'mohr_coulomb', 'udsm']);
+    T.eq(S.law('udsm', 2), 'SmallStrainUDSM2DPlaneStrainLaw');
+    T.eq(S.law('udsm', 3), 'SmallStrainUDSM3DLaw');
     T.eq(S.label('mohr_coulomb'), 'Mohr-Coulomb');
     T.eq(S.law('mohr_coulomb', 2), 'GeoMohrCoulombLawPlaneStrain');
     T.eq(S.law('mohr_coulomb', 3), 'GeoMohrCoulombLaw3D');
@@ -24,7 +26,8 @@
   T.test('a law is the model it is a law of, under its old name too', function () {
     T.eq(S.modelOf('GeoIncrementalLinearElastic3DLaw'), 'linear_elastic');
     T.eq(S.modelOf('GeoMohrCoulombWithTensionCutOff2D'), 'mohr_coulomb');
-    T.eq(S.modelOf('SmallStrainUDSM2DPlaneStrainLaw'), S.OTHER);
+    T.eq(S.modelOf('SmallStrainUDSM2DPlaneStrainLaw'), S.UDSM);
+    T.eq(S.modelOf('SmallStrainUMAT2DPlaneStrainLaw'), S.OTHER);
     T.eq(S.lawIn('GeoMohrCoulombWithTensionCutOff2D', 2), 'GeoMohrCoulombLawPlaneStrain');
   });
 

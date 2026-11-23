@@ -32,6 +32,8 @@ from core import session   # noqa: E402
 from core.model import drafts, soil_models, units   # noqa: E402
 from core.model.schemas import DimensionUpdate, UnitsUpdate   # noqa: E402
 from core.model.templates import seed_project   # noqa: E402
+from core.model import udsm   # noqa: E402
+from tests.fakes import udsm as udsm_fakes   # noqa: E402
 from tests.models.excavation import excavation_project   # noqa: E402
 
 FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
@@ -284,12 +286,49 @@ def calls(models: dict) -> list[dict]:
 
 ELASTIC_2D = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
 MOHR_COULOMB_2D = soil_models.law(soil_models.MOHR_COULOMB, 2)
+UDSM_2D = soil_models.law(soil_models.UDSM, 2)
+UDSM_MODELS = [udsm_fakes.mohr_coulomb(), udsm_fakes.unknown()]
+"""The UDSM models both sides answer for: the JavaScript takes them as App.UDSM_LIBRARY
+(`udsm_library` in the fixture), so the fixture is the same on every system."""
 
 
 def soil_model_cases() -> dict:
     """What `soil_models` answers, for the JavaScript twin to answer the same: the
     defaults it fills, the soils it refuses and why, what a law needs, a law's name in a
-    dimension."""
+    dimension. A UDSM soil's answers are for `UDSM_MODELS`."""
+    with udsm.using(UDSM_MODELS):
+        return {**_soil_model_cases(), **_udsm_cases(),
+                "udsm_library": udsm.table(UDSM_MODELS, [])}
+
+
+def _udsm_cases() -> dict:
+    """A UDSM soil: the model chosen, its parameters in the project's units."""
+    known, unknown = UDSM_MODELS
+    soil = soil_models.defaults_si(soil_models.UDSM)
+
+    def choose(title, model, system, before):
+        variables = dict(before)
+        names = soil_models.udsm_choose(variables, model, system)
+        return {"title": title, "id": model.id, "system": system, "before": before,
+                "after": variables, "names": names}
+
+    def convert(variables, source, target):
+        return {"variables": variables, "source": source, "target": target,
+                "result": units.convert_variables(variables, source, target)[0]}
+
+    return {"udsm_choose": [
+                choose("the known model, in kN", known, "kN", {"POROSITY": 0.2}),
+                choose("a model of no start values, after the known one", unknown, "SI", soil),
+            ],
+            "udsm_convert": [
+                convert(soil, "SI", "kN"),
+                convert({**soil, "UMAT_PARAMETERS": [1.0, 2.0]}, "SI", "kN"),
+                convert({"UDSM_NAME": "Other.dll", "UDSM_NUMBER": 1,
+                         "UMAT_PARAMETERS": [1.0e3]}, "SI", "kN"),
+            ]}
+
+
+def _soil_model_cases() -> dict:
     mohr_coulomb = soil_models.defaults_si(soil_models.MOHR_COULOMB)
     in_kn, _ = units.convert_variables(mohr_coulomb, "SI", "kN")
 
@@ -337,6 +376,7 @@ def soil_model_cases() -> dict:
                 "shown": [p.name for p in soil_models.shown(model, variables, flow)]}
 
     coupled = {**mohr_coulomb, "GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "POROSITY": 0.35}
+    udsm_soil = soil_models.defaults_si(soil_models.UDSM)
     return {
         "derived": [
             derived("a new elastic soil", ELASTIC_2D,
@@ -349,7 +389,7 @@ def soil_model_cases() -> dict:
                     {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "DENSITY_SOLID": 2000.0}, "SI",
                     flow=True),
             derived("a law of no model with a friction angle",
-                    "SmallStrainUDSM2DPlaneStrainLaw", {"GEO_FRICTION_ANGLE": 25.0}, "SI"),
+                    "SmallStrainUMAT2DPlaneStrainLaw", {"GEO_FRICTION_ANGLE": 25.0}, "SI"),
             derived("a drained soil carrying a permeability, written as it is", ELASTIC_2D,
                     {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "PERMEABILITY_XX": 3.0e-12}, "kN"),
             derived("a coupled soil carrying a permeability, written as it is", ELASTIC_2D,
@@ -357,6 +397,7 @@ def soil_model_cases() -> dict:
             derived("a blank soil", ELASTIC_2D, soil_models.blank_si(), "SI"),
             derived("a blank soil with the Van Genuchten law", ELASTIC_2D,
                     {**soil_models.blank_si(), "RETENTION_LAW": "VanGenuchtenLaw"}, "SI"),
+            derived("a UDSM soil's K0 from its friction angle", UDSM_2D, udsm_soil, "SI"),
             derived("a coupled soil in a project with g = 10 m/s2", MOHR_COULOMB_2D,
                     {**coupled, "PERMEABILITY_XX": 3.0e-12}, "kN", gravity=10.0),
         ],
@@ -378,6 +419,8 @@ def soil_model_cases() -> dict:
             fill_choice("linear hardening on a complete soil brings its slopes",
                         MOHR_COULOMB_2D, mohr_coulomb, MOHR_COULOMB_2D,
                         {"GEO_COULOMB_HARDENING_TYPE": "Linear"}, "SI"),
+            fill_choice("a blank soil made UDSM gets its model", ELASTIC_2D,
+                        soil_models.blank_si(), UDSM_2D, {}, "kN"),
         ],
         "shown": [
             shown(soil_models.LINEAR_ELASTIC, {}),
@@ -404,9 +447,18 @@ def soil_model_cases() -> dict:
                  {k: v for k, v in in_kn.items() if k != "GEO_DILATANCY_ANGLE"},
                  MOHR_COULOMB_2D, {}, "kN"),
             fill("another law fills nothing", ELASTIC_2D, {"YOUNG_MODULUS": 1.0},
-                 "SmallStrainUDSM2DPlaneStrainLaw", {}, "SI"),
+                 "SmallStrainUMAT2DPlaneStrainLaw", {}, "SI"),
             fill("an old Mohr-Coulomb name is Mohr-Coulomb", None, {},
                  "GeoMohrCoulombWithTensionCutOff2D", {}, "SI"),
+            fill("a new UDSM soil", None, {}, UDSM_2D, {}, "kN"),
+            fill("a Mohr-Coulomb soil made UDSM", MOHR_COULOMB_2D, mohr_coulomb, UDSM_2D, {},
+                 "SI"),
+            fill("a UDSM soil without parameters gets its own model's", UDSM_2D,
+                 {k: v for k, v in udsm_soil.items() if k != "UMAT_PARAMETERS"}, UDSM_2D,
+                 {"UDSM_NAME": "Creep.dll", "UDSM_NUMBER": 2}, "SI"),
+            fill("a UDSM soil's parameters left out on purpose", UDSM_2D,
+                 {k: v for k, v in udsm_soil.items() if k != "UMAT_PARAMETERS"}, UDSM_2D, {},
+                 "SI", skip=["UMAT_PARAMETERS"]),
         ],
         "problem": [
             problem("a default Mohr-Coulomb soil", MOHR_COULOMB_2D, mohr_coulomb),
@@ -443,13 +495,19 @@ def soil_model_cases() -> dict:
                      "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0}),
             problem("a slope with the hardening off is not read", MOHR_COULOMB_2D,
                     {**mohr_coulomb, "GEO_COHESION_FUNCTION_COEFFICIENTS": -1.0}),
+            problem("a default UDSM soil", UDSM_2D, udsm_soil),
+            problem("a UDSM soil with too few parameters", UDSM_2D,
+                    {**udsm_soil, "UMAT_PARAMETERS": [1.0, 2.0]}),
+            problem("a UDSM soil of a library Styx does not have", UDSM_2D,
+                    {**udsm_soil, "UDSM_NAME": "Other.dll"}),
         ],
         "required": [
             required(ELASTIC_2D, {}),
             required(MOHR_COULOMB_2D, {}),
             required(MOHR_COULOMB_2D, {"GEO_ENABLE_TENSION_CUT_OFF": True}),
             required(MOHR_COULOMB_2D, {"GEO_COULOMB_HARDENING_TYPE": "Linear"}),
-            required("SmallStrainUDSM2DPlaneStrainLaw", {}),
+            required("SmallStrainUMAT2DPlaneStrainLaw", {}),
+            required(UDSM_2D, {}),
         ],
         "fresh_color": [{"used": used, "preferred": preferred,
                          "color": soil_models.fresh_color(used, preferred)}
@@ -462,8 +520,10 @@ def soil_model_cases() -> dict:
                                 soil_models.fresh_color(soil_models.PALETTE)], None))],
         "unread": [{"law": law, "variables": variables,
                     "unread": soil_models.unread(law, variables)}
-                   for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")
+                   for law in (ELASTIC_2D, MOHR_COULOMB_2D, UDSM_2D,
+                               "SmallStrainUMAT2DPlaneStrainLaw")
                    for variables in (
+                       udsm_soil,
                        drafts.preset("embankment")["variables"],
                        {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
                         "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0, "MY_OWN": 2.0,
@@ -472,7 +532,7 @@ def soil_model_cases() -> dict:
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D,
                                "GeoMohrCoulombWithTensionCutOff2D",
                                "GeoMohrCoulombWithTensionCutOff3D",
-                               "SmallStrainUDSM2DPlaneStrainLaw")
+                               "SmallStrainUMAT2DPlaneStrainLaw", UDSM_2D)
                    for dim in (2, 3)],
     }
 
