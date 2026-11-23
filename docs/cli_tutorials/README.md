@@ -1,35 +1,35 @@
-# Simple dike with `kratos-cli`
+# Styx CLI tutorials
 
-This is a simple tutorial on using the Styx Python CLI.
-As an example, a 2D plane-strain model of a soil block with a sheet pile and a line load on its surface, is built and run from PowerShell.
+Each tutorial builds one model with `kratos-cli` in PowerShell, command by command, and
+shows what each command prints. Start with the simple dike if you are new to the command
+line.
 
-| Part | What it is |
+| Tutorial | What you build |
 |---|---|
-| **Soil** | a 20 m × 10 m block, from (0, 0) m to (20, 10) m; linear elastic, E = 20 MPa, ν = 0.3, unit weight 18 kN/m³, dry |
-| **Sheet pile** | a steel beam at x = 10 m, from the ground surface (y = 10 m) down to y = 3 m; E = 210 GPa, A = 0.015 m²/m, I = 3·10⁻⁴ m⁴/m |
-| **Load** | 10 kN/m downward on the ground surface, from x = 10 m to x = 20 m (a line load in the 2D section) |
-| **Mesh** | 1 m linear triangles |
-| **Stages** | 1 K0 on the soil alone → 2 the sheet pile is installed → 3 the load is applied |
+| [Simple dike](simple_dike.md) | A soil block with a sheet pile and a line load on its surface, in three stages |
+| [CROW excavation wall](CROW_case.md) | A staged sheet-pile excavation in clay and sand, with a strut, water loads and Mohr-Coulomb soils, up to the bending moment in the wall |
+| [Levee seepage](levee_seepage_case.md) | A steady-state groundwater flow under and through a clay levee, with a seepage face and Van Genuchten soils |
+| [Muskat groundwater flow](Muskat_case.md) | Three steady-state groundwater flow models of one soil column: saturated, unsaturated, and with a seepage face |
 
-There are three ways to work with it. Pick one:
+The simple dike and the CROW excavation wall each give three ways to work: build the model
+from scratch, open the ready-made model in the shell, or run its Python script in one
+command.
 
-| | Way | Start from | Good for |
-|---|---|---|---|
-| [1](1_build_from_scratch.md) | [Build it from scratch in the shell](1_build_from_scratch.md) | nothing | learning the commands, making your own model |
-| [2](2_open_in_the_shell.md) | [Open the ready-made model in the shell](2_open_in_the_shell.md) | `simple_dike.py` | looking around the model and its results |
-| [3](3_run_the_python_script.md) | [Run the Python script](3_run_the_python_script.md) | `simple_dike.py` | one command: write, run, summarise |
+Tests follow these pages each time the code changes: each command must work and print what
+the page shows. So the pages match the current version of `kratos-cli`.
 
-In the commands below, `<repo>` is the folder you cloned this repository into, such as
-`C:\Users\you\Styx-Kratos-GUI`. The ready-made model is in
-[`examples/simple_dike/`](../../examples/simple_dike/).
+## Before you start
 
----
+- Install Styx: see [Installation](../INSTALLATION.md).
+- To run a model, Kratos must be set up on this machine: see
+  [Setting up Kratos](../KRATOS_SETUP.md).
+- In the commands, `<repo>` is the folder you cloned this repository into, such as
+  `C:\Users\you\Styx-Kratos-GUI`.
 
-## What gets written
+## See also
 
-| File | What it is |
-|---|---|
-| `simple_dike.json` | the model (way 1 only; ways 2 and 3 read `simple_dike.py`) |
-| `simple_dike.mdpa`, `ProjectParameters.json`, `MaterialParameters.json`, ... | the Kratos input files (the deck) |
-| `simple_dike_<date>_<time>\` | one folder per run: a copy of the deck, `kratos.log`, the results (`*.post.res`, `*.post.msh`) and the sheet-pile curves (`*_output_wall.json`) |
-| `uy.csv` | every `uy` value, if you asked for it with `--csv` |
+- [Command reference](../CLI.md): every `kratos-cli` command and its options.
+- [GUI tutorials](../gui_tutorials/index.md): the CROW excavation wall and the levee seepage
+  case, built in the GUI.
+  A model saved from `kratos-cli` opens in the GUI, and the other way round.
+- [Examples](../../examples/README.md): the finished models of these tutorials.

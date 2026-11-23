@@ -1,6 +1,6 @@
 """A 2D soil block with one embedded sheet pile and a line load on its surface.
 
-The model of docs/cli_tutorials/README.md: a 20 m x 10 m block, a sheet pile
+The model of docs/cli_tutorials/simple_dike.md: a 20 m x 10 m block, a sheet pile
 in the middle from the surface down to y = 3, and a line load on the surface to the
 right of it, meshed at 1 m with linear triangles. simple_dike.json beside it is the same
 model, as the tutorial's commands build it.

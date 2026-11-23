@@ -26,6 +26,8 @@ AGENTS.md
 __pycache__/
 .pytest_cache/
 *.py[cod]
+# Package metadata that an editable install (pip install -e .) writes.
+*.egg-info/
 
 # Coverage output (pytest --cov, and the JS summary from --js-coverage)
 /.coverage

@@ -93,35 +93,34 @@ Do these steps in this order. Each step has its own guide.
    shows how to install Kratos and how to tell Styx where it is.
 3. Use the command line (optional). `kratos-cli` does the same work as the browser app, from
    a new model to its results, in a terminal. [CLI.md](docs/CLI.md) lists every command. The
-   [CLI tutorial](docs/cli_tutorials/README.md) builds a first model, a sheet pile in a soil
-   block, from the first command to its results.
+   [CLI tutorials](docs/cli_tutorials/README.md) build models from the first command to
+   their results. Start with the simple dike, a sheet pile in a soil block.
 
 ## Documentation
 
 ### For users
 
-| Document | Contents |
+| Guide | Contents |
 |---|---|
-| [INSTALLATION.md](docs/INSTALLATION.md) | What to install on each platform, and how to start Styx with `run.bat` or `run.sh` |
-| [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
-| [GUI tutorials](docs/gui_tutorials/index.md) | Build a model in the GUI step by step, with a screenshot of each step: the CROW excavation wall, from an empty project to the bending moment in the wall. The documentation site, with these screenshots and all the other pages, is published from `main` on GitHub Pages; CI also attaches it to each run as `docs-site`. |
-| [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
-| [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
-| [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
-| [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
-| [Muskat_case.md](docs/cli_tutorials/Muskat_case.md) | A groundwater flow tutorial: the Muskat soil column, saturated, with a Van Genuchten soil, and with a seepage face |
-| [levee_seepage_case.md](docs/cli_tutorials/levee_seepage_case.md) | A groundwater flow `kratos-cli` tutorial: a levee model with a seepage boundary. |
-| [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+| [Installation](docs/INSTALLATION.md) | What to install on Windows, Linux or macOS, and how to start Styx with `run.bat` or `run.sh` |
+| [Kratos setup](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
+| [Usage](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results and use scripts |
+| [GUI tutorials](docs/gui_tutorials/index.md) | Two models built in the GUI step by step, with a screenshot of each step: the CROW excavation wall and the levee seepage case |
+| [CLI tutorials](docs/cli_tutorials/README.md) | Four models built and run with `kratos-cli` in a terminal, command by command: a simple dike, the CROW excavation wall, the levee seepage case and the Muskat groundwater flow case. [CLI.md](docs/CLI.md) lists every command. |
+| [Features](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+
+All these pages are also on the documentation site. It is published from `main` on GitHub
+Pages, and CI attaches it to each run as `docs-site`.
 
 ### For developers
 
-| Document | Contents |
+| Guide | Contents |
 |---|---|
 | [Developer guide](docs/developer/README.md) | Start here. What Styx, Gmsh and Kratos each do, from a drawn model to its results |
-| [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
-| [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
-| [REVIEWING.md](docs/developer/REVIEWING.md) | How a pull request is reviewed: the issue, correctness, design, GUI and `kratos-cli` parity, tests and documentation |
-| [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
+| [Architecture](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
+| [Testing](docs/developer/TESTING.md) | The test tiers and how to run them |
+| [Reviewing](docs/developer/REVIEWING.md) | How a pull request is reviewed: the issue, correctness, design, GUI and `kratos-cli` parity, tests and documentation |
+| [Project overview](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
 | [Code map](docs/developer/code-map/GRAPH_REPORT.md) | A generated map of the code and a clickable tree of files and functions |
 
 ## Contributing
@@ -154,16 +153,17 @@ Project link: <https://github.com/Deltares-research/Styx-Kratos-GUI>
 
 ## Authors
 
-Styx was developed by Marjan Fathian ([@indigocoral](https://github.com/indigocoral)), Deltares,
-first in the private repository `indigocoral/Kratos-GUI`. To cite Styx, use
-[CITATION.cff](CITATION.cff).
+The following people have contributed directly to the development of Styx:
 
-The following individuals have contributed directly to the development of Styx:
-
-- Aron Noordam ([@anoordam](https://github.com/anoordam))
+- Marjan Fathian ([@indigocoral](https://github.com/indigocoral)), author and lead developer
+- Aron Noordam ([@anoordam](https://github.com/anoordam)) 
 - Gennady Markelov ([@markelov208](https://github.com/markelov208))
 - Wijtze Pieter Kikstra ([@WPK4FEM](https://github.com/WPK4FEM))
 - Richard Faasse ([@rfaasse](https://github.com/rfaasse))
+- Anne van de Graaf ([@avdg81](https://github.com/avdg81))
+
+Styx first started in the private repository `indigocoral/Kratos-GUI`. To cite Styx, use
+[CITATION.cff](CITATION.cff).
 
 ## Acknowledgments
 

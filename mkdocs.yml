@@ -7,7 +7,7 @@
 site_name: Styx documentation
 # Where GitHub Pages publishes it. Help > Documentation in the GUI opens it
 # (frontend/js/documentation.js).
-site_url: https://ubiquitous-adventure-vo3qvvw.pages.github.io/
+site_url: https://deltares-research.github.io/Styx-Kratos-GUI/
 docs_dir: build/docs_site/pages
 site_dir: build/docs_site/site
 # Pages as USAGE.html, not USAGE/index.html: the links then also work when a reader opens
@@ -32,31 +32,34 @@ nav:
   - Home: README.md
   - Get started:
       - Installation: docs/INSTALLATION.md
-      - Set up Kratos: docs/KRATOS_SETUP.md
-      - Use the GUI: docs/USAGE.md
-      - Features: docs/FEATURES.md
+      - Kratos setup: docs/KRATOS_SETUP.md
+      - Usage: docs/USAGE.md
   - GUI tutorials:
       - Overview: docs/gui_tutorials/index.md
       - CROW excavation wall: docs/gui_tutorials/CROW_case.md
       - Levee seepage: docs/gui_tutorials/levee_seepage_case.md
-  - Command line:
-      - Reference: docs/CLI.md
-      - Tutorials: docs/cli_tutorials/README.md
-      - "Simple dike 1: build from scratch": docs/cli_tutorials/1_build_from_scratch.md
-      - "Simple dike 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
-      - "Simple dike 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
+  - CLI tutorials:
+      - Overview: docs/cli_tutorials/README.md
+      - Simple dike:
+          - The model: docs/cli_tutorials/simple_dike.md
+          - "Way 1: build from scratch": docs/cli_tutorials/1_build_from_scratch.md
+          - "Way 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
+          - "Way 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
       - CROW excavation wall: docs/cli_tutorials/CROW_case.md
       - Levee seepage: docs/cli_tutorials/levee_seepage_case.md
-      - Muskat case: docs/cli_tutorials/Muskat_case.md
+      - Muskat groundwater flow: docs/cli_tutorials/Muskat_case.md
+      - Command reference: docs/CLI.md
   - Examples:
+      - Overview: examples/README.md
       - CROW excavation wall: examples/CROW_case/README.md
       - Levee seepage: examples/levee_seepage/README.md
-      - Muskat case: examples/Muskat_case/README.md
+      - Muskat groundwater flow: examples/Muskat_case/README.md
+  - Features: docs/FEATURES.md
   - Developers:
-      - Overview: docs/developer/README.md
-      - Project overview: docs/developer/PROJECT_OVERVIEW.md
+      - Developer guide: docs/developer/README.md
       - Architecture: docs/developer/ARCHITECTURE.md
       - Testing: docs/developer/TESTING.md
       - Reviewing: docs/developer/REVIEWING.md
+      - Project overview: docs/developer/PROJECT_OVERVIEW.md
       - Contributing: CONTRIBUTING.md
       - Security: SECURITY.md

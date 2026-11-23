@@ -5,28 +5,6 @@ first time it runs. You only need Python and an internet connection. Kratos, the
 separate install. You only need it for **Calculate**: you can build, mesh and export models
 without it. [KRATOS_SETUP.md](KRATOS_SETUP.md) explains how to set it up.
 
-## Install from the Deltares package server
-
-With a Deltares account, you can install Styx and Kratos together from the Deltares
-package server (Nexus), without a copy of the repository. The Kratos and Styx release
-guide gives the steps: `release/README.md` in the Deltares FEA-Tools repository, which only
-Deltares accounts can open. The guide makes a uv project, connects it to the package server
-and adds the two packages:
-
-```powershell
-uv add deltaresreleasegeomechanicsapplication
-uv add deltaresstyx
-```
-
-Start the app in that project with `uv run deltaresstyx`, then open the address that it
-prints, <http://127.0.0.1:8000/>. The terminal commands are `uv run kratos-cli`. The
-[launcher options](#launcher-options) work the same, for example
-`uv run deltaresstyx --port 8080`. Styx uses the Kratos of the same project, so you do not
-need [KRATOS_SETUP.md](KRATOS_SETUP.md).
-
-The rest of this page installs Styx from a copy of the repository. Use it if you do not
-have a Deltares account, or if you want to change the code.
-
 ## Prerequisites
 
 You need **Python 3.10 or newer, 64-bit**, and an internet connection for the first run.
@@ -193,4 +171,4 @@ already includes Kratos.
   [KRATOS_SETUP.md](KRATOS_SETUP.md).
 - To learn how to build a model and read its results in the app: [USAGE.md](USAGE.md).
 - To use Styx in a terminal, without the browser: [CLI.md](CLI.md) lists the commands, and
-  the [CLI tutorial](cli_tutorials/README.md) builds a full model.
+  the [CLI tutorials](cli_tutorials/README.md) build full models.
