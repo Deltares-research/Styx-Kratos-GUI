@@ -14,6 +14,7 @@ authors:
     family-names: Fathian
     affiliation: Deltares
 repository-code: "https://github.com/Deltares-research/Styx-Kratos-GUI"
+license: MIT
 keywords:
   - geotechnical engineering
   - finite element method

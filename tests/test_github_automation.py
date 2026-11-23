@@ -483,7 +483,7 @@ def test_the_citation_names_the_author():
     citation = load(ROOT / "CITATION.cff")
     assert citation["cff-version"] == "1.2.0"
     assert citation["type"] == "software"
-    assert "license" not in citation, "the license is still to be decided"
+    assert citation["license"] == "MIT"
     assert citation["repository-code"] == HOME
     first = citation["authors"][0]
     assert (first["given-names"], first["family-names"]) == ("Marjan", "Fathian")
@@ -491,24 +491,31 @@ def test_the_citation_names_the_author():
     assert {"title", "message", "abstract"} <= set(citation)
 
 
-TO_BE_DECIDED = "still under consideration and has not been decided"
-
-
-def test_the_license_is_still_to_be_decided():
-    """No license is chosen yet. LICENSE says so, and nothing grants one in the meantime:
-    no Apache text in LICENSE, no badge, no license line for contributions."""
+def test_the_license_is_mit():
+    """LICENSE holds the plain MIT text, with nothing added, so that GitHub detects it and
+    shows "MIT" on the repository page. The third-party licenses are named in the README."""
     license_file = (ROOT / "LICENSE").read_text(encoding="utf-8")
-    assert TO_BE_DECIDED in license_file and "Apache" not in license_file
+    assert license_file.startswith("MIT License\n\nCopyright (c) 2026 Deltares\n")
+    assert 'THE SOFTWARE IS PROVIDED "AS IS"' in license_file
+    assert "Gmsh" not in license_file
     assert not (ROOT / "NOTICE").exists(), "a NOTICE file belongs to an Apache license"
+
+
+def test_every_place_that_names_the_license_says_mit():
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["license"] == "MIT" and project["license-files"] == ["LICENSE"]
     for name in ("README.md", "CONTRIBUTING.md"):
         text = (ROOT / name).read_text(encoding="utf-8")
-        assert "Apache" not in text and "to be decided" in text, name
+        assert "MIT License" in text and "to be decided" not in text, name
+    assert "badge/license-MIT-" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
-def test_the_readme_license_section_says_it_is_to_be_decided():
+def test_the_readme_license_section_names_the_third_party_licenses():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     section = readme.split("## License", 1)[1].split("\n## ", 1)[0]
-    assert TO_BE_DECIDED in section and "(LICENSE)" in section
+    assert "MIT License" in section and "(LICENSE)" in section
+    for name in ("Gmsh", "GNU GPL", "three.js", "html2canvas", "Kratos Multiphysics"):
+        assert name in section, name
 
 
 def test_the_readme_names_the_author_and_where_the_project_started():
