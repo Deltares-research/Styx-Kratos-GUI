@@ -1,0 +1,412 @@
+{
+  "name": "levee_seepage",
+  "layered_soil": true,
+  "dimension": 2,
+  "unit_system": "SI",
+  "section_offset": 0.0,
+  "domain": {
+    "x0": -36.0,
+    "x1": 54.0,
+    "z0": -10.0,
+    "z1": 10.0,
+    "y_top": 6.0,
+    "y_bottom": -22.0
+  },
+  "materials": [
+    {
+      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "RETENTION_LAW": "VanGenuchtenLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 0.06203,
+        "YOUNG_MODULUS": 10000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2650.0,
+        "POROSITY": 0.3333,
+        "BULK_MODULUS_SOLID": 1e+20,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
+        "PERMEABILITY_YY": 1.1574074074074074e-12,
+        "PERMEABILITY_XY": 0.0,
+        "BIOT_COEFFICIENT": 1.0,
+        "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
+        "VAN_GENUCHTEN_GN": 1.377,
+        "VAN_GENUCHTEN_GL": 1.25,
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
+      },
+      "tables": {},
+      "id": "m_sand",
+      "name": "Sand",
+      "color": "#e6c86e",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral"
+    },
+    {
+      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "RETENTION_LAW": "VanGenuchtenLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 0.06203,
+        "YOUNG_MODULUS": 10000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 2650.0,
+        "POROSITY": 0.3333,
+        "BULK_MODULUS_SOLID": 1e+20,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
+        "PERMEABILITY_YY": 1.1574074074074074e-12,
+        "PERMEABILITY_XY": 0.0,
+        "BIOT_COEFFICIENT": 1.0,
+        "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
+        "VAN_GENUCHTEN_GN": 1.377,
+        "VAN_GENUCHTEN_GL": 1.25,
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
+      },
+      "tables": {},
+      "id": "m_clay",
+      "name": "Clay",
+      "color": "#8fa37a",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral"
+    }
+  ],
+  "layers": [
+    {
+      "id": "cover",
+      "name": "Cover",
+      "mat": "m_clay",
+      "top": 0.0,
+      "bottom": -2.0
+    },
+    {
+      "id": "aquifer",
+      "name": "Aquifer",
+      "mat": "m_sand",
+      "top": -2.0,
+      "bottom": -22.0
+    }
+  ],
+  "loads": [],
+  "beam_sections": [],
+  "panel_sections": [],
+  "beams": [],
+  "anchor_sections": [],
+  "anchors": [],
+  "interface_sections": [],
+  "interfaces": [],
+  "interface_sides": "screen",
+  "normal_loads": [],
+  "water": null,
+  "fluid": {
+    "bulk_modulus": 1e+20,
+    "dynamic_viscosity": 0.001
+  },
+  "boundary_conditions": [
+    {
+      "id": "river_head",
+      "name": "River head",
+      "kind": "water_pressure",
+      "on": "line",
+      "face": null,
+      "part": null,
+      "points": [
+        [
+          -36.0,
+          -22.0
+        ],
+        [
+          -36.0,
+          0.0
+        ],
+        [
+          -18.0,
+          0.0
+        ],
+        [
+          0.0,
+          6.0
+        ]
+      ],
+      "fluid_pressure_type": "Hydrostatic",
+      "is_fixed": true,
+      "value": 0.0,
+      "reference_coordinate": 5.0,
+      "x_coordinates": null,
+      "y_coordinates": null,
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    },
+    {
+      "id": "polder_head",
+      "name": "Polder head",
+      "kind": "water_pressure",
+      "on": "line",
+      "face": null,
+      "part": null,
+      "points": [
+        [
+          54.0,
+          0.0
+        ],
+        [
+          54.0,
+          -22.0
+        ]
+      ],
+      "fluid_pressure_type": "Hydrostatic",
+      "is_fixed": true,
+      "value": 0.0,
+      "reference_coordinate": -0.5,
+      "x_coordinates": null,
+      "y_coordinates": null,
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    },
+    {
+      "id": "seepage_face",
+      "name": "Seepage face",
+      "kind": "seepage",
+      "on": "line",
+      "face": null,
+      "part": null,
+      "points": [
+        [
+          4.0,
+          6.0
+        ],
+        [
+          22.0,
+          0.0
+        ],
+        [
+          54.0,
+          0.0
+        ]
+      ],
+      "active": true
+    },
+    {
+      "id": "start",
+      "name": "Start values",
+      "kind": "water_pressure",
+      "on": "domain",
+      "face": null,
+      "part": null,
+      "points": null,
+      "fluid_pressure_type": "Phreatic_Multi_Line",
+      "is_fixed": false,
+      "value": 0.0,
+      "reference_coordinate": null,
+      "x_coordinates": [
+        -36.0,
+        -2.0,
+        15.0,
+        54.0
+      ],
+      "y_coordinates": [
+        5.0,
+        5.0,
+        -0.5,
+        -0.5
+      ],
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    }
+  ],
+  "gravity_acceleration": 9.81,
+  "mesh": {
+    "element_size": 1.0,
+    "order": 1,
+    "algorithm_3d": "delaunay",
+    "algorithm_2d": "frontal",
+    "optimization": "gmsh",
+    "smoothing": 10,
+    "curvature_points": 16,
+    "size_min_factor": 0.05,
+    "second_order_linear": true,
+    "body_sizes": {},
+    "size_bands": {},
+    "refinements": []
+  },
+  "custom_parts": [
+    {
+      "key": "levee_core",
+      "label": "Levee core",
+      "color": "#888888",
+      "source": "gui",
+      "source_file": "C:\\Checkouts\\Styx-Kratos-GUI\\.data\\recipe-611988720215bf20cbe1186995266baa108edf73.brep",
+      "recipe": {
+        "kind": "polygon_extrude",
+        "label": "Levee core",
+        "material": "m_clay",
+        "vertices": [
+          [
+            -14.0,
+            0.0,
+            -10.0
+          ],
+          [
+            0.0,
+            4.5,
+            -10.0
+          ],
+          [
+            4.0,
+            4.5,
+            -10.0
+          ],
+          [
+            18.0,
+            0.0,
+            -10.0
+          ],
+          [
+            4.0,
+            -0.5,
+            -10.0
+          ],
+          [
+            0.0,
+            -0.5,
+            -10.0
+          ]
+        ],
+        "extrusion": [
+          0.0,
+          0.0,
+          20.0
+        ]
+      },
+      "imported_from": null,
+      "mat": "m_clay",
+      "bbox": [
+        -14.0000001,
+        -0.5000001,
+        -10.0000001,
+        18.0000001,
+        4.5000001,
+        10.0000001
+      ]
+    },
+    {
+      "key": "levee_outer",
+      "label": "Levee outer layer",
+      "color": "#888888",
+      "source": "gui",
+      "source_file": "C:\\Checkouts\\Styx-Kratos-GUI\\.data\\recipe-29c2902ee782da143101570d749693d8c2589079.brep",
+      "recipe": {
+        "kind": "polygon_extrude",
+        "label": "Levee outer layer",
+        "material": "m_clay",
+        "vertices": [
+          [
+            -18.0,
+            0.0,
+            -10.0
+          ],
+          [
+            0.0,
+            6.0,
+            -10.0
+          ],
+          [
+            4.0,
+            6.0,
+            -10.0
+          ],
+          [
+            22.0,
+            0.0,
+            -10.0
+          ],
+          [
+            18.0,
+            0.0,
+            -10.0
+          ],
+          [
+            4.0,
+            4.5,
+            -10.0
+          ],
+          [
+            0.0,
+            4.5,
+            -10.0
+          ],
+          [
+            -14.0,
+            0.0,
+            -10.0
+          ]
+        ],
+        "extrusion": [
+          0.0,
+          0.0,
+          20.0
+        ]
+      },
+      "imported_from": null,
+      "mat": "m_clay",
+      "bbox": [
+        -18.0000001,
+        -1.0000000000000002e-07,
+        -10.0000001,
+        22.0000001,
+        6.0000001,
+        10.0000001
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "id": "flow",
+      "name": "Flow",
+      "parent": null,
+      "calculation": "flow",
+      "stress_initialisation": "none",
+      "time_integration": "static",
+      "loading": "Staged construction",
+      "activate": [],
+      "deactivate": [],
+      "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
+      "max_iterations": 300,
+      "tolerated_error": 0.0001,
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
+    }
+  ],
+  "deck": null,
+  "soil_body_keys": [
+    "soil_cover",
+    "soil_aquifer"
+  ],
+  "soil_body_labels": {
+    "soil_cover": "Cover",
+    "soil_aquifer": "Aquifer"
+  },
+  "soil_body_materials": {
+    "soil_cover": "m_clay",
+    "soil_aquifer": "m_sand"
+  },
+  "stageable_parts": [
+    "soil_cover",
+    "soil_aquifer",
+    "levee_core",
+    "levee_outer",
+    "river_head",
+    "polder_head",
+    "seepage_face",
+    "start"
+  ],
+  "model_strategies": {
+    "flow": "newton_raphson_with_seepage"
+  }
+}

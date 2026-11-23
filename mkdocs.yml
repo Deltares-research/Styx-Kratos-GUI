@@ -38,6 +38,7 @@ nav:
   - GUI tutorials:
       - Overview: docs/gui_tutorials/index.md
       - CROW excavation wall: docs/gui_tutorials/CROW_case.md
+      - Levee seepage: docs/gui_tutorials/levee_seepage_case.md
   - Command line:
       - Reference: docs/CLI.md
       - Tutorials: docs/cli_tutorials/README.md
@@ -45,9 +46,11 @@ nav:
       - "Simple dike 2: open in the shell": docs/cli_tutorials/2_open_in_the_shell.md
       - "Simple dike 3: run the Python script": docs/cli_tutorials/3_run_the_python_script.md
       - CROW excavation wall: docs/cli_tutorials/CROW_case.md
+      - Levee seepage: docs/cli_tutorials/levee_seepage_case.md
       - Muskat case: docs/cli_tutorials/Muskat_case.md
   - Examples:
       - CROW excavation wall: examples/CROW_case/README.md
+      - Levee seepage: examples/levee_seepage/README.md
       - Muskat case: examples/Muskat_case/README.md
   - Developers:
       - Overview: docs/developer/README.md
