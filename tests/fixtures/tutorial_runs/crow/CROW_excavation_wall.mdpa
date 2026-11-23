@@ -10279,7 +10279,7 @@ Begin SubModelPart Load
     End SubModelPartConditions
 End SubModelPart
 
-Begin SubModelPart WaterLoad_Stage1
+Begin SubModelPart WaterLoad_AfterLift1
     Begin SubModelPartNodes
             6
             7
@@ -10312,7 +10312,7 @@ Begin SubModelPart WaterLoad_Stage1
     End SubModelPartConditions
 End SubModelPart
 
-Begin SubModelPart WaterLoad_Stage2
+Begin SubModelPart WaterLoad_AfterLift2
     Begin SubModelPartNodes
             6
             7
@@ -10363,7 +10363,7 @@ Begin SubModelPart WaterLoad_Stage2
     End SubModelPartConditions
 End SubModelPart
 
-Begin SubModelPart WaterLoad_Stage3
+Begin SubModelPart WaterLoad_AfterLift3
     Begin SubModelPartNodes
             6
             7

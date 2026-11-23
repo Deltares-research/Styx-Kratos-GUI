@@ -60,21 +60,20 @@ out of the repository:
 <repo>\cli\kratos-shell.bat $HOME\crow     # or without a folder: it asks for one
 ```
 
-```text
-kratos-cli shell: type one command per line. The open project is used, so leave out its file name.
-help lists the commands, help COMMAND explains one, exit closes the shell.
-
-No project is open. Start one with new FILE, or open one with open FILE.
-
-kratos-cli>
-```
+> <pre>kratos-cli shell: type one command per line. The open project is used, so leave out its file name.
+> help lists the commands, help COMMAND explains one, exit closes the shell.
+>
+> No project is open. Start one with new FILE, or open one with open FILE.
+>
+> kratos-cli></pre>
 
 The shell is in `$HOME\crow`: every file from here on is written there, and so is every run
 (`KRATOS_GUI_RUNS` is set to that folder).
 
 In the shell you leave out `kratos-cli.bat` and the project file on every line, and `undo`
 and `redo` work. Each line is still an ordinary command: to run one on its own in PowerShell,
-put `<repo>\kratos-cli.bat` in front and the project file after the command word.
+put `<repo>\kratos-cli.bat` in front and the project file after the command word. However,
+when running the commands in PowerShell, `undo` and `redo` do not work.
 
 | In the shell | The same command on its own, in PowerShell |
 |---|---|
@@ -93,27 +92,22 @@ put `<repo>\kratos-cli.bat` in front and the project file after the command word
 
 #### Step 1. Create the project
 
-```text
-kratos-cli> new crow.json --force --dim 2 --name "CROW excavation wall"
-wrote crow.json: CROW excavation wall (2D section at z = 0, SI)
-open  crow.json  (...\crow)
-crow.json>
+```powershell
+kratos-cli new crow.json --force --dim 2 --name "CROW excavation wall"
 ```
+> <pre>wrote crow.json: CROW excavation wall (2D section at z = 0, SI)</pre>
 
-`new` writes an empty 2D project in SI units and opens it: the prompt now shows its name.
-`--force` replaces a `crow.json` that is already there. The name also names the deck's files
+`new` writes an empty 2D project in SI units. The name also names the deck's files
 (`CROW_excavation_wall.mdpa`).
 
 #### Step 2. The site
 
-```text
-crow.json> domain --x 0 80 --y -60 0 --z 0 10
-domain x 0 .. 80, y -60 .. 0 (2D section at z = 5); wrote ...\crow.json
-The section at z = 0 is outside the new domain, so it is cut through its middle, at z = 5.
+```powershell
+kratos-cli domain crow.json --x 0 80 --y -60 0
 ```
+> <pre>domain x 0 .. 80, y -60 .. 0 (2D section at z = 0); wrote ...\crow.json</pre>
 
-- The `--z` extent has no effect in plane strain: the section is taken through its middle.
-- The first soil layer starts at the top of the domain, so the ground is at 0.
+The first soil layer starts at the top of the domain, so the ground is at 0.
 
 #### Step 3. The soils
 
@@ -139,21 +133,23 @@ converted on export. The model has two Mohr-Coulomb soils (`GeoMohrCoulombLawPla
 gives the solid's bulk modulus (10¹⁰ Pa), and Kratos derives the Biot coefficient from
 it. Each soil is one line:
 
-```text
-crow.json> material add clay --name Clay --color "#c4a86a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.48021693505171 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.86 POROSITY=0.0 GEO_COHESION=3000.0 GEO_FRICTION_ANGLE=22.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.62 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
-added material clay; wrote ...\crow.json
-
-crow.json> material add sand --name Sand --color "#b08a6a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.571318827227732 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.74 POROSITY=0.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.46 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
-added material sand; wrote ...\crow.json
+```powershell
+kratos-cli material crow.json add clay --name Clay --color "#c4a86a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.48021693505171 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.86 POROSITY=0.0 GEO_COHESION=3000.0 GEO_FRICTION_ANGLE=22.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.62 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
 ```
+> <pre>added material clay; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli material crow.json add sand --name Sand --color "#b08a6a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.571318827227732 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.74 POROSITY=0.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.46 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
+```
+> <pre>added material sand; wrote ...\crow.json</pre>
 
 Useful here:
 
-- `material list` shows the soils there are.
-- `material set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
+- `kratos-cli material crow.json list` shows the soils there are.
+- `kratos-cli material crow.json set clay YOUNG_MODULUS=1e6` changes one value, and `--r-inter` the
   reduction.
-- `material presets` lists the library soils (`embankment` Embankment ...
-  `bedrock` Bedrock), and `material add ID --preset clay_shallow` starts from one
+- `kratos-cli material crow.json presets` lists the library soils (`embankment` Embankment ...
+  `bedrock` Bedrock), and `kratos-cli material crow.json add ID --preset clay_shallow` starts from one
   instead of typing every variable. Add `--model linear-elastic` to get it as a linear
   elastic soil.
 
@@ -161,24 +157,30 @@ Useful here:
 
 Layers are stacked from the top, each under the one before:
 
-```text
-crow.json> layer add L_top --name Soil_Top --material clay --bottom -8
-added layer L_top; wrote ...\crow.json
-crow.json> layer add L_mid --name Soil_Middle --material clay --bottom -12
-added layer L_mid; wrote ...\crow.json
-crow.json> layer add L_bot --name Soil_Bottom --material sand --bottom -60
-added layer L_bot; wrote ...\crow.json
+```powershell
+kratos-cli layer crow.json add L_top --name Soil_Top --material clay --bottom -8
 ```
+> <pre>added layer L_top; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli layer crow.json add L_mid --name Soil_Middle --material clay --bottom -12
+```
+> <pre>added layer L_mid; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli layer crow.json add L_bot  --name Soil_Bottom --material sand --bottom -60
+```
+> <pre>added layer L_bot; wrote ...\crow.json</pre>
 
 The clay is split at −8 as well as at −12, so that the deepest lift of the pit ends
 exactly on a layer boundary.
 
 #### Step 5. The pore pressure
 
-```text
-crow.json> boundary add pore_pressure --name "Pore pressure" --domain --water-pressure Hydrostatic --reference-coordinate -1.5
-added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostatic about -1.5 m, fixed; wrote ...\crow.json
+```powershell
+kratos-cli boundary crow.json add pore_pressure --name "Pore pressure" --domain --water-pressure Hydrostatic --reference-coordinate -1.5
 ```
+> <pre>added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostatic about -1.5 m, fixed; wrote ...\crow.json</pre>
 
 - The pore pressure is a boundary condition: hydrostatic on the whole soil, zero at the
   phreatic level −1.5 m, and fixed in every stage. Without it the deck fixes no water
@@ -191,18 +193,18 @@ added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostati
 soil parts, the supports and the pore pressure condition (the front and back rollers are
 for a 3D model; a section leaves them out of its deck):
 
-```text
-crow.json> parts
-soil_L_top  Soil_Top
-soil_L_mid  Soil_Middle
-soil_L_bot  Soil_Bottom
-fixed_bottom  Fixed bottom
-roller_left  Roller left
-roller_right  Roller right
-roller_front  Roller front
-roller_back  Roller back
-pore_pressure  Pore pressure
+```powershell
+kratos-cli parts crow.json
 ```
+> <pre>soil_L_top  Soil_Top
+> soil_L_mid  Soil_Middle
+> soil_L_bot  Soil_Bottom
+> fixed_bottom  Fixed bottom
+> roller_left  Roller left
+> roller_right  Roller right
+> roller_front  Roller front
+> roller_back  Roller back
+> pore_pressure  Pore pressure</pre>
 
 `show` summarises the whole model at any time.
 
@@ -213,13 +215,15 @@ A structure is built from a **section**, which holds its Kratos variables, and a
 
 #### Step 6. The sheet pile wall
 
-```text
-crow.json> section add beam sheetpile --name "Sheet pile" --spacing 1 YOUNG_MODULUS=8444900000.0 POISSON_RATIO=0.0 DENSITY=298.36 CROSS_AREA=0.4924 I33=0.009948850085333335 AREA_EFFECTIVE_Y=10000.0
-added beam section (id sheetpile, name Sheet pile); wrote ...\crow.json
-
-crow.json> beam add sheetpile --name SheetPileWall --section sheetpile --points 5 0 5 -13
-added sheet pile (id sheetpile, name SheetPileWall); wrote ...\crow.json
+```powershell
+kratos-cli section crow.json add beam sheetpile --name "Sheet pile" --spacing 1 YOUNG_MODULUS=8444900000.0 POISSON_RATIO=0.0 DENSITY=298.36 CROSS_AREA=0.4924 I33=0.009948850085333335 AREA_EFFECTIVE_Y=10000.0
 ```
+> <pre>added beam section (id sheetpile, name Sheet pile); wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli beam crow.json add sheetpile --name SheetPileWall --section sheetpile --points 5 0 5 -13
+```
+> <pre>added sheet pile (id sheetpile, name SheetPileWall); wrote ...\crow.json</pre>
 
 - Per metre of wall: E = 8.44 GPa, A = 0.4924 m², I = 9.95·10⁻³ m⁴, density 298 kg/m³.
 - The wall is a solid plate 0.4924 m thick: `I33` is t³/12. The very large
@@ -235,47 +239,71 @@ off. The wall has already split `Soil_Top` and `Soil_Middle` at x = 5. `Soil_Bot
 whole, because the wall ends inside it. Two lines make the floors of the first two lifts. The
 floor of the third lift is the boundary between the layers.
 
-```text
-crow.json> line add floor_1 --name "Floor of lift 1" --points 0 -2 5 -2
-added line floor_1; wrote ...\crow.json
-crow.json> line add floor_2 --name "Floor of lift 2" --points 0 -5 5 -5
-added line floor_2; wrote ...\crow.json
-crow.json> body list
-soil_L_top__part3  Soil_Top · Part 3  ·  Clay
-soil_L_top__part2  Soil_Top · Part 2  ·  Clay
-soil_L_top__part1  Soil_Top · Part 1  ·  Clay
-soil_L_top__part4  Soil_Top · Part 4  ·  Clay
-soil_L_mid__part1  Soil_Middle · Part 1  ·  Clay
-soil_L_mid__part2  Soil_Middle · Part 2  ·  Clay
-soil_L_bot  Soil_Bottom  ·  Sand
+```powershell
+kratos-cli line crow.json add floor_1 --name "Floor of lift 1" --points 0 -2 5 -2
 ```
+> <pre>added line floor_1; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli line crow.json add floor_2 --name "Floor of lift 2" --points 0 -5 5 -5
+```
+> <pre>added line floor_2; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json list
+```
+> <pre>soil_L_top__part3  Soil_Top · Part 3  ·  Clay
+> soil_L_top__part2  Soil_Top · Part 2  ·  Clay
+> soil_L_top__part1  Soil_Top · Part 1  ·  Clay
+> soil_L_top__part4  Soil_Top · Part 4  ·  Clay
+> soil_L_mid__part1  Soil_Middle · Part 1  ·  Clay
+> soil_L_mid__part2  Soil_Middle · Part 2  ·  Clay
+> soil_L_bot  Soil_Bottom  ·  Sand</pre>
 
 A piece has the key `soil_<layer>__<id>`. The list runs from the top down, and within one
 depth from left to right. `get bodies` shows a point inside each piece, if you need to check
 which is which. Give each piece a name that says what it is:
 
-```text
-crow.json> body set soil_L_top__part3 --name "lift 1"
-changed soil body soil_L_top__part3; wrote ...\crow.json
-crow.json> body set soil_L_top__part1 --name "lift 2"
-changed soil body soil_L_top__part1; wrote ...\crow.json
-crow.json> body set soil_L_top__part4 --name "lift 3"
-changed soil body soil_L_top__part4; wrote ...\crow.json
-crow.json> body set soil_L_top__part2 --name retained
-changed soil body soil_L_top__part2; wrote ...\crow.json
-crow.json> body set soil_L_mid__part1 --name "below the pit"
-changed soil body soil_L_mid__part1; wrote ...\crow.json
-crow.json> body set soil_L_mid__part2 --name retained
-changed soil body soil_L_mid__part2; wrote ...\crow.json
-crow.json> body list
-soil_L_top__part3  lift 1  ·  Clay
-soil_L_top__part2  retained  ·  Clay
-soil_L_top__part1  lift 2  ·  Clay
-soil_L_top__part4  lift 3  ·  Clay
-soil_L_mid__part1  below the pit  ·  Clay
-soil_L_mid__part2  retained  ·  Clay
-soil_L_bot  Soil_Bottom  ·  Sand
+```powershell
+kratos-cli body crow.json set soil_L_top__part3 --name "lift 1"
 ```
+> <pre>changed soil body soil_L_top__part3; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json set soil_L_top__part1 --name "lift 2"
+```
+> <pre>changed soil body soil_L_top__part1; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json set soil_L_top__part4 --name "lift 3"
+```
+> <pre>changed soil body soil_L_top__part4; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json set soil_L_top__part2 --name retained
+```
+> <pre>changed soil body soil_L_top__part2; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json set soil_L_mid__part1 --name "below the pit"
+```
+> <pre>changed soil body soil_L_mid__part1; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json set soil_L_mid__part2 --name retained
+```
+> <pre>changed soil body soil_L_mid__part2; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli body crow.json list
+```
+> <pre>soil_L_top__part3  lift 1  ·  Clay
+> soil_L_top__part2  retained  ·  Clay
+> soil_L_top__part1  lift 2  ·  Clay
+> soil_L_top__part4  lift 3  ·  Clay
+> soil_L_mid__part1  below the pit  ·  Clay
+> soil_L_mid__part2  retained  ·  Clay
+> soil_L_bot  Soil_Bottom  ·  Sand</pre>
 
 - A body keeps its key and its name when you add another line, because it remembers a point
   inside it. That is why the first floor gave `part3`: the wall had already made `part1` and
@@ -293,13 +321,15 @@ strut takes compression and an anchor takes tension, but both are the same truss
 free, attached to the mesh: the tail is a node of the soil mesh, so `--tail-end fixed`
 makes the tail of this strut a pinned support:
 
-```text
-crow.json> section add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
-added anchor section (id strut, name Strut); wrote ...\crow.json
-
-crow.json> anchor add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5 --tail-end fixed
-added anchor (id strut, name Strut); wrote ...\crow.json
+```powershell
+kratos-cli section crow.json add anchor strut --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
 ```
+> <pre>added anchor section (id strut, name Strut); wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli anchor crow.json add strut --name Strut --section strut --head 5 -1.5 --tail 4 -1.5 --tail-end fixed
+```
+> <pre>added anchor (id strut, name Strut); wrote ...\crow.json</pre>
 
 - One strut per metre of wall (`--spacing 1`): E = 210 GPa, A = 4.76·10⁻⁵ m².
 - The strut is massless and has no force limits (`none` clears a limit).
@@ -309,13 +339,15 @@ added anchor (id strut, name Strut); wrote ...\crow.json
 
 #### Step 9. The interface between wall and soil
 
-```text
-crow.json> section add interface contact --name "Wall contact" --material none --r-inter none --virtual-thickness 1.0 --law GeoInterfaceCoulombLawPlaneStrain
-added interface section (id contact, name Wall contact); wrote ...\crow.json
-
-crow.json> interface add wall_contact --name Interface --section contact --structure sheetpile --side both
-added interface (id wall_contact, name Interface); wrote ...\crow.json
+```powershell
+kratos-cli section crow.json add interface contact --name "Wall contact" --material none --r-inter none --virtual-thickness 1.0 --law GeoInterfaceCoulombLawPlaneStrain
 ```
+> <pre>added interface section (id contact, name Wall contact); wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli interface crow.json add wall_contact --name Interface --section contact --structure sheetpile --side both
+```
+> <pre>added interface (id wall_contact, name Interface); wrote ...\crow.json</pre>
 
 - `--material none`: each stretch of the interface takes the soil it runs against.
   `--r-inter none` reduces it by that soil's own `--r-inter` of step 3.
@@ -339,10 +371,10 @@ added interface (id wall_contact, name Interface); wrote ...\crow.json
 The surcharge: 20 kN/m on the retained surface, from the wall to the right edge. Its
 components are in N/m:
 
-```text
-crow.json> load add line surcharge --name Load --x 5 80 --y 0 --components 0 -20000
-added line load (id surcharge, name Load); wrote ...\crow.json
+```powershell
+kratos-cli load crow.json add line surcharge --name Load --x 5 80 --y 0 --components 0 -20000
 ```
+> <pre>added line load (id surcharge, name Load); wrote ...\crow.json</pre>
 
 One hydrostatic water load per lift. Each runs along that lift's floor from the symmetry plane
 to the wall, then up the exposed face of the wall to the water table. A normal load presses
@@ -350,14 +382,20 @@ on the soil on the right of its line as drawn, where its arrows point in the GUI
 ground that stays is on the right of this walk. Its pressure is zero at its
 `--reference-coordinate`, the phreatic level:
 
-```text
-crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
-added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json
-crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
-added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json
-crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
-added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
+```powershell
+kratos-cli normal-load crow.json add water_1 --name WaterLoad_AfterLift1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
 ```
+> <pre>added normal load (id water_1, name WaterLoad_AfterLift1); wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli normal-load crow.json add water_2 --name WaterLoad_AfterLift2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+```
+> <pre>added normal load (id water_2, name WaterLoad_AfterLift2); wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli normal-load crow.json add water_3  --name WaterLoad_AfterLift3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
+```
+> <pre>added normal load (id water_3, name WaterLoad_AfterLift3); wrote ...\crow.json</pre>
 
 ### Part 3: the mesh and the stages
 
@@ -367,11 +405,11 @@ added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
 one object its own element size, and `--band` the distance over which that size grows back
 to the global size. These are the **Mesh size** and **Band** of the object in the GUI.
 
-```text
-crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5 --band sheetpile 30
-3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
-mesh settings kept: wrote ...\crow.json
+```powershell
+kratos-cli mesh crow.json --size 5.0 --order 2 --body-size sheetpile 0.5 --band sheetpile 30
 ```
+> <pre>3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
+> mesh settings kept: wrote ...\crow.json</pre>
 
 | Setting | Why |
 |---|---|
@@ -394,41 +432,63 @@ stages already after it keep what they had -- so the parts that are not built ye
 out of both. Each `stages add` adds one stage after the last, starting with what the stage
 before it has, and names what it switches on and off:
 
-```text
-crow.json> stages set initial --stress-initialisation k0
-changed stage initial; wrote ...\crow.json
-crow.json> stages add null_step --name "Null step" --max-iterations 150
-added stage (id null_step, name Null step) after initial; wrote ...\crow.json
-crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
-sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
-crow.json> stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
-sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json
-crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
-added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json
-crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
-added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json
-crow.json> stages add install_strut --name "Strut installation" --activate strut --max-iterations 150 --tolerance 1e-3
-added stage (id install_strut, name Strut installation) after dig_1; wrote ...\crow.json
-crow.json> stages add dig_2 --name "Second excavation" --activate water_2 --deactivate soil_L_top__part1 water_1 --max-iterations 300 --tolerance 1e-3
-added stage (id dig_2, name Second excavation) after install_strut; wrote ...\crow.json
-crow.json> stages add dig_3 --name "Third excavation" --activate water_3 --deactivate soil_L_top__part4 water_2 --max-iterations 300 --tolerance 1e-3
-added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json
-crow.json> stages list
-1  initial  Initial stage
-     calculation: mechanical, K0 stresses, static; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
-2  null_step  Null step  (after initial)
-     calculation: mechanical, static
-3  install_wall  Wall installation  (after null_step)
-     calculation: mechanical, static; activates sheetpile, wall_contact, surcharge
-4  dig_1  First excavation  (after install_wall)
-     calculation: mechanical, static; activates water_1; deactivates soil_L_top__part3
-5  install_strut  Strut installation  (after dig_1)
-     calculation: mechanical, static; activates strut
-6  dig_2  Second excavation  (after install_strut)
-     calculation: mechanical, static; activates water_2; deactivates soil_L_top__part1, water_1
-7  dig_3  Third excavation  (after dig_2)
-     calculation: mechanical, static; activates water_3; deactivates soil_L_top__part4, water_2
+```powershell
+kratos-cli stages crow.json set initial --stress-initialisation k0
 ```
+> <pre>changed stage initial; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
+```
+> <pre>sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add null_step --name "Null step" --max-iterations 150
+```
+> <pre>added stage (id null_step, name Null step) after initial; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
+```
+> <pre>added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
+```
+> <pre>added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add install_strut --name "Strut installation" --activate strut --max-iterations 150 --tolerance 1e-3
+```
+> <pre>added stage (id install_strut, name Strut installation) after dig_1; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add dig_2 --name "Second excavation" --activate water_2 --deactivate soil_L_top__part1 water_1 --max-iterations 300 --tolerance 1e-3
+```
+> <pre>added stage (id dig_2, name Second excavation) after install_strut; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json add dig_3 --name "Third excavation" --activate water_3 --deactivate soil_L_top__part4 water_2 --max-iterations 300 --tolerance 1e-3
+```
+> <pre>added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json</pre>
+
+```powershell
+kratos-cli stages crow.json list
+```
+> <pre>1  initial  Initial stage
+>      calculation: mechanical, K0 stresses, static; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
+> 2  null_step  Null step  (after initial)
+>      calculation: mechanical, static
+> 3  install_wall  Wall installation  (after null_step)
+>      calculation: mechanical, static; activates sheetpile, wall_contact, surcharge
+> 4  dig_1  First excavation  (after install_wall)
+>      calculation: mechanical, static; activates water_1; deactivates soil_L_top__part3
+> 5  install_strut  Strut installation  (after dig_1)
+>      calculation: mechanical, static; activates strut
+> 6  dig_2  Second excavation  (after install_strut)
+>      calculation: mechanical, static; activates water_2; deactivates soil_L_top__part1, water_1
+> 7  dig_3  Third excavation  (after dig_2)
+>      calculation: mechanical, static; activates water_3; deactivates soil_L_top__part4, water_2</pre>
 
 In words: settle the ground with K0, take a null step, install the wall with its interface
 and the surcharge, then dig lift by lift with that lift's water load, and put the strut in
@@ -442,37 +502,36 @@ the same stage. `stages show install_wall` says `displacements reset`.
 
 To look at a stage, or change one:
 
-```text
-crow.json> stages show dig_2                             what is in the model during that stage
-crow.json> stages set dig_1 --max-iterations 600         more iterations for the first dig
-crow.json> stages deactivate dig_3 strut                 take the strut out of dig_3 alone
-crow.json> undo                                          ...and put it back
-crow.json> undo                                          ...and the first dig back to 500
+```powershell
+kratos-cli stages crow.json show dig_2                             # what is in the model during that stage
 ```
 
-`undo` takes back one command that changed the project. A command that changed nothing (for
-example setting a value it already has) is not a step.
+With the `set` and `deactivate` commands, a stage can be adjusted as needed.  For instance,
+`stages set dig_1 --max-iterations 600` increases the number of iterations for the first dig, and
+`stages deactivate dig_3 strut` takes out the strut during the third excavation.
 
 ### Part 4: the deck and the run
 
 #### Step 13. Check and export the deck
 
-```text
-crow.json> check
-ok: CROW excavation wall (2D section at z = 5, SI)
-
-crow.json> export --out deck
-wrote the Kratos deck CROW_excavation_wall to deck:
-  CROW_excavation_wall.mdpa
-  MaterialParameters.json
-  initial_materials.json
-  ProjectParameters.json
-  kratos_gui_units.json
-3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
-next: kratos-cli run deck
-note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
-note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...
+```powershell
+kratos-cli check crow.json
 ```
+> <pre>ok: CROW excavation wall (2D section at z = 0, SI)</pre>
+
+```powershell
+kratos-cli export crow.json --out deck
+```
+> <pre>wrote the Kratos deck CROW_excavation_wall to deck:
+>   CROW_excavation_wall.mdpa
+>   MaterialParameters.json
+>   initial_materials.json
+>   ProjectParameters.json
+>   kratos_gui_units.json
+> 3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
+> next: kratos-cli run deck
+> note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
+> note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...</pre>
 
 The notes say what the exporter took from the soil beside the interface, which is what this
 model asks for: one line per soil, with the parts of the interface against it and the
@@ -482,35 +541,37 @@ angles δ of step 3 (11.25° shows as 11.2). The files are named after the proje
 
 #### Step 14. Look into the deck (optional)
 
-```text
-crow.json> deck show deck
-CROW_excavation_wall.mdpa: 2D, 3129 nodes, x 0 .. 80, y -60 .. 0
-  elements:
-    1466 SmallStrainUPwDiffOrderElement2D6N (continuum)
-    26 LinearTimoshenkoCurvedBeamElement2D3N (beam)
-    1 LinearTrussElement2D2N (truss)
-    52 Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N (interface)
-  ...
-  35 SubModelParts:
-  ...
-  7 stages:
-  ...
-
-crow.json> node deck 30
-Node 30 at (1.471, -12.000, 0.000)
-  SubModelParts: Soil_Middle_below_the_pit, Soil_Bottom
+```powershell
+kratos-cli deck show deck
 ```
+> <pre>CROW_excavation_wall.mdpa: 2D, 3129 nodes, x 0 .. 80, y -60 .. 0
+>   elements:
+>     1466 SmallStrainUPwDiffOrderElement2D6N (continuum)
+>     26 LinearTimoshenkoCurvedBeamElement2D3N (beam)
+>     1 LinearTrussElement2D2N (truss)
+>     52 Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N (interface)
+>   ...
+>   35 SubModelParts:
+>   ...
+>   7 stages:
+>   ...</pre>
+
+```powershell
+kratos-cli node deck 30
+```
+> <pre>Node 30 at (1.471, -12.000, 0.000)
+>   SubModelParts: Soil_Middle_below_the_pit, Soil_Bottom</pre>
 
 The deck has 3129 nodes, not 3036, because the interface splits each wall node into one per
 side. `node` says which SubModelParts a node is in, and which nodes share its position.
 
 #### Step 15. Run it
 
-```text
-crow.json> run deck
-run CROW_excavation_wall_2026-11-09_21-12 finished in 153.9 s: 30 files in ...\crow\CROW_excavation_wall_2026-11-09_21-12
-next: kratos-cli results show CROW_excavation_wall_2026-11-09_21-12
+```powershell
+kratos-cli run deck
 ```
+> <pre>run CROW_excavation_wall_2026-11-09_21-12 finished in 153.9 s: 30 files in ...\crow\CROW_excavation_wall_2026-11-09_21-12
+> next: kratos-cli results show CROW_excavation_wall_2026-11-09_21-12</pre>
 
 The run takes a few minutes: the Mohr-Coulomb soil yields in the excavation stages,
 and each needs many iterations.
@@ -534,17 +595,44 @@ about 7 s against about 70 s with Newton-Raphson (measured on 2026-11-16).
 The strategy is a solver setting of each stage, so set it on all seven stages, then export
 and run again:
 
-```text
-crow.json> stages set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs         stage 1
-crow.json> stages set null_step --solver strategy_type=quasi_newton quasi_newton_type=lbfgs       stage 2
-crow.json> stages set install_wall --solver strategy_type=quasi_newton quasi_newton_type=lbfgs    stage 3
-crow.json> stages set dig_1 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 4
-crow.json> stages set install_strut --solver strategy_type=quasi_newton quasi_newton_type=lbfgs   stage 5
-crow.json> stages set dig_2 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 6
-crow.json> stages set dig_3 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           stage 7
-crow.json> stages show dig_2                             lists strategy_type = Quasi-Newton *
-crow.json> export --out deck                             the deck again, with the new strategy
-crow.json> run deck                                      a new run
+```powershell
+kratos-cli stages crow.json set initial --solver strategy_type=quasi_newton quasi_newton_type=lbfgs         # stage 1
+```
+
+```powershell
+kratos-cli stages crow.json set null_step --solver strategy_type=quasi_newton quasi_newton_type=lbfgs       # stage 2
+```
+
+```powershell
+kratos-cli stages crow.json set install_wall --solver strategy_type=quasi_newton quasi_newton_type=lbfgs    # stage 3
+```
+
+```powershell
+kratos-cli stages crow.json set dig_1 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 4
+```
+
+```powershell
+kratos-cli stages crow.json set install_strut --solver strategy_type=quasi_newton quasi_newton_type=lbfgs   # stage 5
+```
+
+```powershell
+kratos-cli stages crow.json set dig_2 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 6
+```
+
+```powershell
+kratos-cli stages crow.json set dig_3 --solver strategy_type=quasi_newton quasi_newton_type=lbfgs           # stage 7
+```
+
+```powershell
+kratos-cli stages crow.json show dig_2                             # lists strategy_type = Quasi-Newton *
+```
+
+```powershell
+kratos-cli export crow.json --out deck                             # the deck again, with the new strategy
+```
+
+```powershell
+kratos-cli run deck                                      # a new run
 ```
 
 L-BFGS is the default update of the quasi-Newton strategy, so `quasi_newton_type=lbfgs`
@@ -568,48 +656,54 @@ means "the run just made".
 
 #### Did it finish?
 
-```text
-crow.json> results runs
-1 run in ...\crow:
-  1  CROW_excavation_wall_2026-11-09_21-12  7 stage(s) with results, 36 files
-
-crow.json> results show 1
-CROW_excavation_wall_2026-11-09_21-12  (deck CROW_excavation_wall, started 2026-11-09T21:12)
-  complete, SI units, 36 files, 4.8 MB
-    1  Initial stage                 results
-    2  Null step                     results
-    3  Wall installation             results  +3 series
-    4  First excavation              results  +3 series
-    5  Strut installation            results  +3 series
-    6  Second excavation             results  +3 series
-    7  Third excavation              results  +3 series
+```powershell
+kratos-cli results runs
 ```
+> <pre>1 run in ...\crow:
+>   1  CROW_excavation_wall_2026-11-09_21-12  7 stage(s) with results, 36 files</pre>
+
+```powershell
+kratos-cli results show 1
+```
+> <pre>CROW_excavation_wall_2026-11-09_21-12  (deck CROW_excavation_wall, started 2026-11-09T21:12)
+>   complete, SI units, 36 files, 4.8 MB
+>     1  Initial stage                 results
+>     2  Null step                     results
+>     3  Wall installation             results  +3 series
+>     4  First excavation              results  +3 series
+>     5  Strut installation            results  +3 series
+>     6  Second excavation             results  +3 series
+>     7  Third excavation              results  +3 series</pre>
 
 "+3 series" means the stage also wrote curves along the wall and along each face of the
 interface.
 
 #### The wall, stage by stage
 
-```text
-crow.json> results members 1
-This run wrote curves for:
-  interface_left   stages 3, 4, 5, 6, 7  tn, ts
-  interface_right  stages 3, 4, 5, 6, 7  tn, ts
-  wall             stages 3, 4, 5, 6, 7  M, Q, N, ux, uy
-
-crow.json> results profile 1 wall M
-Bending moment (N·m/m) along the wall, 5 stages:
-    3  Wall installation             min -112 at y -12.5, max 31835 at y -7.50
-    4  First excavation              min -42304 at y -4.00, max 6692 at y -9.50
-    5  Strut installation            min -42347 at y -4.00, max 6679 at y -9.50
-    6  Second excavation             min -9041 at y -1.50, max 1.04e+5 at y -4.50
-    7  Third excavation              min -15667 at y -1.50, max 3.41e+5 at y -6.50
-
-crow.json> results profile 1 wall ux
-Horizontal total displacement (m) along the wall, 5 stages:
-    ...
-    7  Third excavation              min -0.1086 at y -5.50, max -0.0192 at y -13.0
+```powershell
+kratos-cli results members 1
 ```
+> <pre>This run wrote curves for:
+>   interface_left   stages 3, 4, 5, 6, 7  tn, ts
+>   interface_right  stages 3, 4, 5, 6, 7  tn, ts
+>   wall             stages 3, 4, 5, 6, 7  M, Q, N, ux, uy</pre>
+
+```powershell
+kratos-cli results profile 1 wall M
+```
+> <pre>Bending moment (N·m/m) along the wall, 5 stages:
+>     3  Wall installation             min -112 at y -12.5, max 31835 at y -7.50
+>     4  First excavation              min -42304 at y -4.00, max 6692 at y -9.50
+>     5  Strut installation            min -42347 at y -4.00, max 6679 at y -9.50
+>     6  Second excavation             min -9041 at y -1.50, max 1.04e+5 at y -4.50
+>     7  Third excavation              min -15667 at y -1.50, max 3.41e+5 at y -6.50</pre>
+
+```powershell
+kratos-cli results profile 1 wall ux
+```
+> <pre>Horizontal total displacement (m) along the wall, 5 stages:
+>     ...
+>     7  Third excavation              min -0.1086 at y -5.50, max -0.0192 at y -13.0</pre>
 
 After the last lift, the wall carries about 341 kN·m/m at −6.5 m and deflects 109 mm into
 the pit. These are the values the benchmark BM-CROW-MC compares with Kratos' own results.
@@ -621,41 +715,48 @@ the pit. These are the values the benchmark BM-CROW-MC compares with Kratos' own
 
 **Write a curve to a file**, for Excel or a plot of your own:
 
-```text
-crow.json> results profile 1 wall M --stage 7 --csv wall_M.csv
-wrote wall_M.csv (53 rows)
+```powershell
+kratos-cli results profile 1 wall M --stage 7 --csv wall_M.csv
 ```
+> <pre>wrote wall_M.csv (53 rows)</pre>
 
 The CSV has one row per wall node: `stage,name,node,y [m],M [N·m/m]`. Always give `--csv` a
 file name: in Windows PowerShell 5.1, redirecting with `>` would save the file as UTF-16.
 
 #### Fields over the whole mesh
 
-```text
-crow.json> results fields 1
-Stage 7 (Third excavation) offers:
-  Deformations
-    u         |u|                             m       nodes
-    ux        u_x                             m       nodes
-    uy        u_y                             m       nodes
-  ...
-  Effective stresses
-    sxx       σxx                             Pa      elements/nodes
-    syy       σyy                             Pa      elements/nodes
-  ...
-  Water pressure and head
-    pw        Pore pressure                   Pa      nodes
-
-crow.json> results field 1 uy
-u_y (m), stage 7 (Third excavation): -0.3398 to 0.4460 over 3129 nodes
-  min -0.3398 at node 15
-  max 0.4460 at node 161
-
-crow.json> results field 1 syy --stage third --csv syy_stage7.csv
-wrote syy_stage7.csv (1262 rows)
-
-crow.json> results at 1 161 --stage 7                   every field at node 161
+```powershell
+kratos-cli results fields 1
 ```
+> <pre>Stage 7 (Third excavation) offers:
+>   Deformations
+>     u         |u|                             m       nodes
+>     ux        u_x                             m       nodes
+>     uy        u_y                             m       nodes
+>   ...
+>   Effective stresses
+>     sxx       σxx                             Pa      elements/nodes
+>     syy       σyy                             Pa      elements/nodes
+>   ...
+>   Water pressure and head
+>     pw        Pore pressure                   Pa      nodes</pre>
+
+```powershell
+kratos-cli results field 1 uy
+```
+> <pre>u_y (m), stage 7 (Third excavation): -0.3398 to 0.4460 over 3129 nodes
+>   min -0.3398 at node 15
+>   max 0.4460 at node 161</pre>
+
+```powershell
+kratos-cli results field 1 syy --stage third --csv syy_stage7.csv
+```
+> <pre>wrote syy_stage7.csv (1262 rows)</pre>
+
+```powershell
+kratos-cli results at 1 161 --stage 7
+```
+Every field at node 161.
 
 - **Which stage.** Without `--stage`, a command reads the last stage. `--stage` takes the
   stage's **number** (`7`) or **words of its name** (`third`, `"first excavation"`), not its
@@ -670,10 +771,16 @@ crow.json> results at 1 161 --stage 7                   every field at node 161
 
 #### The raw files
 
-```text
-crow.json> results files 1                           every file of the run, with its size
-crow.json> results get 1 kratos.log --out logs/      copy one into logs\ (made if need be)
-crow.json> results archive 1                         the whole run as a .zip, here
+```powershell
+kratos-cli results files 1                           # every file of the run, with its size
+```
+
+```powershell
+kratos-cli results get 1 kratos.log --out logs/      # copy one into logs\ (made if need be)
+```
+
+```powershell
+kratos-cli results archive 1                         # the whole run as a .zip, here
 ```
 
 ### Part 6: keep the model
@@ -693,11 +800,11 @@ $env:KRATOS_GUI_RUNS = "$HOME\crow"; <repo>\run.bat
 
 #### Step 17. Save it as a Python script
 
-```text
-crow.json> script --out crow.py
-wrote crow.py: CROW excavation wall (2D section at z = 5, SI)
-next: run crow.py in the GUI's command box, or python crow.py --out deck/
+```powershell
+kratos-cli script crow.json --out crow.py
 ```
+> <pre>wrote crow.py: CROW excavation wall (2D section at z = 0, SI)
+> next: run crow.py in the GUI's command box, or python crow.py --out deck/</pre>
 
 `crow.py` holds the whole model as readable Python, every value typed out, like the
 ready-made [`crow.py`](../../examples/CROW_case/crow.py) that ways 2 and 3 start from. The
@@ -711,12 +818,6 @@ the model again:
 | the GUI's command box | `run crow.py` opens the model |
 | PowerShell | `<repo>\kratos-cli.bat show $HOME\crow\crow.py`, and every command that only reads a model |
 | PowerShell | `<repo>\.venv-windows\Scripts\python.exe $HOME\crow\crow.py --calculate` writes the deck and runs it |
-
-#### Step 18. Leave the shell
-
-```text
-crow.json> exit
-```
 
 ### All in one go
 
@@ -732,9 +833,21 @@ input files into a run folder in `my_crow`, and runs them:
 
 ```text
 open <repo>\examples\CROW_case\crow.json
+```
+
+```text
 calculate
+```
+
+```text
 results show 1
+```
+
+```text
 results profile 1 wall M
+```
+
+```text
 exit
 ```
 
@@ -800,7 +913,7 @@ In the PowerShell from [Before ways 2 and 3](#before-ways-2-and-3), open the she
 
 Then type these lines. `deck` is a folder in the model's folder, and `1` is the newest run.
 
-```text
+```powershell
 # The model
 show
 parts

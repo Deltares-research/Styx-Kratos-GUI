@@ -10,8 +10,11 @@ Two checks, for two kinds of page:
   the page shows it print: nothing, when the page shows nothing. `...` on the page
   stands for a path and matches anything. A command listed with a note in a column
   (`stages show ID     what is in the model`) only has to succeed. `run`, `calculate`
-  and `results` need Kratos and are left out. The Muskat tutorial, written as
-  `kratos-cli` lines, has its own test (`test_muskat_tutorial.py`).
+  and `results` need Kratos and are left out. A page of `kratos-cli` lines in
+  `powershell` blocks, each with its output in a `> <pre>` quote under it, is followed
+  the same way, each line run on its own. The Muskat tutorial has its own test
+  (`test_muskat_tutorial.py`). The levee seepage tutorial is left out for now: its
+  `<pre style=...>` quotes and `<repo>` paths are not read here yet.
 
 The pages are found, not named: a tutorial added later is checked too.
 """
@@ -55,6 +58,8 @@ class Step:
     shown: list[str] | None
     """What the page shows the command print, blank lines included; None in a script of
     bare lines, and for a command listed with a note in a column."""
+    alone: bool = False
+    """A `kratos-cli` line of a `powershell` block, run on its own, not in the shell."""
 
 
 def steps(page: Path) -> list[Step]:
@@ -64,12 +69,26 @@ def steps(page: Path) -> list[Step]:
     and what it printed follows that; and a script of bare lines, marked by its `#`
     comment lines. What comes after the first `exit` shows other ways in."""
     found: list[Step] = []
-    block, script = None, False
+    block, script, quoted = None, False, None
     for line in page.read_text(encoding="utf-8").splitlines():
+        if quoted is not None and line.startswith(">"):
+            # The `> <pre>` quote under a `powershell` block: what its command printed.
+            quoted.shown.append(re.sub(r"^> ?|</?pre>", "", line).rstrip())
+            continue
+        quoted = None
         if line.startswith("```"):
+            if block == "powershell" and found and found[-1].alone:
+                quoted = found[-1] if found[-1].shown is not None else None
             block, script = (line[3:].strip(), False) if block is None else (None, False)
             continue
-        if block != "text":
+        if block == "powershell" and line.startswith("kratos-cli "):
+            typed = line[len("kratos-cli "):]
+            listed = NOTE.search(typed) is not None
+            found.append(Step(NOTE.sub("", typed).strip(), None if listed else [], True))
+            continue
+        if block != "text" or (found and found[-1].alone):
+            # A `text` block after `kratos-cli` lines is not their output: it shows
+            # other ways in, like the bare lines of "All in one go".
             continue
         if not line.strip():
             # A blank line in what a command printed is part of it (`same_print` drops
@@ -98,7 +117,8 @@ def steps(page: Path) -> list[Step]:
 def tutorials() -> list[Path]:
     """The pages that build a project from nothing in the shell."""
     return [page for page in PAGES[1:]
-            if steps(page) and steps(page)[0].command.startswith("new ")]
+            if page.name not in {"Muskat_case.md", "levee_seepage_case.md"}
+            and steps(page) and steps(page)[0].command.startswith("new ")]
 
 
 def same_print(shown: list[str], printed: list[str]) -> bool:
@@ -131,7 +151,8 @@ def follow(page: Path, folder: Path, monkeypatch) -> list[tuple[Step, int, list[
             continue
         printed = io.StringIO()
         with redirect_stdout(printed), redirect_stderr(io.StringIO()):
-            code = shell.line(step.command)
+            code = (cli_main.main(shlex.split(step.command)) if step.alone
+                    else shell.line(step.command))
         done.append((step, code, printed.getvalue().splitlines()))
     return done
 
