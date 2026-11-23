@@ -27,7 +27,7 @@ A 2D plane-strain section, 80 m wide and 60 m deep, in SI units (m, N, Pa, kg/mÂ
 
 | | Way | Start from | Good for |
 |---|---|---|---|
-| [1](#way-1-build-the-model-from-scratch) | [Build it from scratch in the shell](#way-1-build-the-model-from-scratch) | nothing | learning the commands, making your own model (about 15 minutes) |
+| [1](#way-1-build-the-model-from-scratch) | [Build it from scratch in the shell](#way-1-build-the-model-from-scratch) | nothing | learning the commands, making your own model |
 | [2](#way-2-open-the-ready-made-model-in-the-shell) | [Open the ready-made model in the shell](#way-2-open-the-ready-made-model-in-the-shell) | `crow.py` | looking around the model and its results |
 | [3](#way-3-run-the-python-script) | [Run the Python script](#way-3-run-the-python-script) | `crow.py` | one command: write the deck and run it |
 

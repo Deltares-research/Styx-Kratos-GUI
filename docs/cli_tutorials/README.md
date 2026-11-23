@@ -4,12 +4,12 @@ Each tutorial builds one model with `kratos-cli` in PowerShell, command by comma
 shows what each command prints. Start with the simple dike if you are new to the command
 line.
 
-| Tutorial | What you build | Time |
-|---|---|---|
-| [Simple dike](simple_dike.md) | A soil block with a sheet pile and a line load on its surface, in three stages | about 10 minutes |
-| [CROW excavation wall](CROW_case.md) | A staged sheet-pile excavation in clay and sand, with a strut, water loads and Mohr-Coulomb soils, up to the bending moment in the wall | about 15 minutes |
-| [Levee seepage](levee_seepage_case.md) | A steady-state groundwater flow under and through a clay levee, with a seepage face and Van Genuchten soils | about 15 minutes |
-| [Muskat groundwater flow](Muskat_case.md) | Three steady-state groundwater flow models of one soil column: saturated, unsaturated, and with a seepage face | about 15 minutes |
+| Tutorial | What you build |
+|---|---|
+| [Simple dike](simple_dike.md) | A soil block with a sheet pile and a line load on its surface, in three stages |
+| [CROW excavation wall](CROW_case.md) | A staged sheet-pile excavation in clay and sand, with a strut, water loads and Mohr-Coulomb soils, up to the bending moment in the wall |
+| [Levee seepage](levee_seepage_case.md) | A steady-state groundwater flow under and through a clay levee, with a seepage face and Van Genuchten soils |
+| [Muskat groundwater flow](Muskat_case.md) | Three steady-state groundwater flow models of one soil column: saturated, unsaturated, and with a seepage face |
 
 The simple dike and the CROW excavation wall each give three ways to work: build the model
 from scratch, open the ready-made model in the shell, or run its Python script in one
