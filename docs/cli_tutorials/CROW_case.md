@@ -819,12 +819,6 @@ the model again:
 | PowerShell | `<repo>\kratos-cli.bat show $HOME\crow\crow.py`, and every command that only reads a model |
 | PowerShell | `<repo>\.venv-windows\Scripts\python.exe $HOME\crow\crow.py --calculate` writes the deck and runs it |
 
-#### Step 18. Leave the shell
-
-```powershell
-kratos-cli exit
-```
-
 ### All in one go
 
 [`crow.json`](../../examples/CROW_case/crow.json) is the whole model: the model steps 1 to 12
@@ -837,23 +831,23 @@ build, and the same kind of file the GUI saves. Open the shell in a new folder:
 Then open the JSON file and calculate it. `calculate` meshes the model, writes the Kratos
 input files into a run folder in `my_crow`, and runs them:
 
-```powershell
+```text
 open <repo>\examples\CROW_case\crow.json
 ```
 
-```powershell
+```text
 calculate
 ```
 
-```powershell
+```text
 results show 1
 ```
 
-```powershell
+```text
 results profile 1 wall M
 ```
 
-```powershell
+```text
 exit
 ```
 
