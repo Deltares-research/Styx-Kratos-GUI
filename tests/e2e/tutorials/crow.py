@@ -424,14 +424,16 @@ def meshed(tour: Tour) -> None:
 INITIAL_OFF = [WALL.name, STRUT.name, CONTACT.name, SURCHARGE.name,
                *(load.name for load in MODEL.normal_loads)]
 
+WATER_1, WATER_2, WATER_3 = (load.name for load in MODEL.normal_loads)
+
 SWITCHES = [
     # (what the stage switches on, what it switches off), by Model explorer label
     ([], []),
     ([WALL.name, CONTACT.name, SURCHARGE.name], []),
-    (["WaterLoad_Stage1"], ["lift 1"]),
+    ([WATER_1], ["lift 1"]),
     ([STRUT.name], []),
-    (["WaterLoad_Stage2"], ["lift 2", "WaterLoad_Stage1"]),
-    (["WaterLoad_Stage3"], ["lift 3", "WaterLoad_Stage2"]),
+    ([WATER_2], ["lift 2", WATER_1]),
+    ([WATER_3], ["lift 3", WATER_2]),
 ]
 """For each stage after the initial one: the null step switches nothing."""
 
