@@ -736,13 +736,75 @@ App.Stages = (function () {
     return !on ? 'off' : on === keys.length ? 'on' : 'mixed';
   }
 
-  /* Which part keys the viewport should not draw, given the selected stage.
+  /* ── The tabs that show one stage ────────────────────────────────────── */
 
-     Staged mode only. The other four modes are for building the model, and hiding
-     the excavated lifts in Soil mode would make a body the user is trying to draw
-     against vanish for a reason nothing on screen explains -- the stage list is not
-     even visible there. The dock only shows the stages panel in staged mode
-     (js/app.js:25-33), and this matches it.
+  /* The tabs that show the model as it is in the stage chosen in the list beside the
+     mode tabs: Soil, Structures and Flow conditions, where a part is switched on and
+     off in that stage, and Calculation settings (mode id "staged"), where the stage
+     is set up. Not Mesh: Kratos cannot change the mesh between stages, so a part a
+     stage switches off is still meshed, and the Mesh tab shows every part in every
+     stage. Not Results either, which shows the stage of the run on screen. */
+  var STAGE_MODES = ['soil', 'structures', 'flow', 'staged'];
+
+  function followsStage(mode) {
+    return STAGE_MODES.indexOf(mode) >= 0;
+  }
+
+  /* The list beside the mode tabs, as `{options: [{value, label, disabled}], value,
+     disabled, title}`. One list for every tab, so the stage chosen in one is the
+     stage the next one shows.
+
+     In a model tab it offers the project's stages in the order they run, the one
+     the stages panel has selected (`selectedId`) chosen. In the Mesh tab it is
+     greyed: one mesh serves every stage. In Results it offers the stages of the open
+     run, read from `results` (App.Results.state()): a run can be of an older version
+     of the project, so its own stages are what it can show, and a stage that wrote
+     nothing is greyed, as in the Results explorer. */
+  var PICKER_TITLES = {
+    model: 'The stage this tab shows. A part switched off in it is drawn faded; ' +
+           'its check box in the Model explorer switches it in this stage only.',
+    mesh: 'The mesh is the same in every stage: Kratos cannot change the mesh ' +
+          'between stages, so a part a stage switches off is still meshed.',
+    none: 'This project has no stages. Add them in the Calculation settings tab.',
+    results: 'The stage whose results are shown.',
+    noRun: 'No calculation is open. Calculate, or open a run in the Results menu.'
+  };
+
+  function picker(project, mode, phase, results) {
+    if (mode === 'results') {
+      var runStages = (results && results.run && results.stages) || [];
+      return {
+        options: runStages.map(function (each) {
+          return { value: String(each.index), label: each.index + '  ' + each.stage,
+                   disabled: !each.results };
+        }),
+        value: results && results.stage != null ? String(results.stage) : '',
+        disabled: !runStages.length,
+        title: runStages.length ? PICKER_TITLES.results : PICKER_TITLES.noRun
+      };
+    }
+    var sequence = order(project) || stagesOf(project);
+    if (!sequence.length) {
+      return { options: [{ value: '', label: 'No stages' }], value: '', disabled: true,
+               title: PICKER_TITLES.none };
+    }
+    return {
+      options: sequence.map(function (stage, position) {
+        return { value: stage.id, label: (position + 1) + '  ' + stage.name };
+      }),
+      value: selectedId(project, phase),
+      disabled: mode === 'mesh',
+      title: mode === 'mesh' ? PICKER_TITLES.mesh : PICKER_TITLES.model
+    };
+  }
+
+  /* Which part keys the viewport should not draw as active, given the selected stage.
+
+     In the tabs that follow the stage (`followsStage`) only. The viewport draws them
+     faded rather than not at all (viewport.js `stageGhosts`), so a part a stage
+     switched off can still be picked, edited, and switched back on -- in Soil and
+     Structures the user may be drawing against it. The Mesh tab hides nothing, for
+     the reason `STAGE_MODES` gives.
 
      Empty for an unstaged project, which is the compatibility case: one model, all of
      it, exported exactly as it always was. Empty too when no stage is selected or the
@@ -761,7 +823,7 @@ App.Stages = (function () {
   }
 
   function hiddenKeys(project, stageId, mode) {
-    if (mode !== 'staged') return [];
+    if (!followsStage(mode)) return [];
     var active = activeParts(project, stageId);
     if (!active) return [];
     return stageableKeys(project).filter(function (key) {
@@ -797,6 +859,7 @@ App.Stages = (function () {
     initialOf: initialOf, isInitial: isInitial,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys, partLabel: partLabel, selectedId: selectedId,
+    STAGE_MODES: STAGE_MODES, followsStage: followsStage, picker: picker,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,

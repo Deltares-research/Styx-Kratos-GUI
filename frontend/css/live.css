@@ -512,8 +512,8 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .tree-paint.mixed { background: linear-gradient(135deg, var(--paint, #e6194b) 50%, #fff 50%); }
 .tree-paint.empty-slot { visibility: hidden; cursor: default; }
 
-/* The Model explorer's checkbox in Staged construction mode means "in the model in the
-   selected stage" (addStageChecks in frontend/js/patches.js). A group whose parts differ
+/* The Model explorer's checkbox in Soil, Structures and Flow conditions means "in the
+   model in the stage chosen beside the tabs" (addStageChecks in frontend/js/patches.js). A group whose parts differ
    shows a dash; a state this stage inherited rather than set itself is ticked in grey.
    A boundary condition's checkbox means "active" in every mode (addConditionChecks), with
    the same dash on a group whose conditions differ. */
@@ -739,3 +739,26 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   --r-model: minmax(var(--h-dockhead),
     min(var(--h-model-panel), calc(100% - 2 * var(--split) - 70px - var(--h-phases))));
 }
+
+/* Calculation settings: the Stages explorer is the whole dock. The Model and
+   Selection explorers and their bars are hidden (syncCalculationDock in
+   frontend/js/patches.js), so the one panel left takes the one row. */
+#dock.has-phases.stages-only {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* The stage list beside the mode tabs (mountStagePicker in frontend/js/patches.js):
+   a group of its own, labelled like the tab groups, its list as tall as a tab. */
+.stage-picker-group .mode-group-tabs { align-items: flex-end; }
+.stage-picker {
+  height: calc(var(--h-modetabs) - 22px);
+  min-width: 170px; max-width: 280px;
+  margin-bottom: 3px; padding: 0 6px;
+  border: 1px solid var(--c-border); border-radius: var(--radius);
+  background: #fff; color: var(--c-ink);
+  font: inherit; font-size: var(--fs-md);
+  cursor: pointer;
+}
+.stage-picker:focus { outline: 2px solid var(--brand-primary-2); outline-offset: -1px; }
+.stage-picker:disabled { color: var(--c-ink-faint); background: #f2f4f7; cursor: default; }
+.stage-picker-group.disabled .mode-group-label { opacity: .6; }

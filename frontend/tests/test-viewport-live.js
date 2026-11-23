@@ -390,6 +390,10 @@
       T.ok(hidden.length, 'the first stage switches something off');
       var structures = (App.BEAMS || []).concat(App.ANCHORS || [], App.INTERFACES || [])
         .map(function (record) { return record.id; });
+      // Measured in the Mesh tab, the one tab that shows every part whatever the stage:
+      // one mesh serves them all.
+      App.state.mode = 'mesh';
+      App.Viewport.setMode('mesh');
       var solid = {};
       hidden.forEach(function (key) { solid[key] = opacities(groups[key]); });
 
@@ -412,14 +416,21 @@
         }
       });
 
-      App.state.phase = null;
+      // Soil follows the stage too: the same parts are ghosts there.
       App.state.mode = 'soil';
       App.Viewport.setMode('soil');
-      // A structure is drawn at half behind the Soil tab, so only the ghosts are
-      // held to what they were before.
+      T.eq(Object.keys(App.Viewport.stageGhosts()).sort(), Object.keys(ghosts).sort(),
+           'the Soil tab shows the same stage');
+
+      App.state.phase = null;
+      App.state.mode = 'mesh';
+      App.Viewport.setMode('mesh');
+      T.eq(App.Viewport.stageGhosts(), {}, 'the Mesh tab ghosts nothing');
       hidden.filter(function (key) { return structures.indexOf(key) < 0; }).forEach(function (key) {
-        T.eq(opacities(groups[key]), solid[key], key + ' is solid again outside the stage');
+        T.eq(opacities(groups[key]), solid[key], key + ' is solid again in the Mesh tab');
       });
+      App.state.mode = 'soil';
+      App.Viewport.setMode('soil');
     });
   });
 
@@ -762,7 +773,10 @@
         T.eq(sceneGroups()[contact.id].visible, true, 'soil mode draws contacts');
         T.near(opacity(contact.id), 0.5, 1e-9, 'faded to half in soil mode');
         T.eq(sceneGroups()[App.BEAMS[0].id].visible, true);
-        T.near(opacity(App.BEAMS[0].id), 0.5, 1e-9);
+        // Halved again when the stage on screen has switched the wall off.
+        var stage = App.Stages.selectedId(App.PROJECT, App.state.phase);
+        var off = App.Stages.hiddenKeys(App.PROJECT, stage, 'soil').indexOf(App.BEAMS[0].id) >= 0;
+        T.near(opacity(App.BEAMS[0].id), off ? 0.25 : 0.5, 1e-9);
         App.state.mode = 'structures'; App.Viewport.setMode('structures');
         T.near(opacity(contact.id), 1, 1e-9, 'solid again in structures mode');
         App.Viewport.setVisible(App.BEAMS[0].id, false);

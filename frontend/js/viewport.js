@@ -1490,8 +1490,8 @@ App.Viewport = (function () {
     var project = App.PROJECT;
     if ((mode !== 'staged' && mode !== 'flow') || !scene || !App.SurfaceWater
         || !builtSections || !project || project.dimension !== 2 || project.deck) return;
-    var pieces = App.SurfaceWater.pieces(project, builtSections,
-                                         mode === 'staged' ? stageHidden() : {});
+    // Both tabs follow the stage chosen beside the tabs: this is that stage's water.
+    var pieces = App.SurfaceWater.pieces(project, builtSections, stageHidden());
     if (!pieces.length) return;
     var span = modelSpan(project, frame && frame.size);
     var length = span > 0 ? span * 0.035 : 0.5;
@@ -2589,7 +2589,7 @@ App.Viewport = (function () {
   /* Whether the selected stage takes `key` off the screen. A structure or interface
      the stage has switched off stays, faded (`syncStructureFade`): it is what the
      user is stepping through the stages to see come and go. Any other part stays as
-     a ghost in Staged construction (`stageGhosts`). */
+     a ghost in the tabs that follow the stage (`stageGhosts`). */
   function stageGone(key, hidden, ghosts) {
     return !!hidden[key] && structureKeys.indexOf(key) < 0 && !(ghosts && ghosts[key]);
   }
@@ -2600,11 +2600,13 @@ App.Viewport = (function () {
     });
   }
 
-  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a boundary
-     condition -- a support or a water pressure -- has the stage's checkbox in place of
-     its eye, and the stage is what is read there: the conditions the selected stage has
-     on are drawn, the others ghosted (`stageGhosts`). Results reads the stage on screen
-     the same way for the water, the only conditions it draws. */
+  /* Whether the eye lets `key` be drawn in `mode`. In Calculation settings (mode id
+     "staged") there is no Model explorer, so no eye to turn a boundary condition back
+     on with: the stage is what is read there, the conditions the selected stage has on
+     drawn, the others ghosted (`stageGhosts`). In Soil, Structures and Flow conditions
+     the eye still counts -- the viewport menu's Hide and Show all set it -- and the
+     stage ghosts what it switched off. Results reads the stage on screen the same way
+     for the water, the only conditions it draws. */
   function eyeOpen(key, mode) {
     if (mode === 'staged' && conditionIds.indexOf(key) >= 0) return true;
     if (mode === 'results' && waterIds.indexOf(key) >= 0) return true;
@@ -2710,14 +2712,21 @@ App.Viewport = (function () {
       ? App.Stages.selectedId(App.PROJECT, phase) : phase;
   }
 
+  /* Whether `mode` shows the model as it is in the stage chosen beside the tabs
+     (stages.js `followsStage`). */
+  function followsStage(mode) {
+    return !!(App.Stages && App.Stages.followsStage && App.Stages.followsStage(mode));
+  }
+
   /* The parts the selected stage has switched off that are still drawn, as ghosts:
-     in Staged construction only, so that a part taken out of a stage can be
-     right-clicked to put it back (patches.js, the viewport menu's Activate). The
-     boundary conditions too -- a support or a water pressure a stage has switched off
-     is switched back on the same way. Not Results, which draws only what was in the
-     run. */
+     in every tab that follows the stage (Soil, Structures, Flow conditions,
+     Calculation settings), so that a part taken out of a stage can still be drawn
+     against, and right-clicked to put it back (patches.js, the viewport menu's
+     Activate). The boundary conditions too -- a support or a water pressure a stage
+     has switched off is switched back on the same way. Not Results, which draws only
+     what was in the run; not Mesh, which hides nothing. */
   function stageGhosts() {
-    if (!App.state || App.state.mode !== 'staged') return {};
+    if (!App.state || !followsStage(App.state.mode)) return {};
     var ghosts = {};
     Object.keys(stageHidden()).forEach(function (key) { ghosts[key] = true; });
     return ghosts;
@@ -2798,10 +2807,13 @@ App.Viewport = (function () {
     contextFaded = [];
   }
 
-  function applyContextFade(mode) {
+  /* A ghost wins over this fade: Soil and Flow conditions follow the stage, so a part
+     can be both context and switched off there, and the two must not meet on one
+     material. The ghost is the fainter of the two, so it is the one drawn. */
+  function applyContextFade(mode, ghosts) {
     var opacity = structureOpacity(mode, false);
     contextFaded = (fadedKeys[mode] || []).filter(function (k) {
-      return groups[k] && structureKeys.indexOf(k) < 0;
+      return groups[k] && structureKeys.indexOf(k) < 0 && !(ghosts && ghosts[k]);
     });
     contextFaded.forEach(function (k) { fadeGroup(groups[k], opacity); });
   }
@@ -2817,7 +2829,7 @@ App.Viewport = (function () {
     });
     clearContextFade();
     applyGhosts(ghosts);
-    applyContextFade(mode);
+    applyContextFade(mode, ghosts);
     syncStructureFade(mode, hidden);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);

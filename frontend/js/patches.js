@@ -659,9 +659,10 @@ App.LivePatches = (function () {
     });
   }
 
-  /* ── The Model explorer in Staged construction mode ──────────────────────
-     The row's checkbox stops being "shown" and becomes "in the model in the selected
-     stage". Ticking or unticking edits that stage alone
+  /* ── The Model explorer in the tabs that follow the stage ────────────────
+     In Soil, Structures and Flow conditions (`App.Stages.followsStage`) the row's
+     checkbox stops being "shown" and becomes "in the model in the stage chosen beside
+     the tabs". Ticking or unticking edits that stage alone
      (`App.Stages.setActive`): the other stages keep what they had, and a stage added
      afterwards starts with the state of the one before it. Every part keeps its row and
      its checkbox in every stage, so a part an earlier stage took out can be put back
@@ -673,7 +674,7 @@ App.LivePatches = (function () {
      so what this stage decided stands out from what it was handed. */
   function addStageChecks(mode) {
     var host = document.getElementById('tree-model');
-    if (!host || mode !== 'staged' || !App.Stages || !App.PartColors) return;
+    if (!host || !App.Stages || !App.Stages.followsStage(mode) || !App.PartColors) return;
     if (!selectedStageId()) return;
     var stageable = App.Stages.stageableKeys(App.PROJECT);
     var rows = host.querySelectorAll('.tree-row');
@@ -716,9 +717,9 @@ App.LivePatches = (function () {
      and a click switches it. It is not the eye: a condition is not drawn until the
      user selects its row or picks Show on it, so a box meaning "drawn" would be empty
      on every condition the model uses. The group row switches every condition under
-     it and shows a dash while they differ. In Staged construction a condition row --
-     support or water pressure -- keeps its stage check (addStageChecks), which says
-     more: in the model in the selected stage. */
+     it and shows a dash while they differ. In a tab that follows the stage a condition
+     row -- support or water pressure -- has its stage check (addStageChecks) instead,
+     which says more: in the model in the selected stage. */
   function addConditionChecks(mode) {
     var host = document.getElementById('tree-model');
     if (!host || !App.BoundaryConditions) return;
@@ -765,11 +766,11 @@ App.LivePatches = (function () {
   function syncStageChecks() {
     if (typeof document === 'undefined') return;
     var host = document.getElementById('tree-model');
-    if (!host || !App.state || App.state.mode !== 'staged') return;
+    if (!host || !App.state || !App.Stages.followsStage(App.state.mode)) return;
     var stage = selectedStageId();
     var present = !!host.querySelector('.stage-check');
     if (!!stage !== present) {
-      if (App.Explorer) App.Explorer.mountTree('staged');
+      if (App.Explorer) App.Explorer.mountTree(App.state.mode);
       return;
     }
     paintStageChecks();
@@ -2481,8 +2482,8 @@ App.LivePatches = (function () {
     return wrap;
   }
 
-  /* In Staged construction a click on a part in the viewport selects it, and nothing
-     more: switching a part in or out of a stage is asked for by name, with a right
+  /* In a tab that follows the stage a click on a part in the viewport selects it, and
+     nothing more: switching a part in or out of a stage is asked for by name, with a right
      click (Activate / Deactivate in the viewport menu) or with the part's check box in
      the Model explorer. A click that also switched the part made every look at a part
      an edit, and one that could switch a part off but not reliably back on.
@@ -2491,8 +2492,8 @@ App.LivePatches = (function () {
      stages keep what they had. */
   function stagePartKey(key) {
     if (!key || !App.PROJECT || App.PROJECT.deck) return null;
-    if (!App.state || App.state.mode !== 'staged') return null;
-    if (!(App.PROJECT.stages || []).length || !App.Stages) return null;
+    if (!App.state || !App.Stages || !App.Stages.followsStage(App.state.mode)) return null;
+    if (!(App.PROJECT.stages || []).length) return null;
     return App.Stages.stageableKeys(App.PROJECT).indexOf(key) >= 0 ? key : null;
   }
 
@@ -2516,7 +2517,7 @@ App.LivePatches = (function () {
                       + (stageById(stage) || {}).name + '.');
   }
 
-  /* The viewport menu's two rows for a stageable part, in Staged construction: the
+  /* The viewport menu's two rows for a stageable part, in a tab that follows the stage: the
      state the part does not have in the selected stage is offered, the other greyed,
      so the menu also says which one it is in. */
   /* A soil right-clicked in Flow conditions: the water it takes, a submenu of the
@@ -2566,6 +2567,9 @@ App.LivePatches = (function () {
      away from the control just used. */
   function mountLiveStages() {
     if (typeof document === 'undefined') return;
+    // The stage list beside the mode tabs follows every change of the stage or of the
+    // sequence, and every one of those comes through here.
+    syncStagePicker();
     var host = document.getElementById('list-phases');
     if (!host) return;
     var scroll = host.scrollTop;
@@ -2607,14 +2611,7 @@ App.LivePatches = (function () {
       node.appendChild(el('span.phase-dot.' + row.state));
       node.appendChild(el('span.phase-name', { text: row.name }));
       node.appendChild(el('span.phase-kind', { text: row.kind }));
-      node.addEventListener('click', function () {
-        App.state.phase = row.id;
-        mountLiveStages();
-        // Staged mode draws the model as of the selected stage, so moving the
-        // selection moves the viewport with it.
-        if (App.Viewport.applyStageVisibility) App.Viewport.applyStageVisibility();
-        App.Command.note('Current stage: ' + row.name);
-      });
+      node.addEventListener('click', function () { selectStage(row.id); });
       list.appendChild(node);
     });
     host.appendChild(list);
@@ -2628,6 +2625,208 @@ App.LivePatches = (function () {
     grid.appendChild(head);
     appendStageGroups(grid, stage);
     host.appendChild(grid);
+  }
+
+  /* ── The stage list beside the mode tabs ─────────────────────────────────
+     One stage is on screen in every tab: the one chosen in this list, which sits
+     beside Soil, Structures and Flow conditions. Those three tabs show the model as it
+     is in that stage -- a part the stage switched off faded, its check box in the
+     Model explorer switching it in that stage only -- and Calculation settings sets
+     the stage up. The Mesh tab greys the list: Kratos cannot change the mesh between
+     stages, so one mesh, with every part in it, serves them all. In Results the list
+     is the open run's stages, and choosing one runs `results stage`, as the Results
+     explorer's own list does.
+
+     `App.state.phase` is the one record of the choice: the stages panel's rows and
+     this list both set it through `selectStage`. What the list offers is
+     `App.Stages.picker`, which has no DOM and is tested without a browser. */
+  var STAGE_PICKER_ID = 'stage-picker';
+
+  function selectStage(id) {
+    var stage = stageById(id);
+    if (!stage) return;
+    App.state.phase = id;
+    // Redraws the stages panel, the Model explorer's check boxes and this list.
+    mountLiveStages();
+    // The model tabs draw the model as of the selected stage, so moving the
+    // selection moves the viewport with it.
+    if (App.Viewport.applyStageVisibility) App.Viewport.applyStageVisibility();
+    App.Command.note('Current stage: ' + stage.name);
+  }
+
+  function stagePickerModel() {
+    var mode = App.state && App.state.mode;
+    var results = mode === 'results' && App.Results && App.Results.state
+      ? App.Results.state() : null;
+    return App.Stages.picker(App.PROJECT, mode, App.state && App.state.phase, results);
+  }
+
+  function syncStagePicker() {
+    if (typeof document === 'undefined' || !App.Stages || !App.Stages.picker) return;
+    var select = document.getElementById(STAGE_PICKER_ID);
+    if (!select) return;
+    var model = stagePickerModel();
+    App.UI.clear(select);
+    model.options.forEach(function (option) {
+      var node = document.createElement('option');
+      node.value = option.value;
+      node.textContent = option.label;
+      node.disabled = !!option.disabled;
+      select.appendChild(node);
+    });
+    select.value = model.value;
+    select.disabled = !!model.disabled;
+    select.title = model.title;
+    var group = select.closest ? select.closest('.stage-picker-group') : null;
+    if (group) group.classList.toggle('disabled', !!model.disabled);
+  }
+
+  function onStagePicked(select) {
+    var value = select.value;
+    if (!value) return;
+    if (App.state && App.state.mode === 'results') {
+      // The Results explorer and the Results menu follow by themselves: they redraw
+      // on every change of App.Results.
+      if (App.Results && App.Results.handleCommand) {
+        App.Results.handleCommand('results stage ' + value);
+      }
+      return;
+    }
+    selectStage(value);
+  }
+
+  /* Put the list in the tab bar, after the group that holds Flow conditions: Soil,
+     Structures, Flow conditions | Stage | Mesh, Calculation settings, Results. The
+     frozen toolbar draws the bar afresh on every `mountModes`, so this runs after
+     each (installStageTabs). */
+  function mountStagePicker() {
+    if (typeof document === 'undefined') return;
+    var bar = document.getElementById('modetabs');
+    if (!bar || document.getElementById(STAGE_PICKER_ID)) return;
+    var el = App.UI.el;
+    var group = el('div.mode-group.stage-picker-group');
+    group.appendChild(el('span.mode-group-label', { text: 'Stage' }));
+    var holder = el('div.mode-group-tabs');
+    var select = el('select.stage-picker#' + STAGE_PICKER_ID, { 'aria-label': 'Stage' });
+    select.addEventListener('change', function () { onStagePicked(select); });
+    holder.appendChild(select);
+    group.appendChild(holder);
+    var divider = el('span.mode-group-divider');
+    var flow = bar.querySelector('.mode-tab[data-mode="flow"]');
+    var after = flow && flow.closest ? flow.closest('.mode-group') : null;
+    if (after && after.parentNode === bar) {
+      bar.insertBefore(group, after.nextSibling);
+      bar.insertBefore(divider, group);
+    } else {
+      bar.appendChild(divider);
+      bar.appendChild(group);
+    }
+  }
+
+  /* Calculation settings (mode id "staged") is the stages and their settings, and
+     nothing else: the Stages explorer takes the whole dock, without the Model and
+     Selection explorers. Switching parts on and off in a stage is done in Soil,
+     Structures and Flow conditions. */
+  var CALCULATION_HIDES = ['panel-model', 'split-dock1', 'panel-selection'];
+
+  function syncCalculationDock(mode) {
+    if (typeof document === 'undefined') return;
+    var dock = document.getElementById('dock');
+    if (!dock) return;
+    var only = mode === 'staged';
+    dock.classList.toggle('stages-only', only);
+    CALCULATION_HIDES.forEach(function (id) {
+      var node = document.getElementById(id);
+      if (node) node.hidden = only;
+    });
+    // The bar between the Selection and the Stages explorer: nothing to resize.
+    var bar = document.getElementById('split-dock2');
+    if (bar && only) bar.hidden = true;
+    if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
+  }
+
+  /* The project's stage the result on screen is of, or null: none, or a run that is
+     not of the project as it is now (App.Results.projectStage). */
+  function resultsProjectStage() {
+    var shown = App.Results && App.Results.projectStage
+      ? App.Results.projectStage(App.PROJECT) : null;
+    return shown && shown.stage ? shown.stage : null;
+  }
+
+  /* In Results, the stage chosen there is the stage on screen everywhere: back in
+     Soil the model is shown as it is in the stage whose result was just read. */
+  function followResultsStage() {
+    if (!App.state || App.state.mode !== 'results') return;
+    var stage = resultsProjectStage();
+    if (stage) App.state.phase = stage;
+    syncStagePicker();
+  }
+
+  /* On the way into Results: the result of the stage chosen in the other tabs, when
+     the run is of this project and that stage wrote one. */
+  function showSelectedStageResult() {
+    if (!App.Results || !App.Results.state || !App.Results.handleCommand) return;
+    var shown = resultsProjectStage();
+    var wanted = selectedStageId();
+    if (!shown || !wanted || shown === wanted) return;
+    var ids = (App.Stages.order(App.PROJECT) || []).map(function (stage) { return stage.id; });
+    var number = ids.indexOf(wanted) + 1;
+    var entry = (App.Results.state().stages || []).filter(function (each) {
+      return each.index === number;
+    })[0];
+    if (entry && entry.results) App.Results.handleCommand('results stage ' + number);
+  }
+
+  /* The Staged construction tab becomes Calculation settings, and the stage list
+     goes beside the tabs. Run after Results mode is installed, so this `setMode`
+     wraps the one that knows about Results and sees the whole switch. */
+  /* Short: the status bar shows it on one line, and a longer one widens the page. */
+  var CALCULATION_HINT = 'Calculation settings mode — add stages and set how each one '
+    + 'is calculated.';
+
+  function installStageTabs() {
+    (App.MODES || []).forEach(function (mode) {
+      if (mode.id !== 'staged') return;
+      mode.label = 'Calculation settings';
+      mode.hint = CALCULATION_HINT;
+    });
+    if (App.Toolbars && App.Toolbars.mountModes && !App.Toolbars.mountModes.__stagePicker) {
+      var frozenMountModes = App.Toolbars.mountModes;
+      App.Toolbars.mountModes = function () {
+        frozenMountModes.apply(this, arguments);
+        mountStagePicker();
+        syncStagePicker();
+      };
+      App.Toolbars.mountModes.__stagePicker = true;
+    }
+    if (typeof App.setMode === 'function' && !App.setMode.__stageTabs) {
+      var innerSetMode = App.setMode;
+      App.setMode = function (mode) {
+        var before = App.state && App.state.mode;
+        innerSetMode(mode);
+        var now = App.state && App.state.mode;
+        syncCalculationDock(now);
+        if (now === 'results' && before !== 'results') showSelectedStageResult();
+        syncStagePicker();
+      };
+      App.setMode.__stageTabs = true;
+      App.setMode.__results = innerSetMode.__results;
+    }
+    // A project opened, reloaded or undone has stages of its own.
+    if (App.Model && App.Model.apply && !App.Model.apply.__stagePicker) {
+      var innerApply = App.Model.apply;
+      App.Model.apply = function () {
+        var result = innerApply.apply(this, arguments);
+        syncStagePicker();
+        return result;
+      };
+      App.Model.apply.__stagePicker = true;
+    }
+    if (App.Results && App.Results.onChange && !installStageTabs.listening) {
+      App.Results.onChange(followResultsStage);
+      installStageTabs.listening = true;
+    }
+    syncCalculationDock(App.state && App.state.mode);
   }
 
   /* The property grid's groups for `stage`, then its expert settings, collapsed until
@@ -4103,6 +4302,7 @@ App.LivePatches = (function () {
     orderFlowBeforeMesh();
     installResultsMode();
     installStagesOverview();
+    installStageTabs();
     // The tabs and the bar were drawn at boot, before the reorder above.
     if (App.Toolbars && App.Toolbars.mountModes && document.getElementById('modetabs')) {
       App.Toolbars.mountModes();
@@ -4146,7 +4346,12 @@ App.LivePatches = (function () {
           // A run the user stopped leaves them where they were, at the model.
           if (!result || result.stopped || !App.Results || !App.Results.ready) return;
           App.Results.ready().then(function () {
-            if (App.Results.stage()) App.setMode('results');
+            if (!App.Results.stage()) return;
+            // The run opens on its last stage, and that is then the stage on screen
+            // in every tab -- rather than Results turning to the one chosen before.
+            var shown = resultsProjectStage();
+            if (shown) App.state.phase = shown;
+            App.setMode('results');
           });
         });
       };

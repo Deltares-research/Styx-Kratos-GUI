@@ -20,6 +20,7 @@ To learn the GUI by building one model step by step, start with the
 | Menu bar | Top | All commands, in menus |
 | Toolbar | Below the menu bar | New, open, save, **Save picture** (the camera), the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate**, **Feedback** |
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
+| Stage list | Beside the mode tabs, under **Stage** | The construction stage that the tabs show. See [Stages and calculation settings](#stages-and-calculation-settings). |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
 | Model explorer | Right, top | A tree of all the objects in the model. A group, such as **Sheet piles**, shows when the model has one. Clear a check box to hide an object. |
@@ -27,8 +28,9 @@ To learn the GUI by building one model step by step, start with the
 | Command panel | Bottom | The **Session** log with all messages, the **Model history** tab with the commands that you typed, and the command box |
 | Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and zoom |
 
-Staged construction mode adds a **Stages explorer**, and Results mode adds a **Results
-explorer**, below the Model explorer.
+In Calculation settings mode the **Stages explorer** takes the place of the Model explorer
+and the Selection explorer. Results mode adds a **Results explorer** below the Model
+explorer.
 
 The menus and the tool rail show only the items that work. Plates, beams, wells, drains and
 other tools that Styx does not have yet are not shown.
@@ -46,10 +48,16 @@ Do the modes from left to right:
 | Structures | Add sheet piles, anchors, interfaces, loads, and drawn or imported solids |
 | Flow conditions | Set the water level and the water pressure conditions |
 | Mesh | Set the mesh size and make the mesh. Make it after the water conditions: a condition is meshed into the model that Kratos reads. |
-| Staged construction | Make the construction stages, and select the active parts in each stage |
+| Calculation settings | Make the construction stages, and set how each one is calculated |
 | Results | Look at the results of a calculation |
 
-Click **Calculate** between Staged construction and Results.
+Click **Calculate** between Calculation settings and Results.
+
+The **Stage** list beside the tabs chooses the stage that **Soil**, **Structures**, **Flow
+conditions** and **Calculation settings** show. In the first three you switch parts and
+conditions on and off in that stage. In **Results** the list chooses the stage whose results
+are shown. In **Mesh** the list is grey: Kratos uses one mesh for all the stages, so every
+part is meshed, also a part that a stage switches off.
 
 ## Projects
 
@@ -229,8 +237,8 @@ draw, you can also type `x y` in the command box to place a point.
 
 Where a line crosses a soil layer or a soil surface from one edge to another, it becomes
 separate soil parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
-own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
-part off in its own stage. Select a part to rename it or to give it another material. A
+own row, for example *Soil_Top · Part 1*. You can switch each part off in its own stage:
+choose the stage in the **Stage** list, and clear the part's check box. Select a part to rename it or to give it another material. A
 part starts with its layer's material. Change the layer's material, in the **Soil layers**
 window or in the Selection explorer, and every part of that layer takes the new material,
 also a part you gave a material of its own.
@@ -411,12 +419,11 @@ a soil, not water that stands on the ground, so it adds no load. This is so what
 phreatic line is on; a phreatic line on a soil part puts its water on that part only. This
 is done for each stage, with the soil that the stage has, and the water always pushes on the
 soil or the wall. You do not draw this load. Where you drew a normal load yourself, your load is used
-there instead. The export notes say where the water was added. In **Staged construction**,
-the water standing on the ground in the selected stage is filled in light blue up to the
-phreatic line. Small light blue arrows press into the soil (longer where the water is
+there instead. The export notes say where the water was added. In **Flow conditions** and
+**Calculation settings**, the water standing on the ground in the stage chosen in the
+**Stage** list is filled in light blue up to the phreatic line. Small light blue arrows press into the soil (longer where the water is
 deeper), and the pressure where the water is deepest is shown, for example "p = 10000 Pa"
-under 1 m of water. **Flow conditions** shows the same for the model
-as built. The other tabs do not show it. In the Model explorer, a phreatic line with water on the ground has a
+under 1 m of water. The other tabs do not show it. In the Model explorer, a phreatic line with water on the ground has a
 **Water on the ground** row under it, which says in which stages. A 3D model does not add
 this load, and the export warns when the phreatic line is above the ground.
 
@@ -437,12 +444,15 @@ water from one stage to the next, see
 
 In the Model explorer, the check box of a condition shows if the condition is active. Clear
 it to keep the condition in the project but leave it out of the calculation. The check box
-of **Boundary conditions** switches all of them. In Staged construction mode, the check box
-of a water pressure condition is for the selected stage.
+of **Boundary conditions** switches all of them. In **Soil**, **Structures** and **Flow
+conditions**, the check box of a condition is for the stage chosen in the **Stage** list
+instead. To leave a condition out of the calculation, clear **Active** in the Selection
+explorer.
 
 Each tab shows the conditions that belong to it. **Soil**, **Structures** and **Mesh** show
 the supports. **Flow conditions** shows the water pressure conditions and the seepage faces,
-and not the supports. **Staged construction** shows both. Click a condition or the water level
+and not the supports. **Calculation settings** shows both. A condition that the chosen
+stage switches off is drawn faint. Click a condition or the water level
 to select it. A click a few pixels away from the line also selects it. To hide a condition,
 right-click its row in the Model explorer and select **Hide**. When you select a condition in
 the Model explorer, the viewport shows it in every tab until you select something else.
@@ -513,7 +523,7 @@ The phreatic line and the head lines are water pressures of the type **Phreatic 
 soil and type its points. Where it is drawn is only where it is: the phreatic line acts on
 every soil, and a head line on the soils that take it. A stage has one phreatic line on, and
 any number of head lines. To change the phreatic line in a later stage (a pit pumped dry),
-select that stage in **Staged construction** and then create the new phreatic line: it is
+choose that stage in the **Stage** list and then create the new phreatic line: it is
 switched off in the initial stage and on from the selected stage, and the phreatic line
 that was on there is switched off from that stage on. The status line names the stage.
 With the initial stage selected, a second phreatic line is refused. For a pressure on a line only, use a **Hydrostatic** condition on
@@ -630,7 +640,7 @@ To see the numbers of the nodes or the elements, right-click in the viewport and
 Results. The other tabs do not show the mesh, so they do not show the numbers. To show a part of the mesh in its own colour, type `colour <part>`. To see
 the parts that contain a node, type `node <id>`.
 
-## Staged construction mode
+## Stages and calculation settings
 
 A construction stage is one step of the calculation. In each stage, parts of the model are
 on (active) or off. A stage starts from the result of the stage before it.
@@ -643,7 +653,8 @@ on (active) or off. A stage starts from the result of the stage before it.
 
 A new project has one stage, the **Initial stage**. It chooses the calculation type and
 the stress initialisation of the whole sequence, and it cannot be deleted, nor can a stage
-be inserted before it. Click **Add stage** at the top of the Stages explorer to add the
+be inserted before it. Click the **Calculation settings** tab, then click **Add stage** at
+the top of the Stages explorer to add the
 other stages, for example one to install the wall and one for each excavation lift. A
 project saved without stages gets its initial stage from the first **Add stage**.
 
@@ -663,32 +674,39 @@ stage is selected, so you can set it up next.
 
 ### Switch parts on and off
 
-1. Select a stage in the Stages explorer.
-2. In the Model explorer, select or clear the check box of a part. Or right-click the part
+1. Click the **Soil**, **Structures** or **Flow conditions** tab.
+2. In the **Stage** list beside the tabs, choose the stage.
+3. In the Model explorer, select or clear the check box of a part. Or right-click the part
    in the viewport and click **Activate in** *stage* or **Deactivate in** *stage*.
 
 A click on a part in the viewport only selects it. A part that is switched off in the
-selected stage is shown faint, so you can right-click it to switch it on again.
+chosen stage is shown faint, so you can still draw against it, edit it, and right-click it
+to switch it on again. A tick in grey is a state the stage has from the stage before it.
+
+A part that is switched off is still meshed: Kratos uses one mesh for all the stages. So
+the **Mesh** tab shows every part, whatever the stage.
 
 The change is made in the selected stage only. The other stages keep what they had. A
 stage that you add later starts with the parts of the stage before it.
 
 ### Switch water conditions on and off
 
-A water pressure condition is on in every stage until a stage switches it off. In
-Staged construction mode, each water pressure condition under **Model conditions** →
-**Boundary conditions** has a check box for the selected stage, as a part has. For
+A water pressure condition is on in every stage until a stage switches it off. In the
+**Flow conditions** tab, each water pressure condition under **Model conditions** →
+**Boundary conditions** has a check box for the stage chosen in the **Stage** list, as a
+part has. Choose another stage to see which conditions are on in it. For
 example, to lower the water from a level at -1 m to a level at -6 m in stage 3:
 
 1. Add a second hydrostatic condition with its **Reference level** at -6 m. It is on in
    every stage.
-2. Select each stage before stage 3, and clear the check box of the -6 m condition.
-3. Select stage 3 and each stage after it, and clear the check box of the -1 m condition.
+2. Choose each stage before stage 3 in the **Stage** list, and clear the check box of the
+   -6 m condition.
+3. Choose stage 3 and each stage after it, and clear the check box of the -1 m condition.
 
 As for a part, a check box changes the selected stage only. A stage that you add later
 starts with the check boxes of the stage before it.
 
-The viewport shows the water conditions that the selected stage has on. A stage with no
+The viewport shows the water conditions that the chosen stage has on, and the others faint. A stage with no
 water condition on keeps the water pressures that the stage before it ended with, for a
 **Hydrostatic** or **Phreatic line** condition. A **Uniform** condition does not keep its
 values: after its stage, the water pressure of a soil that couples it to the deformation is
@@ -1008,7 +1026,7 @@ The other parts are outside the view, so they never cover the model:
 
 | Part | Where | When |
 |---|---|---|
-| Stage number and name | Above the view | Staged construction and Results |
+| Stage number and name | Above the view | Calculation settings and Results |
 | Rulers | Left and bottom of the view | 2D |
 | Axes | Below the view, at the left | When **Axes** is selected |
 | Field name, and its maximum and minimum value with the node or element | Below the view, in the middle | Results |
@@ -1030,7 +1048,7 @@ addresses **Copy picture** is grey.
 ### Save pictures to files
 
 1. Show what you want to save: for example, open the **Mesh** tab, or select a stage in the
-   **Staged construction** tab.
+   **Calculation settings** tab.
 2. Click the camera in the toolbar, or click **File** → **Save picture…**, or right-click in
    the viewport and click **Save picture…**.
 3. Set the options, then click **Save…**.
@@ -1062,7 +1080,7 @@ folder.
 
 ### Save every stage or field
 
-In the **Staged construction** tab, select **Every stage**. Each picture shows the stage with
+In the **Calculation settings** tab, select **Every stage**. Each picture shows the stage with
 its own active parts.
 
 To get one document, select **PDF** and **All pictures in one PDF file, one per page**. If you stop
