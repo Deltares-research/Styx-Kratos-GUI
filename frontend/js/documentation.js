@@ -18,7 +18,7 @@
 (function (App) {
   'use strict';
 
-  var SITE = 'https://ubiquitous-adventure-vo3qvvw.pages.github.io/';
+  var SITE = 'https://deltares-research.github.io/Styx-Kratos-GUI/';
 
   /* The pages the Help menu opens, as the site names them. */
   var PAGES = {

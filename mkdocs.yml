@@ -7,7 +7,7 @@
 site_name: Styx documentation
 # Where GitHub Pages publishes it. Help > Documentation in the GUI opens it
 # (frontend/js/documentation.js).
-site_url: https://ubiquitous-adventure-vo3qvvw.pages.github.io/
+site_url: https://deltares-research.github.io/Styx-Kratos-GUI/
 docs_dir: build/docs_site/pages
 site_dir: build/docs_site/site
 # Pages as USAGE.html, not USAGE/index.html: the links then also work when a reader opens

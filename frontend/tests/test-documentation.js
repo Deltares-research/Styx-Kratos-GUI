@@ -25,9 +25,9 @@
   }
 
   T.test('the home page and the GUI tutorials are pages of the published site', function () {
-    T.eq(D.url('home'), 'https://ubiquitous-adventure-vo3qvvw.pages.github.io/index.html');
+    T.eq(D.url('home'), 'https://deltares-research.github.io/Styx-Kratos-GUI/index.html');
     T.eq(D.url('tutorials'),
-         'https://ubiquitous-adventure-vo3qvvw.pages.github.io/docs/gui_tutorials/index.html');
+         'https://deltares-research.github.io/Styx-Kratos-GUI/docs/gui_tutorials/index.html');
   });
 
   T.test('a page it does not know opens the home page', function () {
