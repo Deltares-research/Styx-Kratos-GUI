@@ -367,6 +367,25 @@ class WaterPressure:
     initial: bool = False
 
 
+@dataclass(frozen=True)
+class Flux:
+    """One `FluxCondition` (core/model/schemas.py) with one of its values, resolved: the
+    part of its normal flux conditions, the water flowing into the soil there per unit
+    area of boundary (project units, positive in), and the key a stage switches it on by
+    (`Stage.conditions`) -- its id, or `<id>#<n>` for a value a stage gives it."""
+    part: str
+    inflow: float
+    condition: str = ""
+
+
+FLUX_INTO_SOIL = -1.0
+"""Kratos' `NORMAL_FLUID_FLUX` for water flowing into the soil at a unit rate. The flux
+conditions subtract `NORMAL_FLUID_FLUX` times the shape function from the water's
+right-hand side (`PwNormalFluxCondition`, `UPwNormalFluxCondition`): the boundary term of
+the water balance, the flux along the outward normal. So a positive nodal value lets
+water out, and water in takes it negative. Held by a run (tests/kratos/test_live_flux.py)."""
+
+
 def stage_name(index: int, label: str) -> str:
     """`1_Initial_stage`: the position in the sequence, then the stage's own name.
 
@@ -387,6 +406,7 @@ def project_parameters(
                            | tuple[str, str, float, float, float, PhreaticLine]] = (),
     *,
     water_pressures: Sequence[WaterPressure] = (),
+    fluxes: Sequence[Flux] = (),
     deck_name: str = "model",
     domain_size: int = 2,
     body_parts: Sequence[str] = (),
@@ -409,7 +429,8 @@ def project_parameters(
     `water_pressures` is the water pressure conditions, in the order they are written:
     start values first, so that where a fixed value acts on the same node it is the one
     that stays (see `_water_pressure`). The user's, and the writer's own pressure on the
-    soil surface under open water (`core.kratos.writer._wet_surface`).
+    soil surface under open water (`core.kratos.writer._wet_surface`). `fluxes` is the
+    prescribed fluxes (`Flux`), each written in the stages that have its key on.
 
     The keyword arguments are what the analysis block needs and the process lists do
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
@@ -439,25 +460,30 @@ def project_parameters(
             in normal_loads if keep(name)
         ]
         loads_processes += [_seepage(name) for name in stage.seepage]
+        loads_processes += [_normal_flux(flux.part, flux.inflow) for flux in fluxes
+                            if keep(flux.part) and _switched_on(stage, [flux.condition])]
         constraint_processes = [_constraint(name, is_fixed)
                                 for name, is_fixed, *of in constraints
                                 if keep(name) and _switched_on(stage, of)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
         # And it is in the stages whose stage has it switched on. An interpolated soil
-        # reads its pressure off the others, so it is on in the stages that have any.
+        # reads its pressure off the others, so it is on in the stages that have any --
+        # and, where it carries a key, that interpolate it.
         # A water line's start values are written where it comes on, not again in each
         # stage that keeps it: Kratos carries the pressure from stage to stage, and a
         # flow or coupled stage would lose what the one before made of it.
         watered = (stage.conditions is None
                    or any(pressure.condition in stage.conditions
-                          for pressure in water_pressures))
+                          for pressure in water_pressures
+                          if pressure.fluid_pressure_type != INTERPOLATE_LINE))
 
         def on(pressure: WaterPressure) -> bool:
             if pressure.part is not None and not keep(pressure.part):
                 return False
             if pressure.fluid_pressure_type == INTERPOLATE_LINE:
-                return watered
+                return watered and (not pressure.condition or stage.conditions is None
+                                    or pressure.condition in stage.conditions)
             return (not pressure.condition or stage.conditions is None
                     or pressure.condition in stage.conditions)
 
@@ -1097,6 +1123,26 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyNormalLoadTableProcess",
         "Parameters": parameters,
+    }
+
+
+def _normal_flux(part_name: str, inflow: float) -> dict:
+    """A prescribed flux (`schemas.FluxCondition`): Kratos' nodal `NORMAL_FLUID_FLUX` on
+    the nodes of the part's normal flux conditions, which read it there. Set, not fixed
+    -- it is no degree of freedom -- by the scalar process every Kratos GeoMechanics deck
+    sets a nodal value with, as the GiD problem type writes a "Normal fluid flux". In
+    `FLUX_INTO_SOIL`'s sign."""
+    return {
+        "python_module": "apply_scalar_constraint_table_process",
+        "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+        "process_name": "ApplyScalarConstraintTableProcess",
+        "Parameters": {
+            "model_part_name": f"PorousDomain.{part_name}",
+            "variable_name": "NORMAL_FLUID_FLUX",
+            "is_fixed": False,
+            "value": FLUX_INTO_SOIL * inflow,
+            "table": 0,
+        },
     }
 
 

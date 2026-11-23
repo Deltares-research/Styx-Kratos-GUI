@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from core.model import stages
-from core.model.schemas import (INTERPOLATE, SECTION_FACES, DisplacementCondition,
+from core.model.schemas import (DRY, INTERPOLATE, SECTION_FACES, DisplacementCondition,
                                 Material, Stage, Project, SeepageCondition,
                                 WaterPressureCondition)
 
@@ -84,8 +84,8 @@ def written(project: Project, condition) -> bool:
 
 def noun(condition) -> str:
     """`condition`, as a warning names it."""
-    kind = {"water_pressure": "water pressure", "seepage": "seepage"}.get(
-        condition.kind, "displacement")
+    kind = {"water_pressure": "water pressure", "seepage": "seepage",
+            "flux": "flux"}.get(condition.kind, "displacement")
     return f"{kind} condition {condition.name!r}"
 
 
@@ -94,6 +94,9 @@ def _left_out(project: Project, condition) -> str | None:
     if condition.on in ("line", "point") and project.dimension != 2:
         return (f"{noun(condition)} is on a {condition.on}, which is drawn in the 2D "
                 "section; this 3D deck leaves it out.")
+    if condition.kind == "flux" and project.dimension != 2:
+        return (f"{noun(condition)} is left out: a prescribed flux is written on the edges "
+                "of a 2D section only, and this deck is 3D.")
     if condition.on == "face" and project.dimension == 2 \
             and condition.face not in SECTION_FACES:
         return (f"{noun(condition)} is on the {condition.face} face, which this 2D model "
@@ -200,12 +203,10 @@ def _free_water_in_stages(project: Project) -> list[str]:
         order = stages.linearise(project)
     except stages.StageError:
         return []
-    fixed = [c for c in pressures if c.is_fixed]
     kept = False
     out: list[str] = []
     for stage in order:
-        on = stages.active_parts(project, stage)
-        now = [c for c in fixed if c.id in on]
+        now = _fixed_in(project, stage)
         if not now and not kept and not _wetting(project, stage):
             out.append(
                 f"in stage {stage.name!r} no fixed water pressure condition is on and "
@@ -281,15 +282,25 @@ def _unheld_flow_stage(project: Project) -> Stage | None:
         order = stages.linearise(project)
     except stages.StageError:
         return None
-    fixed = [c for c in _water_pressures(project) if c.is_fixed]
     kept = False
     for stage in order:
-        on = stages.active_parts(project, stage)
-        now = [c for c in fixed if c.id in on]
+        now = _fixed_in(project, stage)
         if not now and not kept and not _wetting(project, stage):
             return stage
         kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
     return None
+
+
+def _fixed_in(project: Project, stage: Stage) -> list[WaterPressureCondition]:
+    """The fixed water pressures `stage` has on, with the values it gives them, and a
+    fixed zero for each soil that is dry in it (`schemas.DRY`), as the deck writes one."""
+    water = stages.water_in(project, stage)
+    now = [c for c in water.conditions.values()
+           if isinstance(c, WaterPressureCondition) and c.is_fixed and written(project, c)]
+    if DRY in water.soil_water.values():
+        now.append(WaterPressureCondition(id="dry_soil", name="dry soil", on="domain",
+                                          fluid_pressure_type="Uniform", value=0.0))
+    return now
 
 
 def _left_out_of_flow(project: Project) -> list[str]:
@@ -384,24 +395,30 @@ def _surface_water_in_3d(project: Project) -> list[str]:
 def _wetting(project: Project, stage: Stage) -> bool:
     """Whether the phreatic line `stage` has on stands above its ground, which makes the
     deck fix the pressure on the wet surface (`core.kratos.writer._wet_surface`)."""
-    on = stages.active_parts(project, stage)
-    lines = [c for c in project.phreatic_lines()
-             if written(project, c) and not c.is_fixed and c.id in on]
-    return bool(lines) and any(above_ground(project, c, _dug(project, stage))
-                               for c in lines)
+    line = stages.water_in(project, stage).phreatic
+    return (line is not None and written(project, line) and not line.is_fixed
+            and above_ground(project, line, _dug(project, stage)))
 
 
 def _soil_water(project: Project) -> list[str]:
-    """A head line acts only on the soils that take it, so one that none takes acts
+    """A head line acts only on the soils that take it, so one that none takes -- in the
+    model as built or in any stage -- and that no stage makes its phreatic line acts
     nowhere; an interpolated soil in a 3D model takes the phreatic line, as Kratos
     interpolates in a vertical section only."""
     taken = set(project.water_of_bodies().values())
+    for stage in project.stages:
+        taken |= set(stage.soil_water.values())
+        if stage.phreatic_line is not None:
+            taken.add(stage.phreatic_line)
     out = [f"{noun(c)} is a head line, which acts only on the soils that take it, and no "
            "soil does: give it to a soil in Soil water, or remove it."
            for c in project.head_lines() if written(project, c) and c.id not in taken]
     if project.dimension != 2 and INTERPOLATE in taken:
-        interpolated = sorted(key for key, water in project.soil_water.items()
-                              if water == INTERPOLATE)
+        interpolated = sorted({key for key, water in project.soil_water.items()
+                               if water == INTERPOLATE}
+                              | {key for stage in project.stages
+                                 for key, water in stage.soil_water.items()
+                                 if water == INTERPOLATE})
         out.append("the water of " + ", ".join(interpolated) + " is interpolated, which "
                    "Kratos does in a 2D section only; this 3D deck gives them the "
                    "phreatic line.")

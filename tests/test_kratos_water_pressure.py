@@ -298,6 +298,26 @@ def test_a_pressure_at_a_point_holds_the_one_node_there(every_target):
     assert deck.nodes[node][:2] == pytest.approx((10.0, -12.0))
 
 
+def test_a_point_drawn_a_hair_off_the_ground_holds_the_node_on_the_ground(gmsh_session):
+    """The GUI snaps a point onto the ground as its rounded sections show it, so it can be
+    micrometres above the real surface: it is put on the surface, not left in the air."""
+    export = writer.export_project(section([
+        condition("well", on="point", fluid_pressure_type="Uniform", value=-1.0,
+                  points=[[10.0, 3e-5]]),
+    ]), MESH)
+    deck = mdpa.parse(export["mdpa"])
+    [node] = deck.parts["well"].nodes
+    assert deck.nodes[node][:2] == pytest.approx((10.0, 0.0), abs=1e-9)
+
+
+def test_a_point_well_above_the_ground_still_has_no_mesh(gmsh_session):
+    with pytest.raises(writer.ExportError, match="has no mesh at its point"):
+        writer.export_project(section([
+            condition("well", on="point", fluid_pressure_type="Uniform", value=-1.0,
+                      points=[[10.0, 0.5]]),
+        ]), MESH)
+
+
 def test_a_face_the_section_does_not_have_is_left_out_with_a_warning(every_target):
     assert len(water_processes(every_target)) == 5
     assert any("'front_head' is on the front face" in w

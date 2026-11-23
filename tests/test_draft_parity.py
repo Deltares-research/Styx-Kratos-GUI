@@ -63,10 +63,14 @@ def projects() -> dict:
     solid = seed_project()
     wall = drafts.wall(solid)
     member = drafts.member(solid)
+    dry = section.model_copy(update={"water": None, "boundary_conditions": []})
     return {
         "section": section,
         "section_kn": section_kn,
-        "dry": section.model_copy(update={"water": None, "boundary_conditions": []}),
+        "dry": dry,
+        # One water line drawn already: the next is a head line.
+        "lined": dry.model_copy(update={"boundary_conditions": [
+            drafts.water_line(dry, [(0, -1), (25, -1)])]}),
         "section_pile_kn": section_pile_kn,
         "section_tall_pile": section_tall_pile,
         "pile": excavation_project(staged=False),
@@ -257,6 +261,30 @@ def calls(models: dict) -> list[dict]:
          "section", ["domain", {}], lambda p: drafts.seepage_condition(p, "domain"))
     call("a seepage line in the solid model is refused", "BoundaryConditions.draftSeepage",
          "solid", ["line", {}], lambda p: drafts.seepage_condition(p, "line"))
+    call("a flux on the top face", "BoundaryConditions.draftFlux", "section",
+         ["face", {"face": "top", "value": 2e-6}],
+         lambda p: drafts.flux_condition(p, "face", face="top", value=2e-6))
+    call("a flux line drawn", "BoundaryConditions.draftFlux", "section",
+         ["line", {"points": [[0, 0], [10, 0]], "name": "Rain", "value": 1e-6}],
+         lambda p: drafts.flux_condition(p, "line", points=[(0, 0), (10, 0)], name="Rain",
+                                         value=1e-6))
+    call("a flux line down the right side", "BoundaryConditions.draftFlux", "section",
+         ["line", {}], lambda p: drafts.flux_condition(p, "line"))
+    call("a flux on a part is refused", "BoundaryConditions.draftFlux", "section",
+         ["part", {}], lambda p: drafts.flux_condition(p, "part"))
+    call("a flux line in the solid model is refused", "BoundaryConditions.draftFlux",
+         "solid", ["line", {}], lambda p: drafts.flux_condition(p, "line"))
+    call("the first water line is the phreatic line", "BoundaryConditions.draftWaterLine",
+         "dry", [[[25, -2], [0, -1], [10, -3]], {}],
+         lambda p: drafts.water_line(p, [(25, -2), (0, -1), (10, -3)]))
+    call("the next water line is a head line", "BoundaryConditions.draftWaterLine",
+         "lined", [[[0, 2], [25, 4]], {"name": "Aquifer"}],
+         lambda p: drafts.water_line(p, [(0, 2), (25, 4)], name="Aquifer"))
+    call("a water line with two levels at one x is refused",
+         "BoundaryConditions.draftWaterLine", "dry", [[[5, -1], [5, -3]], {}],
+         lambda p: drafts.water_line(p, [(5, -1), (5, -3)]))
+    call("a water line of one point is refused", "BoundaryConditions.draftWaterLine",
+         "dry", [[[5, -1]], {}], lambda p: drafts.water_line(p, [(5, -1)]))
     call("the standard supports, with ids no condition has",
          "BoundaryConditions.standardConditions", "section", [],
          drafts.standard_conditions)
@@ -520,6 +548,7 @@ def test_every_structure_tool_is_called():
                       "Loads.draftFromPoints", "Loads.draftSurface",
                       "BoundaryConditions.draftDisplacement",
                       "BoundaryConditions.draftWaterPressure",
+                      "BoundaryConditions.draftFlux", "BoundaryConditions.draftWaterLine",
                       "BoundaryConditions.standardConditions"}
 
 

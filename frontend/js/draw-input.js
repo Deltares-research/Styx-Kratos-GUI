@@ -74,8 +74,12 @@ App.DrawInput = (function () {
     
     // A line or an outline a tool asked for (a boundary condition's, or the corners
     // of a soil surface) goes to that tool, not into a drawn solid: the points are
-    // what it wants.
+    // what it wants. A tool that takes one point as well as a line (`minPoints: 1`, the
+    // flow boundary condition's) finishes on a single click.
     var wanted = { line: 2, polygon: 3 }[activeMode];
+    if (activeMode === 'line' && activeOptions && activeOptions.minPoints > 0) {
+      wanted = activeOptions.minPoints;
+    }
     if (wanted && activeOptions && activeOptions.onComplete && vertices.length >= wanted) {
       var drawn = vertices.slice();
       var done = activeOptions.onComplete;
@@ -160,6 +164,14 @@ App.DrawInput = (function () {
     return Math.round(Math.round(value / step) * step * 1e6) / 1e6;
   }
 
+  /* `p` ({x, y}) moved by the tool's `snapPoint`, with the snapping distance `step`
+     (null with snapping off). */
+  function onTarget(p, step) {
+    var snapped = activeOptions.snapPoint([p.x, p.y], step);
+    if (snapped) { p.x = snapped[0]; p.y = snapped[1]; }
+    return p;
+  }
+
   function getIntersection(ev) {
     var r = canvas.getBoundingClientRect();
     pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
@@ -181,9 +193,15 @@ App.DrawInput = (function () {
       plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -project.domain.y_top);
     }
     if (raycaster.ray.intersectPlane(plane, p)) {
-      if (App.state && App.state.snap) {
-        // Snap to a grid of the status bar's snapping distance (1 m when unset).
-        var step = App.state.snapDistance > 0 ? App.state.snapDistance : 1;
+      // The status bar's snapping distance when snapping is on (1 m when unset).
+      var step = App.state && App.state.snap
+        ? (App.state.snapDistance > 0 ? App.state.snapDistance : 1) : null;
+      if (activeOptions && activeOptions.snapPoint) {
+        // A tool that draws on something -- a flow boundary condition on the soil's
+        // boundary (js/boundary-conditions.js) -- moves the pointer onto it, and snaps
+        // along it itself: a point snapped to the grid first would leave a sloping side.
+        onTarget(p, step);
+      } else if (step) {
         p.x = snapTo(p.x, step);
         p.y = snapTo(p.y, step);
         p.z = snapTo(p.z, step);
@@ -240,6 +258,11 @@ App.DrawInput = (function () {
       var y = parseFloat(parts[1]);
       var z = parts.length > 2 ? parseFloat(parts[2]) : 0;
       if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+        if (activeOptions && activeOptions.snapPoint) {
+          // Onto what the tool draws on, as a click is; a typed point is not rounded.
+          var typed = onTarget({ x: x, y: y }, null);
+          x = typed.x; y = typed.y;
+        }
         vertices.push([x, y, z]);
         if (App.Command) App.Command.note('Placed vertex at ' + x + ', ' + y + ', ' + z);
         
@@ -291,14 +314,24 @@ App.DrawInput = (function () {
       if (child.material) child.material.dispose();
     }
     
+    // A tool that snaps the pointer onto something marks where a click would land, from
+    // before the first click on: the point it is moved to is not under the pointer.
+    if (activeMode && cursorPt && activeOptions && activeOptions.snapPoint) {
+      var marker = new THREE.Mesh(new THREE.SphereGeometry(0.2),
+                                  new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+      marker.position.set(cursorPt[0], cursorPt[1], cursorPt[2]);
+      marker.userData.snapMarker = true;
+      previewGroup.add(marker);
+    }
+
     if (!activeMode || vertices.length === 0) {
       App.Viewport.resize(); // trigger render
       return;
     }
-    
+
     var pts = vertices.slice();
     if (cursorPt) pts.push(cursorPt);
-    
+
     var material = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2 });
     var pMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
     

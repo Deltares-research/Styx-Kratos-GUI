@@ -595,6 +595,7 @@ App.Model = (function () {
   function conditionProps(record) {
     var support = record.kind === 'displacement';
     var seepage = record.kind === 'seepage';
+    var flux = record.kind === 'flux';
     var where = record.on === 'domain' ? 'Whole soil'
       : record.on === 'face' ? 'Face: ' + record.face
       : record.on === 'part' ? 'Part: ' + record.part
@@ -602,8 +603,8 @@ App.Model = (function () {
         + (record.points || []).map(function (p) { return fixed(p[0]) + ' ' + fixed(p[1]); })
           .join(', ');
     var general = [
-      ['Condition', support ? 'Support' : seepage ? 'Seepage face' : 'Water pressure', '',
-       true],
+      ['Condition', support ? 'Support' : seepage ? 'Seepage face' : flux ? 'Flux'
+        : 'Water pressure', '', true],
       ['Where', where, '', true],
       ['Active', record.active !== false ? 'Yes' : 'No', '', false,
        yesNo(function () { return record.active !== false; },
@@ -628,6 +629,12 @@ App.Model = (function () {
       });
     } else if (seepage) {
       what.push(['', 'Water may leave the soil here, in a groundwater flow calculation.',
+                 '', true]);
+    } else if (flux) {
+      var rate = 'm/' + (App.Units.label('time') || 's');
+      what.push(['Flux', String(record.value), rate, false,
+                 conditionNumberEditor(record, 'value', rate)]);
+      what.push(['', 'Water flowing into the soil per unit area; negative flows out.',
                  '', true]);
     } else {
       var stress = App.Units.label('stress');

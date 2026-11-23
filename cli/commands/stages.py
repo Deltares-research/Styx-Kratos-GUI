@@ -19,6 +19,18 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
                        after it keep what they had -- with the smallest instruction that
                        does it, as the explorer's checkbox. A stage added later starts
                        with the state of the stage it follows.
+    water ID           the stage's water: its phreatic line, each soil's water and the
+                       values it gives its conditions; --phreatic-line LINE makes a
+                       water line its phreatic line, every other one a head line there
+    soil-water ID SOIL WATER
+                       the water a soil takes in the stage: a water line, interpolate,
+                       dry, phreatic, or inherit for the stage before's
+    value ID CONDITION a condition's value in the stage: --value, --reference-coordinate,
+                       --phreatic-line, --pressure-tension-cut-off, or --inherit
+                       for the stage before's
+
+Like activate, each water edit is the stage's alone: the stages after it keep the water
+they had, and a stage added later starts with the water of the stage it follows.
 
 A sequence that would branch, or a part the model does not have, is refused. So is
 --reset-displacements or --keep-displacements on a flow stage, which has no
@@ -40,10 +52,15 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import NAME_HELP, existing, file_of, given, id_and_name, id_help, named_ids
+from cli.terminal.words import (NAME_HELP, coordinates, existing, file_of, given,
+                                id_and_name, id_help, named_ids)
 from core import session
 from core.model import solver, stages, units
-from core.model.schemas import Project
+from core.model.schemas import DRY, INTERPOLATE, PHREATIC, STAGE_VALUES, Project
+
+INHERIT = "inherit"
+"""What `stages water --phreatic-line`, `soil-water` and `value --inherit` say for what the
+stage before has."""
 
 CALCULATIONS = {"mechanical": "mechanical", "upw": "mechanical", "u_pw": "mechanical",
                 "flow": stages.FLOW, "pw": stages.FLOW, "groundwater flow": stages.FLOW,
@@ -117,6 +134,46 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                             help="part keys, as `kratos-cli parts` lists them")
         add_writing(switch)
         switch.set_defaults(handler=switch_parts, wanted=wanted)
+
+    water = actions.add_parser("water", parents=[common],
+                               help="a stage's water: its phreatic line, each soil's water "
+                                    "and its conditions' values")
+    existing(water, "stage", "stages")
+    water.add_argument("--phreatic-line", metavar="LINE",
+                       help="the water line that is the phreatic line from this stage, "
+                            f"every other one a head line there; {INHERIT} for the stage "
+                            "before's")
+    add_writing(water)
+    water.set_defaults(handler=stage_water)
+
+    soil = actions.add_parser("soil-water", parents=[common],
+                              help="the water a soil takes from a stage")
+    existing(soil, "stage", "stages")
+    soil.add_argument("soil", metavar="SOIL",
+                      help="a soil, as `parts` lists it: a layer soil_<id> with all its "
+                           "pieces, one body, or a custom part with a material")
+    soil.add_argument("water", metavar="WATER",
+                      help=f"a water line's id, {INTERPOLATE}, {DRY}, phreatic, or "
+                           f"{INHERIT} for the stage before's")
+    add_writing(soil)
+    soil.set_defaults(handler=stage_soil_water)
+
+    value = actions.add_parser("value", parents=[common],
+                               help="a condition's value from a stage")
+    existing(value, "stage", "stages")
+    value.add_argument("condition", metavar="CONDITION",
+                       help="a water pressure or a flux, as `boundary list` lists it")
+    value.add_argument("--value", type=float,
+                       help="a uniform water pressure's (its stress), or a flux's rate")
+    value.add_argument("--reference-coordinate", type=float, metavar="Y",
+                       help="a hydrostatic water pressure's level, in metres")
+    value.add_argument("--phreatic-line", nargs="+", metavar="N",
+                       help="a phreatic or head line's points, x y x y ..., x increasing")
+    value.add_argument("--pressure-tension-cut-off", type=float, metavar="STRESS")
+    value.add_argument("--inherit", action="store_true",
+                       help="the values of the stage before")
+    add_writing(value)
+    value.set_defaults(handler=stage_value)
 
 
 def _choice(words: dict[str, str], what: str, use: str):
@@ -217,6 +274,7 @@ def show_stage(args: argparse.Namespace) -> Answer:
         lines.append("  switches on: " + ", ".join(stage.activate))
     if stage.deactivate:
         lines.append("  switches off: " + ", ".join(stage.deactivate))
+    lines += water_lines(project, stage.id)
     rows = _solver_rows(project, stage)
     lines.append("  expert solver settings (* set on this stage; --solver KEY=VALUE "
                  "changes one):")
@@ -274,6 +332,91 @@ def update_stage(args: argparse.Namespace) -> Answer:
 def remove_stage(args: argparse.Namespace) -> Answer:
     project = session.remove_stage(read(args), args.id)
     return _edited(args, project, f"removed stage {args.id}")
+
+
+def water_lines(project: Project, id: str) -> list[str]:
+    """The water of stage `id`, as `stages show` and `stages water` print it: its
+    phreatic line and head lines, each soil that takes a water of its own, and the values
+    the stage gives its conditions -- each marked * where the stage itself says it."""
+    stage = session.find_stage(project, id)
+    water = stages.water_in(project, id)
+    own = " *" if stage.phreatic_line is not None else ""
+    lines = ["  phreatic line: " + (f"{water.phreatic.name} ({water.phreatic.id}){own}"
+                                   if water.phreatic is not None else "none")]
+    heads = water.head_lines()
+    if heads:
+        lines.append("  head lines: " + ", ".join(f"{line.name} ({line.id})"
+                                                  for line in heads))
+    for soil, taken in water.soil_water.items():
+        said = {INTERPOLATE: "interpolated", DRY: "dry"}.get(taken, f"head line {taken}")
+        lines.append(f"  soil {soil}: {said}" + (" *" if soil in stage.soil_water else ""))
+    for condition, fields in stages.stage_values(project, id).items():
+        given_here = stage.condition_values.get(condition, {})
+        lines.append(f"  {condition}: " + ", ".join(
+            f"{field} = {value}" + (" *" if field in given_here else "")
+            for field, value in fields.items()))
+    return lines
+
+
+def stage_water(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    session.find_stage(project, args.id)
+    if args.phreatic_line is not None:
+        line = None if args.phreatic_line == INHERIT else args.phreatic_line
+        project = session.set_stage_phreatic(project, args.id, line)
+        answer = _edited(args, project,
+                         f"stage {args.id} has the phreatic line of the stage before"
+                         if line is None else
+                         f"{line} is the phreatic line from stage {args.id}")
+    else:
+        answer = Answer(data={}, lines=[])
+    water = stages.water_in(project, args.id)
+    edited_data = answer.data if isinstance(answer.data, dict) else {}
+    answer.data = {**edited_data, "stage": args.id, "water": {
+        "phreatic_line": water.phreatic.id if water.phreatic is not None else None,
+        "soil_water": water.soil_water,
+        "condition_values": stages.stage_values(project, args.id)}}
+    answer.lines += water_lines(project, args.id)
+    return answer
+
+
+def stage_soil_water(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    water = {INHERIT: None, "phreatic": PHREATIC}.get(args.water, args.water)
+    project = session.set_stage_soil_water(project, args.id, args.soil, water)
+    did = (f"soil {args.soil} takes the water of the stage before in stage {args.id}"
+           if water is None else
+           f"soil {args.soil} takes the phreatic line from stage {args.id}"
+           if water == PHREATIC else
+           f"soil {args.soil} is {water} from stage {args.id}" if water in (DRY,
+                                                                           INTERPOLATE)
+           else f"soil {args.soil} takes head line {water} from stage {args.id}")
+    answer = _edited(args, project, did)
+    answer.lines += water_lines(project, args.id)
+    return answer
+
+
+def stage_value(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    fields = given(args, "value", "reference_coordinate", "pressure_tension_cut_off")
+    if args.phreatic_line is not None:
+        points = coordinates(args.phreatic_line, 2, "--phreatic-line")
+        fields.update({"x_coordinates": [x for x, _ in points],
+                       "y_coordinates": [y for _, y in points]})
+    if args.inherit and fields:
+        raise CommandError("--inherit takes the stage before's values; give no value with "
+                           "it")
+    if not args.inherit and not fields:
+        kinds = ", ".join(f"{kind.replace('_', ' ')}: {', '.join(names)}"
+                          for kind, names in STAGE_VALUES.items())
+        raise CommandError(f"give a value, or --inherit; a stage can change ({kinds})")
+    project = session.set_stage_values(project, args.id, args.condition,
+                                       None if args.inherit else fields)
+    did = (f"{args.condition} has the values of the stage before in stage {args.id}"
+           if args.inherit else f"{args.condition} changed from stage {args.id}")
+    answer = _edited(args, project, did)
+    answer.lines += water_lines(project, args.id)
+    return answer
 
 
 def switch_parts(args: argparse.Namespace) -> Answer:

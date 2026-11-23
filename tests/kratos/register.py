@@ -71,6 +71,12 @@ REGISTER = [
      "what": "Kratos is unit-agnostic: a deck in kN, m, t, s",
      "status": "closed", "evidence": "test_live_units: the test model in SI and in kN "
      "agree x1000 at every node and Gauss point"},
+    {"id": "R17", "where": "kratos/parameters._normal_flux / writer.FLUX_CONDITIONS",
+     "what": "prescribed flux: the PwNormalFlux / UPwNormalFlux conditions, NORMAL_FLUID_FLUX "
+     "set by the scalar process, and its sign (FLUX_INTO_SOIL)",
+     "status": "open", "evidence": "the condition names and their nodal NORMAL_FLUID_FLUX "
+     "read are Kratos master's source; test_live_flux (written, not yet run) holds the "
+     "process and that a positive user flux puts water in"},
     {"id": "K1", "where": "solver settings newmark_*", "what": "Kratos defaults used",
      "status": "closed", "evidence": "wall curves validated outside this repository "
      "against Kratos' own reference results, without them"},

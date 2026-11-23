@@ -64,14 +64,16 @@ STAGES = [
     {"id": "null_step", "name": "Null step", "parent": "initial"},
     {"id": "build_wall", "name": "Wall installation", "parent": "null_step",
      "activate": ["pile", "load"], "reset_displacements": True},
+    # The water a stage gives: the low line its phreatic line from the first dig on.
     {"id": "dig_1", "name": "Dig to -2.0 m", "parent": "build_wall",
-     "activate": ["soil_L1__lift1"], "deactivate": ["soil_L1"]},
+     "activate": ["soil_L1__lift1"], "deactivate": ["soil_L1"], "phreatic_line": "low"},
     {"id": "prop", "name": "Strut installation", "parent": "dig_1",
-     "activate": ["tie"]},
+     "activate": ["tie"], "soil_water": {"soil_L2": "dry"}},
     # Re-activates a part an earlier stage switched off -- the case a "last write wins"
     # reading of the chain gets wrong.
     {"id": "dig_2", "name": "Dig to -5.0 m", "parent": "prop",
-     "activate": ["soil_L1__lift2", "soil_L1"], "deactivate": ["soil_L1__lift1"]},
+     "activate": ["soil_L1__lift2", "soil_L1"], "deactivate": ["soil_L1__lift1"],
+     "soil_water": {"soil_L2": ""}, "condition_values": {"clay": {"value": -25.0}}},
     # Changes nothing: `soil_L1__lift1` is already off. Stages accumulate no-ops
     # through ordinary editing, and both sides have to shrug at them identically. Its
     # own convergence criterion is one a copy carries and a flow sequence replaces.
@@ -110,6 +112,17 @@ def _project() -> schemas.Project:
                                                         variables={}).model_dump()]
     payload["anchors"] = [{"id": "tie", "name": "Tie", "section": "t",
                            "head": (5.0, -1.0), "tail": (3.0, -1.0)}]
+    # The water: the phreatic line, a lower line the soils can take as a head line, and
+    # a uniform pressure on a soil. The aquifer takes the low line as built.
+    line = {"kind": "water_pressure", "on": "domain", "x_coordinates": [-100.0, 100.0]}
+    payload["boundary_conditions"] += [
+        {**line, "id": "high", "name": "High", "fluid_pressure_type": "Phreatic_Multi_Line",
+         "y_coordinates": [-1.0, -1.0]},
+        {**line, "id": "low", "name": "Low", "fluid_pressure_type": "Head_Line",
+         "y_coordinates": [-6.0, -6.0]},
+        {"id": "clay", "name": "Clay", "kind": "water_pressure", "on": "part",
+         "part": "soil_L2", "fluid_pressure_type": "Uniform", "value": -10.0}]
+    payload["soil_water"] = {"soil_L3": "low"}
     payload["stages"] = STAGES
     return schemas.Project.model_validate(payload)
 
@@ -142,6 +155,14 @@ EDITS = [
     ("editedSolver", ["dig_1", "strategy_type", "line_search"]),
     ("editedSolver", ["settle", "linear_solver_type", "bicgstab"]),
     ("editedSolver", ["settle", "strategy_type", None]),
+    # The water a stage gives, each its stage's alone: the stage after is pinned to what
+    # it had where the edit would change it.
+    ("setPhreaticLine", ["null_step", "low"]),
+    ("setPhreaticLine", ["dig_1", None]),
+    ("setSoilWater", ["build_wall", "soil_L1", "dry"]),
+    ("setSoilWater", ["prop", "soil_L2", None]),
+    ("setValues", ["build_wall", "clay", {"value": -15.0}]),
+    ("setValues", ["dig_2", "clay", None]),
 ]
 """The Stages toolbar's edits, the Model explorer's checkbox and the property grid, each
 called on the project by its JavaScript name with these arguments after it. The roots
@@ -151,7 +172,18 @@ initial stage because the calculation type and the stress initialisation are its
 PYTHON_EDITS = {"added": stages.added, "inserted": stages.inserted,
                 "removed": stages.removed, "copied": stages.copied,
                 "setActive": stages.set_active, "edited": stages.edited,
-                "editedSolver": stages.edited_solver}
+                "editedSolver": stages.edited_solver,
+                "setPhreaticLine": stages.set_phreatic_line,
+                "setSoilWater": stages.set_soil_water, "setValues": stages.set_values}
+
+
+def _water(project: schemas.Project, stage: str | None) -> dict:
+    """What `stages.water_in` says of `stage`: its phreatic line, its soils' water, and
+    the values it gives its conditions."""
+    water = stages.water_in(project, stage)
+    return {"phreatic": water.phreatic.id if water.phreatic is not None else None,
+            "soil_water": water.soil_water,
+            "values": stages.stage_values(project, stage)}
 
 
 def build() -> dict:
@@ -166,6 +198,8 @@ def build() -> dict:
         "active_parts": {stage.id: sorted(stages.active_parts(project, stage.id))
                          for stage in project.stages},
         "order": [stage.id for stage in stages.linearise(project)],
+        "water_in": {"as_built": _water(project, None),
+                     **{stage.id: _water(project, stage.id) for stage in project.stages}},
     }
 
 

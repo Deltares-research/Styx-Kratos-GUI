@@ -22,7 +22,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
-                      computed_field, field_validator, model_serializer, model_validator)
+                      ValidationError, computed_field, field_validator, model_serializer,
+                      model_validator)
 
 from core.model import migration, polylines, regions, soil_models, solver, units
 
@@ -1246,12 +1247,43 @@ INTERPOLATE = "interpolate"
 """What `Project.soil_water` says for a soil whose water pressure is interpolated between
 the pressures of the soils above and below it: Kratos' `Interpolate_Line`."""
 
+DRY = "dry"
+"""What `Project.soil_water` says for a dry soil: no water in its pores, its water
+pressure held at zero in every stage it is dry (a fixed `Uniform` 0 on its nodes). In a
+groundwater flow stage a dry soil next to a wet one is a region of atmospheric pressure,
+which the water around it may drain into."""
+
+PHREATIC = ""
+"""What `Stage.soil_water` says for a soil that goes back to the phreatic line from that
+stage on: the empty string, which no condition's id can be. `Project.soil_water` has no
+need of it: a soil it does not name takes the phreatic line; a stage's missing entry
+means "as the stage before"."""
+
+SOIL_WATERS = (INTERPOLATE, DRY)
+"""The waters a soil can take that are no water line (`Project.soil_water`)."""
+
+RESERVED_IDS = (INTERPOLATE, DRY)
+"""What a soil's water can say that is no water line's id, so no water line may be called
+(`Project.water_lines`, which a soil's water names). No condition at all may be called
+`INTERPOLATE`, as before a water line could be told from another condition; `DRY` came
+later, and a condition called "dry" -- the Uniform 0 a dry model was told to add -- that
+is no water line keeps its name."""
+
 TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
 one node, Kratos keeps the value written last, so the more specific target wins."""
 
-STAGED_CONDITIONS = ("displacement", "water_pressure", "seepage")
+STAGED_CONDITIONS = ("displacement", "water_pressure", "seepage", "flux")
 """The boundary condition kinds a stage switches on and off (`Project.stageable_keys`)."""
+
+STAGE_VALUES = {
+    "water_pressure": ("value", "reference_coordinate", "x_coordinates", "y_coordinates",
+                       "z_coordinates", "pressure_tension_cut_off"),
+    "flux": ("value",),
+}
+"""The fields of a condition a stage may give a value of its own (`Stage.condition_values`),
+by kind: its numbers, never what it is or where it acts. A seepage face and a support have
+none."""
 
 
 class WaterPressureCondition(Base):
@@ -1364,8 +1396,8 @@ class WaterPressureCondition(Base):
                              "points of the line (x_coordinates and y_coordinates)")
         return self
 
-def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition,
-                  noun: str) -> None:
+def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition
+                  | FluxCondition, noun: str) -> None:
     """`on` and the one field it names, and none of the others: the target check both
     kinds of condition share."""
     named = {"face": record.face, "part": record.part, "points": record.points}
@@ -1477,7 +1509,44 @@ class SeepageCondition(Base):
         return self
 
 
-AnyCondition = DisplacementCondition | WaterPressureCondition | SeepageCondition
+class FluxCondition(Base):
+    """A prescribed flux: water flowing into the soil through a stretch of its outer
+    boundary at a given rate -- rain on the crest, a recharge, or a pumped outflow.
+
+    `value` is a discharge per unit area of the boundary (a velocity), in the project's
+    length over its time (`core.model.units`): positive flows into the soil, negative out
+    of it. The deck writes a normal flux condition on each mesh edge of the target --
+    `PwNormalFluxCondition2D2N` in a groundwater flow deck, `UPwNormalFluxCondition2D2N`
+    in a coupled one (`2D3N` in a quadratic mesh) -- and sets Kratos' nodal
+    `NORMAL_FLUID_FLUX` on them (`core/kratos/parameters.py:_normal_flux`).
+
+    The target is `on` and the field it names, as for a `SeepageCondition`: the face
+    `face`, or the polyline `points` drawn along the soil's outer boundary in the 2D
+    section. A line through the soil is refused at export. A 3D export leaves it out with
+    a warning. A stage switches it on and off, and may give it a value of its own
+    (`Stage.condition_values`).
+    """
+    id: Ident
+    name: str
+    kind: Literal["flux"] = "flux"
+    on: SeepageTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    value: float = 0.0
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> FluxCondition:
+        noun = f"flux condition {self.id!r}"
+        _check_target(self, noun)
+        if not math.isfinite(self.value):
+            raise ValueError(f"{noun} has a non-finite value")
+        return self
+
+
+AnyCondition = (DisplacementCondition | WaterPressureCondition | SeepageCondition
+                | FluxCondition)
 """Any one boundary condition, for a type annotation (`BoundaryCondition` is the same
 union, told apart by `kind` when a project is read)."""
 
@@ -1500,7 +1569,8 @@ def standard_conditions() -> list[AnyCondition]:
 
 
 BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
-                              | SeepageCondition, Field(discriminator="kind")]
+                              | SeepageCondition | FluxCondition,
+                              Field(discriminator="kind")]
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
@@ -1595,6 +1665,25 @@ class Stage(Base):
 
     activate: list[Ident] = Field(default_factory=list)
     deactivate: list[Ident] = Field(default_factory=list)
+
+    # The water of the stage, each a diff on the stage before as `activate` is: what it
+    # says holds from this stage on, until a later stage says otherwise. Resolved by
+    # `core.model.stages.water_in`, the one place that walks the chain for them.
+    phreatic_line: Ident | None = None
+    """The water line (`Project.water_lines`) that is the phreatic line from this stage on,
+    or None for the one the stage before has. Every other water line on in the stage is
+    a head line there, for the soils that take it. A stage that names none, and no stage
+    before it does, has the phreatic line the model has on in it
+    (`Project.phreatic_lines`)."""
+    soil_water: dict[str, str] = Field(default_factory=dict)
+    """The water a soil takes from this stage on, as `Project.soil_water` says it, over
+    what the stage before gave it: a water line's id, `INTERPOLATE`, `DRY`, or `PHREATIC`
+    for the phreatic line again. A soil it does not name keeps the water of the stage
+    before."""
+    condition_values: dict[Ident, dict[str, Any]] = Field(default_factory=dict)
+    """The values a condition has from this stage on, over the ones of the stage before:
+    a condition's id to some of its fields (`STAGE_VALUES`), so one water pressure can be
+    10 kPa in one stage and 25 kPa in a later one, or a phreatic line can drop."""
 
     # The three the reference deck actually varies between its stages (see
     # plan sec 0.2). Their defaults are its initial stage's own values, so a stage that
@@ -2060,7 +2149,10 @@ class Project(Base):
     soil_water: dict[str, str] = Field(default_factory=dict)
     """The water each soil takes, for an aquifer under an aquitard: a soil part key
     (`soil_part_keys`: a layer, a body cut off one, or a custom soil part) to the id of a
-    head line (`head_lines`), or `INTERPOLATE`.
+    water line (`water_lines`) that acts as a head line for it, `INTERPOLATE`, or `DRY`.
+    This is the model as built; a stage may give a soil another water from then on
+    (`Stage.soil_water`, resolved by `core.model.stages.water_in`). An entry naming the
+    phreatic line of a stage is the phreatic line there.
 
     A soil that is not in it takes the phreatic line its stage has on (`phreatic_lines`),
     which is the water of the whole soil wherever it was drawn. A head line acts only on the soils
@@ -2268,7 +2360,9 @@ class Project(Base):
 
         Unstaged, every active line is on in the one stage there is. Staged, the first
         stage that has two on is named; a stage tree that does not linearise is the
-        stages' own error to say, so it is let through here."""
+        stages' own error to say, so it is let through here. A stage that names its
+        phreatic line, or follows one that does (`Stage.phreatic_line`), has the one it
+        names, and every other line is a head line there, so it has no two."""
         from core.model import stages        # which imports this module
 
         lines = [c for c in self.phreatic_lines() if c.active]
@@ -2281,6 +2375,9 @@ class Project(Base):
         except stages.StageError:
             return None
         for stage in order:
+            if any(each.phreatic_line is not None
+                   for each in stages._chain_to(self, stage)):
+                continue
             on = stages.active_parts(self, stage)
             both = [c.name for c in lines if c.id in on]
             if len(both) > 1:
@@ -2449,13 +2546,16 @@ class Project(Base):
                 + " and ".join(repr(name) for name in names) + f" are both on {where}: "
                 "switch one off there, or make it a head line (Head_Line) and give it to "
                 "its soils in Soil water")
-        if any(c.id == INTERPOLATE for c in self.boundary_conditions):
-            raise ValueError(f"a boundary condition cannot be called {INTERPOLATE!r}: a "
-                             "soil's water says that for interpolated")
+        reserved = sorted({c.id for c in self.boundary_conditions if c.id == INTERPOLATE}
+                          | {line.id for line in self.water_lines() if line.id in RESERVED_IDS})
+        if reserved:
+            raise ValueError(f"a {'water line' if reserved[0] == DRY else 'boundary condition'} "
+                             f"cannot be called {reserved[0]!r}: a soil's water says that for "
+                             + {INTERPOLATE: "interpolated", DRY: "a dry soil"}[reserved[0]])
         # What the soil or the line it named took with it goes too.
-        lines = {line.id for line in self.head_lines()}
+        lines = {line.id for line in self.water_lines()}
         self.soil_water = {key: water for key, water in self.soil_water.items()
-                           if key in soil and (water == INTERPOLATE or water in lines)}
+                           if key in soil and (water in SOIL_WATERS or water in lines)}
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a
@@ -2509,6 +2609,7 @@ class Project(Base):
             )
 
         self._check_stages()
+        self._check_stage_water()
 
         known = {m.id for m in self.materials}
         for layer in self.layers:
@@ -3016,6 +3117,56 @@ class Project(Base):
                 raise ValueError(
                     f"stage {stage.id!r} names no such part: {', '.join(unknown)}"
                 )
+
+    def _check_stage_water(self) -> None:
+        """The water each stage gives (`Stage.phreatic_line`, `soil_water`,
+        `condition_values`) names real lines, soils and conditions, and its values make
+        records that hold.
+
+        What a deleted line, soil or condition took with it goes, as it does from
+        `Project.soil_water`: a stage's phreatic line that is no water line any more is
+        the stage before's again. A value a condition of its kind does not have, or one
+        that makes it unusable -- a phreatic line whose x no longer increases -- is the
+        user's to fix, and refused."""
+        if not self.stages:
+            return
+        from core.model import stages        # which imports this module
+
+        lines = {line.id for line in self.water_lines()}
+        soil = set(self.soil_part_keys())
+        conditions = {c.id: c for c in self.boundary_conditions}
+        for stage in self.stages:
+            if stage.phreatic_line is not None and stage.phreatic_line not in lines:
+                stage.phreatic_line = None
+            stage.soil_water = {key: water for key, water in stage.soil_water.items()
+                                if key in soil and (water in SOIL_WATERS or water == PHREATIC
+                                                    or water in lines)}
+            kept: dict[str, dict[str, Any]] = {}
+            for id, fields in stage.condition_values.items():
+                condition = conditions.get(id)
+                if condition is None:
+                    continue
+                allowed = STAGE_VALUES.get(condition.kind, ())
+                stray = sorted(set(fields) - set(allowed))
+                if stray:
+                    raise ValueError(
+                        f"stage {stage.id!r} gives {condition.kind.replace('_', ' ')} "
+                        f"condition {id!r} a value of {', '.join(stray)}, which a stage "
+                        "cannot change"
+                        + (f"; it can change {', '.join(allowed)}" if allowed
+                           else "; switch it on or off instead"))
+                if fields:
+                    kept[id] = dict(fields)
+            stage.condition_values = kept
+        for stage in self.stages:
+            values = stages.stage_values(self, stage)
+            for id, fields in values.items():
+                try:
+                    stages.with_values(conditions[id], fields)
+                except ValidationError as failure:
+                    reason = "; ".join(error["msg"].removeprefix("Value error, ")
+                                       for error in failure.errors())
+                    raise ValueError(f"in stage {stage.id!r}: {reason}") from None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

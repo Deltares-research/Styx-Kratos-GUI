@@ -685,6 +685,38 @@ def _split_at(points: Sequence[tuple[float, ...]],
     return out
 
 
+ONTO_SOIL = 1e-3
+"""m: how far off a line of the soil a drawn condition's point may be and still be on it.
+
+The GUI snaps a flow boundary condition's points onto the soil's lines as it shows them,
+which are the built sections rounded to 4 decimals (`core.geometry.tessellation.DECIMALS`),
+and a snapped grid crossing to the micrometre: a point on a slope is on it to the eye and
+a few micrometres off it in fact. That is far less than the fragment's tolerance can
+absorb, and on the side of the air it would leave the point outside the soil, with no
+node to hold. The GUI's own tolerance for the sections' lines (`surface-water.js` TOL)."""
+
+
+def _onto_soil(owners: dict[int, set[str]]) -> Callable[[float, float], tuple[float, float]]:
+    """(x, y) -> the nearest point of the lines bounding the section's faces `owners`,
+    when that is within `ONTO_SOIL` of it, else (x, y) unchanged."""
+    gmsh.model.occ.synchronize()
+    curves = sorted({tag for _, tag in gmsh.model.getBoundary(
+        [(2, tag) for tag in owners], combined=False, oriented=False, recursive=False)})
+
+    def onto(x: float, y: float) -> tuple[float, float]:
+        best, away = (x, y), ONTO_SOIL
+        for tag in curves:
+            x0, y0, _, x1, y1, _ = gmsh.model.getBoundingBox(1, tag)
+            if not (x0 - away <= x <= x1 + away and y0 - away <= y <= y1 + away):
+                continue
+            closest = gmsh.model.getClosestPoint(1, tag, [x, y, 0.0])[0]
+            distance = math.dist((x, y), closest[:2])
+            if distance <= away:
+                best, away = (float(closest[0]), float(closest[1])), distance
+        return best
+    return onto
+
+
 def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
                  log: list[str] | None = None
                  ) -> tuple[dict[int, set[str]], dict[str, list[int]], dict[str, list[int]],
@@ -775,8 +807,10 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # A boundary condition on a drawn line, for the same reason again: its nodes are the
     # ones on its own mesh edges (`core.kratos.writer._condition_targets`). One at a
     # point is a vertex the fragment embeds, and its node is the one on that vertex.
+    # Each of its points is first put on the soil's line it was drawn on (`_onto_soil`).
+    onto = _onto_soil(owners) if drawn else None
     for condition in drawn:
-        vertices = [point(x, y) for x, y in condition.points or []]
+        vertices = [point(*onto(x, y)) for x, y in condition.points or []]
         if condition.on == "point":
             tools.append((0, vertices[0]))
             owner_of_tool.append(condition.id)

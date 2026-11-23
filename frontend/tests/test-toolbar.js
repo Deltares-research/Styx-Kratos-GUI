@@ -76,7 +76,8 @@
          ['interface', 'createNormalLoad', 'drawLine', 'createLineByCoordinates',
           'drawSoilSurface', 'toggleRuler', 'createSupportLine',
           'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint',
-          'createSeepageLine']);
+          'createSeepageLine', 'drawWaterLine', 'createFlowBoundary',
+          'createSoilPressure']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);
     T.eq(App.LivePatches.availableIn3D('createNormalLoad'), false);
     T.eq(App.LivePatches.availableIn3D('createSheetPile'), true);
@@ -435,15 +436,25 @@
       var flow = (App.RAILS.flow || []).map(function (tool) {
         return tool === '-' ? '-' : (tool.action || tool.icon);
       });
-      var create = flow.indexOf('createFlowCondition');
-      T.ok(create > 0, 'the Flow conditions rail has a Create flow boundary condition button');
-      T.eq(flow.slice(create, create + 3),
-           ['createFlowCondition', 'createWaterPressureLine', 'flowConditions']);
+      // Drawn on the model: the water line, a flow boundary condition along the soil's
+      // boundary, a uniform pressure on a soil; then the window of them all.
+      var draw = flow.indexOf('drawWaterLine');
+      T.ok(draw > 0, 'the Flow conditions rail has a Draw water line button');
+      T.eq(flow.slice(draw, draw + 4),
+           ['drawWaterLine', 'createFlowBoundary', 'createSoilPressure', 'flowConditions']);
+      T.eq(flow.indexOf('createFlowCondition'), -1, 'the window of one new condition is in '
+           + 'the menu, not on the rail');
+      var boundary = App.RAILS.flow.filter(function (t) {
+        return t && t.action === 'createFlowBoundary';
+      })[0];
+      T.eq(boundary.flyout, undefined, 'one button: one click is a point, more a line');
       function actions(label) {
         var menu = App.MENUS.filter(function (m) { return m.label === label; })[0];
         return menu.items.map(function (item) { return item && item.action; });
       }
       T.ok(actions('Flow conditions').indexOf('createFlowCondition') >= 0);
+      T.ok(actions('Flow conditions').indexOf('createFlowBoundary') >= 0);
+      T.ok(actions('Flow conditions').indexOf('createSoilPressure') >= 0);
       T.ok(actions('Flow conditions').indexOf('flowConditions') >= 0);
       T.eq(actions('Flow conditions').indexOf('boundaryConditions'), -1);
       T.ok(actions('Structures').indexOf('createBoundaryCondition') >= 0);
@@ -469,6 +480,123 @@
       } finally { App.BoundaryConditions = saved; }
       T.eq(calls, [['open', 'mechanical'], ['open', 'flow'], ['open', 'all'],
                    ['record', null, 'mechanical'], ['record', null, 'flow']]);
+    });
+  });
+
+  /* The Flow conditions rail's drawing tools, the water rows of the right-click menu,
+     and the stage panel's phreatic line: each calls App.BoundaryConditions. */
+  function withWater(project, state, body) {
+    var saved = { project: App.PROJECT, state: App.state, bc: App.BoundaryConditions };
+    var calls = [];
+    var real = App.BoundaryConditions;
+    App.PROJECT = project;
+    App.state = state;
+    App.BoundaryConditions = Object.assign({}, real);
+    ['drawWaterLine', 'drawFlowBoundary', 'pickSoilPressure', 'setSoilWater',
+     'setStageSoilWater', 'openSoilPressure', 'makePhreatic', 'setStagePhreatic',
+     'openRecord'].forEach(function (name) {
+      App.BoundaryConditions[name] = function () {
+        calls.push([name].concat(Array.prototype.slice.call(arguments)));
+        return Promise.resolve();
+      };
+    });
+    try { return body(calls); }
+    finally {
+      App.PROJECT = saved.project; App.state = saved.state;
+      App.BoundaryConditions = saved.bc;
+    }
+  }
+
+  function waterProject() {
+    var line = { kind: 'water_pressure', on: 'domain', x_coordinates: [0, 20],
+                 is_fixed: true, active: true, face: null, part: null, points: null };
+    return {
+      dimension: 2, domain: { x0: 0, x1: 20, z0: 0, z1: 1, y_top: 0, y_bottom: -10 },
+      layers: [{ id: 'L1', name: 'Sand' }], custom_parts: [],
+      stageable_parts: ['soil_L1', 'high', 'low', 'clay'],
+      boundary_conditions: [
+        Object.assign({ id: 'high', name: 'High', fluid_pressure_type: 'Phreatic_Multi_Line',
+                        y_coordinates: [-1, -1] }, line),
+        Object.assign({ id: 'low', name: 'Low', fluid_pressure_type: 'Head_Line',
+                        y_coordinates: [-4, -4] }, line),
+        { id: 'clay', name: 'Clay', kind: 'water_pressure', on: 'part', part: 'soil_L1',
+          fluid_pressure_type: 'Uniform', value: -10, is_fixed: true, active: true }],
+      stages: [{ id: 's1', name: 'First', parent: null },
+               { id: 's2', name: 'Second', parent: 's1', phreatic_line: 'low' }]
+    };
+  }
+
+  test('the Flow conditions rail draws a water line, a flow boundary, a soil pressure',
+       function () {
+    withInstall(function () {
+      withWater(waterProject(), { mode: 'flow' }, function (calls) {
+        ['drawWaterLine', 'createFlowBoundary', 'createSoilPressure']
+          .forEach(function (action) { App.runAction({ action: action }); });
+        T.eq(calls, [['drawWaterLine'], ['drawFlowBoundary'], ['pickSoilPressure']]);
+      });
+    });
+  });
+
+  test('a water line right-clicked in Flow conditions can be made the phreatic line',
+       function () {
+    withWater(waterProject(), { mode: 'flow' }, function (calls) {
+      var P = App.LivePatches;
+      var rows = P.withSoilWaterRows([], 'low');
+      T.eq([rows[0].label, rows[0].action, !!rows[0].disabled],
+           ['Make phreatic line', 'makePhreatic', false]);
+      T.eq(P.withSoilWaterRows([], 'high')[0].disabled, true, 'the phreatic line already');
+      var soil = P.withSoilWaterRows([], 'soil_L1')[0];
+      T.eq(soil.label.indexOf('Water: '), 0);
+      T.eq(P.withSoilWaterRows([{ label: 'x' }], 'nothing'), [{ label: 'x' }]);
+      T.ok(P.runWaterItem(rows[0]));
+      T.ok(P.runWaterItem({ action: 'soilWater', soilKey: 'soil_L1', soilWater: 'dry' }));
+      T.ok(P.runWaterItem({ action: 'soilPressure', soilKey: 'soil_L1' }));
+      T.eq(P.runWaterItem({ action: 'somethingElse' }), false);
+      T.eq(P.runWaterItem(null), false);
+      T.eq(calls, [['makePhreatic', 'low'], ['setSoilWater', 'soil_L1', 'dry'],
+                   ['openSoilPressure', 'soil_L1']]);
+    });
+  });
+
+  test('in Staged construction the rows are the selected stage\'s', function () {
+    withWater(waterProject(), { mode: 'staged', phase: 's1' }, function (calls) {
+      var P = App.LivePatches;
+      var rows = P.withSoilWaterRows([], 'low');
+      // A stage may move a water line too: its values in the stage.
+      T.eq(rows.map(function (row) { return row === '-' ? '-' : row.action; }),
+           ['stagePhreatic', 'stageValues', '-']);
+      var clay = P.withSoilWaterRows([], 'clay');
+      T.eq(clay[0].action, 'stageValues');
+      T.eq(clay[0].label, 'Values in First…');
+      var soil = P.withSoilWaterRows([], 'soil_L1')[0];
+      T.eq(soil.label.indexOf('Water from First: '), 0);
+      P.runWaterItem(rows[0]);
+      P.runWaterItem(clay[0]);
+      P.runWaterItem({ action: 'stageSoilWater', stageId: 's1', soilKey: 'soil_L1',
+                       soilWater: 'dry' });
+      T.eq(calls.map(function (call) { return call[0]; }),
+           ['setStagePhreatic', 'openRecord', 'setStageSoilWater']);
+      T.eq(calls[0].slice(1), ['s1', 'low']);
+      T.eq(calls[1][3], 's1');
+    });
+  });
+
+  test('the stage panel offers the phreatic line, as the stage before or each line',
+       function () {
+    withWater(waterProject(), { mode: 'staged', phase: 's2' }, function () {
+      var project = App.PROJECT;
+      var row = App.LivePatches.phreaticRow(project.stages[1])[0];
+      T.eq(row.slice(0, 3), ['Phreatic line', 'select', 'phreatic_line']);
+      T.eq(row[3], [['', 'As the stage before (High)'], ['high', 'High'], ['low', 'Low']]);
+      T.eq(App.LivePatches.phreaticRow(project.stages[0])[0][3][0],
+           ['', 'As built (High)']);
+      T.eq(App.LivePatches.phreaticRow(Object.assign({}, project.stages[0]))
+             .length, 1);
+    });
+    withWater(Object.assign(waterProject(), { boundary_conditions: [] }),
+              { mode: 'staged', phase: 's1' }, function () {
+      T.eq(App.LivePatches.phreaticRow({ id: 's1', parent: null }), [],
+           'no row with no water line');
     });
   });
 

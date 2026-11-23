@@ -123,6 +123,25 @@
     });
   });
 
+  test('line for a tool that takes a point too: one vertex finishes it', function () {
+    return withMockedEnvironment(function (canvas, getPosted) {
+      var handed = null;
+      App.DrawInput.start('line', { onComplete: function (v) { handed = v; } });
+      App.DrawInput.handleCommand('3 -2 0');
+      pressEnter();
+      T.eq(handed, null, 'a plain line wants two vertices');
+      App.DrawInput.cancel();
+
+      App.DrawInput.start('line', { minPoints: 1, onComplete: function (v) { handed = v; } });
+      App.DrawInput.handleCommand('3 -2 0');
+      T.eq(handed, null, 'one vertex does not finish it by itself: more may follow');
+      pressEnter();
+      T.eq(handed, [[3, -2, 0]]);
+      T.eq(getPosted(), null);
+      T.eq(canvas.style.cursor, '', 'the tool is finished');
+    });
+  });
+
   test('box: two typed corners auto-commit a box recipe', function () {
     return withMockedEnvironment(function (canvas, getPosted) {
       App.DrawInput.start('box');

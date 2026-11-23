@@ -2803,6 +2803,9 @@ window.EDITS_FIXTURE =
             "water_2",
             "water_3"
           ],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
@@ -2823,6 +2826,9 @@ window.EDITS_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -2847,6 +2853,9 @@ window.EDITS_FIXTURE =
             "surcharge"
           ],
           "deactivate": [],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": true,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -2871,6 +2880,9 @@ window.EDITS_FIXTURE =
           "deactivate": [
             "soil_L_top__lift1"
           ],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -2893,6 +2905,9 @@ window.EDITS_FIXTURE =
             "strut"
           ],
           "deactivate": [],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -2918,6 +2933,9 @@ window.EDITS_FIXTURE =
             "soil_L_top__lift2",
             "water_1"
           ],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -2943,6 +2961,9 @@ window.EDITS_FIXTURE =
             "soil_L_top__lift3",
             "water_2"
           ],
+          "phreatic_line": null,
+          "soil_water": {},
+          "condition_values": {},
           "reset_displacements": false,
           "convergence_criterion": "residual_criterion",
           "max_iterations": 150,
@@ -3486,6 +3507,9 @@ window.EDITS_FIXTURE =
               "water_2",
               "water_3"
             ],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": false,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 15,
@@ -3506,6 +3530,9 @@ window.EDITS_FIXTURE =
             "loading": "Staged construction",
             "activate": [],
             "deactivate": [],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": false,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
@@ -3530,6 +3557,9 @@ window.EDITS_FIXTURE =
               "surcharge"
             ],
             "deactivate": [],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": true,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
@@ -3554,6 +3584,9 @@ window.EDITS_FIXTURE =
             "deactivate": [
               "soil_L_top__lift1"
             ],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": false,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
@@ -3576,6 +3609,9 @@ window.EDITS_FIXTURE =
               "strut"
             ],
             "deactivate": [],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": false,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 150,
@@ -3601,6 +3637,9 @@ window.EDITS_FIXTURE =
               "soil_L_top__lift3",
               "water_2"
             ],
+            "phreatic_line": null,
+            "soil_water": {},
+            "condition_values": {},
             "reset_displacements": false,
             "convergence_criterion": "residual_criterion",
             "max_iterations": 150,

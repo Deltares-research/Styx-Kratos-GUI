@@ -30,7 +30,11 @@ own namespace (`Project.stageable_keys`), not on deck part names -- one drawn
 
 from __future__ import annotations
 
-from core.model.schemas import CONVERGENCE_CRITERIA, Stage, Project, followed_tolerance
+from dataclasses import dataclass, field
+
+from core.model.schemas import (CONVERGENCE_CRITERIA, DRY, INTERPOLATE, PHREATIC,
+                                STAGED_CONDITIONS, AnyCondition, Stage, Project,
+                                WaterPressureCondition, followed_tolerance)
 
 
 class StageError(Exception):
@@ -203,6 +207,117 @@ def active_parts(project: Project, stage: Stage | str) -> set[str]:
         active -= set(each.deactivate)
         active |= set(each.activate)
     return active
+
+
+# -- the water of a stage ----------------------------------------------------
+
+@dataclass(frozen=True)
+class StageWater:
+    """The water of one stage, or of the model as built, resolved: what the deck writes
+    in it and the Flow conditions and Staged construction tabs draw for it.
+
+    `conditions` is every boundary condition on in the stage, by id, with the values
+    the stage gives it (`Stage.condition_values`). Of the water lines among them
+    (`Project.water_lines`), `phreatic` is the phreatic line -- the water of every soil
+    that takes no other -- typed `Phreatic_Multi_Line` whatever its record says, and
+    every other one is a head line, typed `Head_Line` (`head_lines`), for the soils that
+    take it. `soil_water` is each soil part key (`Project.soil_part_keys`) that takes a
+    water of its own, to a head line's id, `INTERPOLATE` or `DRY`: an entry naming a line
+    not on in the stage, or the phreatic line itself, is the phreatic line, and so is no
+    entry."""
+    phreatic: WaterPressureCondition | None
+    soil_water: dict[str, str] = field(default_factory=dict)
+    conditions: dict[str, AnyCondition] = field(default_factory=dict)
+
+    def head_lines(self) -> list[WaterPressureCondition]:
+        """The water lines on in the stage that are not its phreatic line."""
+        return [c for c in self.conditions.values()
+                if isinstance(c, WaterPressureCondition) and c.on in ("domain", "line")
+                and c.fluid_pressure_type == "Head_Line"]
+
+    def water_of_bodies(self, project: Project) -> dict[str, str]:
+        """Each soil body that takes a water of its own, as `Project.water_of_bodies`
+        reads `soil_water`: a body's own entry, else its layer's."""
+        return _of_bodies(project, self.soil_water)
+
+
+def _of_bodies(project: Project, chosen: dict[str, str]) -> dict[str, str]:
+    bodies = [key for key, *_ in project.soil_bodies()]
+    bodies += [part.key for part in project.custom_parts if part.mat is not None]
+    out = {}
+    for key in bodies:
+        water = chosen.get(key, chosen.get(key.partition("__")[0]))
+        if water is not None:
+            out[key] = water
+    return out
+
+
+def stage_values(project: Project, stage: Stage | str | None) -> dict[str, dict]:
+    """Each condition's values in `stage` that are not its own: the stage's
+    `condition_values` over those of the stages before it, field by field."""
+    values: dict[str, dict] = {}
+    for each in _chain_to(project, stage) if stage is not None else []:
+        for id, fields in each.condition_values.items():
+            values[id] = {**values.get(id, {}), **fields}
+    return values
+
+
+def with_values(condition: AnyCondition, fields: dict | None) -> AnyCondition:
+    """`condition` with the values `fields` gives it, checked as a record of its own is:
+    a phreatic line a stage moves still needs its x to increase."""
+    if not fields:
+        return condition
+    return type(condition).model_validate({**condition.model_dump(), **fields})
+
+
+def water_in(project: Project, stage: Stage | str | None) -> StageWater:
+    """The water of `stage`, or of the model as built for None: the model that the Flow
+    conditions tab shows and an unstaged project exports (`StageWater`).
+
+    The phreatic line is the one the nearest stage along the chain names
+    (`Stage.phreatic_line`); when none does, it is the line typed `Phreatic_Multi_Line`
+    that is on -- the model as built's, or the one a stage switched on in place of
+    another, the way the phreatic line was switched before a stage could name it. The
+    soils' water is `Project.soil_water` with each stage's `soil_water` over it, in
+    order."""
+    chain = _chain_to(project, stage) if stage is not None else []
+    on = active_parts(project, chain[-1]) if chain else None
+    values = stage_values(project, stage)
+    named: str | None = None
+    chosen = dict(project.soil_water)
+    for each in chain:
+        if each.phreatic_line is not None:
+            named = each.phreatic_line
+        chosen.update(each.soil_water)
+
+    conditions: dict[str, AnyCondition] = {}
+    for condition in project.boundary_conditions:
+        if not condition.active:
+            continue
+        if on is not None and condition.kind in STAGED_CONDITIONS and condition.id not in on:
+            continue
+        conditions[condition.id] = with_values(condition, values.get(condition.id))
+
+    lines = [found for line in project.water_lines()
+             if isinstance(found := conditions.get(line.id), WaterPressureCondition)]
+    if named is not None:
+        phreatic_id = named if any(line.id == named for line in lines) else None
+    else:
+        phreatic_id = next((line.id for line in lines
+                            if line.fluid_pressure_type == "Phreatic_Multi_Line"), None)
+    phreatic: WaterPressureCondition | None = None
+    for line in lines:
+        role = "Phreatic_Multi_Line" if line.id == phreatic_id else "Head_Line"
+        if line.fluid_pressure_type != role:
+            line = line.model_copy(update={"fluid_pressure_type": role})
+            conditions[line.id] = line
+        if line.id == phreatic_id:
+            phreatic = line
+
+    heads = {line.id for line in lines if line.id != phreatic_id}
+    soil_water = {key: water for key, water in chosen.items()
+                  if water in (INTERPOLATE, DRY) or water in heads}
+    return StageWater(phreatic=phreatic, soil_water=soil_water, conditions=conditions)
 
 
 SATURATED = "SaturatedLaw"
@@ -509,3 +624,94 @@ def set_active(project: Project, id: str, keys: list[str], wanted: bool) -> list
             for key in keys:
                 restate(stage, key, active_along(children[stage.id], key), wanted)
     return listed
+
+
+# -- the water a stage gives -------------------------------------------------
+#
+# Each edits stage `id` alone, as `set_active` does: what it gives is a diff, so the
+# stages that start from it would follow it, and each is given whatever keeps it as it
+# was instead. A stage made afterwards starts with its parent's water.
+
+def _children_kept(project: Project, id: str, listed: list[Stage], read, pin) -> list[Stage]:
+    """`listed` with each stage that starts from `id` given, by `pin(stage, was)`, what
+    it read (`read(project, stage_id)`) before the edit, where the edit changed it."""
+    children = [stage.id for stage in project.stages if stage.parent == id and stage.id != id]
+    was = {child: read(project, child) for child in children}
+    after = project.model_copy(update={"stages": listed})
+    for stage in listed:
+        if stage.id in was and read(after, stage.id) != was[stage.id]:
+            pin(stage, was[stage.id])
+    return listed
+
+
+def set_phreatic_line(project: Project, id: str, line: str | None) -> list[Stage]:
+    """The water line `line` the phreatic line from stage `id` (None: the stage before's
+    again), switched on there if it is off -- a phreatic line is on in its stage."""
+    listed = (set_active(project, id, [line], True)
+              if line is not None and line not in active_parts(project, id)
+              else _copies(project))
+    for stage in listed:
+        if stage.id == id:
+            stage.phreatic_line = line
+
+    def read(p: Project, stage: str) -> str | None:
+        found = water_in(p, stage).phreatic
+        return found.id if found is not None else None
+
+    def pin(stage: Stage, was: str | None) -> None:
+        if was is not None:
+            stage.phreatic_line = was
+
+    return _children_kept(project, id, listed, read, pin)
+
+
+def set_soil_water(project: Project, id: str, soil: str, water: str | None) -> list[Stage]:
+    """The soil `soil` takes `water` from stage `id`: a water line's id, `INTERPOLATE`,
+    `DRY`, or `PHREATIC` for the phreatic line; None takes the stage before's again."""
+    listed = _copies(project)
+    for stage in listed:
+        if stage.id == id:
+            stage.soil_water = dict(stage.soil_water)
+            if water is None:
+                stage.soil_water.pop(soil, None)
+            else:
+                stage.soil_water[soil] = water
+
+    def read(p: Project, stage: str) -> str:
+        return water_in(p, stage).soil_water.get(soil, PHREATIC)
+
+    def pin(stage: Stage, was: str) -> None:
+        stage.soil_water = {**stage.soil_water, soil: was}
+
+    return _children_kept(project, id, listed, read, pin)
+
+
+def set_values(project: Project, id: str, condition: str,
+               fields: dict | None) -> list[Stage]:
+    """The condition `condition` with the values `fields` from stage `id`, over the ones
+    it gives already; None takes the stage before's values again."""
+    listed = _copies(project)
+    record = next((c for c in project.boundary_conditions if c.id == condition), None)
+    touched = (list(fields) if fields is not None else
+               list(next((s.condition_values.get(condition, {}) for s in project.stages
+                          if s.id == id), {})))
+    for stage in listed:
+        if stage.id == id:
+            values = dict(stage.condition_values)
+            if fields is None:
+                values.pop(condition, None)
+            else:
+                values[condition] = {**values.get(condition, {}), **fields}
+            stage.condition_values = values
+    own = record.model_dump() if record is not None else {}
+
+    def read(p: Project, stage: str) -> dict:
+        given = stage_values(p, stage).get(condition, {})
+        return {field: given.get(field, own.get(field)) for field in touched}
+
+    def pin(stage: Stage, was: dict) -> None:
+        values = dict(stage.condition_values)
+        values[condition] = {**was, **values.get(condition, {})}
+        stage.condition_values = values
+
+    return _children_kept(project, id, listed, read, pin)

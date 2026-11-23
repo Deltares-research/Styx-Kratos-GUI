@@ -24,7 +24,8 @@ from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interf
                                 InterfaceSection, Line, LineLoad, Material, Member, NormalLoad,
                                 Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
-                                SeepageCondition, SurfaceLoad, WaterPressureCondition)
+                                SeepageCondition, SurfaceLoad, WaterPressureCondition,
+                                FluxCondition)
 from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
                                 PressureType, standard_conditions as standard_set)
 
@@ -908,6 +909,70 @@ def seepage_condition(project: Project, on: ConditionTarget, *, face: Face | Non
     return SeepageCondition(id=id, name=name or default_name, kind="seepage",
                             on="face" if on == "face" else "line", face=face, part=None,
                             points=drawn, active=True)
+
+
+def flux_condition(project: Project, on: ConditionTarget, *, face: Face | None = None,
+                   points=None, id: str | None = None, name: str | None = None,
+                   value: float = 0.0) -> FluxCondition:
+    """A new prescribed flux on `on`: `"face"` with `face`, or `"line"` with `points`
+    (down the right side of the section to half its depth when none are given, as a
+    seepage line's), of `value` -- water flowing into the soil per unit area, in the
+    project's length over its time; negative flows out."""
+    if on not in ("face", "line"):
+        raise DraftError("A prescribed flux is on a face of the model, or on a line along "
+                         "the soil's outer boundary.")
+    if on == "line" and project.dimension != 2:
+        raise DraftError("A flux line is drawn in the 2D section; switch to 2D to create "
+                         "one, or put the flux on a face.")
+    drawn = None
+    if on == "line":
+        drawn = _right_side(project) if points is None else [(p[0], p[1]) for p in points]
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "flux_", "Flux")
+    return FluxCondition(id=id, name=name or default_name, kind="flux",
+                         on="face" if on == "face" else "line", face=face, part=None,
+                         points=drawn, value=value, active=True)
+
+
+def water_line(project: Project, points, *, id: str | None = None,
+               name: str | None = None) -> WaterPressureCondition:
+    """A new water line through `points` on the whole soil (`Project.water_lines`): the
+    phreatic line if the project has no water line yet, else a head line, for the soils
+    that take it -- the Flow conditions tab's "Draw water line". Its points are sorted by
+    x, as Kratos reads a phreatic line, and the line is not embedded in the mesh: it
+    says where the water stands, which can be anywhere, outside the soil too.
+
+    In a groundwater flow project (`stages.groundwater_flow`) it is start values, the
+    soils' initial pressure that the flow then changes -- where the phreatic line stands
+    above the ground the deck fixes the wet surface under it -- as a fixed line on the
+    whole soil would leave no water free to flow. Otherwise it is fixed, as a new water
+    pressure is (`water_pressure_condition`)."""
+    drawn = sorted(((float(p[0]), float(p[1])) for p in points), key=lambda p: p[0])
+    if len(drawn) < 2:
+        raise DraftError("A water line needs two points or more.")
+    if any(b[0] <= a[0] for a, b in zip(drawn, drawn[1:])):
+        raise DraftError("A water line has one level at each x: give its points different "
+                         "x coordinates.")
+    phreatic = not project.water_lines()
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "waterline_",
+                              "Phreatic line" if phreatic else "Head line")
+    return WaterPressureCondition(
+        id=id, name=name or default_name, kind="water_pressure", on="domain",
+        fluid_pressure_type="Phreatic_Multi_Line" if phreatic else "Head_Line",
+        is_fixed=not _flow(project), x_coordinates=[p[0] for p in drawn],
+        y_coordinates=[p[1] for p in drawn], active=True)
+
+
+def _flow(project: Project) -> bool:
+    """Whether `project` is a groundwater flow calculation; a tree that does not
+    linearise is not one yet."""
+    from core.model import stages        # which imports what this module does
+
+    try:
+        return stages.groundwater_flow(project)
+    except stages.StageError:
+        return False
 
 
 def _right_side(project: Project) -> list[tuple[float, float]]:

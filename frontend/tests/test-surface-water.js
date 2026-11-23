@@ -305,4 +305,138 @@
     T.eq(spec.tails.length, 0);
   });
 
+
+  /* ── The soil's outer boundary, where a flow boundary condition goes ──── */
+
+  test('the outline is the boundary with soil on one side only', function () {
+    var edges = W.outline(sections(), ['soil_L', 'soil_L__right', 'soil_L__below']);
+    function has(a, b) {
+      return edges.some(function (e) {
+        return (e.a[0] === a[0] && e.a[1] === a[1] && e.b[0] === b[0] && e.b[1] === b[1])
+          || (e.a[0] === b[0] && e.a[1] === b[1] && e.b[0] === a[0] && e.b[1] === a[1]);
+      });
+    }
+    T.ok(has([0, -10], [0, 0]), 'the left side');
+    T.ok(has([8, -3], [12, -3]), 'the floor of the pit, dug out');
+    T.ok(!has([8, -10], [8, -3]) && !edges.some(function (e) {
+      return e.a[0] === 8 && e.b[0] === 8 && Math.min(e.a[1], e.b[1]) < -3;
+    }), 'not the side two bodies share below the pit');
+    T.eq(W.outline(null, ['soil_L']), []);
+  });
+
+  test('a point is moved to the nearest point of the outline', function () {
+    var edges = W.outline(sections(), ['soil_L', 'soil_L__right', 'soil_L__below']);
+    var near = W.nearestOn(edges, 10, -2.6);
+    T.near(near.point[0], 10, 1e-9);
+    T.near(near.point[1], -3, 1e-9);
+    T.near(near.distance, 0.4, 1e-9);
+    T.eq(W.nearestOn([], 1, 1), null);
+  });
+
+  /* An embankment-like soil over a second one: a top sloping from (0, -5) up to
+     (20, 0), on a soil from -10 down to -20. */
+  function slopeSections() {
+    return [
+      { key: 'soil_A', positions: [0, -10, 0, 20, -10, 0, 20, 0, 0, 0, -5, 0],
+        indices: [0, 1, 2, 0, 2, 3] },
+      { key: 'soil_B', positions: [0, -20, 0, 20, -20, 0, 20, -10, 0, 0, -10, 0],
+        indices: [0, 1, 2, 0, 2, 3] }
+    ];
+  }
+
+  function sorted(points) {
+    return points.slice().sort(function (p, q) { return p[0] - q[0] || p[1] - q[1]; });
+  }
+
+  /* As the build sends a 2D section: every triangle twice, once per winding. */
+  function bothWindings(sections) {
+    return sections.map(function (section) {
+      var twice = [];
+      for (var i = 0; i < section.indices.length; i += 3) {
+        var t = section.indices.slice(i, i + 3);
+        twice.push(t[0], t[1], t[2], t[0], t[2], t[1]);
+      }
+      return Object.assign({}, section, { indices: twice });
+    });
+  }
+
+  function key(edges) {
+    return edges.map(function (e) {
+      var ends = [e.a, e.b].sort(function (p, q) { return p[0] - q[0] || p[1] - q[1]; });
+      return e.key + ' ' + JSON.stringify(ends) + (e.outer ? ' outer' : '');
+    }).sort();
+  }
+
+  test('the geometry\'s lines: the outer boundary and the lines between bodies', function () {
+    var edges = W.geometryLines(slopeSections(), ['soil_A', 'soil_B']);
+    T.eq(key(edges), [
+      'soil_A [[0,-10],[0,-5]] outer', 'soil_A [[0,-10],[20,-10]]',
+      'soil_A [[0,-5],[20,0]] outer', 'soil_A [[20,-10],[20,0]] outer',
+      'soil_B [[0,-10],[20,-10]]', 'soil_B [[0,-20],[0,-10]] outer',
+      'soil_B [[0,-20],[20,-20]] outer', 'soil_B [[20,-20],[20,-10]] outer'
+    ], 'the line between the two soils once for each, inside the soil');
+    T.eq(key(W.geometryLines(bothWindings(slopeSections()), ['soil_A', 'soil_B'])),
+         key(edges), 'a triangle sent with both windings is one triangle');
+    T.eq(W.outline(bothWindings(slopeSections()), ['soil_A', 'soil_B']).length, 6,
+         'the outer boundary, not nothing, as the build sends it');
+  });
+
+  test('a line runs along the outer boundary, or not', function () {
+    var outer = W.outline(slopeSections(), ['soil_A', 'soil_B']);
+    T.ok(W.runsAlong(outer, [[20, -15], [20, -5]]), 'up the right side, over two bodies');
+    T.ok(W.runsAlong(outer, [[0, -5], [20, 0], [20, -10]]), 'round a corner');
+    T.ok(!W.runsAlong(outer, [[0, -10], [20, -10]]), 'the line between the two soils');
+    T.ok(!W.runsAlong(outer, [[0, -5], [20, -10]]), 'across the soil, both ends on it');
+    T.ok(!W.runsAlong(outer, []));
+  });
+
+  test('the corners: where a line turns, ends or meets another', function () {
+    var edges = W.geometryLines(slopeSections(), ['soil_A', 'soil_B']);
+    T.eq(sorted(W.corners(edges)),
+         [[0, -20], [0, -10], [0, -5], [20, -20], [20, -10], [20, 0]]);
+    T.eq(sorted(W.corners(W.outline(slopeSections(), ['soil_A', 'soil_B']))),
+         [[0, -20], [0, -5], [20, -20], [20, 0]],
+         'the outer boundary alone runs straight on past the line between the soils');
+    // A side the mesh splits into edges that carry on straight has no corner there.
+    T.eq(sorted(W.corners([{ a: [0, 0], b: [5, 0], key: 's' },
+                           { a: [5, 0], b: [10, 0], key: 's' },
+                           { a: [10, 0], b: [10, -5], key: 's' }])),
+         [[0, 0], [10, -5], [10, 0]]);
+    T.eq(W.corners([]), []);
+  });
+
+  test('a point is always moved onto a line, however far off it is', function () {
+    var edges = W.geometryLines(slopeSections(), ['soil_A', 'soil_B']);
+    var corners = W.corners(edges);
+    var deep = W.snapOnto(edges, corners, 10, -16, null);
+    T.near(deep.point[0], 10, 1e-9);
+    T.near(deep.point[1], -20, 1e-9, 'deep in the soil: onto the bottom, the nearest line');
+    var between = W.snapOnto(edges, corners, 10, -11.5, null);
+    T.near(between.point[1], -10, 1e-9, 'onto the line between the two soils');
+    var above = W.snapOnto(edges, corners, 10, 5, null).point;
+    T.near(above[1], -5 + 0.25 * above[0], 1e-9, 'above the slope: onto it');
+    T.ok(above[0] !== Math.round(above[0]), 'with snapping off, wherever it lands');
+    T.eq(W.snapOnto([], [], 1, 1, 1), null);
+  });
+
+  test('with a snapping distance a point snaps along the line', function () {
+    var edges = W.geometryLines(slopeSections(), ['soil_A', 'soil_B']);
+    var corners = W.corners(edges);
+    T.eq(W.snapOnto(edges, corners, 10.3, 5, 1).point, [12, -2],
+         'on the slope, where it crosses the grid line x = 12');
+    T.eq(W.snapOnto(edges, corners, 25, -15.3, 1).point, [20, -15],
+         'on the right side, at the grid line y = -15');
+    T.eq(W.snapOnto(edges, corners, 21, -10.4, 3).point, [20, -10],
+         'the two soils meet at -10: a corner, off the 3 m grid, taken first');
+    T.eq(W.snapOnto(edges, corners, 21, -12.4, 3).point, [20, -12],
+         'further from the corner than from the grid line: the grid line');
+  });
+
+  test('the soil at a point is the body there, or none', function () {
+    var keys = ['soil_L', 'soil_L__right', 'soil_L__below'];
+    T.eq(W.soilAt(sections(), keys, 4, -5), 'soil_L');
+    T.eq(W.soilAt(sections(), keys, 10, -6), 'soil_L__below');
+    T.eq(W.soilAt(sections(), keys, 10, -1), null, 'the pit, dug out');
+  });
+
 })();
