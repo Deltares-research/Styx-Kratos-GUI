@@ -100,6 +100,10 @@ The version number is `VERSION` in [core/version.py](core/version.py). The GUI's
 builds `.zip` and `.tar.gz` archives from the tag, checks that the unpacked archive starts
 and says the version of the tag, and publishes a GitHub release with notes made from the
 merged pull requests. A tag with a hyphen, such as `v1.2.0-rc.1`, makes a pre-release.
+
+You can also make the release by hand on the GitHub **Releases** page, with a new tag
+`v1.2.0` on the merge commit. That pushes the tag too, so the same workflow runs. It then
+attaches the archives to your release and keeps your notes and your pre-release choice.
 [.gitattributes](.gitattributes) lists what the archives leave out.
 
 A copy that is not exactly a release adds its commit to the version. For example,

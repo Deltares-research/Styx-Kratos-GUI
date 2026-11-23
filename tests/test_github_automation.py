@@ -297,6 +297,13 @@ def test_only_the_publishing_job_may_write(release):
     assert "gh release create" in run and "--generate-notes" in run and "--verify-tag" in run
 
 
+def test_a_release_made_on_the_releases_page_gets_the_archives(release):
+    run = commands(release["jobs"]["publish"])
+    assert "gh release view" in run and "gh release upload" in run, \
+        "a release made by hand pushes its tag, and `gh release create` then fails"
+    assert run.index("gh release upload") < run.index("gh release create")
+
+
 def test_the_release_notes_are_sorted_by_label():
     config = load(GITHUB / "release.yml")
     labels = {label for category in config["changelog"]["categories"]
