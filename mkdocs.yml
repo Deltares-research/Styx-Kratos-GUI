@@ -47,10 +47,11 @@ nav:
       - CROW excavation wall: docs/cli_tutorials/CROW_case.md
       - Muskat groundwater flow: docs/cli_tutorials/Muskat_case.md
       - Command reference: docs/CLI.md
-  - Features: docs/FEATURES.md
   - Examples:
+      - Overview: examples/README.md
       - CROW excavation wall: examples/CROW_case/README.md
       - Muskat groundwater flow: examples/Muskat_case/README.md
+  - Features: docs/FEATURES.md
   - Developers:
       - Developer guide: docs/developer/README.md
       - Architecture: docs/developer/ARCHITECTURE.md

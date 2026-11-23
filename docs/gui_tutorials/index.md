@@ -10,7 +10,17 @@ step. Start with the first one if you are new to Styx.
 The screenshots are made from the GUI each time the code changes, so they show the GUI as
 it is.
 
-To install Styx and connect Kratos, see the
-[README](../../README.md#getting-started). Every
-mode and tool of the GUI is described in
-[USAGE.md](../USAGE.md).
+## Before you start
+
+- Install Styx: see [Installation](../INSTALLATION.md).
+- To run a model, Kratos must be set up on this machine: see
+  [Setting up Kratos](../KRATOS_SETUP.md).
+- Start the GUI: see [Run the app](../INSTALLATION.md#run-the-app).
+
+## See also
+
+- [Usage](../USAGE.md): every mode and tool of the GUI.
+- [CLI tutorials](../cli_tutorials/README.md): the CROW excavation wall, built with
+  `kratos-cli`. A model saved from the GUI opens in `kratos-cli`, and the other way round.
+- [Examples](../../examples/README.md): the finished CROW model, to open with
+  **File > Open project…**.

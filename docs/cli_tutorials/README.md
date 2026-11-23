@@ -30,3 +30,4 @@ the page shows. So the pages match the current version of `kratos-cli`.
 - [Command reference](../CLI.md): every `kratos-cli` command and its options.
 - [GUI tutorials](../gui_tutorials/index.md): the CROW excavation wall, built in the GUI.
   A model saved from `kratos-cli` opens in the GUI, and the other way round.
+- [Examples](../../examples/README.md): the finished models of these tutorials.
