@@ -210,7 +210,9 @@ The preset values are only a start. Check them for your soil.
 ### Soil surfaces and volumes
 
 **Create soil surface…** (in 2D) or **Create soil volume…** (in 3D) adds a body of soil that
-is not a layer, for example an embankment or a lens. Type the corners of its outline and
+is not a layer, for example an embankment or a lens. In 2D, click the corners of its outline
+in the viewport, then right-click or press Enter: the window opens on the corners that you
+clicked, and you can type over any of them. In 3D, type the corners in the window. Then
 select its material. In a terminal, `kratos-cli surface add` makes the same soil surface.
 
 A line splits a soil surface in the same way as a layer (see below). Each part then has its
