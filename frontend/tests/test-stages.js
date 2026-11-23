@@ -507,19 +507,83 @@
 
   /* ── What the viewport hides ─────────────────────────────────────────── */
 
-  test('outside staged mode a stage hides nothing', function () {
-    /* Soil mode is for building the model, not for looking at one moment of it.
-       Hiding the excavated lifts there would make a body the user is trying to draw
-       against disappear for a reason nothing on screen explains. */
-    ['soil', 'structures', 'mesh', 'flow'].forEach(function (mode) {
-      T.eq(App.Stages.hiddenKeys(project(), 'dig_2', mode), []);
+  test('the Mesh tab shows every part, whatever the stage', function () {
+    /* Kratos cannot change the mesh between stages: a part a stage switches off is
+       still meshed, so the Mesh tab draws the whole model in every stage. */
+    T.eq(App.Stages.hiddenKeys(project(), 'dig_2', 'mesh'), []);
+    T.ok(!App.Stages.followsStage('mesh'));
+    T.ok(!App.Stages.followsStage('results'), 'Results reads the stage of its run');
+    T.ok(!App.Stages.followsStage(undefined));
+  });
+
+  test('every model tab shows the stage chosen beside the tabs', function () {
+    /* Soil, Structures and Flow conditions show the model as it is in the selected
+       stage, and so does Calculation settings (mode id "staged"). */
+    ['soil', 'structures', 'flow', 'staged'].forEach(function (mode) {
+      T.ok(App.Stages.followsStage(mode), mode + ' does not follow the stage');
+      var hidden = App.Stages.hiddenKeys(project(), 'prop', mode);
+      T.ok(hidden.indexOf('soil_L1__lift2') >= 0, mode + ': an inactive lift is shown as active');
+      T.ok(hidden.indexOf('soil_L2__pit') < 0, mode + ': an active body is shown as inactive');
     });
   });
 
-  test('in staged mode the parts a stage switched off are hidden', function () {
-    var hidden = App.Stages.hiddenKeys(project(), 'prop', 'staged');
-    T.ok(hidden.indexOf('soil_L1__lift2') >= 0, 'an inactive lift is still drawn');
-    T.ok(hidden.indexOf('soil_L2__pit') < 0, 'an active body was hidden');
+  /* ── The stage list beside the mode tabs ─────────────────────────────── */
+
+  test('the stage list offers the stages in the order they run', function () {
+    var p = project();
+    var order = App.Stages.order(p);
+    var picker = App.Stages.picker(p, 'soil', order[1].id, null);
+    T.eq(picker.options.map(function (o) { return o.value; }),
+         order.map(function (stage) { return stage.id; }));
+    T.eq(picker.options[0].label, '1  ' + order[0].name, 'numbered as they run');
+    T.eq(picker.value, order[1].id);
+    T.ok(!picker.disabled);
+  });
+
+  test('the stage list falls back to the first stage, as the stage panel does', function () {
+    var p = project();
+    T.eq(App.Stages.picker(p, 'structures', 'no_such_stage', null).value,
+         App.Stages.order(p)[0].id);
+  });
+
+  test('the stage list is greyed in the Mesh tab: one mesh serves every stage', function () {
+    var p = project();
+    var picker = App.Stages.picker(p, 'mesh', 'prop', null);
+    T.ok(picker.disabled);
+    T.eq(picker.value, 'prop', 'it still says which stage the other tabs show');
+    T.ok(/mesh/i.test(picker.title), 'the tooltip says why');
+  });
+
+  test('a project with no stages has nothing to choose', function () {
+    var p = project();
+    p.stages = [];
+    var picker = App.Stages.picker(p, 'soil', null, null);
+    T.ok(picker.disabled);
+    T.eq(picker.options.length, 1);
+    T.eq(picker.value, '');
+    T.ok(/Calculation settings/.test(picker.title), 'the tooltip says where stages are added');
+  });
+
+  test('in Results the stage list is the open run\'s stages', function () {
+    /* A run may be of an older version of the project, so it offers what the run
+       wrote rather than the project's stages; a stage with no results is greyed. */
+    var results = { run: 'run_1', stage: 2, stages: [
+      { index: 1, stage: 'Initial stage', results: true },
+      { index: 2, stage: 'Dig', results: true },
+      { index: 3, stage: 'Prop', results: false }
+    ] };
+    var picker = App.Stages.picker(project(), 'results', 'prop', results);
+    T.eq(picker.options.map(function (o) { return o.value; }), ['1', '2', '3']);
+    T.eq(picker.options[1].label, '2  Dig');
+    T.eq(picker.options.map(function (o) { return !!o.disabled; }), [false, false, true]);
+    T.eq(picker.value, '2');
+    T.ok(!picker.disabled);
+  });
+
+  test('in Results with no run open the stage list is greyed', function () {
+    var picker = App.Stages.picker(project(), 'results', 'prop', { run: null, stages: [] });
+    T.ok(picker.disabled);
+    T.ok(/calculat/i.test(picker.title));
   });
 
   test('a part is named as the Model explorer names it, not by its key', function () {
@@ -553,10 +617,12 @@
 
   test('a project with no stages hides nothing, in any mode', function () {
     /* The compatibility case: an unstaged project is one model, all of it, and
-       staged mode must not start hiding parts of it. */
+       no tab may start hiding parts of it. */
     var p = project();
     p.stages = [];
-    T.eq(App.Stages.hiddenKeys(p, null, 'staged'), []);
+    ['soil', 'structures', 'flow', 'staged'].forEach(function (mode) {
+      T.eq(App.Stages.hiddenKeys(p, null, mode), []);
+    });
   });
 
   /* ── The Model explorer's checkbox, in Staged construction mode ─────────

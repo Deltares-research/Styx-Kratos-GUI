@@ -137,6 +137,47 @@
     });
   });
 
+  test('soil, structures and flow explorers switch parts in the stage; mesh does not', function () {
+    /* Parts are switched on and off in a stage in the tabs where they are built. The
+       Mesh tab keeps the eye: one mesh serves every stage, a part a stage switches
+       off included. Calculation settings hides the Model explorer altogether. */
+    return withShell(function (ctx, host) {
+      App.state.phase = App.PROJECT.stages[0].id;
+      ['soil', 'structures', 'flow'].forEach(function (mode) {
+        App.state.mode = mode;
+        App.Explorer.mountTree(mode);
+        T.ok(host.querySelector('.stage-check'), mode + ': no stage check boxes');
+      });
+      App.state.mode = 'mesh';
+      App.Explorer.mountTree('mesh');
+      T.ok(!host.querySelector('.stage-check'), 'mesh: a stage check box');
+    });
+  });
+
+  test('a part switched in the Soil tab is switched in the chosen stage only', function () {
+    return withShell(function (ctx, host) {
+      var stages = App.Stages.order(App.PROJECT);
+      var stage = stages[stages.length - 1].id;
+      App.state.mode = 'soil';
+      App.state.phase = stage;
+      App.Explorer.mountTree('soil');
+      var check = host.querySelector('.stage-check');
+      var keys = check.dataset.keys.split('\n');
+      var others = stages.slice(0, -1).map(function (each) {
+        return App.Stages.stateIn(App.PROJECT, each.id, keys);
+      });
+      var wasOn = App.Stages.stateIn(App.PROJECT, stage, keys) === 'on';
+      check.click();
+      return settle().then(function () {
+        T.eq(ctx.requests[0].path, '/api/project/stages');
+        T.eq(App.Stages.stateIn(App.PROJECT, stage, keys), wasOn ? 'off' : 'on');
+        T.eq(stages.slice(0, -1).map(function (each) {
+          return App.Stages.stateIn(App.PROJECT, each.id, keys);
+        }), others, 'the stages before it kept what they had');
+      });
+    });
+  });
+
   test('typed boundary, water, units and script writes refresh the model and report refusals', function () {
     return withShell(function (ctx) {
       var other = App.Units.systems().filter(function (system) {

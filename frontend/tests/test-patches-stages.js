@@ -520,13 +520,32 @@
     }));
   });
 
-  test('outside staged mode the viewport menu has no stage rows', function () {
+  test('the viewport menu switches a part in the stage in Soil, Structures and Flow ' +
+       'conditions', function () {
     var ctx = rig(model());
-    App.state.mode = 'soil';
-    App.viewportContextMenu({ clientX: 0, clientY: 0 },
-                            App.Stages.stageableKeys(App.PROJECT)[0]);
-    T.ok(!menuRow(ctx, 'stageActivate') && !menuRow(ctx, 'stageDeactivate'));
-    ctx.restore();
+    try {
+      ['soil', 'structures', 'flow'].forEach(function (mode) {
+        App.state.mode = mode;
+        ctx.menu = null;
+        App.viewportContextMenu({ clientX: 0, clientY: 0 },
+                                App.Stages.stageableKeys(App.PROJECT)[0]);
+        T.ok(menuRow(ctx, 'stageActivate') && menuRow(ctx, 'stageDeactivate'), mode);
+      });
+    } finally { ctx.restore(); }
+  });
+
+  test('in Mesh and Results the viewport menu has no stage rows', function () {
+    /* One mesh serves every stage; Results shows a run, not the project's stages. */
+    var ctx = rig(model());
+    try {
+      ['mesh', 'results'].forEach(function (mode) {
+        App.state.mode = mode;
+        ctx.menu = null;
+        App.viewportContextMenu({ clientX: 0, clientY: 0 },
+                                App.Stages.stageableKeys(App.PROJECT)[0]);
+        T.ok(!menuRow(ctx, 'stageActivate') && !menuRow(ctx, 'stageDeactivate'), mode);
+      });
+    } finally { ctx.restore(); }
   });
 
   /* ── The expert solver settings ──────────────────────────────────────── */
@@ -612,6 +631,170 @@
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches[0].body.stages[0].solver_settings, {});
     }));
+  });
+
+  /* ── The stage list beside the mode tabs ─────────────────────────────── */
+
+  function picker() { return document.getElementById('stage-picker'); }
+
+  /* The tab bar as the app draws it, with the stage list put in by install(). */
+  function mountTabs() {
+    App.Toolbars.mountModes();
+    return document.getElementById('modetabs');
+  }
+
+  test('stage list: beside Soil, Structures and Flow conditions, one row per stage', function () {
+    var ctx = rig(model());
+    try {
+      var bar = mountTabs();
+      var select = picker();
+      T.ok(select, 'the stage list is in the tab bar');
+      var group = select.closest('.mode-group');
+      var before = group.previousElementSibling.previousElementSibling;
+      T.ok(before.querySelector('.mode-tab[data-mode="flow"]'),
+           'it follows the group that holds Flow conditions');
+      T.ok(group.nextElementSibling, 'the Calculation group comes after it');
+      T.eq(select.options.length, model().stages.length);
+      T.eq(select.value, App.Stages.selectedId(App.PROJECT, App.state.phase));
+      App.Toolbars.mountModes();
+      T.eq(bar.querySelectorAll('#stage-picker').length, 1, 'drawn once per mount');
+    } finally { ctx.restore(); }
+  });
+
+  test('stage list: the staged tab is called Calculation settings', function () {
+    var ctx = rig(model());
+    try {
+      var bar = mountTabs();
+      T.eq(bar.querySelector('.mode-tab[data-mode="staged"]').textContent.trim(),
+           'Calculation settings');
+    } finally { ctx.restore(); }
+  });
+
+  test('stage list: choosing a stage selects it for every tab, and the viewport follows', function () {
+    var ctx = rig(model());
+    try {
+      mountTabs();
+      App.setMode('soil');
+      var last = model().stages[model().stages.length - 1];
+      var select = picker();
+      select.value = last.id;
+      select.dispatchEvent(new Event('change'));
+      T.eq(App.state.phase, last.id);
+      T.ok(ctx.visibility > 0, 'the viewport was asked to redraw the stage');
+      T.ok(ctx.lines.indexOf('note:Current stage: ' + last.name) >= 0);
+      App.setMode('structures');
+      T.eq(picker().value, last.id, 'the next tab shows the same stage');
+    } finally { ctx.restore(); }
+  });
+
+  test('stage list: a stage chosen in the stages panel is chosen in the list too', function () {
+    var ctx = rig(model());
+    try {
+      mountTabs();
+      App.setMode('staged');
+      App.Explorer.mountPhases();
+      var rows = ctx.dock.querySelectorAll('.phase-row');
+      rows[rows.length - 1].click();
+      T.eq(picker().value, App.state.phase);
+    } finally { ctx.restore(); }
+  });
+
+  test('stage list: greyed in the Mesh tab, where one mesh serves every stage', function () {
+    var ctx = rig(model());
+    try {
+      mountTabs();
+      App.setMode('mesh');
+      T.ok(picker().disabled);
+      T.ok(/mesh/i.test(picker().title));
+      App.setMode('flow');
+      T.ok(!picker().disabled, 'back in a model tab it can be used again');
+    } finally { ctx.restore(); }
+  });
+
+  test('stage list: in Results it chooses the stage of the run', function () {
+    var ctx = rig(model());
+    var results = App.Results;
+    var typed = [];
+    App.Results = Object.assign({}, results, {
+      state: function () {
+        return { run: 'run_1', stage: 1, stages: [
+          { index: 1, stage: 'Initial stage', results: true },
+          { index: 2, stage: 'Dig', results: true }] };
+      },
+      projectStage: function () { return null; },
+      handleCommand: function (text) { typed.push(text); return null; }
+    });
+    try {
+      mountTabs();
+      App.setMode('results');
+      var select = picker();
+      T.eq(select.options.length, 2);
+      T.eq(select.value, '1');
+      select.value = '2';
+      select.dispatchEvent(new Event('change'));
+      T.eq(typed, ['results stage 2']);
+    } finally { App.Results = results; ctx.restore(); }
+  });
+
+  test('stage list: Results opens on the stage chosen in the other tabs', function () {
+    var ctx = rig(model());
+    var results = App.Results;
+    var order = App.Stages.order(App.PROJECT);
+    var typed = [];
+    App.Results = Object.assign({}, results, {
+      state: function () {
+        return { run: 'run_1', stage: order.length, stages: order.map(function (s, i) {
+          return { index: i + 1, stage: s.name, results: true };
+        }) };
+      },
+      // The run is of this project, and shows its last stage.
+      projectStage: function () { return { stage: order[order.length - 1].id }; },
+      handleCommand: function (text) { typed.push(text); return null; }
+    });
+    try {
+      mountTabs();
+      App.state.phase = order[1].id;
+      App.setMode('soil');
+      App.setMode('results');
+      T.eq(typed, ['results stage 2']);
+      typed = [];
+      App.setMode('results');
+      T.eq(typed, [], 'staying in Results does not choose again');
+    } finally { App.Results = results; ctx.restore(); }
+  });
+
+  /* ── Calculation settings: the Stages explorer alone ────────────────── */
+
+  function dockRig() {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    ['panel-model', 'split-dock1', 'panel-selection', 'split-dock2', 'panel-phases']
+      .forEach(function (id) {
+        var node = document.createElement('section');
+        node.id = id;
+        if (/^panel/.test(id)) node.className = 'dock-panel';
+        dock.appendChild(node);
+      });
+    document.body.appendChild(dock);
+    return dock;
+  }
+
+  test('calculation settings: the Stages explorer is the whole dock', function () {
+    var ctx = rig(model());
+    var dock = dockRig();
+    try {
+      App.setMode('staged');
+      T.ok(dock.classList.contains('stages-only'));
+      ['panel-model', 'split-dock1', 'panel-selection', 'split-dock2'].forEach(function (id) {
+        T.ok(document.getElementById(id).hidden, id + ' is still shown');
+      });
+      T.ok(!document.getElementById('panel-phases').hidden);
+      App.setMode('soil');
+      T.ok(!dock.classList.contains('stages-only'));
+      ['panel-model', 'split-dock1', 'panel-selection'].forEach(function (id) {
+        T.ok(!document.getElementById(id).hidden, id + ' did not come back');
+      });
+    } finally { dock.remove(); ctx.restore(); }
   });
 
 })();

@@ -419,13 +419,17 @@ of the mesh shows them:
 ## 12. Set up the seven stages
 
 A stage is one calculation step of the construction. Each stage starts from the stage
-before it. In Staged construction mode, the check box of a row in the Model explorer says
-whether that object is in the model in the selected stage.
+before it. You add the stages and set how each one is calculated in the **Calculation
+settings** tab. You switch objects on and off in a stage in the **Soil**, **Structures** and
+**Flow conditions** tabs: choose the stage in the **Stage** list beside the tabs, and the
+check box of a row in the Model explorer then says whether that object is in the model in
+that stage. An object that is switched off is drawn faded. It is still meshed: Kratos uses
+one mesh for all the stages.
 
 A new project already has the initial stage. It calculates the initial stresses in the
 soil. Set it to the K0 procedure:
 
-1. Click the **Staged construction** tab.
+1. Click the **Calculation settings** tab.
 2. In the Stages explorer, click **Initial stage**.
 3. Click **Stages…**.
 4. In **Stress initialisation**, select **K0 procedure**.
@@ -437,12 +441,13 @@ The initial stage also sets the calculation type of all stages: **Mechanical (U-
 it. The K0 procedure makes the initial stresses in the soil without the wall, so switch
 off the objects that are not there yet:
 
-1. In the Stages explorer, click **Initial stage**.
-2. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
+1. Click the **Structures** tab.
+2. In the **Stage** list beside the tabs, select **1 Initial stage**.
+3. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
    **Interface**, **WaterLoad_AfterLift1**, **WaterLoad_AfterLift2**, **WaterLoad_AfterLift3** and
    **Load**.
 
-![The initial stage, with the wall, strut, interface and loads switched off in the Model explorer. The Add stage button is outlined.](images/crow/12_stages_initial.png)
+![The initial stage in the Structures tab, with the wall, strut, interface and loads switched off in the Model explorer. The Stage list is outlined.](images/crow/12_stages_initial.png)
 
 Then add the null step and the five construction stages:
 
@@ -465,24 +470,26 @@ only what the construction does. Kratos' own CROW test resets them in the same s
 
 For each stage in the table:
 
-1. In the toolbar of the Stages explorer, click **Add stage** (the first button). The new
+1. Click the **Calculation settings** tab.
+2. In the toolbar of the Stages explorer, click **Add stage** (the first button). The new
    stage comes after the last stage.
-2. Click **Stages…**. The Stages window opens with the new stage selected.
-3. Type the **Name**, the **Max iterations** and the **Tolerated error**. Press Enter
+3. Click **Stages…**. The Stages window opens with the new stage selected.
+4. Type the **Name**, the **Max iterations** and the **Tolerated error**. Press Enter
    after each value.
-4. For Wall installation only: select **Reset displacements to zero**.
-5. Click **Close**.
-6. In the Stages explorer, click the new stage.
-7. In the Model explorer, select the check boxes of the objects to switch on, and clear the
-   check boxes of the objects to switch off.
+5. For Wall installation only: select **Reset displacements to zero**.
+6. Click **Close**.
+7. Click the **Structures** tab. The **Stage** list shows the new stage.
+8. In the Model explorer, select the check boxes of the objects to switch on, and clear the
+   check boxes of the objects to switch off. A switch changes this stage only: the stages
+   before it keep what they had.
 
 The Stages window of the stage Wall installation:
 
 ![The Stages window of the stage Wall installation. The Reset displacements to zero row is outlined.](images/crow/12_stages_reset.png)
 
-After the last stage, the Stages explorer shows seven stages:
+After the last stage, the **Stage** list has seven stages:
 
-![The stage Third excavation. The Add stage button and the two water loads that it changes are outlined.](images/crow/12_stages_last.png)
+![The stage Third excavation in the Structures tab. The Stage list and the two water loads that it changes are outlined.](images/crow/12_stages_last.png)
 
 ## 13. Calculate and look at the wall
 
@@ -513,7 +520,8 @@ updates its inverse from the residuals, so each iteration costs much less. For t
 the bending moment and the wall displacement stay the same, and Kratos took about 7 s
 against about 70 s with Newton-Raphson (measured on 2026-11-16).
 
-The strategy is a setting of each stage. For each of the seven stages:
+The strategy is a setting of each stage. In the **Calculation settings** tab, for each of
+the seven stages:
 
 1. In the Stages explorer, click the stage.
 2. Click **Stages…**.
@@ -533,7 +541,7 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 1. Click **Close** in the Plot along the wall window, then click **Close** in the
    Convergence window.
 2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
-   excavation**.
+   excavation**. The **Stage** list beside the mode tabs does the same.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
    effective stress.
 

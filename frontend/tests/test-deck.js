@@ -80,14 +80,17 @@
     ]
   };
 
-  T.test('outside the Staged construction tab every part is drawn', function () {
+  T.test('in the Mesh and Results tabs every part is drawn', function () {
+    // One mesh serves every stage; Results draws its own copy of the mesh.
     T.eq(D.activeForView(STAGED, '3_Fill', 'mesh'), null);
     T.eq(D.activeForView(STAGED, '3_Fill', 'results'), null);
   });
 
-  T.test('on the Staged construction tab, the selected stage decides', function () {
-    T.eq(D.activeForView(STAGED, '1_Initial_stage', 'staged'), ['soil']);
-    T.eq(D.activeForView(STAGED, '3_Fill', 'staged'), ['fill', 'soil']);
+  T.test('in every tab that follows the stage, the selected stage decides', function () {
+    ['soil', 'structures', 'flow', 'staged'].forEach(function (mode) {
+      T.eq(D.activeForView(STAGED, '1_Initial_stage', mode), ['soil'], mode);
+      T.eq(D.activeForView(STAGED, '3_Fill', mode), ['fill', 'soil'], mode);
+    });
   });
 
   T.test('no stage selected hides nothing, rather than everything', function () {

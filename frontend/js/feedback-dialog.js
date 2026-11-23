@@ -79,7 +79,8 @@ App.FeedbackDialog = (function () {
       window: aboutWindow || null,
       windows: openWindows(),
       selection: App.state && App.state.selection,
-      stage: mode === 'staged' ? stageName() : null,
+      // Every tab that shows one stage (the stage list beside the tabs) names it.
+      stage: App.Stages && App.Stages.followsStage(mode) ? stageName() : null,
       results: resultsSaid(),
       project: project.name || null,
       dimension: project.dimension ? project.dimension + 'D' : null,

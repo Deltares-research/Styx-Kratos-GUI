@@ -276,7 +276,7 @@ little.
 A new project has one stage, the initial stage. It is a mechanical stage. Make it a
 groundwater flow stage:
 
-1. Click the **Staged construction** tab.
+1. Click the **Calculation settings** tab.
 2. In the Stages explorer, click **Initial stage**.
 3. Click **Stages…**.
 4. In **Calculation type**, select **Flow (Pw)**.

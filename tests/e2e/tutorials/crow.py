@@ -440,8 +440,30 @@ SWITCHES = [
 STRESS_INITIALISATION = {"K0": "K0 procedure", "gravity": "Gravity loading", "none": "None"}
 
 
+STAGE_LIST = "#stage-picker"
+"""The stage list beside the mode tabs: the stage Soil, Structures and Flow conditions show."""
+
+
+def _choose_stage(tour: Tour, name: str) -> None:
+    """Choose the stage `name` in the stage list beside the mode tabs."""
+    stage = next(s for s in project(tour)["stages"] if s["name"] == name)
+    tour.page.locator(STAGE_LIST).select_option(stage["id"])
+    tour.until(f"App.state.phase === {stage['id']!r}")
+    tour.settle()
+
+
+def _switch_in(tour: Tour, name: str, on: list[str], off: list[str]) -> None:
+    """In the Structures tab, with stage `name` chosen, switch the rows `on` and `off`."""
+    mode(tour, "structures")
+    _choose_stage(tour, name)
+    for label in on:
+        _switch(tour, label, True)
+    for label in off:
+        _switch(tour, label, False)
+
+
 def _switch(tour: Tour, label: str, on: bool) -> None:
-    """The check box of a Model explorer row: is the object there in this stage."""
+    """The check box of a Model explorer row: is the object there in the chosen stage."""
     eye = tree_row(tour.page, label).locator(".tree-eye")
     if ("off" not in (eye.get_attribute("class") or "")) != on:
         eye.click()
@@ -487,11 +509,10 @@ def stages(tour: Tour) -> None:
     tour.settle()
     tour.picture("window", of=dialog, mark=_stage_row(dialog, "Stress initialisation"))
     dialog.get_by_role("button", name="Close").click()
-    _pick_stage(tour, first.name)
-    for label in INITIAL_OFF:
-        _switch(tour, label, False)
-    tour.picture("initial", mark=[add, *(tree_row(page, label) for label in INITIAL_OFF)])
+    _switch_in(tour, first.name, [], INITIAL_OFF)
+    tour.picture("initial", mark=[STAGE_LIST, *(tree_row(page, label) for label in INITIAL_OFF)])
     for number, (stage, (on, off)) in enumerate(zip(MODEL.stages[1:], SWITCHES), start=2):
+        mode(tour, "staged")
         add.click()
         tour.until(f"App.PROJECT.stages.length === {number}")
         tour.settle()
@@ -507,12 +528,8 @@ def stages(tour: Tour) -> None:
         if stage.reset_displacements:
             tour.picture("reset", of=dialog, mark=_stage_row(dialog, "Reset displacements to zero"))
         dialog.get_by_role("button", name="Close").click()
-        _pick_stage(tour, stage.name)
-        for label in on:
-            _switch(tour, label, True)
-        for label in off:
-            _switch(tour, label, False)
-    tour.picture("last", mark=[add, *(tree_row(page, label) for label in on + off)])
+        _switch_in(tour, stage.name, on, off)
+    tour.picture("last", mark=[STAGE_LIST, *(tree_row(page, label) for label in on + off)])
 
 
 def seven_stages(tour: Tour) -> None:

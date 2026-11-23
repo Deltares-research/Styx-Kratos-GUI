@@ -57,14 +57,16 @@
       + ' in the Model explorer, under "Imported mesh".';
   }
 
-  /* ── Staged construction: a stage's own parts ─────────────────────────────
+  /* ── A stage's own parts ──────────────────────────────────────────────────
      A deck's stages are its stages (core/kratos/external_deck.py `stages`), keyed by the deck's
      own part names. The viewport draws a deck as imported sections, outside the
      project parts the frozen stage pass hides, so it asks this which parts the
-     selected stage has. `null` means "draw by the eye alone": any tab but Staged
-     construction, no stage selected, or a model that is not a deck. */
+     selected stage has. `null` means "draw by the eye alone": a tab that does not
+     follow the stage chosen beside the tabs (Mesh, Results; `App.Stages.followsStage`),
+     no stage selected, or a model that is not a deck. */
   function activeForView(project, stageId, mode) {
-    if (mode !== 'staged' || !project || !project.deck || !stageId) return null;
+    if (!project || !project.deck || !stageId) return null;
+    if (!App.Stages || !App.Stages.followsStage || !App.Stages.followsStage(mode)) return null;
     if (!App.Stages || !App.Stages.activeParts) return null;
     return App.Stages.activeParts(project, stageId);
   }
