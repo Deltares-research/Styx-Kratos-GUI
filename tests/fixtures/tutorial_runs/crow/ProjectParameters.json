@@ -1354,7 +1354,7 @@
                         "Left_Edge",
                         "Right_Edge",
                         "Load",
-                        "WaterLoad_Stage1"
+                        "WaterLoad_AfterLift1"
                     ],
                     "body_domain_sub_model_part_list": [
                         "Soil_Top_retained",
@@ -1591,7 +1591,7 @@
                             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
                             "process_name": "ApplyNormalLoadTableProcess",
                             "Parameters": {
-                                "model_part_name": "PorousDomain.WaterLoad_Stage1",
+                                "model_part_name": "PorousDomain.WaterLoad_AfterLift1",
                                 "variable_name": "NORMAL_CONTACT_STRESS",
                                 "active": [
                                     true,
@@ -1834,7 +1834,7 @@
                         "Right_Edge",
                         "Strut_Support",
                         "Load",
-                        "WaterLoad_Stage1"
+                        "WaterLoad_AfterLift1"
                     ],
                     "body_domain_sub_model_part_list": [
                         "Soil_Top_retained",
@@ -2101,7 +2101,7 @@
                             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
                             "process_name": "ApplyNormalLoadTableProcess",
                             "Parameters": {
-                                "model_part_name": "PorousDomain.WaterLoad_Stage1",
+                                "model_part_name": "PorousDomain.WaterLoad_AfterLift1",
                                 "variable_name": "NORMAL_CONTACT_STRESS",
                                 "active": [
                                     true,
@@ -2342,7 +2342,7 @@
                         "Right_Edge",
                         "Strut_Support",
                         "Load",
-                        "WaterLoad_Stage2"
+                        "WaterLoad_AfterLift2"
                     ],
                     "body_domain_sub_model_part_list": [
                         "Soil_Top_retained",
@@ -2578,7 +2578,7 @@
                             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
                             "process_name": "ApplyNormalLoadTableProcess",
                             "Parameters": {
-                                "model_part_name": "PorousDomain.WaterLoad_Stage2",
+                                "model_part_name": "PorousDomain.WaterLoad_AfterLift2",
                                 "variable_name": "NORMAL_CONTACT_STRESS",
                                 "active": [
                                     true,
@@ -2815,7 +2815,7 @@
                         "Right_Edge",
                         "Strut_Support",
                         "Load",
-                        "WaterLoad_Stage3"
+                        "WaterLoad_AfterLift3"
                     ],
                     "body_domain_sub_model_part_list": [
                         "Soil_Top_retained",
@@ -3020,7 +3020,7 @@
                             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
                             "process_name": "ApplyNormalLoadTableProcess",
                             "Parameters": {
-                                "model_part_name": "PorousDomain.WaterLoad_Stage3",
+                                "model_part_name": "PorousDomain.WaterLoad_AfterLift3",
                                 "variable_name": "NORMAL_CONTACT_STRESS",
                                 "active": [
                                     true,

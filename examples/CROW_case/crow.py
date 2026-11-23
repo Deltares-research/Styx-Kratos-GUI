@@ -203,21 +203,21 @@ LOADS = [
 NORMAL_LOADS = [
     NormalLoad(
         id="water_1",
-        name="WaterLoad_Stage1",
+        name="WaterLoad_AfterLift1",
         points=[(0.0, -2.0), (5.0, -2.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
         reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_2",
-        name="WaterLoad_Stage2",
+        name="WaterLoad_AfterLift2",
         points=[(0.0, -5.0), (5.0, -5.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
         reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_3",
-        name="WaterLoad_Stage3",
+        name="WaterLoad_AfterLift3",
         points=[(0.0, -8.0), (5.0, -8.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
         reference_coordinate=-1.5,

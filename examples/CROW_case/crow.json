@@ -297,7 +297,7 @@
   "normal_loads": [
     {
       "id": "water_1",
-      "name": "WaterLoad_Stage1",
+      "name": "WaterLoad_AfterLift1",
       "kind": "normal",
       "points": [
         [
@@ -320,7 +320,7 @@
     },
     {
       "id": "water_2",
-      "name": "WaterLoad_Stage2",
+      "name": "WaterLoad_AfterLift2",
       "kind": "normal",
       "points": [
         [
@@ -343,7 +343,7 @@
     },
     {
       "id": "water_3",
-      "name": "WaterLoad_Stage3",
+      "name": "WaterLoad_AfterLift3",
       "kind": "normal",
       "points": [
         [

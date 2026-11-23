@@ -383,19 +383,19 @@ ground that stays is on the right of this walk. Its pressure is zero at its
 `--reference-coordinate`, the phreatic level:
 
 ```powershell
-kratos-cli normal-load crow.json add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
+kratos-cli normal-load crow.json add water_1 --name WaterLoad_AfterLift1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
 ```
-> <pre>added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json</pre>
+> <pre>added normal load (id water_1, name WaterLoad_AfterLift1); wrote ...\crow.json</pre>
 
 ```powershell
-kratos-cli normal-load crow.json add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+kratos-cli normal-load crow.json add water_2 --name WaterLoad_AfterLift2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
 ```
-> <pre>added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json</pre>
+> <pre>added normal load (id water_2, name WaterLoad_AfterLift2); wrote ...\crow.json</pre>
 
 ```powershell
-kratos-cli normal-load crow.json add water_3  --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
+kratos-cli normal-load crow.json add water_3  --name WaterLoad_AfterLift3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
 ```
-> <pre>added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json</pre>
+> <pre>added normal load (id water_3, name WaterLoad_AfterLift3); wrote ...\crow.json</pre>
 
 ### Part 3: the mesh and the stages
 

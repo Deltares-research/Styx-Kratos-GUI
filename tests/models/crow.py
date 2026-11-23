@@ -102,7 +102,7 @@ def project(model: str = MOHR_COULOMB) -> Project:
     contact = InterfaceSection(
         id="contact", name="Wall contact", constitutive_law=LAWS[model][1],
         virtual_thickness=1.0)
-    water_loads = [NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
+    water_loads = [NormalLoad(id=f"water_{index}", name=f"WaterLoad_AfterLift{index}",
                               fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
                               points=[(0.0, level), (WALL_X, level), (WALL_X, WATER_Y)])
                    for index, level in enumerate(LIFTS, start=1)]

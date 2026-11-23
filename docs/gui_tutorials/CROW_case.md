@@ -96,8 +96,8 @@ The model has two Mohr-Coulomb soils:
 - Kratos calculates the unit weight of the soil from the density of the solid
   ρ<sub>s</sub>, the density of the water ρ<sub>w</sub> and the porosity n:
 
-  - Dry unit weight: γ<sub>dry</sub> = (1 − n) · ρ<sub>s</sub> · g
-  - Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · ρ<sub>w</sub>) · g
+    * Dry unit weight: γ<sub>dry</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>res</sub> · ρ<sub>w</sub>) · g
+    * Saturated unit weight: γ<sub>sat</sub> = ((1 − n) · ρ<sub>s</sub> + n · S<sub>sat</sub> · ρ<sub>w</sub>) · g
 
   With n = 0, the two are the same: γ = ρ<sub>s</sub> · g. The densities in the table give
   γ = 18 kN/m³ for the clay and 20 kN/m³ for the sand, the unit weights of the CROW case.
@@ -222,12 +222,12 @@ Draw the first line with points that you type:
 2. In the command box at the bottom of the window, type `0 -2` and press Enter.
 3. Type `5 -2` and press Enter.
 
-   ![The two points of the first line, typed in the command box. The Create line tool and the command box are outlined.](images/crow/06_lines_drawn.png)
+    ![The two points of the first line, typed in the command box. The Create line tool and the command box are outlined.](images/crow/06_lines_drawn.png)
 
 4. Press Enter in the empty command box. The Create line window opens with the two points.
 5. In **Name**, type `Floor of lift 1`.
 
-   ![The Create line window of the first line.](images/crow/06_lines_drawn_window.png)
+    ![The Create line window of the first line.](images/crow/06_lines_drawn_window.png)
 
 6. Click **Save**.
 
@@ -291,15 +291,15 @@ anchor.
 1. On the tool rail, click **Create anchor…**. The **Create anchor** window opens.
 2. Type these values:
 
-   | Field | Value |
-   |---|---|
-   | **Name** | `Strut` |
-   | **Head x**, **Head y** (m) | `5`, `-1.5` |
-   | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
-   | **YOUNG_MODULUS** (Pa) | `210000000000` |
-   | **CROSS_AREA** (m²) | `4.7619e-05` |
-   | **DENSITY** (kg/m³) | `0` |
-   | **Spacing** (m) | `1` |
+    | Field | Value |
+    |---|---|
+    | **Name** | `Strut` |
+    | **Head x**, **Head y** (m) | `5`, `-1.5` |
+    | **Tail x**, **Tail y** (m) | `4`, `-1.5` |
+    | **YOUNG_MODULUS** (Pa) | `210000000000` |
+    | **CROSS_AREA** (m²) | `4.7619e-05` |
+    | **DENSITY** (kg/m³) | `0` |
+    | **Spacing** (m) | `1` |
 
 3. Leave **Head end** at **Free (attached to the mesh)**. The head is on the wall, so it
    becomes a node of the wall.
@@ -307,14 +307,14 @@ anchor.
    **Free (attached to the mesh)**: it is a node of the soil mesh. The tail of this strut
    is in the pit, where the soil is removed, so it must be a fixed support.
 
-   ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
+    ![The Create anchor window with the values of the strut. The Create anchor tool is outlined.](images/crow/08_strut.png)
 
 5. Click **Save**. Styx adds the strut and selects it.
 6. In the Selection explorer, in the **Tension limit** row, click **No tension limit**.
 
-   Leave **Compression limit** empty. The strut then has no force limits.
+    Leave **Compression limit** empty. The strut then has no force limits.
 
-   ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
+    ![The Selection explorer of the strut. The Tension limit row is outlined.](images/crow/08_strut_limits.png)
 
 The head of the strut is on the wall, so it becomes a node of the wall. The tail is a fixed
 support.
@@ -330,7 +330,7 @@ by the soil's own **Rinter** from step 2.
 3. In **Side**, select **Both sides**.
 4. Click **Save**.
 
-   ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
+    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
 5. In the Selection explorer of the interface, in **Law**, select **Coulomb**.
 6. Keep the other values of a new interface. **Stiffness** shows **From the soil** and
@@ -357,12 +357,12 @@ The surcharge is 20 kN/m on the retained ground surface, from the wall to the ri
    **Line load**.
 2. Type these values:
 
-   | Field | Value |
-   |---|---|
-   | **Name** | `Load` |
-   | **x min**, **x max** (m) | `5`, `80` |
-   | **y** (m) | `0` |
-   | **qx**, **qy** (N/m) | `0`, `-20000` |
+    | Field | Value |
+    |---|---|
+    | **Name** | `Load` |
+    | **x min**, **x max** (m) | `5`, `80` |
+    | **y** (m) | `0` |
+    | **qx**, **qy** (N/m) | `0`, `-20000` |
 
 3. Click **Save**.
 
@@ -374,9 +374,9 @@ the water table. The pressure is hydrostatic and zero at −1.5 m.
 
 | Name | Point 1 | Point 2 | Point 3 |
 |---|---|---|---|
-| `WaterLoad_Stage1` | `0`, `-2` | `5`, `-2` | `5`, `-1.5` |
-| `WaterLoad_Stage2` | `0`, `-5` | `5`, `-5` | `5`, `-1.5` |
-| `WaterLoad_Stage3` | `0`, `-8` | `5`, `-8` | `5`, `-1.5` |
+| `WaterLoad_AfterLift1` | `0`, `-2` | `5`, `-2` | `5`, `-1.5` |
+| `WaterLoad_AfterLift2` | `0`, `-5` | `5`, `-5` | `5`, `-1.5` |
+| `WaterLoad_AfterLift3` | `0`, `-8` | `5`, `-8` | `5`, `-1.5` |
 
 For each water load:
 
@@ -439,7 +439,7 @@ off the objects that are not there yet:
 
 1. In the Stages explorer, click **Initial stage**.
 2. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
-   **Interface**, **WaterLoad_Stage1**, **WaterLoad_Stage2**, **WaterLoad_Stage3** and
+   **Interface**, **WaterLoad_AfterLift1**, **WaterLoad_AfterLift2**, **WaterLoad_AfterLift3** and
    **Load**.
 
 ![The initial stage, with the wall, strut, interface and loads switched off in the Model explorer. The Add stage button is outlined.](images/crow/12_stages_initial.png)
@@ -450,10 +450,10 @@ Then add the null step and the five construction stages:
 |---|---|---|---|---|---|
 | 2 | `Null step` | `150` | `0.0001` | | |
 | 3 | `Wall installation` | `150` | `0.001` | SheetPileWall, Interface, Load | |
-| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | lift 1 |
+| 4 | `First excavation` | `500` | `0.001` | WaterLoad_AfterLift1 | lift 1 |
 | 5 | `Strut installation` | `150` | `0.001` | Strut | |
-| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | lift 2, WaterLoad_Stage1 |
-| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | lift 3, WaterLoad_Stage2 |
+| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_AfterLift2 | lift 2, WaterLoad_AfterLift1 |
+| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_AfterLift3 | lift 3, WaterLoad_AfterLift2 |
 
 The null step changes nothing in the model. Kratos' own CROW test has the same stage after
 the K0 procedure. The excavation stages have more iterations, because the soil yields
@@ -537,23 +537,23 @@ on a new model compare one calculation with a Newton-Raphson calculation.
 3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
    effective stress.
 
-![The horizontal effective stress after the third excavation. The Stage and Field lists of the Results explorer are outlined.](images/crow/14_contours_horizontal.png)
+    ![The horizontal effective stress after the third excavation. The Stage and Field lists of the Results explorer are outlined.](images/crow/14_contours_horizontal.png)
 
-The colours show the stress on the mesh, and the legend at the right gives the values.
-Compression is negative. The horizontal stress goes from about −9 kPa near the ground
-surface to about −275 kPa at the bottom of the model. The pit, at the left of the wall, has
-no colours, because its soil is excavated. Under the pit floor the stresses are small,
-because the soil above that floor is gone.
+    The colours show the stress on the mesh, and the legend at the right gives the values.
+    Compression is negative. The horizontal stress goes from about −9 kPa near the ground
+    surface to about −275 kPa at the bottom of the model. The pit, at the left of the wall, has
+    no colours, because its soil is excavated. Under the pit floor the stresses are small,
+    because the soil above that floor is gone.
 
 4. In **Field**, select **Effective stresses · σyy (Pa)**. This is the vertical effective
    stress.
 
-![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
+    ![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
 
-The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
-bottom. Deep in the sand, the horizontal stress is about half of the vertical stress: at the
-bottom, −275 kPa against −600 kPa. This ratio is close to K0 of the sand, 0.46. Near the
-ground surface and near the wall, the ratio is different.
+    The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
+    bottom. Deep in the sand, the horizontal stress is about half of the vertical stress: at the
+    bottom, −275 kPa against −600 kPa. This ratio is close to K0 of the sand, 0.46. Near the
+    ground surface and near the wall, the ratio is different.
 
 5. In **Field**, select **Deformations · |u| (m)**. This is the magnitude of the total
    displacement since the wall installation, the stage that resets the displacements.

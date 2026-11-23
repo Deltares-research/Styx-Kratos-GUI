@@ -13,7 +13,8 @@ Two checks, for two kinds of page:
   and `results` need Kratos and are left out. A page of `kratos-cli` lines in
   `powershell` blocks, each with its output in a `> <pre>` quote under it, is followed
   the same way, each line run on its own. The Muskat tutorial has its own test
-  (`test_muskat_tutorial.py`).
+  (`test_muskat_tutorial.py`). The levee seepage tutorial is left out for now: its
+  `<pre style=...>` quotes and `<repo>` paths are not read here yet.
 
 The pages are found, not named: a tutorial added later is checked too.
 """
@@ -115,7 +116,8 @@ def steps(page: Path) -> list[Step]:
 
 def tutorials() -> list[Path]:
     """The pages that build a project from nothing in the shell."""
-    return [page for page in PAGES[1:] if page.name != "Muskat_case.md"
+    return [page for page in PAGES[1:]
+            if page.name not in {"Muskat_case.md", "levee_seepage_case.md"}
             and steps(page) and steps(page)[0].command.startswith("new ")]
 
 
