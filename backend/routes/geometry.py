@@ -7,7 +7,6 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from pydantic import BaseModel
 
 from backend import store
 from backend.routes.common import read_upload, refusals, stored
@@ -115,41 +114,3 @@ async def create_geometry(recipe: dict) -> dict:
         "edit_notes": notes,
         "invalidates": ["geometry", "mesh", "tree", "project"]
     }
-
-
-class IntersectRequest(BaseModel):
-    key: str
-    """The soil surface right-clicked: the overlap takes its material."""
-    other: str
-    """The soil surface it overlaps."""
-
-
-@router.post("/api/geometry/intersect")
-async def intersect_surfaces(request: IntersectRequest) -> dict:
-    """Split two overlapping soil surfaces into the part of each outside the other and the
-    overlap (`session.intersection_plan`): viewport right-click > Intersect with.
-
-    Planned before gmsh is asked, so a refusal -- surfaces that do not overlap -- costs no
-    geometry work; each piece is then built as Create soil surface… builds one."""
-    import json
-
-    with refusals():
-        plan = session.intersection_plan(store.get(), request.key, request.other)
-    try:
-        built = [await gmsh_worker.run(gmsh_worker.create_job, json.dumps(recipe))
-                 for recipe, _ in plan]
-    except ValueError as refused:
-        raise HTTPException(status_code=422, detail=str(refused)) from refused
-    except gmsh_worker.WorkerCrashed:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    # Planned again against the project as it is now: gmsh took a while, and the store
-    # may have changed under it.
-    with refusals():
-        project = store.get()
-        if session.intersection_plan(project, request.key, request.other) != plan:
-            raise session.EditRefused("the surfaces changed while they were being "
-                                      "intersected; intersect them again")
-        project = session.with_intersection(project, plan, built)
-    return stored(project) | {"invalidates": ["geometry", "mesh", "tree", "project"]}

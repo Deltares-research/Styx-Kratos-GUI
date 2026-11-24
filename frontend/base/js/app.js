@@ -9,8 +9,7 @@ App.state = {
   phase: 'ph4',
   projection: true,     // true = perspective
   grid: true,
-  snap: true,
-  snapDistance: 1      // metres; a picked point is rounded to a multiple of it
+  snap: true
 };
 
 /* ── Mode switching ───────────────────────────────────────────── */
@@ -314,21 +313,6 @@ function toggleCommandPanel() {
   /* Status-bar snapping toggle */
   document.getElementById('sb-snap').addEventListener('click', function () {
     App.runAction({ action: 'toggleSnap' });
-  });
-
-  /* Status-bar snapping distance: a positive number of metres, anything else is put back */
-  var snapDist = document.getElementById('sb-snap-dist');
-  snapDist.value = App.state.snapDistance;
-  snapDist.addEventListener('change', function () {
-    // Typed, so a decimal comma (1,5) is accepted as well as a point; "1.5x" is refused.
-    var value = Number(snapDist.value.trim().replace(',', '.'));
-    if (isFinite(value) && value > 0) App.state.snapDistance = value;
-    // defaultValue is the applied one: an Enter with nothing new typed then goes to the
-    // drawing (js/draw-input.js onKey) and finishes it.
-    snapDist.value = snapDist.defaultValue = String(App.state.snapDistance);
-  });
-  snapDist.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') snapDist.value = snapDist.defaultValue;   // drop an unapplied edit
   });
 
   /* Keyboard shortcuts */

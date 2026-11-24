@@ -35,7 +35,7 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, migration, regions, soil_models, stages, units
+from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (INTERPOLATE, ConditionsUpdate, CustomPart, DimensionUpdate,
                                 LayersUpdate,
@@ -653,103 +653,6 @@ def without_custom_part(project: Project, key: str) -> Project:
     if not any(p.key == key for p in project.custom_parts):
         raise UnknownPart(f"no custom part with key {key!r}")
     return without_custom_parts(project, [key])
-
-
-IntersectionPlan = list[tuple[dict, str]]
-"""What intersecting two soil surfaces builds (`intersection_plan`): each piece's creation
-recipe, and the key of the surface whose stages, water and mesh size a new piece takes."""
-
-
-def _soil_surface(project: Project, key: str) -> tuple[CustomPart, tuple]:
-    """The custom part `key`, which has to be a soil surface: an outline swept along z with
-    a material (`CustomPart.section_outline`), and its section."""
-    part = next((p for p in project.custom_parts if p.key == key), None)
-    if part is None:
-        raise UnknownPart(f"no custom part with key {key!r}")
-    section = part.section_outline()
-    if section is None:
-        raise EditRefused(f"{part.label!r} is not a soil surface: only a drawn outline with "
-                          "a material can be intersected")
-    return part, section
-
-
-def intersection_plan(project: Project, key: str, other: str) -> IntersectionPlan:
-    """What intersecting the soil surface `key` with the soil surface `other` makes: the
-    pieces of each outside the other, and the pieces where they overlap, which take `key`'s
-    material. Viewport right-click > Intersect with, and `kratos-cli surface intersect`.
-
-    Each surface keeps its key, its name and its material for its first piece of its own,
-    so what names it -- a stage, its water, its mesh size -- still finds it; every other
-    piece is a new part. Where one surface lies wholly inside the other, the overlap is the
-    whole of the inner one and keeps the inner one's key. Refused for two surfaces that do
-    not overlap, or that cover the same ground."""
-    require_parametric(project, "drawn into")
-    if key == other:
-        raise EditRefused("a soil surface cannot be intersected with itself")
-    first, (outline, z0, z1) = _soil_surface(project, key)
-    second, (other_outline, w0, w1) = _soil_surface(project, other)
-    if abs(z0 - w0) > 1e-9 or abs(z1 - w1) > 1e-9:
-        raise EditRefused(f"{first.label!r} and {second.label!r} do not span the same "
-                          "range along z, so they cannot be intersected in the section")
-    a_only, both, b_only = regions.overlay(outline, other_outline)
-    if not both:
-        raise EditRefused(f"{first.label!r} and {second.label!r} do not overlap")
-    if not a_only and not b_only:
-        raise EditRefused(f"{first.label!r} and {second.label!r} cover the same ground")
-
-    def recipe(piece: regions.Piece, label: str, material: str | None,
-               replace: str | None) -> dict:
-        made = {"kind": "polygon_extrude",
-                "vertices": [[x, y, z0] for x, y in piece.outline],
-                "extrusion": [0, 0, z1 - z0], "label": label, "material": material}
-        return made | ({"replace": replace} if replace is not None else {})
-
-    # Replacements first: a new piece built while its surface still has its old shape
-    # could be refused as already occupying that space.
-    kept: IntersectionPlan = []
-    new: IntersectionPlan = []
-    overlap = f"{first.label} & {second.label}"
-    for found, part in ((a_only, first), (b_only, second)):
-        for index, piece in enumerate(found):
-            (kept if index == 0 else new).append(
-                (recipe(piece, part.label, part.mat, part.key if index == 0 else None),
-                 part.key))
-    # The overlap is the whole of a surface with no piece of its own left: it stays that
-    # surface, under its key.
-    whole = first if not a_only else second if not b_only else None
-    for index, piece in enumerate(both):
-        replace = whole.key if whole is not None and index == 0 else None
-        label = first.label if replace == first.key else overlap
-        (kept if replace is not None else new).append(
-            (recipe(piece, label, first.mat, replace), first.key))
-    return kept + new
-
-
-def with_intersection(project: Project, plan: IntersectionPlan,
-                      built: Sequence[dict]) -> Project:
-    """`project` with the pieces of `plan` (`intersection_plan`) in it, each built by gmsh
-    into `built` (`core.gmsh_worker.create_job`, one per recipe, in order). A new piece is
-    in every stage its surface is in, and takes its surface's water and mesh size."""
-    if len(plan) != len(built):
-        raise ValueError("one built solid is needed for each piece of the plan")
-    edited = project
-    follows: dict[str, str] = {}
-    for (recipe, source), solid in zip(plan, built):
-        edited, part = with_created_part(edited, recipe, solid)
-        if recipe.get("replace") is None:
-            follows[part.key] = source
-    if not follows:
-        return edited
-    payload = edited.model_dump()
-    for stage in payload["stages"]:
-        for field in ("activate", "deactivate"):
-            stage[field] = stage[field] + [key for key, source in follows.items()
-                                           if source in stage[field]]
-    for table in (payload["soil_water"], payload["mesh"]["body_sizes"],
-                  payload["mesh"]["size_bands"]):
-        table.update({key: table[source] for key, source in follows.items()
-                      if source in table})
-    return _edited(edited, payload)
 
 
 def edit_notes(before: Project, after: Project) -> list[str]:

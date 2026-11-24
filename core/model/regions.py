@@ -90,51 +90,6 @@ def polygon_pieces(outline: Polyline, cutters: tuple[Polyline, ...]) -> tuple[Pi
     return _cut(corners, edges, segments, whole)
 
 
-SLIVER = 1e-9
-"""Square metres. A piece smaller than this is where two edges nearly coincide, not soil."""
-
-
-def overlay(a: Polyline, b: Polyline
-            ) -> tuple[tuple[Piece, ...], tuple[Piece, ...], tuple[Piece, ...]]:
-    """Two drawn soil surfaces intersected: the pieces of `a` outside `b`, the pieces where
-    they overlap, and the pieces of `b` outside `a`, each in the order of `polygon_pieces`.
-
-    Each outline cuts the other, as a closed line would. No piece has a hole, since a
-    soil surface's outline cannot hold one: where one surface lies wholly inside the other,
-    what is left of the outer one is cut into pieces either side of it (`_without_holes`).
-    The overlap is `a`'s pieces inside `b`; two surfaces that only touch have none."""
-    def closed(outline: Polyline) -> Polyline:
-        return tuple(outline) + (outline[0],)
-
-    def split(outline: Polyline, other: Polyline) -> tuple[list[Piece], list[Piece]]:
-        inside: list[Piece] = []
-        outside: list[Piece] = []
-        for piece in polygon_pieces(tuple(outline), (closed(other),)):
-            for kept in _without_holes(piece):
-                if abs(_area(kept.outline)) > SLIVER:
-                    (inside if _inside(_counter_clockwise(other), kept.point)
-                     else outside).append(kept)
-        return inside, outside
-
-    both, a_only = split(a, b)
-    _, b_only = split(b, a)
-    return tuple(a_only), tuple(both), tuple(b_only)
-
-
-def _without_holes(piece: Piece) -> tuple[Piece, ...]:
-    """`piece`, cut where it has a hole by an upright line through the hole into pieces
-    that have none: the line runs from the outline to the hole on either side, so the hole
-    opens onto each piece's boundary."""
-    if not piece.holes:
-        return (piece,)
-    bottom, top = piece.bottom - 1.0, piece.top + 1.0
-    cutters = tuple(hole + (hole[0],) for hole in piece.holes) + tuple(
-        ((x, bottom), (x, top)) for x, _ in (_point_inside(hole, []) for hole in piece.holes))
-    return tuple(kept for found in polygon_pieces(piece.outline, cutters)
-                 if not any(_inside(hole, found.point) for hole in piece.holes)
-                 for kept in _without_holes(found))
-
-
 def _cut(corners: Polyline, boundary: list[tuple[Point, Point]],
          segments: list[tuple[Point, Point]], whole: tuple[Piece, ...]) -> tuple[Piece, ...]:
     """The pieces the clipped `segments` cut the region with this `boundary` into."""

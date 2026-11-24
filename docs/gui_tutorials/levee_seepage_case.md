@@ -182,13 +182,11 @@ right, and then back along the top of the core.
 For each surface:
 
 1. On the tool rail, click **Create soil surface…**.
-2. In the viewport, click three points for a rough outline, then press Enter. The
-   **Create soil surface** window opens on the corners that you clicked.
-3. In **Name**, type the name.
-4. In **Material**, select **Clay**.
-5. Click **Add corner** until the window has as many corners as the table, and type the
-   corners in order over the ones that you clicked.
-6. Click **Create**.
+2. In **Name**, type the name.
+3. In **Material**, select **Clay**.
+4. Click **Add corner** until the window has as many corners as the table, and type the
+   corners in order. The window opens with an example of four corners: type over them.
+5. Click **Create**.
 
 ![The Create soil surface window of the levee core. The Create soil surface tool and the Add corner button are outlined.](images/levee_seepage/04_levee_core.png)
 

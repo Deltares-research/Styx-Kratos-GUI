@@ -81,25 +81,6 @@ def _box(c):
         "kind": "box", "origin": [0, 0, 0], "size": [1, 1, 1], "label": "B"}).json()["parts"][0]["key"]
 
 
-def _surfaces(c, apart: float = 2.0) -> tuple[str, str]:
-    """The keys of two soil surfaces 3 m square, `apart` metres apart along x: with the
-    default they overlap, and from 3 m on they do not."""
-    material = _project(c)["materials"][0]["id"]
-
-    def surface(x0: float, label: str) -> str:
-        return c.post("/api/geometry/create", json={
-            "kind": "polygon_extrude", "label": label, "material": material,
-            "vertices": [[x0, 0, 0], [x0 + 3, 0, 0], [x0 + 3, 3, 0], [x0, 3, 0]],
-            "extrusion": [0, 0, 1]}).json()["parts"][0]["key"]
-
-    return surface(0, "Left"), surface(apart, "Right")
-
-
-def _intersect(c, apart: float = 2.0):
-    first, second = _surfaces(c, apart)
-    return c.post("/api/geometry/intersect", json={"key": first, "other": second})
-
-
 def _on_this_computer() -> TestClient:
     """A browser on the server's own computer, which may write in the folder called `chosen`
     (the `client` fixture). The table's client is not one, so its request for the folder
@@ -237,8 +218,6 @@ CONTRACTS = [
              {"parts", "invalidates"},
              bad=lambda c: c.post("/api/geometry/create", json={"kind": "teapot"}),
              bad_status=422),
-    Contract("POST", "/api/geometry/intersect", _intersect, EDITED, EVERYTHING,
-             bad=lambda c: _intersect(c, apart=5.0), bad_status=422),
     Contract("POST", "/api/mesh", lambda c: c.post("/api/mesh", json=COARSE),
              {"bbox", "log", "meshed_keys", "parts", "sections", "stats"},
              bad=lambda c: c.post("/api/mesh", json={**COARSE, "element_size": 0}),

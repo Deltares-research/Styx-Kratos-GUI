@@ -77,7 +77,7 @@ Genuchten soil.
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
 | `body P list\|set\|remove ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]`; `remove KEY` deletes one body and leaves a void |
-| `surface P list\|add\|set\|remove\|intersect ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]`; `intersect KEY OTHER` splits two that overlap |
+| `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
@@ -288,11 +288,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   as **Create soil surface…** in the GUI does. It has the key `drawn_0`, `drawn_1`, ...,
   and `--label` gives it a name (the default is *Soil surface*). `surface set KEY` changes
   its corners, material or name and keeps its key, and `surface remove KEY` removes it with
-  its pieces. `surface intersect KEY OTHER` splits two overlapping surfaces into the part of
-  each outside the other and the overlap, which takes the material of `KEY`, as
-  right-click > **Intersect with** in the viewport does. `surface list` shows each surface
-  with its corners, and the pieces a line cut it into. A soil surface is the same record
-  that `volume add polygon` makes in 2D, so `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
+  its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
+  it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
+  `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
 - **Names of layers and soil surfaces** are unique. A name that is already in use, given
   with `layer add`, `layer set`, `surface add` or `surface set`, gets a number: a second
   *Embankment* becomes *Embankment_2*, and a note says so. Names that differ only in case

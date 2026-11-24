@@ -46,10 +46,7 @@ App.DrawInput = (function () {
     document.addEventListener('keydown', boundKey, true);
     
     canvas.style.cursor = 'crosshair';
-    if (App.Command) {
-      App.Command.note('Started drawing ' + ((options && options.noun) || mode) +
-                       '. Click to place, right-click/Enter to finish, Esc to cancel.');
-    }
+    if (App.Command) App.Command.note('Started drawing ' + mode + '. Click to place, right-click/Enter to finish, Esc to cancel.');
   }
   
   function cancel() {
@@ -72,11 +69,10 @@ App.DrawInput = (function () {
   function commit() {
     var recipe = null;
     
-    // A line or an outline a tool asked for (a boundary condition's, or the corners
-    // of a soil surface) goes to that tool, not into a drawn solid: the points are
-    // what it wants.
-    var wanted = { line: 2, polygon: 3 }[activeMode];
-    if (wanted && activeOptions && activeOptions.onComplete && vertices.length >= wanted) {
+    // A line a tool asked for (a boundary condition's) goes to that tool, not into a
+    // drawn solid: the points are what it wants.
+    if (activeMode === 'line' && activeOptions && activeOptions.onComplete
+        && vertices.length >= 2) {
       var drawn = vertices.slice();
       var done = activeOptions.onComplete;
       finish();
@@ -154,12 +150,6 @@ App.DrawInput = (function () {
     });
   }
   
-  /* `value` rounded to a multiple of `step`, to the micrometre: 3 x 0.1 is 0.3, not
-     0.30000000000000004. */
-  function snapTo(value, step) {
-    return Math.round(Math.round(value / step) * step * 1e6) / 1e6;
-  }
-
   function getIntersection(ev) {
     var r = canvas.getBoundingClientRect();
     pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
@@ -182,11 +172,10 @@ App.DrawInput = (function () {
     }
     if (raycaster.ray.intersectPlane(plane, p)) {
       if (App.state && App.state.snap) {
-        // Snap to a grid of the status bar's snapping distance (1 m when unset).
-        var step = App.state.snapDistance > 0 ? App.state.snapDistance : 1;
-        p.x = snapTo(p.x, step);
-        p.y = snapTo(p.y, step);
-        p.z = snapTo(p.z, step);
+        // Snap to grid (1m resolution)
+        p.x = Math.round(p.x);
+        p.y = Math.round(p.y);
+        p.z = Math.round(p.z);
       }
       if (activeMode === 'load' && project
           && !(activeOptions && (activeOptions.pointLoad || activeOptions.atPointer))) {
@@ -265,17 +254,8 @@ App.DrawInput = (function () {
   
   function onKey(ev) {
     if (ev.key === 'Escape') {
-      // From anywhere, a field included: clicking the snapping distance mid-drawing
-      // must not leave the drawing with no way out.
       cancel();
     } else if (ev.key === 'Enter') {
-      // Enter in a field holding an edit not yet applied (a new snapping distance, a
-      // typed command) is that field's: it applies the edit and the drawing goes on.
-      // A field with nothing pending lets Enter finish the drawing.
-      var field = ev.target;
-      var tag = field && field.tagName;
-      if (tag === 'SELECT') return;
-      if ((tag === 'INPUT' || tag === 'TEXTAREA') && field.value !== field.defaultValue) return;
       if (activeMode === 'line' || activeMode === 'polygon') {
         ev.preventDefault();
         commit();
