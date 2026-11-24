@@ -13,7 +13,7 @@ in the Model explorer.
 from __future__ import annotations
 
 from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
-                                         field, fill, mode, project, rail, rail_tool,
+                                         field, fill, menu, mode, project, rail, rail_tool,
                                          rename, selection_row,
                                          tool, tree_row, tree_rows, type_command,
                                          window, window_fits)
@@ -162,14 +162,14 @@ WATER = _by_id(MODEL.boundary_conditions, "pore_pressure")
 def water(tour: Tour) -> None:
     page = tour.page
     mode(tour, "flow")
-    rail(tour, "createFlowCondition")
+    menu(tour, "Flow conditions", "New flow condition…")
     field(page, "Name").fill(WATER.name)
     field(page, "Condition").select_option("Water pressure")
     field(page, "Where").select_option(label="Whole soil")
     field(page, "Type").select_option(WATER.fluid_pressure_type)
     field(page, "Reference level").fill(f"{WATER.reference_coordinate:g}")
     window_fits(tour)
-    tour.picture(mark=rail_tool("createFlowCondition"))
+    tour.picture()
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.some(b => b.name === {WATER.name!r})")
 

@@ -808,7 +808,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # ones on its own mesh edges (`core.kratos.writer._condition_targets`). One at a
     # point is a vertex the fragment embeds, and its node is the one on that vertex.
     # Each of its points is first put on the soil's line it was drawn on (`_onto_soil`).
-    onto = _onto_soil(owners) if drawn else None
+    onto = _onto_soil(owners) if drawn else (lambda x, y: (x, y))
     for condition in drawn:
         vertices = [point(*onto(x, y)) for x, y in condition.points or []]
         if condition.on == "point":

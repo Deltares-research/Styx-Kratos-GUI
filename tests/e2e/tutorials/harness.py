@@ -225,6 +225,14 @@ def mode(tour: Tour, name: str) -> None:
     tour.settle()
 
 
+def menu(tour: Tour, label: str, item: str) -> None:
+    """An item of a menu of the menu bar."""
+    page = tour.page
+    tour.settle()
+    page.locator("#menubar").get_by_text(label, exact=True).click()
+    page.locator(".menu-item", has_text=item).click()
+
+
 def rail_tool(key: str) -> str:
     """The selector of a rail tool, to click or to mark."""
     return f'#toolrail .rail-btn[data-tool="{key}"]'

@@ -10,6 +10,7 @@ command takes.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 
 from cli.terminal import output, style
@@ -41,6 +42,12 @@ class Parser(argparse.ArgumentParser):
     """argparse's parser, saying a command line it cannot read in the colours of the
     rest (`cli.terminal.style`). Its commands' parsers are of this class too: argparse makes a
     subparser of its parent's class."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A negative number in any notation is a value, not an option: `--flux -1e-6`.
+        # Python 3.14's own test; before it, argparse took `-1e-6` for an option.
+        self._negative_number_matcher = re.compile(r"-\.?\d")
 
     def error(self, message: str):
         on = style.enabled(sys.stderr)

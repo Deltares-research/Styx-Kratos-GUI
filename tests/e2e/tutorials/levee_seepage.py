@@ -12,7 +12,7 @@ makes, and the quick tests that read this module's steps need none of that.
 
 from __future__ import annotations
 
-from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, field, fill, mode,
+from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, field, fill, menu, mode,
                                          project, rail, rail_tool, select_in_tree,
                                          selection_row, set_in_selection, tool, tree_row,
                                          window)
@@ -201,7 +201,7 @@ def _points(points) -> str:
 
 def _condition(tour: Tour, record, picture: str = "") -> None:
     page = tour.page
-    rail(tour, "createFlowCondition")
+    menu(tour, "Flow conditions", "New flow condition…")
     field(page, "Name").fill(record.name)
     field(page, "Condition").select_option(record.kind)
     field(page, "Where").select_option(record.on)
@@ -217,7 +217,7 @@ def _condition(tour: Tour, record, picture: str = "") -> None:
         field(page, "Tension cut-off").fill(f"{record.pressure_tension_cut_off:g}")
         field(page, "Initial only").set_checked(not record.is_fixed)
     if picture:
-        tour.picture(picture, mark=rail_tool("createFlowCondition"))
+        tour.picture(picture)
     count = len(project(tour)["boundary_conditions"])
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.length === {count + 1}")
