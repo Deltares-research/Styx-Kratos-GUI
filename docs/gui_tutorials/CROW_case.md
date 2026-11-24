@@ -159,14 +159,14 @@ hydrostatic: it is zero at the water table and grows by 10 kPa per metre of dept
 the water table the pore pressure is zero.
 
 1. Click the **Flow conditions** tab.
-2. On the tool rail, click **Create flow boundary condition…**.
+2. In the **Flow conditions** menu, click **New flow condition…**.
 3. In **Name**, type `Pore pressure`.
 4. In **Condition**, select **Water pressure**.
 5. In **Where**, select **Whole soil**.
 6. In **Type**, select **Hydrostatic**, and in **Reference level**, type `-1.5`.
 7. Click **Save**.
 
-![The Create boundary condition window for the water pressure. The Create flow boundary condition tool is outlined.](images/crow/04_water.png)
+![The Create boundary condition window for the water pressure.](images/crow/04_water.png)
 
 A new project already has the displacement conditions: the bottom is fixed, and the left
 and right sides are fixed in the horizontal direction only. The Model explorer now shows

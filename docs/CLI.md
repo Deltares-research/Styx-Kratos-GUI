@@ -87,7 +87,7 @@ Genuchten soil.
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
-| `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
+| `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face, `add [ID] --face F\|--line ... --flux RATE` for a flux; `water-line X Y X Y ...` draws a water line, `phreatic ID` makes one the phreatic line, `soil-water SOIL WATER` gives a soil its water; `standard` puts back the standard supports |
 | `gravity P [G]` | Show whether the self weight acts, or set g in m/s² (9.81 in a new project). The initial stage's stress initialisation decides whether the self weight acts |
 | `parts P` | Every part by its key, and every support, water pressure condition and seepage face: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2] [--body-size KEY S] [--band KEY B]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them. `--body-size` is the element size at one object, by its key: a layer (`soil_<layer>`) or soil body, a sheet pile, an anchor (at its head), an interface, a normal load, a soil line, a load, a boundary condition, or a face of the model (`face_bottom`, `face_left`, `face_right`, `face_top`, and in 3D `face_front`, `face_back`). A condition on a face keeps its size as the size of that face, and a condition on a soil part as the size of that part; a condition on the whole soil is refused. `none` takes the size and its band away. `--band` is the distance over which that size grows back to the element size; `none` takes it away |
@@ -313,12 +313,15 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   soil hydrostatic pore pressures about the water level, and keeps that level as its own.
 - **The water in the pores** is the project's, not each soil's: every soil is written
   with the same `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. `fluid`
-  without a value says what they are. `--bulk-modulus` (a stress) and `--viscosity` set
-  them in the project's units (Pa and Pa·s in SI, kPa and kPa·s in kN), and `--unset
-  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 2.2 GPa and
-  1 mPa·s. `DENSITY_WATER` is not set here: it is the water level's specific weight over
-  g. A soil that sets one of the three itself is refused; a file saved when each soil
-  had its own water is read with the first soil's, and says which soils changed.
+  without a value says what they are. `--unit-weight` (a specific weight),
+  `--bulk-modulus` (a stress) and `--viscosity` set them in the project's units (N/m³,
+  Pa and Pa·s in SI; kN/m³, kPa and kPa·s in kN), and `--unset specific_weight
+  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 10 kN/m³, 2.2 GPa
+  and 1 mPa·s. `DENSITY_WATER` is the unit weight over g, and every hydrostatic water
+  pressure grows by the unit weight per metre. A soil that sets one of the three itself
+  is refused; a file saved when each soil had its own water is read with the first
+  soil's, and says which soils changed. A file saved when the unit weight was the water
+  level's keeps its value, now as the water's.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.
@@ -429,6 +432,11 @@ kratos-cli boundary pit.json add head --line 0 1 60 3 --water-pressure Head_Line
 kratos-cli boundary pit.json soil-water soil_L3 head            # the aquifer on its own line
 kratos-cli boundary pit.json soil-water soil_L2 interpolate     # the clay between them
 kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic line again
+kratos-cli boundary pit.json soil-water soil_L1 dry             # no water: held at zero
+kratos-cli boundary dike.json water-line 0 4 30 4 60 1          # the first: the phreatic line
+kratos-cli boundary dike.json water-line 0 -2 60 -3 --id aquifer  # the next: a head line
+kratos-cli boundary dike.json phreatic aquifer                  # make it the phreatic line
+kratos-cli boundary dike.json add rain --face top --flux 1e-7   # 1e-7 m/s into the soil
 ```
 
 - **Supports.** `--fixed` holds x, y and z; `--roller` holds the component normal to its
@@ -465,9 +473,17 @@ kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic l
   WATER` gives a soil (a layer `soil_<id>`, one body, or a custom part with a material) the
   water of a head line (its id, on `--domain` or a `--line`), `interpolate` for the
   pressures of the soils above and below it, interpolated over its depth (Kratos'
-  `Interpolate_Line`, 2D only), or `default` for the phreatic line. A head line acts only on
-  the soils that take it. A body takes its own water, or else its layer's. Only the
-  phreatic line puts water on the ground.
+  `Interpolate_Line`, 2D only), `dry` for no water (the pressure fixed at zero), or
+  `default` for the phreatic line. A head line acts only on the soils that take it. A body
+  takes its own water, or else its layer's. Only the phreatic line puts water on the
+  ground. A uniform water pressure on a soil part (`--part KEY --water-pressure Uniform`)
+  replaces the water the soil takes.
+- **Water lines.** `water-line X Y X Y ...` draws a water line on the whole soil, as the
+  GUI's **Draw water line** does: the phreatic line if the project has no water line yet,
+  else a head line. Its points are sorted by x. It is start values (`--initial`) in a
+  groundwater flow project, and fixed otherwise. `phreatic ID` makes a water line the
+  phreatic line and every other water line a head line; a stage may name another
+  (`stages water`, below).
 - **Its own level.** A `Hydrostatic` condition given no `--reference-coordinate` takes the
   water level, keeps it as its own, and says so. With no water level either it is refused.
   A dry model needs no water pressure condition, unless a soil couples the water pressure
@@ -495,6 +511,20 @@ kratos-cli boundary pit.json soil-water soil_L2 default         # the phreatic l
   and a deformation calculation leaves a seepage face out, with a warning. It is on in
   every stage until a stage switches it off (`stages P deactivate STAGE ID`), as a water
   pressure condition is.
+- **Flux.** `--flux RATE` makes a prescribed flux: water flowing into the soil per unit
+  area of its line, in the project's length over its time (m/s), negative for water
+  flowing out. It is on `--face F`, or on `--line X Y X Y ...` anywhere in the soil, and
+  takes no other option; `set ID --flux RATE` changes it. A flux line may run along the
+  soil's outer boundary or through the soil: there the water leaves the line to both
+  sides, the given rate per unit area of the line in all. It acts in a groundwater flow
+  and in a coupled calculation, and a 3D deck leaves it out, with a warning. A stage
+  switches it on and off, and may give it another rate (`stages value`).
+- **Impermeable line.** `--impermeable` makes a line no water flows through, in a
+  groundwater flow calculation: on `--line X Y X Y ...` in the soil, and it takes no other
+  option; `set ID --line ...` moves it. The export cuts the mesh along the line, so the
+  water pressure may differ on its two sides; where the line ends inside the soil the
+  water flows round its end. It acts in every stage, and no stage switches it. A coupled
+  or deformation calculation leaves it out, with a warning, and so does a 3D deck.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -538,6 +568,11 @@ kratos-cli stages pit.json deactivate initial low  # the low level is off at fir
 kratos-cli stages pit.json activate dig_2 low      # ... and on from dig_2, in place of pore
 kratos-cli stages pit.json deactivate dig_2 pore
 kratos-cli stages pit.json list
+kratos-cli stages dike.json water flood --phreatic-line high   # high water from flood on
+kratos-cli stages dike.json soil-water flood soil_L1 dry       # the crest dry then
+kratos-cli stages dike.json value flood rain --value 5e-7      # more rain then
+kratos-cli stages dike.json value flood rain --inherit         # the rain of the stage before
+kratos-cli stages dike.json water flood                        # what the stage has
 ```
 
 - **The initial stage.** A new project starts with one stage, `initial` ("Initial
@@ -556,6 +591,17 @@ kratos-cli stages pit.json list
   what the stage inherits drops the instruction. A stage added later starts with the
   parts of the stage before it. `add` and `copy` take `--activate` and `--deactivate`
   the same way.
+- **The water of a stage.** `water STAGE` shows the stage's phreatic line, its head
+  lines, the soils with water of their own, and the values it gives its conditions, each
+  marked `*` where the stage itself says it. `--phreatic-line LINE` makes a water line the
+  phreatic line from that stage (switched on there if it is off), and every other water
+  line a head line there; `inherit` takes the stage before's. `soil-water STAGE SOIL
+  WATER` gives a soil a water line's id, `interpolate`, `dry`, `phreatic`, or `inherit`.
+  `value STAGE CONDITION` gives a water pressure `--value`, `--reference-coordinate`,
+  `--phreatic-line X Y ...` (a water line's points) or `--pressure-tension-cut-off`, and a
+  flux `--value`; `--inherit` takes the stage before's values. As `activate`, each is the
+  stage's alone: the stages after it keep the water they had, and a stage added later
+  starts with the water of the stage before it. `show` lists the same.
 - **`set STAGE`** changes `--name`, `--calculation mechanical|flow`,
   `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
   `--reset-displacements` / `--keep-displacements`, `--convergence-criterion`,

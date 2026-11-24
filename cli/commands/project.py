@@ -93,15 +93,19 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
     fluid = commands.add_parser(
         "fluid", parents=[common],
-        help="show or set the water in every soil's pores: its bulk modulus and viscosity",
-        description="The water every soil holds, one for the whole project. Its weight is "
-                    "the water level's specific weight; its bulk modulus and viscosity "
-                    "are set here, in the project's units. Unset, each is water's at 20 C.")
+        help="show or set the water in every soil's pores: its unit weight, bulk modulus "
+             "and viscosity",
+        description="The water every soil holds, one for the whole project: its unit "
+                    "weight, bulk modulus and viscosity, set here in the project's units. "
+                    "Unset, each is water's at 20 C (10 kN/m3 for the unit weight).")
     add_project(fluid)
+    fluid.add_argument("--unit-weight", type=float, dest="specific_weight",
+                       help="the water's specific weight: DENSITY_WATER is this over g, "
+                            "and every hydrostatic pressure grows by it per metre")
     fluid.add_argument("--bulk-modulus", type=float, help="BULK_MODULUS_FLUID, a stress")
     fluid.add_argument("--viscosity", type=float, help="DYNAMIC_VISCOSITY")
     fluid.add_argument("--unset", nargs="+", default=[], metavar="FIELD",
-                       choices=("bulk_modulus", "dynamic_viscosity"),
+                       choices=("specific_weight", "bulk_modulus", "dynamic_viscosity"),
                        help="give these back to water's own")
     add_writing(fluid)
     fluid.set_defaults(handler=set_fluid)
@@ -223,9 +227,11 @@ def set_water(args: argparse.Namespace) -> Answer:
 
 def set_fluid(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
-    if args.bulk_modulus is None and args.viscosity is None and not args.unset:
+    if (args.specific_weight is None and args.bulk_modulus is None
+            and args.viscosity is None and not args.unset):
         return Answer(data={"fluid": _fluid(project)}, lines=[_fluid_line(project)])
-    project = session.set_fluid(project, bulk_modulus=args.bulk_modulus,
+    project = session.set_fluid(project, specific_weight=args.specific_weight,
+                                bulk_modulus=args.bulk_modulus,
                                 dynamic_viscosity=args.viscosity, unset=args.unset)
     target, where = written(args, project)
     return Answer(data={"file": _file(target), "fluid": _fluid(project)},
@@ -244,12 +250,15 @@ def _fluid_line(project: Project) -> str:
     def given(value: float | None) -> str:
         return "" if value is not None else " (water's)"
 
-    return (f"Water in every soil: bulk modulus {written['BULK_MODULUS_FLUID']:g} "
+    return (f"Water in every soil: unit weight {project.water_specific_weight:g} "
+            f"{units.label(units.SPECIFIC_WEIGHT, system)}"
+            f"{given(project.fluid.specific_weight)}, "
+            f"bulk modulus {written['BULK_MODULUS_FLUID']:g} "
             f"{units.label(units.STRESS, system)}{given(project.fluid.bulk_modulus)}, "
             f"viscosity {written['DYNAMIC_VISCOSITY']:g} "
             f"{units.label(units.VISCOSITY, system)}{given(project.fluid.dynamic_viscosity)}, "
             f"density {written['DENSITY_WATER']:g} {units.label(units.DENSITY, system)} "
-            "(the water level's specific weight over g).")
+            "(the unit weight over g).")
 
 
 # ── Saying what a model is ──────────────────────────────────────────────────
@@ -337,8 +346,7 @@ def _water(project: Project) -> dict | None:
 def _water_line(project: Project) -> str:
     if project.water is None:
         return "No water level."
-    return (f"Water level: {project.water.y:.2f} m (specific weight "
-            f"{project.water_specific_weight:g}).")
+    return f"Water level: {project.water.y:.2f} m."
 
 
 def _file(target: Path | None) -> str | None:

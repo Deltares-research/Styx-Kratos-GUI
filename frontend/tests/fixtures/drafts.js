@@ -1961,8 +1961,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -2272,8 +2271,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -2584,6 +2582,243 @@ window.DRAFTS_FIXTURE =
       "boundary_conditions": [],
       "custom_parts": []
     },
+    "lined": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "SI",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [],
+      "beams": [],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "water": null,
+      "boundary_conditions": [
+        {
+          "id": "waterline_1",
+          "name": "Phreatic line 1",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Phreatic_Multi_Line",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": null,
+          "x_coordinates": [
+            0.0,
+            25.0
+          ],
+          "y_coordinates": [
+            -1.0,
+            -1.0
+          ],
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
+      "custom_parts": []
+    },
     "section_pile_kn": {
       "name": "Deep excavation — Rotterdam Zuid",
       "dimension": 2,
@@ -2829,8 +3064,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3174,8 +3408,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3557,8 +3790,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3852,8 +4084,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -4181,8 +4412,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -4512,8 +4742,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -6127,6 +6356,307 @@ window.DRAFTS_FIXTURE =
         {}
       ],
       "error": "A seepage line is drawn in the 2D section; switch to 2D to create one, or put the seepage face on a face."
+    },
+    {
+      "title": "a flux on the top face",
+      "call": "BoundaryConditions.draftFlux",
+      "project": "section",
+      "args": [
+        "face",
+        {
+          "face": "top",
+          "value": 2e-06
+        }
+      ],
+      "result": {
+        "id": "flux_1",
+        "name": "Flux 1",
+        "kind": "flux",
+        "on": "face",
+        "face": "top",
+        "part": null,
+        "points": null,
+        "value": 2e-06,
+        "active": true
+      }
+    },
+    {
+      "title": "a flux line drawn",
+      "call": "BoundaryConditions.draftFlux",
+      "project": "section",
+      "args": [
+        "line",
+        {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ]
+          ],
+          "name": "Rain",
+          "value": 1e-06
+        }
+      ],
+      "result": {
+        "id": "flux_1",
+        "name": "Rain",
+        "kind": "flux",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            10.0,
+            0.0
+          ]
+        ],
+        "value": 1e-06,
+        "active": true
+      }
+    },
+    {
+      "title": "a flux line down the right side",
+      "call": "BoundaryConditions.draftFlux",
+      "project": "section",
+      "args": [
+        "line",
+        {}
+      ],
+      "result": {
+        "id": "flux_1",
+        "name": "Flux 1",
+        "kind": "flux",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            25.0,
+            0.0
+          ],
+          [
+            25.0,
+            -12.5
+          ]
+        ],
+        "value": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a flux on a part is refused",
+      "call": "BoundaryConditions.draftFlux",
+      "project": "section",
+      "args": [
+        "part",
+        {}
+      ],
+      "error": "A prescribed flux is on a face of the model, or on a line in the soil."
+    },
+    {
+      "title": "a flux line in the solid model is refused",
+      "call": "BoundaryConditions.draftFlux",
+      "project": "solid",
+      "args": [
+        "line",
+        {}
+      ],
+      "error": "A flux line is drawn in the 2D section; switch to 2D to create one, or put the flux on a face."
+    },
+    {
+      "title": "an impermeable line down the middle",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "section",
+      "args": [
+        {}
+      ],
+      "result": {
+        "id": "impermeable_1",
+        "name": "Impermeable line 1",
+        "kind": "impermeable",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an impermeable line drawn",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "section",
+      "args": [
+        {
+          "points": [
+            [
+              9,
+              -4
+            ],
+            [
+              9,
+              -10
+            ]
+          ],
+          "name": "Screen"
+        }
+      ],
+      "result": {
+        "id": "impermeable_1",
+        "name": "Screen",
+        "kind": "impermeable",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            9.0,
+            -4.0
+          ],
+          [
+            9.0,
+            -10.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an impermeable line in the solid model is refused",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "solid",
+      "args": [
+        {}
+      ],
+      "error": "An impermeable line is drawn in the 2D section; switch to 2D to create one."
+    },
+    {
+      "title": "the first water line is the phreatic line",
+      "call": "BoundaryConditions.draftWaterLine",
+      "project": "dry",
+      "args": [
+        [
+          [
+            25,
+            -2
+          ],
+          [
+            0,
+            -1
+          ],
+          [
+            10,
+            -3
+          ]
+        ],
+        {}
+      ],
+      "result": {
+        "id": "waterline_1",
+        "name": "Phreatic line 1",
+        "kind": "water_pressure",
+        "on": "domain",
+        "fluid_pressure_type": "Phreatic_Multi_Line",
+        "is_fixed": true,
+        "x_coordinates": [
+          0.0,
+          10.0,
+          25.0
+        ],
+        "y_coordinates": [
+          -1.0,
+          -3.0,
+          -2.0
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "the next water line is a head line",
+      "call": "BoundaryConditions.draftWaterLine",
+      "project": "lined",
+      "args": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            25,
+            4
+          ]
+        ],
+        {
+          "name": "Aquifer"
+        }
+      ],
+      "result": {
+        "id": "waterline_2",
+        "name": "Aquifer",
+        "kind": "water_pressure",
+        "on": "domain",
+        "fluid_pressure_type": "Head_Line",
+        "is_fixed": true,
+        "x_coordinates": [
+          0.0,
+          25.0
+        ],
+        "y_coordinates": [
+          2.0,
+          4.0
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a water line with two levels at one x is refused",
+      "call": "BoundaryConditions.draftWaterLine",
+      "project": "dry",
+      "args": [
+        [
+          [
+            5,
+            -1
+          ],
+          [
+            5,
+            -3
+          ]
+        ],
+        {}
+      ],
+      "error": "A water line has one level at each x: give its points different x coordinates."
+    },
+    {
+      "title": "a water line of one point is refused",
+      "call": "BoundaryConditions.draftWaterLine",
+      "project": "dry",
+      "args": [
+        [
+          [
+            5,
+            -1
+          ]
+        ],
+        {}
+      ],
+      "error": "A water line needs two points or more."
     },
     {
       "title": "the standard supports, with ids no condition has",

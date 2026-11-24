@@ -9,7 +9,11 @@ prescribes there: displacements held at zero (`--fixed`, `--roller`, `--fix`,
 `core.model.drafts.displacement_condition`), a water pressure (`--water-pressure`,
 `core.model.drafts.water_pressure_condition`), or a seepage face, where water may leave
 the soil in a groundwater flow calculation (`--seepage`, on a face or a line,
-`core.model.drafts.seepage_condition`). `boundary standard` puts back the
+`core.model.drafts.seepage_condition`), a flux of water into the soil (`--flux`, on a
+face or a line, `core.model.drafts.flux_condition`), or an impermeable line no water flows
+through (`--impermeable`, on a line, `core.model.drafts.impermeable_condition`). `boundary water-line` draws a water
+line on the whole soil -- the phreatic line if there is none yet, else a head line -- and
+`boundary phreatic` makes one the phreatic line. `boundary standard` puts back the
 supports a new project starts with. Whether the bodies have their self weight is the
 initial stage's stress initialisation (`kratos-cli stages`), not a condition.
 
@@ -29,7 +33,7 @@ from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing
 from core import session
 from core.kratos import condition_checks
 from core.model import drafts, stages
-from core.model.schemas import FACES, INTERPOLATE, LINE_TYPES, Project
+from core.model.schemas import DRY, FACES, INTERPOLATE, LINE_TYPES, Project
 
 PRESSURE_TYPES = ("Uniform", "Hydrostatic", "Phreatic_Multi_Line", "Head_Line")
 """`--water-pressure`: Kratos' `fluid_pressure_type`, under its own names, and
@@ -43,6 +47,12 @@ WATER_OPTIONS = {"reference_coordinate": "--reference-coordinate", "value": "--v
                  "pressure_tension_cut_off": "--pressure-tension-cut-off"}
 """The options only a water pressure takes."""
 
+EDGE_TARGETS = "--face FACE or --line X Y X Y ..., along the soil's outer boundary"
+"""Where a seepage face can be."""
+
+FLUX_TARGETS = "--face FACE or --line X Y X Y ..., anywhere in the soil"
+"""Where a flux can be: its line may run through the soil too (`schemas.FluxCondition`)."""
+
 
 def register(commands, common: argparse.ArgumentParser) -> None:
     actions = noun(commands, common, "boundary",
@@ -51,8 +61,9 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add = action(actions, common, "add", add_condition,
                  help="a support (--fixed, --roller, --fix) on a face, a soil part, a "
                       "drawn line or a point, a water pressure (--water-pressure) there "
-                      "or on the whole soil, or a seepage face (--seepage) on a face or "
-                      "a line")
+                      "or on the whole soil, a seepage face (--seepage) or a flux "
+                      "(--flux) on a face or a line, or an impermeable line "
+                      "(--impermeable) on a line")
     add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _fields(add)
     change = action(actions, common, "set", update_condition,
@@ -69,15 +80,26 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(actions, common, "standard", standard_conditions,
            help="the standard supports, the bottom fixed and the sides on rollers, in "
                 "place of the supports on the faces")
+    drawn = action(actions, common, "water-line", add_water_line,
+                   help="a water line on the whole soil, through its points: the phreatic "
+                        "line if the project has no water line yet, else a head line")
+    drawn.add_argument("points", nargs="+", metavar="N",
+                       help="its points, x y x y ..., or @file")
+    drawn.add_argument("--id", help=id_help("the first free one"))
+    drawn.add_argument("--name", help=NAME_HELP)
+    phreatic = action(actions, common, "phreatic", make_phreatic,
+                      help="make a water line the phreatic line, and every other one a "
+                           "head line; a stage may name another (stages water)")
+    existing(phreatic, "water line", "boundary")
     soil = action(actions, common, "soil-water", soil_water,
-                  help="the water each soil takes: the phreatic line, a head line, or "
-                       "interpolated between the soils above and below it")
+                  help="the water each soil takes: the phreatic line, a head line, "
+                       "interpolated between the soils above and below it, or dry")
     soil.add_argument("soil", nargs="?", metavar="SOIL",
                       help="a soil, as `parts` lists it: a layer soil_<id> with all its "
                            "pieces, one body, or a custom part with a material")
     soil.add_argument("water", nargs="?", metavar="WATER",
-                      help=f"the id of a head line, {INTERPOLATE}, or {DEFAULT_WATER} for "
-                           "the phreatic line")
+                      help=f"the id of a water line, {INTERPOLATE}, {DRY}, or "
+                           f"{DEFAULT_WATER} for the phreatic line")
 
     gravity = commands.add_parser("gravity", parents=[common],
                                   help="show whether the self weight acts, or set g",
@@ -114,6 +136,13 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                         help="a seepage face, where water may leave the soil in a "
                              "groundwater flow calculation: on a face, or a line along the "
                              "soil's outer boundary")
+    parser.add_argument("--flux", type=float, metavar="RATE",
+                        help="a prescribed flux: water flowing into the soil per unit area "
+                             "of boundary, in the project's length over its time (negative: "
+                             "out); on a face, or a line anywhere in the soil")
+    parser.add_argument("--impermeable", action="store_true",
+                        help="an impermeable line, which no water flows through in a "
+                             "groundwater flow calculation: on a line in the soil")
     parser.add_argument("--water-pressure", choices=PRESSURE_TYPES, metavar="TYPE",
                         help="Uniform (--value), Hydrostatic (--reference-coordinate), "
                              "Phreatic_Multi_Line (--phreatic-line; one a stage) or "
@@ -175,10 +204,15 @@ def add_condition(args: argparse.Namespace) -> Answer:
     support = args.roller or args.fix is not None
     if args.seepage:
         return _add_seepage(args, project)
+    if args.flux is not None:
+        return _add_flux(args, project)
+    if args.impermeable:
+        return _add_impermeable(args, project)
     if args.water_pressure is None and not support and args.is_fixed is not True:
         raise CommandError("say what the condition prescribes: --fixed, --roller or "
                            "--fix AXIS ... for a support, --water-pressure "
-                           + "|".join(PRESSURE_TYPES) + ", or --seepage")
+                           + "|".join(PRESSURE_TYPES) + ", --seepage, --flux RATE, or "
+                           "--impermeable")
     target = _target(args)
     if target is None:
         raise CommandError("say where it acts: --domain, --face FACE, --part KEY, "
@@ -220,43 +254,131 @@ def _add_seepage(args: argparse.Namespace, project: Project) -> Answer:
     _only_seepage(args)
     target = _target(args)
     if target is None or target["on"] not in ("face", "line"):
-        raise CommandError("a seepage face is on --face FACE or --line X Y X Y ..., along "
-                           "the soil's outer boundary")
+        raise CommandError(f"a seepage face is on {EDGE_TARGETS}")
     record = drafts.seepage_condition(project, target.pop("on"), id=args.id,
                                       name=args.name, **target)
     return edited(args, session.add_condition(project, record), f"added {line(record)}")
 
 
-def _only_seepage(args: argparse.Namespace) -> None:
-    """Refuse what a seepage face does not take: what a support or a water pressure
-    prescribes."""
-    others = [option for option, given_value in (
+def _add_flux(args: argparse.Namespace, project: Project) -> Answer:
+    """`add --flux RATE`: a prescribed flux on a face or a line, and nothing else."""
+    _only_flux(args)
+    target = _target(args)
+    if target is None or target["on"] not in ("face", "line"):
+        raise CommandError(f"a flux is on {FLUX_TARGETS}")
+    record = drafts.flux_condition(project, target.pop("on"), id=args.id, name=args.name,
+                                   value=args.flux, **target)
+    return edited(args, session.add_condition(project, record), f"added {line(record)}")
+
+
+def _add_impermeable(args: argparse.Namespace, project: Project) -> Answer:
+    """`add --impermeable`: an impermeable line, on a line and nothing else."""
+    _only_impermeable(args)
+    target = _target(args)
+    if target is None or target["on"] != "line":
+        raise CommandError("an impermeable line is on --line X Y X Y ..., in the soil")
+    try:
+        record = drafts.impermeable_condition(project, target["points"], id=args.id,
+                                              name=args.name)
+    except drafts.DraftError as failure:
+        raise CommandError(str(failure)) from None
+    return edited(args, session.add_condition(project, record), f"added {line(record)}")
+
+
+def _only_impermeable(args: argparse.Namespace) -> None:
+    """Refuse what an impermeable line does not take: what a support, a water pressure,
+    a seepage face or a flux prescribes."""
+    others = _others(args, ("--seepage", args.seepage or None), ("--flux", args.flux))
+    if others:
+        raise CommandError(f"{', '.join(others)} do not belong to an impermeable line: it "
+                           "prescribes nothing but that no water flows through it")
+
+
+def _others(args: argparse.Namespace, *also: tuple[str, object]) -> list[str]:
+    """The options given of what a support or a water pressure prescribes, and `also`."""
+    return [option for option, given_value in (
         ("--water-pressure", args.water_pressure), ("--roller", args.roller or None),
         ("--fix", args.fix), ("--fixed or --initial", args.is_fixed),
-        *((option, getattr(args, field)) for field, option in WATER_OPTIONS.items()))
+        *((option, getattr(args, field)) for field, option in WATER_OPTIONS.items()),
+        *also)
         if given_value is not None]
+
+
+def _only_seepage(args: argparse.Namespace) -> None:
+    """Refuse what a seepage face does not take: what a support, a water pressure or a
+    flux prescribes."""
+    others = _others(args, ("--flux", args.flux),
+                     ("--impermeable", args.impermeable or None))
     if others:
         raise CommandError(f"{', '.join(others)} do not belong to a seepage face: it "
                            "prescribes nothing but where water may leave the soil")
 
 
+def _only_flux(args: argparse.Namespace) -> None:
+    """Refuse what a flux does not take: what a support or a water pressure prescribes,
+    and a seepage face."""
+    others = _others(args, ("--seepage", args.seepage or None),
+                     ("--impermeable", args.impermeable or None))
+    if others:
+        raise CommandError(f"{', '.join(others)} do not belong to a flux: it prescribes "
+                           "the rate water flows into the soil (--flux), and nothing else")
+
+
+def add_water_line(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    points = coordinates(args.points, 2, "points")
+    try:
+        record = drafts.water_line(project, points, id=args.id, name=args.name)
+    except drafts.DraftError as failure:
+        raise CommandError(str(failure)) from None
+    project = session.add_condition(project, record)
+    role = ("the phreatic line" if record.fluid_pressure_type == "Phreatic_Multi_Line"
+            else "a head line, for the soils that take it (soil-water)")
+    return edited(args, project, f"added {line(record)}: {role}")
+
+
+def make_phreatic(args: argparse.Namespace) -> Answer:
+    project = session.make_phreatic(read(args), args.id)
+    answer = edited(args, project, f"{args.id} is the phreatic line; every other water "
+                                   "line is a head line")
+    answer.lines += [line(record) for record in project.water_lines()]
+    return answer
+
+
 def update_condition(args: argparse.Namespace) -> Answer:
     project = read(args)
     record = session.find_condition(project, args.id)
-    if record.kind == "seepage":
-        _only_seepage(args)
+    if record.kind == "impermeable":
+        _only_impermeable(args)
         fields = given(args, "name", "active")
         target = _target(args)
         if target is not None:
+            if target["on"] != "line":
+                raise CommandError("an impermeable line is on --line X Y X Y ...")
+            fields["points"] = target["points"]
+        project = session.update_condition(project, args.id, **fields)
+        return edited(args, project,
+                      f"changed {line(session.find_condition(project, args.id))}")
+    if record.kind in ("seepage", "flux"):
+        noun = "seepage face" if record.kind == "seepage" else "flux"
+        (_only_seepage if record.kind == "seepage" else _only_flux)(args)
+        fields = given(args, "name", "active")
+        if args.flux is not None:
+            fields["value"] = args.flux
+        target = _target(args)
+        if target is not None:
             if target["on"] not in ("face", "line"):
-                raise CommandError("a seepage face is on --face FACE or --line X Y X Y ...")
+                raise CommandError(f"a {noun} is on --face FACE or --line X Y X Y ...")
             fields.update(target)
         project = session.update_condition(project, args.id, **fields)
         return edited(args, project,
                       f"changed {line(session.find_condition(project, args.id))}")
-    if args.seepage:
+    if args.seepage or args.flux is not None or args.impermeable:
         raise CommandError(f"{args.id} is a {record.kind.replace('_', ' ')} condition; "
-                           "remove it and add a seepage face instead")
+                           "remove it and add a "
+                           + ("seepage face" if args.seepage else "flux"
+                              if args.flux is not None else "impermeable line")
+                           + " instead")
     if record.kind == "displacement":
         return _update_support(args, project, record)
     if args.roller or args.fix is not None:
@@ -320,13 +442,15 @@ def soil_water_lines(project: Project) -> list[str]:
     default = ("the phreatic line its stage has on (" + ", ".join(phreatic) + ")"
                if len(phreatic) > 1 else f"the phreatic line {phreatic[0]}" if phreatic
                else "the phreatic line (there is none)")
-    lines = {line.id: line for line in project.head_lines()}
+    lines = {line.id: line for line in project.water_lines()}
 
     def said(water: str | None) -> str:
         if water is None:
             return default
         if water == INTERPOLATE:
             return "interpolated between the soils above and below it"
+        if water == DRY:
+            return "dry: its water pressure held at zero"
         return f"the head line {lines[water].name} ({water})"
 
     return [f"{soil}  {said(project.soil_water.get(soil))}"
@@ -338,13 +462,15 @@ def soil_water(args: argparse.Namespace) -> Answer:
     if args.soil is None:
         return Answer(data=dict(project.soil_water), lines=soil_water_lines(project))
     if args.water is None:
-        raise CommandError("give the soil's water: the id of a head line, "
-                           f"{INTERPOLATE}, or {DEFAULT_WATER} for the phreatic line")
+        raise CommandError("give the soil's water: the id of a water line, "
+                           f"{INTERPOLATE}, {DRY}, or {DEFAULT_WATER} for the phreatic "
+                           "line")
     water = None if args.water == DEFAULT_WATER else args.water
     project = session.set_soil_water(project, args.soil, water)
     answer = edited(args, project, f"soil {args.soil} takes "
                     + ("the phreatic line" if water is None else
                        "interpolated water" if water == INTERPOLATE else
+                       "no water: it is dry" if water == DRY else
                        f"its water from {water}"))
     answer.lines += soil_water_lines(project)
     return answer
@@ -461,6 +587,11 @@ def prescribed(record) -> str:
         return "fixed in " + " ".join(held)
     if record.kind == "seepage":
         return "water may leave the soil here"
+    if record.kind == "impermeable":
+        return "no water flows through it"
+    if record.kind == "flux":
+        return (f"{record.value:g} into the soil" if record.value >= 0
+                else f"{-record.value:g} out of the soil")
     if record.fluid_pressure_type == "Uniform":
         what = f"{record.value:g} uniform"
     elif record.fluid_pressure_type == "Hydrostatic":

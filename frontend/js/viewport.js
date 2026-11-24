@@ -841,7 +841,12 @@ App.Viewport = (function () {
   // A water pressure on a line or a face of its own: indigo, apart from the phreatic
   // line's blue and the water on the ground's light blue, and from the head lines'.
   var CONDITION_PRESSURE_COLOR = '#3949ab';
+  // A prescribed flux: cyan, the water moving rather than standing.
+  var FLUX_COLOR = '#0097a7';
+  // An impermeable line: dark slate, a screen rather than water.
+  var IMPERMEABLE_COLOR = '#37474f';
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
+  var NODE_RING = 0.6;             // a point condition's ring radius, in symbol sizes
 
   /* Where the symbols stand on a line of [x, y] points: at each corner, and evenly
      between, about `spacing` apart. A line with no length (a face the soil only touches
@@ -1006,7 +1011,12 @@ App.Viewport = (function () {
     return path[path.length - 1].slice();
   }
 
-  function conditionGlyphSpec(record, project, outlines) {
+  /* `water`, when given, is the water of the stage on screen (`App.Stages.waterIn`): a
+     water line the stage has on is drawn as that stage has it -- its phreatic line, or
+     a head line, with the values the stage gives it -- whatever its record is typed. */
+  function conditionGlyphSpec(record, project, outlines, water) {
+    var staged = water && water.conditions && water.conditions[record.id];
+    if (staged) record = staged;
     var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
                  active: record.active !== false };
     var d = project.domain;
@@ -1055,8 +1065,33 @@ App.Viewport = (function () {
       return spec;
     }
 
-    // A seepage face: its edge or line, with arrows out of the soil.
-    if (record.kind === 'seepage') {
+    // An impermeable line: a screen, its line hatched on both sides, in no water's
+    // colour -- no water passes it.
+    if (record.kind === 'impermeable') {
+      spec.color = IMPERMEABLE_COLOR;
+      var screen = (record.points || []).map(function (q) { return [q[0], q[1], z]; });
+      if (screen.length > 1) spec.lines.push(screen);
+      for (var s2 = 0; two && s2 + 1 < screen.length; s2 += 1) {
+        var from = screen[s2], to = screen[s2 + 1];
+        var run = Math.hypot(to[0] - from[0], to[1] - from[1]);
+        if (!(run > 0)) continue;
+        var n = [(to[1] - from[1]) / run, -(to[0] - from[0]) / run];
+        spec.strips.push({ from: from, to: to, outward: n },
+                         { from: from, to: to, outward: [-n[0], -n[1]] });
+      }
+      return spec;
+    }
+
+    // A seepage face: its edge or line, with arrows out of the soil. A flux the same,
+    // its arrows into the soil where water flows in and out where it flows out. A flux
+    // on a line inside the soil has soil on both sides: its arrows leave the line to
+    // both where water flows in, and come to it from both where it flows out.
+    if (record.kind === 'seepage' || record.kind === 'flux') {
+      var into = record.kind === 'flux' && !(record.value < 0);
+      var both = record.kind === 'flux' && record.on === 'line' && two
+        && App.BoundaryConditions && App.BoundaryConditions.insideSoil
+        && App.BoundaryConditions.insideSoil(project, record.points || []);
+      if (record.kind === 'flux') spec.color = FLUX_COLOR;
       var path = record.on === 'face'
         ? faceOutline(project, record.face, outlines)
         : (record.points || []).map(function (q) { return [q[0], q[1], z]; });
@@ -1075,6 +1110,19 @@ App.Viewport = (function () {
         if ((middle[0] - centre[0]) * normalOut[0] + (middle[1] - centre[1]) * normalOut[1] < 0) {
           normalOut = [-normalOut[0], -normalOut[1]];
         }
+        if (both) {
+          // An arrow is drawn from 0.15 to 1 symbol size off its point, along `outward`:
+          // one standing that far off the line, pointing back, ends at the line.
+          var off = into ? 0 : 1.15 * spec.size;
+          alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {
+            [normalOut, [-normalOut[0], -normalOut[1]]].forEach(function (n) {
+              spec.symbols.push({ at: [at[0] + n[0] * off, at[1] + n[1] * off, z],
+                                  outward: into ? n : [-n[0], -n[1]], arrow: true });
+            });
+          });
+          continue;
+        }
+        if (into) normalOut = [-normalOut[0], -normalOut[1]];
         alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {
           spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
         });
@@ -1121,7 +1169,10 @@ App.Viewport = (function () {
       // the two never read as one another.
       var BC = App.BoundaryConditions;
       var list = project.boundary_conditions || [];
-      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list) : null;
+      // In a stage, its own phreatic line (`Stage.phreatic_line`); head lines keep the
+      // colour of their place in the list either way.
+      var phreaticId = staged ? (water.phreatic ? water.phreatic.id : null) : undefined;
+      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list, phreaticId) : null;
       if (color) {
         spec.color = color;
         if (type === 'Phreatic_Multi_Line') {
@@ -1135,16 +1186,23 @@ App.Viewport = (function () {
       }
     } else if (type === 'Uniform') {
       var where = record.on === 'face' ? faceOutline(project, record.face, outlines)
-        : (record.on === 'line' || record.on === 'point')
+        : record.on === 'line'
           ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
           : null;
       if (where) spec.lines.push(where);
     }
+    // On a point: the node the pressure is held at, marked where it is (a dot in a
+    // ring), in the colour of a pressure of its own, so it can be seen and picked.
+    if (record.on === 'point' && record.points && record.points.length) {
+      var node = record.points[0];
+      spec.color = CONDITION_PRESSURE_COLOR;
+      spec.symbols.push({ at: [node[0], node[1], z], outward: [0, 1], node: true });
+    }
     return spec;
   }
 
-  function conditionGlyphGroup(record, project, outlines) {
-    var spec = conditionGlyphSpec(record, project, outlines);
+  function conditionGlyphGroup(record, project, outlines, water) {
+    var spec = conditionGlyphSpec(record, project, outlines, water);
     var group = new THREE.Group();
     group.name = record.id + '-condition';
     var color = !spec.active ? 0x777777
@@ -1225,6 +1283,22 @@ App.Viewport = (function () {
                 p(-0.22 * s, -0.5 * s), p(0.22 * s, -0.5 * s)], true);
         return;
       }
+      if (symbol.node) {
+        // A node held at a water pressure: a filled dot in a ring. The whole ring picks
+        // it (`pickRadius`, read by `screenTargets`), not only its centre.
+        var disc = new THREE.Mesh(new THREE.CircleGeometry(0.28 * s, 20),
+                                  new THREE.MeshBasicMaterial({ color: color }));
+        disc.position.set(symbol.at[0], symbol.at[1], symbol.at[2]);
+        disc.userData.pickRadius = NODE_RING * s;
+        group.add(disc);
+        var ring = [];
+        for (var k = 0; k <= 24; k += 1) {
+          var angle = (k / 24) * Math.PI * 2;
+          ring.push(p(Math.cos(angle) * NODE_RING * s, Math.sin(angle) * NODE_RING * s));
+        }
+        stroke(ring);
+        return;
+      }
       if (symbol.arrow) {
         // Water leaving the soil: a short arrow pointing out of it.
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
@@ -1297,7 +1371,38 @@ App.Viewport = (function () {
       }).map(function (part) { return part.key; }));
     // No soil, no face: the export has none either, and a support drawn round an
     // empty site would hold nothing.
-    var outlines = App.PROJECT ? soilFaceOutlines(sections, soil, App.PROJECT) || {} : null;
+    conditionOutlines = App.PROJECT ? soilFaceOutlines(sections, soil, App.PROJECT) || {} : null;
+    drawConditionGlyphs(App.state && App.state.mode);
+  }
+
+  /* The face outlines of the last build, and what the condition glyphs were last drawn
+     for (`glyphWaterKey`): a stage selected or a result opened redraws them only when
+     its water differs. */
+  var conditionOutlines = null;
+  var drawnGlyphWater = null;
+
+  /* The water of the stage `mode` shows, or null for the model as built: the stage
+     selected in Staged construction, the stage of the result in Results. */
+  function glyphWater(mode) {
+    var S = App.Stages, project = App.PROJECT;
+    if (!S || !S.waterIn || !S.chainTo || !project || !(project.stages || []).length) {
+      return null;
+    }
+    var stage = mode === 'staged' ? viewedStage(App.state && App.state.phase)
+      : mode === 'results' ? (resultsStage() || {}).stage : null;
+    if (stage == null || !S.chainTo(project, stage).length) return null;
+    return S.waterIn(project, stage);
+  }
+
+  function glyphWaterKey(water) {
+    return water ? JSON.stringify([water.phreatic ? water.phreatic.id : null,
+                                   water.conditions]) : '';
+  }
+
+  /* Each condition's glyph, as the stage `mode` shows has it (`glyphWater`). */
+  function drawConditionGlyphs(mode) {
+    var water = glyphWater(mode);
+    drawnGlyphWater = glyphWaterKey(water);
     ((App.PROJECT && App.PROJECT.boundary_conditions) || []).forEach(function (record) {
       var group = groups[record.id];
       if (!group) {
@@ -1305,8 +1410,21 @@ App.Viewport = (function () {
         group.name = record.id;
         scene.add(group);
       }
-      group.add(conditionGlyphGroup(record, App.PROJECT, outlines));
+      group.children.slice().forEach(function (child) {
+        if (child.name !== record.id + '-condition') return;
+        group.remove(child);
+        disposeGroup(child);
+      });
+      group.add(conditionGlyphGroup(record, App.PROJECT, conditionOutlines, water));
     });
+  }
+
+  /* On a change of tab or stage: the glyphs redrawn when the water they show is no
+     longer the water on screen -- a stage with a phreatic line of its own. */
+  function syncConditionGlyphs(mode) {
+    if (!scene || !App.PROJECT || conditionOutlines === null) return;
+    if (glyphWaterKey(glyphWater(mode)) === drawnGlyphWater) return;
+    drawConditionGlyphs(mode);
   }
 
   /* The keys of the conditions, supports and water pressures apart. Both are in every
@@ -1490,6 +1608,11 @@ App.Viewport = (function () {
     var project = App.PROJECT;
     if ((mode !== 'staged' && mode !== 'flow') || !scene || !App.SurfaceWater
         || !builtSections || !project || project.dimension !== 2 || project.deck) return;
+    // In Staged construction the stage's own water: its phreatic line, and the values
+    // it gives the lines (App.Stages.waterView).
+    if (mode === 'staged' && App.Stages && App.Stages.waterView) {
+      project = App.Stages.waterView(project, viewedStage(App.state && App.state.phase));
+    }
     var pieces = App.SurfaceWater.pieces(project, builtSections,
                                          mode === 'staged' ? stageHidden() : {});
     if (!pieces.length) return;
@@ -2453,9 +2576,11 @@ App.Viewport = (function () {
       group.traverse(function (part) {
         // Its lines, and the dot a condition at a point is drawn as.
         if (!(part.isLine || part.isMesh) || !part.userData.key || !shown(part)) return;
-        targets.push({ mesh: part, order: part.renderOrder,
-                       distance: G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0,
-                                                  toScreen, click) });
+        var distance = G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0, toScreen, click);
+        if (part.userData.pickRadius) {
+          distance = Math.max(0, distance - screenRadius(part, part.userData.pickRadius));
+        }
+        targets.push({ mesh: part, order: part.renderOrder, distance: distance });
       });
     });
     // The line through the tails is not picked by the ray (`noPick`), but it is the
@@ -2481,9 +2606,17 @@ App.Viewport = (function () {
 
   var LINE_PICK_STYLE = { width: 1 };
 
+  /* How many pixels `radius` (model units) round `mesh`'s centre is on screen. */
+  function screenRadius(mesh, radius) {
+    mesh.updateMatrixWorld();
+    var c = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
+    var a = projectToScreen(c.x, c.y, c.z), b = projectToScreen(c.x + radius, c.y, c.z);
+    return a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0;
+  }
+
   /* A THREE.Line's points as structure-glyphs.js paths, in world coordinates: one
      polyline, or for LineSegments one path per pair. A mesh -- a point condition's
-     dot -- is its centre. */
+     dot -- is its centre (`pickRadius` widens it, in `screenTargets`). */
   function linePaths3(line) {
     line.updateMatrixWorld();
     var v = new THREE.Vector3(), points = [];
@@ -2808,6 +2941,9 @@ App.Viewport = (function () {
 
   function setMode(mode) {
     var wanted = modeKeys(mode);
+    // Before anything sets the glyphs' visibility, fade or highlight: a stage with a
+    // phreatic line of its own has them drawn anew.
+    syncConditionGlyphs(mode);
     var hidden = stageHidden();
     var ghosts = stageGhosts();
     revealed = [];
@@ -2870,20 +3006,68 @@ App.Viewport = (function () {
   function applySoilWaterColors(mode) {
     var BC = App.BoundaryConditions;
     var keys = soilWaterKeys();
-    var colors = mode === 'flow' && App.PROJECT && !App.PROJECT.deck && BC
-      && BC.soilWaterColors ? BC.soilWaterColors(App.PROJECT, keys) : null;
+    // Flow conditions shows the model as built; Staged construction the selected stage's
+    // water, which a stage may change (`Stage.soil_water`, `Stage.phreatic_line`).
+    var stage = mode === 'staged' ? viewedStage(App.state && App.state.phase) : null;
+    var colors = (mode === 'flow' || (mode === 'staged' && stage != null))
+      && App.PROJECT && !App.PROJECT.deck && BC
+      && BC.soilWaterColors ? BC.soilWaterColors(App.PROJECT, keys, stage) : null;
     keys.forEach(function (key) {
       var g = groups[key];
       if (!g) return;
-      var fill = colors && colors[key] ? colors[key].fill : null;
+      var entry = colors && colors[key];
+      var fill = entry ? entry.fill : null;
+      var hatch = entry && entry.pattern === 'hatch' ? entry.color : null;
       g.children.forEach(function (o) {
         var m = o.isMesh && o.material;
         if (!m || Array.isArray(m) || !m.color || (m.userData && m.userData.glyph)) return;
         if (!m.userData.soilBase) m.userData.soilBase = m.color.clone();
         if (fill) m.color.set(fill); else m.color.copy(m.userData.soilBase);
+        setSoilHatch(m, hatch);
       });
     });
-    syncWaterLegend(colors ? BC.waterLegend(App.PROJECT, keys) : []);
+    syncWaterLegend(colors ? BC.waterLegend(App.PROJECT, keys, stage) : []);
+  }
+
+  /* A soil with a uniform pressure of its own is hatched: diagonal stripes of `color`
+     over its fill, a fixed number of pixels apart at any zoom, so it never reads as a
+     plain water tint. Drawn by the shader (the soil meshes carry no texture
+     coordinates); the CPU renderer has no shader and shows the fill alone. `color`
+     null takes the stripes off. */
+  var HATCH_SPACING = 9;     // px between two stripes
+  var HATCH_WIDTH = 2.5;     // px, each stripe
+
+  function hatchFragment(shader, uniform) {
+    var ratio = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    var spacing = (HATCH_SPACING * ratio * Math.SQRT2).toFixed(2);
+    var half = (HATCH_WIDTH * ratio * Math.SQRT2 / 2).toFixed(2);
+    shader.uniforms.soilHatchColor = uniform;
+    shader.fragmentShader = 'uniform vec3 soilHatchColor;\n' + shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      '#include <color_fragment>\n'
+      + '  float soilHatchAt = abs(mod(gl_FragCoord.x + gl_FragCoord.y, ' + spacing + ')'
+      + ' - ' + spacing + ' * 0.5);\n'
+      + '  diffuseColor.rgb = mix(soilHatchColor, diffuseColor.rgb,'
+      + ' smoothstep(' + half + ', ' + half + ' + 1.0, soilHatchAt));\n');
+  }
+
+  function setSoilHatch(m, color) {
+    var on = !!color;
+    if (on) {
+      if (!m.userData.soilHatch) m.userData.soilHatch = { value: new THREE.Color() };
+      m.userData.soilHatch.value.set(color);
+    }
+    if (on === !!m.userData.soilHatched) return;
+    m.userData.soilHatched = on;
+    if (on) {
+      var uniform = m.userData.soilHatch;
+      m.onBeforeCompile = function (shader) { hatchFragment(shader, uniform); };
+      m.customProgramCacheKey = function () { return 'soil-hatch'; };
+    } else {
+      delete m.onBeforeCompile;
+      delete m.customProgramCacheKey;
+    }
+    m.needsUpdate = true;
   }
 
   var waterLegendHost = null;
@@ -2912,7 +3096,10 @@ App.Viewport = (function () {
       item.className = 'vp-water-legend-row';
       var swatch = document.createElement('i');
       swatch.className = 'vp-water-legend-swatch';
-      swatch.style.background = row.fill;
+      swatch.style.background = row.pattern === 'hatch'
+        ? 'repeating-linear-gradient(45deg, ' + row.color + ' 0 2px, ' + row.fill
+          + ' 2px 6px)'
+        : row.fill;
       swatch.style.borderColor = row.color;
       if (row.line) {
         var stroke = document.createElement('b');

@@ -356,14 +356,33 @@ See [Boundary conditions](#boundary-conditions).
 
 The model has one horizontal water level. A new hydrostatic water pressure condition or
 normal load takes this level as its own. To change the water level, select **Global water
-level** in the Model explorer. Then change **Level** or **Specific weight** in the Selection
-explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water off` to
-remove the water. A condition keeps its own level when the water level changes.
+level** in the Model explorer. Then change **Level** in the Selection explorer. You can
+also type `water -1.5` to set the level to -1.5 m, or `water off` to remove the water. A
+condition keeps its own level when the water level changes.
 
-**Create flow boundary condition…** opens the window of one new water pressure or seepage
-face. **Create water pressure line** draws a water pressure along a line or at a point
-(2D). **Flow boundary conditions…** opens the window of all water pressures and seepage
-faces.
+The properties of the water itself — its unit weight, bulk modulus and viscosity — are
+one set for the whole project, also when it has no water level. Change them under
+**Water** in the **Soil materials** window, or with **Water properties…** on the tool rail
+of Flow conditions mode. Both edit the same values. Left blank, each is the value of
+water at 20 °C (10 kN/m³ for the unit weight).
+
+The tool rail of Flow conditions mode draws the water on the model (2D):
+
+| Tool | What it does |
+|---|---|
+| **Draw water line** | Click the points of a water line, then right-click or press Enter. The first water line of a project is the phreatic line; every next one is a head line. A water line acts on the whole soil, wherever you draw it, and it may start and end outside the soil. The points are sorted by x. |
+| **Create flow boundary condition** | Click points on a line of the soil, then right-click or press Enter: one point makes a condition at that point, two or more a line through them. A line of the soil is its outer boundary, or a line between two soils: a layer boundary, or a line that splits the soil. Each point that you click or type moves onto the nearest point of such a line, wherever you click; a marker shows where it lands. With snapping on, the point then moves along the line to the nearest corner (where a line turns or meets another) or grid line of the snapping distance, within that distance. Then choose what it is: **Seepage face**, **Flux** (the water that flows in, per m² of boundary, in m/s; negative flows out), **Impermeable** (no water flows through the line), **Hydrostatic** (with its level) or **Uniform** (with its pressure). A point can be Hydrostatic or Uniform only. A line inside the soil can be anything but a seepage face, which is on the outer boundary. |
+| **Uniform soil pressure** | Click a soil and give its water pressure. The soil gets that pressure, fixed, in place of the water it takes (see [The water of each soil](#the-water-of-each-soil)). |
+| **Flow boundary conditions…** | The window of all water pressures, seepage faces, fluxes and impermeable lines. |
+| **Water properties…** | The unit weight, bulk modulus and viscosity of the water in every soil: the same values as **Water** in the **Soil materials** window. |
+
+**Flow conditions > New flow condition…** opens the window of one new condition of any
+kind, on any target: the whole soil, a face, a part, a line or a point.
+
+A drawn water line is a water pressure of the type **Phreatic line** or **Head line** on
+the whole soil. In a groundwater flow project it is **Initial only**, as a water line
+that is fixed on the whole soil leaves no water free to flow; otherwise it is fixed. To
+change this, or its points, edit it in **Flow boundary conditions…**.
 
 ## Boundary conditions
 
@@ -495,14 +514,38 @@ pressure is zero and the water flows out. Make one in one of these ways:
   column of a face.
 - In **Create boundary condition**, select the condition **Seepage face**, on a face or a
   line.
-- In Flow conditions mode, open the water pressure tool of the tool rail, select
-  **Seepage line** and draw the line along the boundary.
+- In Flow conditions mode, click **Create flow boundary condition**, draw the line along
+  the boundary, and choose **Seepage face**.
 
 A seepage line through the soil is refused when you calculate. The viewport shows a seepage
 face as a line with arrows that point out of the soil. Kratos opens or closes one node of
 the face for each iteration, so give the stage enough iterations: the calculation warns
 when the stage allows fewer iterations than the face has nodes. A deformation calculation
 leaves a seepage face out, and warns.
+
+A **flux** is water that flows into the soil through a line at a known rate: rain on the
+crest of a dike, a recharge, a leaking pipe, or a pumped outflow or a drain (negative). The
+value is a discharge per m² of the line, in the project's length over its time (m/s).
+Make one with **Create flow boundary condition** (choose **Flux**), or as a condition of
+the kind **Flux** on a face or a line. A flux line can lie along the soil's outer boundary,
+or anywhere inside the soil: along a line between two soils, or straight across one. Inside
+the soil the water leaves the line to both sides, the given rate per m² of the line in all.
+The viewport shows a flux as a cyan line with arrows into the soil (out of it for a
+negative flux); inside the soil the arrows point away from the line on both sides (towards
+it for a negative flux). A flux acts in a groundwater flow calculation and in a coupled
+one. 3D leaves it out, and warns. A flux of 0 inside the soil does nothing: the water
+flows through the line as if it were not there. To stop the water, use an impermeable
+line.
+
+An **impermeable line** is a screen in the soil that no water flows through: a sealed
+sheet-pile screen, or a clay cut-off. Make one with **Create flow boundary condition**
+(choose **Impermeable**), or as a condition of the kind **Impermeable line** on a line.
+The calculation cuts the mesh along the line, so the water pressure can differ on its two
+sides. Where the line ends inside the soil, the water flows round its end. A stretch of
+the line on the soil's outer boundary does nothing, as no water flows out there anyway.
+The viewport shows the line in dark grey, hatched on both sides. It acts in every stage of
+a groundwater flow calculation, and no stage can switch it off. A coupled or deformation
+calculation leaves it out, and warns: there the cut would let the soil come apart.
 
 ### The water of each soil
 
@@ -516,6 +559,16 @@ one of these:
 | Phreatic line (the default) | Hydrostatic below the phreatic line |
 | Head line | Hydrostatic below the head line, for example the head of an aquifer. A head line acts only on the soils that take it. |
 | Interpolated between the soils above and below | The pressure of the soil above and of the soil below, interpolated over the depth of this soil, for an aquitard. Kratos' `Interpolate_Line` reads the pressures that the other soils set on the edges of this soil. 2D only; a 3D model gives the soil the phreatic line, and the export says so. |
+| Dry | No water: the water pressure of the soil is fixed at zero. In a groundwater flow calculation, a dry soil next to a wet soil is a zone of atmospheric pressure, so water from the wet soil can flow into it. |
+
+A soil can also have a **uniform pressure** of its own: right-click the soil and choose
+**Water > Uniform pressure…**, or use the **Uniform soil pressure** tool. This is a fixed
+Uniform water pressure on that soil part, and it replaces the water the soil takes. Its
+window asks only the name, the value, **Initial only** and **Active**: the soil and the
+type are already known.
+
+To make another water line the phreatic line, right-click the line in Flow conditions
+mode and choose **Make phreatic line**. Every other water line is then a head line.
 
 The phreatic line and the head lines are water pressures of the type **Phreatic line** and
 **Head line**: polylines through points, x increasing, which can slope. Draw one on a line
@@ -542,13 +595,16 @@ You can also right-click a soil in Flow conditions mode, in the viewport or in t
 explorer, and choose its water under **Water**. The tick shows the water it takes now.
 
 In Flow conditions mode each soil is filled with the colour of the water it takes, and a
-legend in the viewport says which colour is which:
+legend in the viewport says which colour is which. Staged construction mode does the same
+for the selected stage:
 
 | Water | Colour | How the line is drawn |
 |---|---|---|
 | Phreatic line | Always blue | A solid line, with the water table mark (▽) near its start |
 | Head line | A colour for each head line: red, purple, teal, pink, brown or olive, in list order | A dashed line, labelled with its name |
 | Interpolated | Always amber | No line of its own |
+| Dry | Always brown-grey | No line of its own |
+| Uniform pressure | Always green, hatched with diagonal stripes | No line of its own |
 | No water line | Grey: a soil on the phreatic line in a project that has none | — |
 
 A project with no phreatic line, no head line and no soil water keeps the soils in their
@@ -704,6 +760,27 @@ water condition on keeps the water pressures that the stage before it ended with
 values: after its stage, the water pressure of a soil that couples it to the deformation is
 free, and the export warns about it. You cannot delete a condition that a stage switches;
 clear its check boxes first. The supports are on in every stage.
+
+### The water of a stage
+
+A stage can change the water. Select the stage in Staged construction mode, then:
+
+| To change | Do this |
+|---|---|
+| The phreatic line | Right-click a water line and choose **Phreatic line from** *stage*, or choose the line under **Phreatic line** in the stage settings. Every other water line is a head line in that stage. The line is switched on in the stage if it was off. **As the stage before** takes the change back. |
+| The water of a soil | Right-click the soil and choose its water under **Water from** *stage*: the phreatic line, a head line, interpolated or dry. **As the stage before** takes the change back. |
+| The value of a condition | Right-click a water pressure, a water line or a flux and choose **Values in** *stage*…. You can change the value, the level, the points of a line and the tension cut-off. **As the stage before** takes the values back. |
+
+As for a check box, each change applies to the selected stage only: the stages after it
+keep the water they had. A stage that you add later starts with the water of the stage
+before it. For example, to lower the phreatic line from -1 m to -6 m in stage 3, draw both
+lines, select stage 3, right-click the -6 m line and choose **Phreatic line from**
+*stage 3*; then select stage 4 and do the same, if stage 4 must also have the low water.
+Or give the one phreatic line other points in stage 3 under **Values in** *stage 3*….
+
+The deck writes each value a condition has as a process of its own, in the stages that
+have that value. In `kratos-cli` the same changes are `stages water`, `stages soil-water`
+and `stages value` (see [CLI.md](CLI.md)).
 
 ### Stage settings
 

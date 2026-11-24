@@ -280,7 +280,11 @@ App.Results = (function () {
       App.Stages.hiddenKeys(project, shown.stage, 'staged')
         .forEach(function (key) { hidden[key] = true; });
     }
-    return App.SurfaceWater.waters(project, hidden).map(function (record) {
+    // The stage's own phreatic line (`Stage.phreatic_line`) and the values it gives the
+    // lines, as Staged construction draws them: every other water line on is a head line.
+    var water = App.Stages && App.Stages.waterView
+      ? App.Stages.waterView(project, shown.stage) : project;
+    return App.SurfaceWater.waters(water, hidden).map(function (record) {
       return record.x_coordinates.map(function (x, k) {
         return [x, record.y_coordinates[k]];
       });

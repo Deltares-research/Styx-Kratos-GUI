@@ -338,15 +338,15 @@
     T.eq(row('Structures', /^Create line$/)[0].action, 'drawLine');
     T.eq(row('Mesh', /^View mesh$/)[0].action, 'viewMesh');
     T.eq(row('Edit', /^Deselect all$/)[0].action, 'deselectAll');
-    var water = row('Flow conditions', /water pressure line/);
+    var water = row('Flow conditions', /^Draw water line$/);
     T.eq(water.length, 1, 'named as the rail button is');
-    T.eq(water[0].action, 'createWaterPressureLine');
+    T.eq(water[0].action, 'drawWaterLine');
     T.eq(row('Flow conditions', /^Create water level$/), []);
   });
 
-  test('the water pressure line row is plane strain, like its rail button', function () {
+  test('the water line row is plane strain, like its rail button', function () {
     withInstall(function () {});
-    var water = row('Flow conditions', /water pressure line/)[0];
+    var water = row('Flow conditions', /^Draw water line$/)[0];
     try {
       App.LivePatches.syncDimensionAvailability(false);
       T.eq(water.disabled, true);

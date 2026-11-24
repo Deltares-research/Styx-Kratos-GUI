@@ -71,7 +71,7 @@ def test_switching_to_kn_converts_every_dimensioned_value(client):
     uniform = next(n for n in after.normal_loads if n.fluid_pressure_type == "Uniform")
     uniform0 = next(n for n in before.normal_loads if n.fluid_pressure_type == "Uniform")
     assert uniform.pressure == pytest.approx(uniform0.pressure / 1000)
-    assert after.water.specific_weight == pytest.approx(before.water.specific_weight / 1000)
+    assert after.fluid.specific_weight == pytest.approx(before.fluid.specific_weight / 1000)
     # Geometry is metres in both systems, and is not touched.
     assert after.domain == before.domain and after.beams == before.beams
 

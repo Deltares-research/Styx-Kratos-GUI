@@ -897,11 +897,27 @@ App.LivePatches = (function () {
              action: 'mechanicalConditions' };
   }
 
-  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
-     "Create water level" draws nothing -- the water level is the `water` command and
-     its explorer row -- so the rail's water tools are the conditions' instead: a new
-     flow condition in its window, one drawn along a line or at a point, and the
-     window of them all. */
+  /* The Flow conditions rail and menu. The frozen "Create water level" draws nothing --
+     the water level is the `water` command and its explorer row -- so it is the water
+     line tool instead: the first line drawn is the phreatic line, the next ones head
+     lines. Then a flow boundary condition drawn on a line of the soil -- its boundary,
+     or a line between two soils: one point clicked is a condition at that point, more a
+     line through them (seepage, flux, impermeable, hydrostatic or uniform) -- a uniform
+     pressure on a soil, the window of them all, and the water's own properties -- the
+     Water box of the Soil materials window, on its own (App.MaterialSets.openWater). A
+     new condition of any kind in its window is in the menu. */
+  var FLOW_TOOLS = [
+    { icon: 'watercondition', tip: 'Create flow boundary condition: click one point on a '
+      + 'line of the soil for a point, more for a line; right-click or Enter to finish -- '
+      + 'seepage, flux, impermeable, hydrostatic or uniform',
+      action: 'createFlowBoundary' },
+    { icon: 'water', tip: 'Uniform soil pressure: click a soil, give its water pressure',
+      action: 'createSoilPressure' },
+    { icon: 'conditionlist', tip: 'Flow boundary conditions…', action: 'flowConditions' },
+    { icon: 'waterproperties', tip: 'Water properties…: unit weight, bulk modulus and '
+      + 'viscosity of the water in every soil', action: 'waterProperties' }
+  ];
+
   function installBoundaryConditionTools() {
     var flow = (App.RAILS || {}).flow;
     if (flow && !flow.some(function (tool) { return tool && tool.action === 'flowConditions'; })) {
@@ -909,34 +925,30 @@ App.LivePatches = (function () {
       flow.forEach(function (tool) {
         if (tool && tool.icon === 'waterlevel' && !tool.action) {
           drawTool = tool;
-          tool.action = 'createWaterPressureLine';
-          tool.tip = 'Create water pressure line';
-          tool.flyout = [
-            { icon: 'waterlevel', label: 'Water pressure line',
-              action: 'createWaterPressureLine' },
-            { icon: 'waterlevel', label: 'Water pressure point',
-              action: 'createWaterPressurePoint' },
-            { icon: 'waterlevel', label: 'Seepage line',
-              action: 'createSeepageLine' }
-          ];
+          tool.action = 'drawWaterLine';
+          tool.tip = 'Draw water line: the first is the phreatic line, the next ones head '
+            + 'lines';
         }
       });
-      // New in its window, then drawn, then the window of them all.
-      var at = drawTool ? flow.indexOf(drawTool) : Math.min(2, flow.length);
-      flow.splice(at, 0, { icon: 'watercondition', tip: 'Create flow boundary condition…',
-                           action: 'createFlowCondition' });
-      flow.splice(at + (drawTool ? 2 : 1), 0, { icon: 'conditionlist',
-                                                tip: 'Flow boundary conditions…',
-                                                action: 'flowConditions' });
+      var at = drawTool ? flow.indexOf(drawTool) + 1 : Math.min(2, flow.length);
+      FLOW_TOOLS.forEach(function (tool, i) {
+        flow.splice(at + i, 0, JSON.parse(JSON.stringify(tool)));
+      });
     }
     var menus = App.MENUS || [];
     var flowMenu = menus.filter(function (m) { return m.label === 'Flow conditions'; })[0];
     if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'flowConditions'; })) {
       flowMenu.items.unshift(
-        { label: 'Create flow boundary condition…', icon: 'watercondition',
+        { label: 'Create flow boundary condition', icon: 'watercondition',
+          action: 'createFlowBoundary' },
+        { label: 'Uniform soil pressure', icon: 'water', action: 'createSoilPressure' },
+        '-',
+        { label: 'New flow condition…', icon: 'watercondition',
           action: 'createFlowCondition' },
         { label: 'Flow boundary conditions…', icon: 'conditionlist',
-          action: 'flowConditions' }, '-');
+          action: 'flowConditions' },
+        { label: 'Water properties…', icon: 'waterproperties', action: 'waterProperties' },
+        '-');
     }
     var structuresMenu = menus.filter(function (m) { return m.label === 'Structures'; })[0];
     var items = structuresMenu ? structuresMenu.items : [];
@@ -1203,7 +1215,8 @@ App.LivePatches = (function () {
                     'drawSoilSurface',
                     'toggleRuler', 'createSupportLine',
                     'createSupportPoint', 'createWaterPressureLine',
-                    'createWaterPressurePoint', 'createSeepageLine'];
+                    'createWaterPressurePoint', 'createSeepageLine',
+                    'drawWaterLine', 'createFlowBoundary', 'createSoilPressure'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -1414,9 +1427,7 @@ App.LivePatches = (function () {
       }));
       // A soil's row in Flow conditions: the water it takes, as in the viewport.
       return openAt(withSoilWaterRows(kept, key), x, y, function (item) {
-        if (item && item.action === 'soilWater') {
-          return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
-        }
+        if (runWaterItem(item)) return null;
         if (onPick) return onPick(item);
         return App.runAction(item);
       });
@@ -2331,9 +2342,7 @@ App.LivePatches = (function () {
           if (item && item.action === 'intersectSurface') {
             return intersectSurfaces(item.surfaceKey, item.otherKey);
           }
-          if (item && item.action === 'soilWater') {
-            return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
-          }
+          if (runWaterItem(item)) return null;
           if (item && item.action === 'stageActivate') {
             return switchPartInStage(item.stageKey, true);
           }
@@ -2408,6 +2417,9 @@ App.LivePatches = (function () {
      same thing -- so the reply replaces the list rather than the request confirming
      it. On a refusal the project is reloaded, which is what puts the panel back in
      step after an edit that could not be kept. */
+  /* For the water edits a stage makes (js/boundary-conditions.js). */
+  App.saveStages = function (list, note) { return saveStages(list, note); };
+
   function saveStages(list, note) {
     return App.Api.patch('/api/project/stages', { stages: list })
       .then(function (response) {
@@ -2554,28 +2566,87 @@ App.LivePatches = (function () {
      state the part does not have in the selected stage is offered, the other greyed,
      so the menu also says which one it is in. */
   /* A soil right-clicked in Flow conditions: the water it takes, a submenu of the
-     phreatic line, each head line and interpolated, the one it takes now ticked -- the
-     same choice as its row of Soil water in the Boundary conditions window
-     (`App.BoundaryConditions.soilWaterMenu`). */
+     phreatic line, each head line, interpolated and dry, the one it takes now ticked --
+     the same choice as its row of Soil water in the Boundary conditions window
+     (`App.BoundaryConditions.soilWaterMenu`) -- and a uniform pressure of its own. In
+     Staged construction the same, from the selected stage on (`Stage.soil_water`).
+
+     A water line right-clicked: in Flow conditions, Make phreatic line (the model as
+     built's, `kratos-cli boundary phreatic`); in Staged construction, the phreatic line
+     from the selected stage (`Stage.phreatic_line`). And a flow condition with values a
+     stage may change: its values in the selected stage (`Stage.condition_values`). */
+  function waterMode() {
+    var mode = App.state && App.state.mode;
+    if (!App.PROJECT || App.PROJECT.deck || !App.BoundaryConditions) return null;
+    if (mode === 'flow') return 'flow';
+    if (mode === 'staged' && selectedStageId()) return 'staged';
+    return null;
+  }
+
   function soilWaterKey(key) {
     var BC = App.BoundaryConditions;
-    if (!key || !App.PROJECT || App.PROJECT.deck || !BC || !BC.soilWaterMenu) return null;
-    if (!App.state || App.state.mode !== 'flow') return null;
+    if (!key || !waterMode() || !BC.soilWaterMenu) return null;
     return BC.soilPartKeys(App.PROJECT).indexOf(key) >= 0 ? key : null;
   }
 
   function withSoilWaterRows(items, key) {
-    var soil = soilWaterKey(key);
-    if (!soil) return items;
+    var mode = waterMode();
     var BC = App.BoundaryConditions;
-    var choices = BC.soilWaterMenu(App.PROJECT, soil);
-    var now = choices.filter(function (choice) { return choice.checked; })[0];
-    var rows = [
-      { label: 'Water: ' + (now ? now.label : 'phreatic line'), sub: choices },
-      '-'
-    ];
+    var rows = [];
+    var soil = soilWaterKey(key);
+    var stage = mode === 'staged' ? selectedStageId() : null;
+    var stageName = stage ? (stageById(stage) || {}).name || stage : '';
+    if (soil) {
+      var choices = BC.soilWaterMenu(App.PROJECT, soil, stage);
+      var now = choices.filter(function (choice) { return choice && choice.checked; })[0];
+      rows.push({ label: (stage ? 'Water from ' + stageName + ': ' : 'Water: ')
+                    + (now ? now.label : 'phreatic line'), sub: choices }, '-');
+    }
+    var record = mode && key ? BC.find(key, App.PROJECT) : null;
+    if (record && BC.waterLines([record]).length) {
+      if (mode === 'flow') {
+        var phreatic = record.fluid_pressure_type === 'Phreatic_Multi_Line';
+        rows.push({ label: phreatic ? 'The phreatic line' : 'Make phreatic line',
+                    action: 'makePhreatic', conditionKey: record.id, disabled: phreatic,
+                    checked: phreatic });
+      } else {
+        var water = App.Stages.waterIn(App.PROJECT, stage);
+        var already = !!water.phreatic && water.phreatic.id === record.id;
+        rows.push({ label: 'Phreatic line from ' + stageName, action: 'stagePhreatic',
+                    conditionKey: record.id, stageId: stage, checked: already,
+                    disabled: already });
+      }
+    }
+    if (record && mode === 'staged' && BC.STAGE_VALUES[record.kind]) {
+      rows.push({ label: 'Values in ' + stageName + '…', action: 'stageValues',
+                  conditionKey: record.id, stageId: stage });
+    }
+    if (rows.length && rows[rows.length - 1] !== '-') rows.push('-');
+    if (!rows.length) return items;
     var at = items.length && items[0] && items[0].title ? 1 : 0;
     return items.slice(0, at).concat(rows, items.slice(at));
+  }
+
+  /* The water rows' edits; false for an item that is none of them. */
+  function runWaterItem(item) {
+    var BC = App.BoundaryConditions;
+    if (!item || !BC) return false;
+    if (item.action === 'soilWater') {
+      BC.setSoilWater(item.soilKey, item.soilWater);
+    } else if (item.action === 'stageSoilWater') {
+      BC.setStageSoilWater(item.stageId, item.soilKey, item.soilWater);
+    } else if (item.action === 'soilPressure') {
+      BC.openSoilPressure(item.soilKey);
+    } else if (item.action === 'makePhreatic') {
+      BC.makePhreatic(item.conditionKey);
+    } else if (item.action === 'stagePhreatic') {
+      BC.setStagePhreatic(item.stageId, item.conditionKey);
+    } else if (item.action === 'stageValues') {
+      BC.openRecord(BC.find(item.conditionKey), 'flow', item.stageId);
+    } else {
+      return false;
+    }
+    return true;
   }
 
   /* Right-click on a drawn soil surface: Intersect with > each other soil surface it
@@ -2944,7 +3015,7 @@ App.LivePatches = (function () {
         ['Loading type', 'static', stage.loading || 'Staged construction'],
         ['Water conditions', 'static', App.BoundaryConditions
           ? App.BoundaryConditions.waterIn(App.PROJECT, stage.id) : '']
-      ], timing, [
+      ], phreaticRow(stage), timing, [
         ['Stage duration', 'number', 'duration', { exclusiveMin: 0 }, second],
         ['Time step', 'number', 'time_step', { exclusiveMin: 0 }, second]
       ]),
@@ -2969,6 +3040,25 @@ App.LivePatches = (function () {
     return groups;
   }
 
+  /* The stage's phreatic line, as a choice: as the stage before (what that is in
+     brackets), or each water line. None when the model has no water line. Set by
+     `App.BoundaryConditions.setStagePhreatic`, which also switches the line on there
+     and keeps the stages after as they were. */
+  function phreaticRow(stage) {
+    var BC = App.BoundaryConditions;
+    var lines = BC ? BC.waterLines((App.PROJECT && App.PROJECT.boundary_conditions) || [])
+      : [];
+    if (!lines.length) return [];
+    var before = stage.parent == null ? App.Stages.waterIn(App.PROJECT, null)
+      : App.Stages.waterIn(App.PROJECT, stage.parent);
+    var inherited = before.phreatic ? before.phreatic.name : 'none';
+    return [['Phreatic line', 'select', 'phreatic_line',
+             [['', (stage.parent == null ? 'As built' : 'As the stage before')
+                   + ' (' + inherited + ')']].concat(lines.map(function (line) {
+               return [line.id, line.name];
+             }))]];
+  }
+
   /* One row, and the edit behind it.
 
      Every committed edit PATCHes the whole stage list, because that is what the
@@ -2981,8 +3071,11 @@ App.LivePatches = (function () {
     var key = el('div.pgrid-key', { text: label });
 
     function commit(value) {
-      var list = App.Stages.edited(App.PROJECT, stage.id, spec[2], value);
-      var saved = saveStages(list);
+      // The phreatic line is a water edit: it switches the line on and keeps the stages
+      // after as they were (`App.Stages.setPhreaticLine`).
+      var saved = spec[2] === 'phreatic_line'
+        ? App.BoundaryConditions.setStagePhreatic(stage.id, value === '' ? null : value)
+        : saveStages(App.Stages.edited(App.PROJECT, stage.id, spec[2], value));
       if (after) saved.then(after);
     }
 
@@ -3024,7 +3117,7 @@ App.LivePatches = (function () {
         var value = Array.isArray(option) ? option[0] : option;
         var node = el('option', { value: value,
                                   text: Array.isArray(option) ? option[1] : option });
-        if (value === stage[spec[2]]) node.selected = true;
+        if (value === (stage[spec[2]] == null ? '' : stage[spec[2]])) node.selected = true;
         control.appendChild(node);
       });
       control.addEventListener('change', function () { commit(control.value); });
@@ -3643,6 +3736,19 @@ App.LivePatches = (function () {
         if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'flow');
         return;
       }
+      if (item && item.action === 'waterProperties') {
+        if (App.MaterialSets) App.MaterialSets.openWater();
+        return;
+      }
+      var flowTools = {
+        drawWaterLine: function (BC) { BC.drawWaterLine(); },
+        createFlowBoundary: function (BC) { BC.drawFlowBoundary(); },
+        createSoilPressure: function (BC) { BC.pickSoilPressure(); }
+      };
+      if (item && flowTools[item.action]) {
+        if (App.BoundaryConditions) flowTools[item.action](App.BoundaryConditions);
+        return;
+      }
       var drawnConditions = {
         createSupportLine: ['displacement', 'line'],
         createSupportPoint: ['displacement', 'point'],
@@ -3749,7 +3855,7 @@ App.LivePatches = (function () {
                     'Create surface': 'drawPolygon', 'Create anchor': 'createAnchor' },
       Mesh: { 'Refine mesh': 'refineMesh', 'Coarsen mesh': 'coarsenMesh',
               'Reset local refinement': 'resetMeshRefinement', 'View mesh': 'viewMesh' },
-      'Flow conditions': { 'Create water level': 'createWaterPressureLine' }
+      'Flow conditions': { 'Create water level': 'drawWaterLine' }
     };
     // Clear mesh, under Generate mesh: the two are a pair.
     var meshMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Mesh'; })[0];
@@ -3774,9 +3880,7 @@ App.LivePatches = (function () {
       (menu.items || []).forEach(function (item) {
         if (item && !item.action && wanted[item.label]) item.action = wanted[item.label];
         // Named as the rail button is, since that is what it makes.
-        if (item && item.action === 'createWaterPressureLine') {
-          item.label = 'Create water pressure line';
-        }
+        if (item && item.action === 'drawWaterLine') item.label = 'Draw water line';
       });
     });
 
@@ -3838,6 +3942,9 @@ App.LivePatches = (function () {
     // The window of all conditions of a group: a table of rows.
     App.ICONS.conditionlist = '<path d="M3 4h18v16H3z"/>'
                             + '<path d="M3 9h18M3 14.5h18M8.5 4v16"/>';
+    // The water's properties: a drop beside the lines of a property sheet.
+    App.ICONS.waterproperties = '<path d="M8 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z"/>'
+                              + '<path d="M16 8h5M16 12.5h5M16 17h5"/>';
 
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {
@@ -5553,6 +5660,8 @@ App.LivePatches = (function () {
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
     withIntersectRows: withIntersectRows, intersectSurfaces: intersectSurfaces,
+    withSoilWaterRows: withSoilWaterRows, runWaterItem: runWaterItem,
+    phreaticRow: phreaticRow,
     drawSoilSurface: drawSoilSurface,
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,

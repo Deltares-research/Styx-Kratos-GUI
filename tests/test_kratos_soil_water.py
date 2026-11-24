@@ -129,10 +129,14 @@ def test_a_condition_cannot_be_called_interpolate():
         layered((PHREATIC, dict(HEAD, id=INTERPOLATE)))
 
 
-def test_a_soil_takes_a_head_line_and_nothing_else_of_its_own():
+def test_a_soil_takes_a_water_line_and_nothing_else_of_its_own():
+    """Any water line, the phreatic one too: a stage may make another line its phreatic
+    line (`Stage.phreatic_line`), and this one a head line there, which the soil then
+    takes. Where it is the phreatic line, the soil takes it as every soil does."""
     p = layered((PHREATIC, HEAD, LEVEL)).model_dump()
     p["soil_water"] = {"soil_L1": "phreatic", "soil_L2": "level", "soil_L3": "head"}
-    assert Project.model_validate(p).soil_water == {"soil_L3": "head"}
+    assert Project.model_validate(p).soil_water == {"soil_L1": "phreatic",
+                                                    "soil_L3": "head"}
 
 
 def drawn(record: dict) -> dict:

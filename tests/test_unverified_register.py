@@ -31,4 +31,4 @@ def test_every_deferral_in_the_exporter_is_in_a_file_the_register_covers():
 def test_the_open_and_blocked_rows_are_the_known_gaps():
     """Shrinking this set is progress; growing it should be a decision."""
     assert {row["id"] for row in REGISTER if row["status"] in {"open", "blocked"}} == \
-        {"R3", "R6"}
+        {"R3", "R6", "R17"}

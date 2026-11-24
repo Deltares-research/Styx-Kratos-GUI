@@ -41,7 +41,8 @@ def section(conditions: list[dict], water: float | None = -3.5, **changes) -> Pr
     payload = seed_project().model_dump()
     payload.update({"dimension": 2, "section_offset": 20.0,
                     "boundary_conditions": conditions, **changes})
-    payload["water"] = None if water is None else {"y": water, "specific_weight": 10_000.0}
+    payload["water"] = None if water is None else {"y": water}
+    payload["fluid"] = {**payload["fluid"], "specific_weight": 10_000.0}
     return Project.model_validate(payload)
 
 
@@ -296,6 +297,26 @@ def test_a_pressure_at_a_point_holds_the_one_node_there(every_target):
     deck = mdpa.parse(every_target["mdpa"])
     [node] = deck.parts["well"].nodes
     assert deck.nodes[node][:2] == pytest.approx((10.0, -12.0))
+
+
+def test_a_point_drawn_a_hair_off_the_ground_holds_the_node_on_the_ground(gmsh_session):
+    """The GUI snaps a point onto the ground as its rounded sections show it, so it can be
+    micrometres above the real surface: it is put on the surface, not left in the air."""
+    export = writer.export_project(section([
+        condition("well", on="point", fluid_pressure_type="Uniform", value=-1.0,
+                  points=[[10.0, 3e-5]]),
+    ]), MESH)
+    deck = mdpa.parse(export["mdpa"])
+    [node] = deck.parts["well"].nodes
+    assert deck.nodes[node][:2] == pytest.approx((10.0, 0.0), abs=1e-9)
+
+
+def test_a_point_well_above_the_ground_still_has_no_mesh(gmsh_session):
+    with pytest.raises(writer.ExportError, match="has no mesh at its point"):
+        writer.export_project(section([
+            condition("well", on="point", fluid_pressure_type="Uniform", value=-1.0,
+                      points=[[10.0, 0.5]]),
+        ]), MESH)
 
 
 def test_a_face_the_section_does_not_have_is_left_out_with_a_warning(every_target):

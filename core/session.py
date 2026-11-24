@@ -37,7 +37,7 @@ from core import scripting
 from core.kratos import materials
 from core.model import drafts, migration, regions, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
-from core.model.schemas import (INTERPOLATE, ConditionsUpdate, CustomPart, DimensionUpdate,
+from core.model.schemas import (DRY, INTERPOLATE, PHREATIC, SOIL_WATERS, STAGE_VALUES, ConditionsUpdate, CustomPart, DimensionUpdate,
                                 LayersUpdate,
                                 Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
@@ -381,17 +381,21 @@ def set_water_level(project: Project, level: float | None) -> Project:
     return set_water(project, WaterUpdate(water=water))
 
 
-def set_fluid(project: Project, *, bulk_modulus: float | None = None,
+def set_fluid(project: Project, *, specific_weight: float | None = None,
+              bulk_modulus: float | None = None,
               dynamic_viscosity: float | None = None,
               unset: Sequence[str] = ()) -> Project:
-    """The water in every soil's pores: its bulk modulus and viscosity, in the project's
-    units. `unset` names fields to give back to water's own (`soil_models.water`)."""
+    """The water in every soil's pores: its unit weight, bulk modulus and viscosity, in
+    the project's units. `unset` names fields to give back to water's own
+    (`soil_models.water`)."""
     payload = project.model_dump()
     fluid = payload["fluid"]
     for name in unset:
         if name not in fluid:
             raise EditRefused(f"the water has no {name}; it has: " + ", ".join(fluid))
         fluid[name] = None
+    if specific_weight is not None:
+        fluid["specific_weight"] = specific_weight
     if bulk_modulus is not None:
         fluid["bulk_modulus"] = bulk_modulus
     if dynamic_viscosity is not None:
@@ -1556,25 +1560,101 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
         stages.linearise(edited)
         stages.check_settings(edited)
     if update.soil_water is not None:
-        _refuse_unknown_soil_water(edited, update.soil_water)
+        # The entries this request asks for: one the project kept from before -- a soil
+        # on a line since made the phreatic line -- is not asked for again.
+        _refuse_unknown_soil_water(edited, {
+            soil: water for soil, water in update.soil_water.items()
+            if project.soil_water.get(soil) != water})
     return edited
 
 
-def _refuse_unknown_soil_water(edited: Project, asked: dict[str, str]) -> None:
-    """Refuse a soil's water that names no soil or no head line: the project lets go of
+def _refuse_unknown_soil_water(edited: Project, asked: dict[str, str],
+                               back: bool = False) -> None:
+    """Refuse a soil's water that names no soil or no water line: the project lets go of
     one whose soil or line an edit took away (`Project.soil_water`), but one asked for
-    by name is a mistake to say."""
+    by name is a mistake to say. `back` allows `PHREATIC`, which a stage says for the
+    phreatic line again (`Stage.soil_water`)."""
     soils = edited.soil_part_keys()
-    lines = [line.id for line in edited.head_lines()]
+    lines = [line.id for line in edited.water_lines()]
+    phreatic = {line.id for line in edited.phreatic_lines()}
     for soil, water in asked.items():
         if soil not in soils:
             raise EditRefused(f"{soil!r} is not a soil of this project; the soils are "
                               + (", ".join(soils) or "none"))
-        if water != INTERPOLATE and water not in lines:
+        if water in phreatic and not back:
             raise EditRefused(
-                f"{water!r} is not a head line: a soil takes the phreatic line, a head "
-                "line (" + (", ".join(lines) or "there is none") + "), or "
-                f"{INTERPOLATE!r}")
+                f"{water!r} is not a head line: it is the phreatic line, which a soil "
+                "takes when it names none. A stage that makes another line its phreatic "
+                "line may give the soil this one there (stages soil-water).")
+        if water not in SOIL_WATERS and water not in lines and not (back
+                                                                    and water == PHREATIC):
+            raise EditRefused(
+                f"{water!r} is not a head line: a soil takes the phreatic line, a water "
+                "line as its head line (" + (", ".join(lines) or "there is none") + "), "
+                f"{INTERPOLATE!r}, or {DRY!r}")
+
+
+def make_phreatic(project: Project, line: str) -> Project:
+    """`project` with the water line `line` its phreatic line as built -- every stage's
+    that names none (`Stage.phreatic_line`) -- and every other water line a head line, for
+    the soils that take it: the Flow conditions tab's "Make phreatic line"."""
+    lines = {each.id for each in project.water_lines()}
+    if line not in lines:
+        raise EditRefused(f"{line!r} is not a water line: the water lines are "
+                          + (", ".join(sorted(lines)) or "none")
+                          + " -- a phreatic or head line on the whole soil or drawn")
+    payload = project.model_dump()
+    for record in payload["boundary_conditions"]:
+        if record["id"] in lines:
+            record["fluid_pressure_type"] = ("Phreatic_Multi_Line" if record["id"] == line
+                                             else "Head_Line")
+    return _edited(project, payload)
+
+
+def set_stage_phreatic(project: Project, stage: str, line: str | None) -> Project:
+    """The water line `line` the phreatic line from stage `stage` on (None: the stage
+    before's), as the Staged construction tab's "Phreatic line from" sets it
+    (`stages.set_phreatic_line`). Switched on there if it is off."""
+    _index(project.stages, stage, "stage")
+    if line is not None and line not in {each.id for each in project.water_lines()}:
+        raise EditRefused(f"{line!r} is not a water line: a stage's phreatic line is one "
+                          "of " + (", ".join(each.id for each in project.water_lines())
+                                   or "none, as there is no water line yet"))
+    return replace_stages(project, StagesUpdate(
+        stages=stages.set_phreatic_line(project, stage, line)))
+
+
+def set_stage_soil_water(project: Project, stage: str, soil: str,
+                         water: str | None) -> Project:
+    """The soil `soil` taking `water` from stage `stage` on: a water line's id,
+    `INTERPOLATE`, `DRY` or `PHREATIC`; None, the stage before's water again
+    (`stages.set_soil_water`)."""
+    _index(project.stages, stage, "stage")
+    if water is not None:
+        _refuse_unknown_soil_water(project, {soil: water}, back=True)
+    elif soil not in project.soil_part_keys():
+        _refuse_unknown_soil_water(project, {soil: PHREATIC}, back=True)
+    return replace_stages(project, StagesUpdate(
+        stages=stages.set_soil_water(project, stage, soil, water)))
+
+
+def set_stage_values(project: Project, stage: str, condition: str,
+                     fields: dict | None) -> Project:
+    """The condition `condition` with the values `fields` from stage `stage` on, over the
+    ones the stages before give it; None, the stage before's values again
+    (`stages.set_values`). Only the values a stage may change (`STAGE_VALUES`)."""
+    _index(project.stages, stage, "stage")
+    record = find_condition(project, condition)
+    allowed = STAGE_VALUES.get(record.kind, ())
+    stray = sorted(set(fields or {}) - set(allowed))
+    if not allowed or stray:
+        raise EditRefused(
+            f"a stage cannot change {', '.join(stray) or 'any value'} of "
+            f"{record.kind.replace('_', ' ')} condition {condition!r}"
+            + (f"; it can change {', '.join(allowed)}" if allowed
+               else "; switch it on or off in the stage instead"))
+    return replace_stages(project, StagesUpdate(
+        stages=stages.set_values(project, stage, condition, fields)))
 
 
 def set_soil_water(project: Project, soil: str, water: str | None) -> Project:

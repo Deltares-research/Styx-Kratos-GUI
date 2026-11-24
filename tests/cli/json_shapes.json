@@ -103,7 +103,6 @@
   "warnings": [],
   "water": {
    "margin": "number",
-   "specific_weight": "null",
    "thickness": "number",
    "y": "number"
   }
@@ -209,6 +208,7 @@
    "absolute_tolerance": "number",
    "activate": "array",
    "calculation": "string",
+   "condition_values": "object",
    "convergence_criterion": "string",
    "deactivate": "array",
    "duration": "number",
@@ -217,7 +217,9 @@
    "max_iterations": "number",
    "name": "string",
    "parent": "null|string",
+   "phreatic_line": "null",
    "reset_displacements": "boolean",
+   "soil_water": "object",
    "solver_settings": "object",
    "start_time": "number",
    "stress_initialisation": "string",
@@ -292,7 +294,6 @@
   "unit_system": "string",
   "water": {
    "margin": "number",
-   "specific_weight": "null",
    "thickness": "number",
    "y": "number"
   }
@@ -302,6 +303,7 @@
    "absolute_tolerance": "number",
    "activate": "array",
    "calculation": "string",
+   "condition_values": "object",
    "convergence_criterion": "string",
    "deactivate": "array",
    "duration": "number",
@@ -310,7 +312,9 @@
    "max_iterations": "number",
    "name": "string",
    "parent": "null|string",
+   "phreatic_line": "null",
    "reset_displacements": "boolean",
+   "soil_water": "object",
    "solver_settings": "object",
    "start_time": "number",
    "stress_initialisation": "string",

@@ -1021,7 +1021,7 @@
       T.eq(selects[0].getAttribute('aria-label'), 'Water of Upper');
       T.eq([selects[0].value, selects[1].value], ['', 'head']);
       T.eq(Array.prototype.map.call(selects[0].options, function (o) { return o.value; }),
-           ['', 'head', 'interpolate']);
+           ['', 'head', 'interpolate', 'dry']);
       change(selects[0], 'interpolate');
       return button(dialog, 'Save').then(function () {
         var body = ctx.requests[0].body;
@@ -1287,7 +1287,8 @@
         var sent = ctx.requests[ctx.requests.length - 1].body.boundary_conditions;
         T.eq(sent.map(function (r) { return r.id; }), [before[0].id, before[2].id, before[3].id]);
         button(latest(ctx), 'Add condition…');
-        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage']);
+        T.eq(values(field(latest(ctx), 'Condition')),
+             ['water_pressure', 'seepage', 'flux', 'impermeable']);
       });
     });
   });
@@ -1325,12 +1326,12 @@
     });
   });
 
-  test('a new flow condition offers water pressure and seepage face, on the whole soil', function () {
+  test('a new flow condition offers each flow kind, on the whole soil', function () {
     return withEnvironment(project(), function (ctx) {
       App.BoundaryConditions.openRecord(null, 'flow');
       var dialog = latest(ctx);
       var condition = field(dialog, 'Condition');
-      T.eq(values(condition), ['water_pressure', 'seepage']);
+      T.eq(values(condition), ['water_pressure', 'seepage', 'flux', 'impermeable']);
       T.eq(condition.disabled, false);
       T.eq(field(dialog, 'Where').value, 'domain');
       T.eq(field(dialog, 'Name').value, 'Water pressure 1');
@@ -1341,8 +1342,233 @@
         T.eq([saved.kind, saved.on, saved.fluid_pressure_type, saved.reference_coordinate],
              ['water_pressure', 'domain', 'Hydrostatic', -1.5]);
         App.BoundaryConditions.edit(saved.id);
-        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage'],
+        T.eq(values(field(latest(ctx), 'Condition')),
+             ['water_pressure', 'seepage', 'flux', 'impermeable'],
              'a water condition is edited among the flow kinds');
+      });
+    });
+  });
+
+  /* ── The Flow conditions rail's tools, and the water of a stage ───────── */
+
+  test('the first water line drawn is the phreatic line, the next a head line', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.drawWaterLine();
+      T.eq(ctx.drawn.mode, 'line');
+      return ctx.drawn.options.onComplete([[50, -2, 0], [0, -1, 0]]).then(function () {
+        var first = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([first.fluid_pressure_type, first.on, first.x_coordinates],
+             ['Phreatic_Multi_Line', 'domain', [0, 50]]);
+        App.BoundaryConditions.drawWaterLine();
+        return ctx.drawn.options.onComplete([[0, 1, 0], [50, 3, 0]]);
+      }).then(function () {
+        var lines = ctx.requests[1].body.boundary_conditions;
+        T.eq(lines.map(function (c) { return c.fluid_pressure_type; }),
+             ['Phreatic_Multi_Line', 'Head_Line']);
+      });
+    });
+  });
+
+  test('a flow boundary line becomes the condition chosen for it', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openFlowBoundary('line', [[50, 0], [50, -10]]);
+      var dialog = latest(ctx);
+      var condition = field(dialog, 'Condition');
+      T.eq(values(condition), ['seepage', 'flux', 'impermeable', 'Hydrostatic', 'Uniform']);
+      change(condition, 'flux');
+      field(dialog, 'Flux').value = '0.000002';
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.kind, saved.on, saved.points, saved.value],
+             ['flux', 'line', [[50, 0], [50, -10]], 2e-6]);
+      });
+    });
+  });
+
+  test('a flow boundary point is a water pressure there', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openFlowBoundary('point', [[50, -4]]);
+      var dialog = latest(ctx);
+      T.eq(values(field(dialog, 'Condition')), ['Hydrostatic', 'Uniform']);
+      field(dialog, 'Level').value = '-3';
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.on, saved.fluid_pressure_type, saved.reference_coordinate],
+             ['point', 'Hydrostatic', -3]);
+      });
+    });
+  });
+
+  test('any water line is made the phreatic line, the others head lines', function () {
+    return withEnvironment(aquiferProject(), function (ctx) {
+      return App.BoundaryConditions.makePhreatic('head').then(function () {
+        T.eq(ctx.requests[0].body.boundary_conditions.map(function (c) {
+          return [c.id, c.fluid_pressure_type];
+        }), [['pl', 'Head_Line'], ['head', 'Phreatic_Multi_Line']]);
+      });
+    });
+  });
+
+  /* The two layers of `project()` as the build sends their sections. */
+  function layerSections() {
+    function rect(key, y0, y1) {
+      return { key: key, positions: [0, y0, 0, 50, y0, 0, 50, y1, 0, 0, y1, 0],
+               indices: [0, 1, 2, 0, 2, 3] };
+    }
+    return [rect('soil_L1', -10, 0), rect('soil_L2', -25, -10)];
+  }
+
+  test('a flow boundary is drawn with each point moved onto the soil\'s boundary', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = layerSections;
+      App.BoundaryConditions.drawFlowBoundary();
+      T.eq(ctx.drawn.mode, 'line');
+      T.eq(ctx.drawn.options.minPoints, 1, 'one point is enough');
+      var snap = ctx.drawn.options.snapPoint;
+      T.eq(snap([49.5, -4]), [50, -4], 'near the right side: onto it');
+      T.eq(snap([25, -4]), [25, 0], 'in the middle of the soil: onto the nearest line');
+      T.eq(snap([25, -8]), [25, -10], 'or onto the line between the two layers');
+      T.eq(snap([49.5, -4.3], 1), [50, -4], 'with snapping on: on to the grid along it');
+      T.eq(snap([49, -9.6], 3), [50, -10], 'or to where the two layers meet on it');
+      ctx.drawn.options.onComplete([[50, 0, 0], [50, -6, 0]]);
+      T.eq(values(field(latest(ctx), 'Condition'))[0], 'seepage', 'two points: a line');
+      App.BoundaryConditions.drawFlowBoundary();
+      ctx.drawn.options.onComplete([[50, -3, 0]]);
+      T.eq(values(field(latest(ctx), 'Condition')), ['Hydrostatic', 'Uniform'],
+           'one point: a condition at that point');
+      App.BoundaryConditions.drawFlowBoundary();
+      ctx.drawn.options.onComplete([[50, -3, 0], [50, -3, 0]]);
+      T.eq(values(field(latest(ctx), 'Condition')), ['Hydrostatic', 'Uniform'],
+           'two clicks on one spot: still a point');
+    });
+  });
+
+  test('a flow boundary is not drawn on a model with no soil built', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = function () { return null; };
+      App.BoundaryConditions.drawFlowBoundary();
+      T.eq(ctx.drawn, null);
+      T.ok(ctx.logs.some(function (log) {
+        return log[0] === 'err' && /no soil to draw/.test(log[1]);
+      }));
+    });
+  });
+
+  test('a flow boundary line inside the soil is a flux, a screen or a pressure', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = layerSections;
+      var inner = ['flux', 'impermeable', 'Hydrostatic', 'Uniform'];
+      App.BoundaryConditions.openFlowBoundary('line', [[0, -10], [50, -10]]);
+      T.eq(values(field(latest(ctx), 'Condition')), inner,
+           'the line between the two layers: no seepage face there');
+      App.BoundaryConditions.openFlowBoundary('line', [[10, -4], [40, -4]]);
+      T.eq(values(field(latest(ctx), 'Condition')), inner,
+           'a line straight across a soil: the same');
+      App.BoundaryConditions.openFlowBoundary('line', [[50, 0], [50, -25]]);
+      T.eq(values(field(latest(ctx), 'Condition')),
+           ['seepage', 'flux', 'impermeable', 'Hydrostatic', 'Uniform'],
+           'the right side: any of them');
+    });
+  });
+
+  test('a flow boundary line saved as impermeable is an impermeable line', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = layerSections;
+      App.BoundaryConditions.openFlowBoundary('line', [[25, 0], [25, -15]]);
+      var dialog = latest(ctx);
+      change(field(dialog, 'Condition'), 'impermeable');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions.filter(function (c) {
+          return c.kind === 'impermeable';
+        });
+        T.eq(saved.length, 1);
+        T.eq([saved[0].on, saved[0].points], ['line', [[25, 0], [25, -15]]]);
+      });
+    });
+  });
+
+  test('a flow boundary and a water line are drawn in the 2D section only', function () {
+    return withEnvironment(project(3), function (ctx) {
+      App.BoundaryConditions.drawFlowBoundary();
+      App.BoundaryConditions.drawWaterLine();
+      App.BoundaryConditions.pickSoilPressure();
+      T.eq(ctx.drawn, null);
+      T.ok(ctx.logs.some(function (log) { return /switch to 2D/.test(log[1]); }));
+    });
+  });
+
+  test('a soil picked on the model gets a uniform pressure of its own', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = layerSections;
+      App.BoundaryConditions.pickSoilPressure();
+      ctx.drawn.options.onComplete([[25, -40, 0]]);
+      T.ok(ctx.logs.some(function (log) { return log[0] === 'err'; }), 'no soil there');
+      ctx.drawn.options.onComplete([[25, -15, 0]]);
+      var dialog = latest(ctx);
+      T.eq(field(dialog, 'Part').value, 'soil_L2');
+      T.eq(field(dialog, 'Type').value, 'Uniform');
+      // The soil and the type are known: only the name, value, Initial only and Active.
+      var shown = Array.prototype.filter.call(
+        dialog.form.querySelectorAll('label.mesh-setting-label'),
+        function (label) { return label.style.display !== 'none' && label.textContent; }
+      ).map(function (label) { return label.textContent; });
+      T.eq(shown, ['Name', 'Value', 'Initial only', 'Active']);
+      T.ok(!dialog.options.buttons.some(function (item) {
+        return item.label === 'Pick on model…';
+      }), 'the soil is already picked');
+      field(dialog, 'Value').value = '-20000';
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([saved.on, saved.part, saved.fluid_pressure_type, saved.value],
+             ['part', 'soil_L2', 'Uniform', -20000]);
+        App.BoundaryConditions.openSoilPressure('soil_L2');
+        T.eq(field(latest(ctx), 'Name').value, saved.name, 'the soil\'s own pressure again');
+      });
+    });
+  });
+
+  test('a stage names its phreatic line, and gives a soil its water', function () {
+    var p = aquiferProject();
+    p.stageable_parts = ['soil_L1', 'soil_L2', 'pl', 'head'];
+    p.stages = [{ id: 's1', name: 'First', parent: null },
+                { id: 's2', name: 'Second', parent: 's1' }];
+    return withEnvironment(p, function (ctx) {
+      return App.BoundaryConditions.setStagePhreatic('s2', 'head').then(function () {
+        T.eq(ctx.requests[0].body.stages[1].phreatic_line, 'head');
+        return App.BoundaryConditions.setStageSoilWater('s2', 'soil_L1', 'dry');
+      }).then(function () {
+        T.eq(ctx.requests[1].body.stages[1].soil_water, { soil_L1: 'dry' });
+        return App.BoundaryConditions.setStageSoilWater('s2', 'soil_L1', null);
+      }).then(function () {
+        T.eq(ctx.requests[2].body.stages[1].soil_water, {});
+        return App.BoundaryConditions.setStagePhreatic('s2', null);
+      }).then(function () {
+        T.eq(ctx.requests[3].body.stages[1].phreatic_line, null);
+        return App.BoundaryConditions.setSoilWater('soil_L1', 'dry');
+      }).then(function () {
+        T.eq(ctx.requests[4].body.soil_water, { soil_L2: 'head', soil_L1: 'dry' });
+      });
+    });
+  });
+
+  test('a condition\'s values in a stage are the stage\'s own', function () {
+    var p = project();
+    p.boundary_conditions = [App.BoundaryConditions.draftWaterPressure(p, 'part', {
+      id: 'clay', name: 'Clay', part: 'soil_L2', fluid_pressure_type: 'Uniform', value: -10 })];
+    p.stageable_parts = ['soil_L1', 'soil_L2', 'clay'];
+    p.stages = [{ id: 's1', name: 'First', parent: null },
+                { id: 's2', name: 'Second', parent: 's1' }];
+    return withEnvironment(p, function (ctx) {
+      App.BoundaryConditions.openRecord(App.PROJECT.boundary_conditions[0], 'flow', 's2');
+      var dialog = latest(ctx);
+      T.eq(dialog.options.title, 'Clay in Second');
+      T.eq(field(dialog, 'Where').disabled, true, 'a stage changes values, not where');
+      field(dialog, 'Value').value = '-25';
+      return button(dialog, 'Save').then(function () {
+        var sent = ctx.requests[0];
+        T.eq(sent.path, '/api/project/stages');
+        T.eq(sent.body.stages[1].condition_values, { clay: { value: -25 } });
+        T.eq(sent.body.stages[0].condition_values || {}, {});
       });
     });
   });

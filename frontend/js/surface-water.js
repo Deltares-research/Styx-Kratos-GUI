@@ -364,6 +364,191 @@ App.SurfaceWater = (function () {
     return out;
   }
 
+  /* The lines of the soil's geometry in the section: the boundary of each soil body of
+     the sections `keys`, as {a: [x, y], b: [x, y], key, outer}. `outer` is an edge of
+     the soil's outer boundary, with soil on one side and none on the other; the others
+     are inside the soil, between two bodies -- a layer boundary, a line that splits the
+     soil (lines.js). Read on both sides of each edge rather than by matching the edges
+     of neighbouring bodies, whose triangulations need not share their vertices, so a
+     line between two bodies is there once for each.
+
+     The build sends each triangle of a 2D section twice, once per winding (its front
+     and its back), so a triangle is counted once whatever its winding: a body's own
+     boundary is the edges one of its triangles has. */
+  function geometryLines(sections, keys) {
+    var triangles = trianglesOf(sections || [], keys || []);
+    var out = [];
+    (sections || []).forEach(function (section) {
+      if ((keys || []).indexOf(section.key) < 0) return;
+      var p = section.positions || [], idx = section.indices || [];
+      var count = {};
+      var ends = {};
+      var seen = {};
+      for (var i = 0; i + 2 < idx.length; i += 3) {
+        var corners3 = [idx[i], idx[i + 1], idx[i + 2]];
+        var triangle = corners3.slice().sort(function (m, n) { return m - n; }).join(':');
+        if (seen[triangle]) continue;
+        seen[triangle] = true;
+        [[corners3[0], corners3[1]], [corners3[1], corners3[2]],
+         [corners3[2], corners3[0]]].forEach(function (edge) {
+          var name = Math.min(edge[0], edge[1]) + ':' + Math.max(edge[0], edge[1]);
+          count[name] = (count[name] || 0) + 1;
+          ends[name] = edge;
+        });
+      }
+      Object.keys(count).forEach(function (name) {
+        if (count[name] !== 1) return;
+        var a = [p[ends[name][0] * 3], p[ends[name][0] * 3 + 1]];
+        var b = [p[ends[name][1] * 3], p[ends[name][1] * 3 + 1]];
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        var length = Math.sqrt(dx * dx + dy * dy);
+        if (!length) return;
+        var mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        var nx = -dy / length * SIDE, ny = dx / length * SIDE;
+        out.push({ a: a, b: b, key: section.key,
+                   outer: inside(triangles, mx + nx, my + ny)
+                     !== inside(triangles, mx - nx, my - ny) });
+      });
+    });
+    return out;
+  }
+
+  /* The soil's outer boundary in the section (`geometryLines`, `outer`). Where a seepage
+     face and a flux can be (writer `_edge_conditions`). */
+  function outline(sections, keys) {
+    return geometryLines(sections, keys).filter(function (edge) { return edge.outer; });
+  }
+
+  /* Whether the polyline `points` runs along `edges` (`geometryLines`): each point and
+     the middle of each stretch on one of them. A stretch from one side of the soil
+     straight across to another has its middle in the soil, on none. */
+  function runsAlong(edges, points) {
+    if (!points || !points.length) return false;
+    var probes = points.slice();
+    for (var i = 1; i < points.length; i += 1) {
+      probes.push([(points[i - 1][0] + points[i][0]) / 2,
+                   (points[i - 1][1] + points[i][1]) / 2]);
+    }
+    return probes.every(function (q) {
+      var near = nearestOn(edges, q[0], q[1]);
+      return !!near && near.distance <= TOL;
+    });
+  }
+
+  /* The point of `edges` (`outline`, `geometryLines`) nearest to (x, y), as
+     {point: [x, y], distance}, or null with no edge. */
+  function nearestOn(edges, x, y) {
+    var best = null;
+    (edges || []).forEach(function (edge) {
+      var dx = edge.b[0] - edge.a[0], dy = edge.b[1] - edge.a[1];
+      var length2 = dx * dx + dy * dy;
+      var t = length2 ? Math.max(0, Math.min(1, ((x - edge.a[0]) * dx
+                                                 + (y - edge.a[1]) * dy) / length2)) : 0;
+      var px = edge.a[0] + t * dx, py = edge.a[1] + t * dy;
+      var distance = Math.sqrt((px - x) * (px - x) + (py - y) * (py - y));
+      if (!best || distance < best.distance) best = { point: [px, py], distance: distance };
+    });
+    return best;
+  }
+
+  /* The corners of the lines `edges` (`geometryLines`), as [[x, y], ...]: where a line
+     turns, ends, or meets another -- a layer boundary reaching the side of the model, a
+     line that splits the soil. The build splits a straight line into several edges, and
+     a line between two bodies is there once for each; where it carries on straight is no
+     corner. */
+  var STRAIGHT = 1e-2;   // the sine of the largest bend that is still straight on, ~0.6°
+
+  function corners(edges) {
+    var at = {};
+    (edges || []).forEach(function (edge) {
+      [[edge.a, edge.b], [edge.b, edge.a]].forEach(function (end) {
+        var name = Math.round(end[0][0] / TOL) + ':' + Math.round(end[0][1] / TOL);
+        var node = at[name] = at[name] || { point: end[0], ways: [] };
+        var ux = end[1][0] - end[0][0], uy = end[1][1] - end[0][1];
+        var length = Math.sqrt(ux * ux + uy * uy);
+        if (!length) return;
+        var way = [ux / length, uy / length];
+        // The same way out twice (the line of two bodies) is one way.
+        if (!node.ways.some(function (w) {
+          return Math.abs(w[0] * way[1] - w[1] * way[0]) < STRAIGHT
+            && w[0] * way[0] + w[1] * way[1] > 0;
+        })) node.ways.push(way);
+      });
+    });
+    var out = [];
+    Object.keys(at).forEach(function (name) {
+      var p = at[name].point, ways = at[name].ways;
+      // Two ways out, opposite: the line runs straight on.
+      if (ways.length === 2 && Math.abs(ways[0][0] * ways[1][1] - ways[0][1] * ways[1][0])
+          < STRAIGHT && ways[0][0] * ways[1][0] + ways[0][1] * ways[1][1] < 0) return;
+      out.push([p[0], p[1]]);
+    });
+    return out;
+  }
+
+  /* To the micrometre, as a snapped click is (draw-input.js `snapTo`). */
+  function micro(value) { return Math.round(value * 1e6) / 1e6; }
+
+  /* Where `edge` crosses the grid lines `step` apart, within `step` of `q` along it. A
+     grid line the edge runs along is not a crossing. */
+  function crossings(edge, step, q) {
+    var out = [];
+    [0, 1].forEach(function (axis) {
+      var from = edge.a[axis], span = edge.b[axis] - from;
+      if (Math.abs(span) < TOL) return;
+      var lo = Math.max(Math.min(from, from + span), q[axis] - step);
+      var hi = Math.min(Math.max(from, from + span), q[axis] + step);
+      for (var k = Math.ceil(lo / step - 1e-9); k <= Math.floor(hi / step + 1e-9); k += 1) {
+        var t = (k * step - from) / span;
+        var p = [edge.a[0] + t * (edge.b[0] - edge.a[0]), edge.a[1] + t * (edge.b[1] - edge.a[1])];
+        p[axis] = k * step;
+        out.push([micro(p[0]), micro(p[1])]);
+      }
+    });
+    return out;
+  }
+
+  /* (x, y) moved onto the lines `edges` (`geometryLines`): to their nearest point,
+     always -- a flow boundary condition is on a line of the geometry and nowhere else.
+     With a snapping distance `step`, then on along the lines to the nearest, within
+     `step`, of their `corners` (`corners`) and of the points where they cross a grid
+     line of `step`: a corner of the soil, or a round coordinate, and still on the line.
+     {point, distance} as `nearestOn`, or null with no edge. */
+  function snapOnto(edges, cornerList, x, y, step) {
+    var near = nearestOn(edges, x, y);
+    if (!near || !(step > 0)) return near;
+    var q = near.point;
+    var best = null;
+    function consider(p) {
+      var d = Math.sqrt((p[0] - q[0]) * (p[0] - q[0]) + (p[1] - q[1]) * (p[1] - q[1]));
+      if (d <= step + 1e-9 && (!best || d < best.away - 1e-9)) best = { point: p, away: d };
+    }
+    // The corners first, so a corner on a grid line is taken as the corner.
+    (cornerList || []).forEach(consider);
+    edges.forEach(function (edge) {
+      // Only the edges that come within `step` of where the click landed.
+      if (Math.min(edge.a[0], edge.b[0]) > q[0] + step
+          || Math.max(edge.a[0], edge.b[0]) < q[0] - step
+          || Math.min(edge.a[1], edge.b[1]) > q[1] + step
+          || Math.max(edge.a[1], edge.b[1]) < q[1] - step) return;
+      crossings(edge, step, q).forEach(consider);
+    });
+    if (!best) return near;
+    var p = best.point;
+    return { point: [p[0], p[1]],
+             distance: Math.sqrt((p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y)) };
+  }
+
+  /* The soil body of the sections `keys` at (x, y), or null outside the soil. */
+  function soilAt(sections, keys, x, y) {
+    var found = null;
+    (keys || []).some(function (key) {
+      if (inside(trianglesOf(sections || [], [key]), x, y)) found = key;
+      return !!found;
+    });
+    return found;
+  }
+
   /* Which stages of `order` (App.Stages.order: the stages in execution order, empty
      for a model with no stages) have water on the ground, per phreatic line: `{water
      id: [stage name, ...]}`, or `{water id: [null]}` for a model with no stages.
@@ -428,7 +613,7 @@ App.SurfaceWater = (function () {
      (`Project.water_specific_weight`): the project's own, or water's. Null where the
      unit tables are not loaded. */
   function specificWeight(project) {
-    var given = project && project.water && project.water.specific_weight;
+    var given = project && project.fluid && project.fluid.specific_weight;
     if (typeof given === 'number') return given;
     if (!App.SoilModels || !App.Units) return null;
     var system = (project && project.unit_system) || undefined;
@@ -448,5 +633,8 @@ App.SurfaceWater = (function () {
 
   return { pieces: pieces, glyph: glyph, level: level, stagesWithWater: stagesWithWater,
            along: along, waterBody: waterBody, specificWeight: specificWeight,
-           pressureText: pressureText, linesOf: linesOf, reach: reach, waters: waters };
+           pressureText: pressureText, linesOf: linesOf, reach: reach, waters: waters,
+           geometryLines: geometryLines, outline: outline, runsAlong: runsAlong,
+           nearestOn: nearestOn, corners: corners, snapOnto: snapOnto,
+           soilAt: soilAt, soilKeys: soilKeys };
 })();

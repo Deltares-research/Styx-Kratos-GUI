@@ -327,6 +327,44 @@
     } finally { ctx.restore(); }
   });
 
+  /* A flow boundary condition's points (js/boundary-conditions.js `boundarySnapper`):
+     the tool moves the pointer onto the soil's boundary and snaps along it itself, so it
+     is handed the pointer as it is, not rounded to the grid first, and the snapping
+     distance. Here the "boundary" is the line y = 0. */
+  test('draw: a tool that snaps onto something gets the pointer and the snapping distance',
+       function () {
+    var ctx = rig(SECTION, sectionCamera());
+    var asked = [], completed = null;
+    try {
+      App.state.snap = true;
+      App.state.snapDistance = 0.25;
+      App.DrawInput.start('line', {
+        count: 1, atPointer: true,
+        snapPoint: function (point, step) { asked.push([point, step]); return [point[0], 0]; },
+        onComplete: function (points) { completed = points; }
+      });
+      at(ctx, 'mousemove', 13, 7);
+      var marker = preview(ctx).children.filter(function (c) {
+        return c.userData.snapMarker;
+      })[0];
+      T.ok(marker, 'where a click would land is marked before the first click');
+      T.near(marker.position.y, 0, 1e-9, 'on the boundary, not under the pointer');
+      T.near(asked[0][0][0], 12.6, 1e-6, 'x as pointed at: not rounded to a quarter metre');
+      T.near(asked[0][0][1], -7.4, 1e-6);
+      T.eq(asked[0][1], 0.25, 'the snapping distance, for the tool to snap along it');
+      at(ctx, 'click', 13, 7);
+      App.state.snap = false;
+      at(ctx, 'click', 50, 25);
+      T.eq(asked[asked.length - 1][1], null, 'with snapping off, no distance');
+      App.DrawInput.handleCommand('3 -4');
+      T.eq(asked[asked.length - 1], [[3, -4], null], 'a typed point too, not rounded');
+      at(ctx, 'contextmenu');
+      T.ok(completed, 'the line is handed back');
+      T.eq(completed.map(function (p) { return p[1]; }), [0, 0, 0], 'every point moved');
+      T.eq(completed[2][0], 3);
+    } finally { ctx.restore(); }
+  });
+
   test('draw: a load being placed is previewed as it is drawn', function () {
     var ctx = rig(SECTION, FACE_ON);
     try {

@@ -43,6 +43,20 @@ PRESTRESS_WORKAROUND_SOURCE = Path(__file__).with_name("prestress_workaround.py"
 """The file the deck's copy is made from. It is read as text and never imported: it
 imports Kratos, which the server does not have."""
 
+FLOW_ELEMENTS_NAME = "kratos_gui_flow_elements.py"
+"""A process of the deck's own, shipped only in a groundwater flow deck with a stage
+whose time integration needs other water pressure elements than the .mdpa has: a
+dynamic stage needs the transient class, and a static stage after it the steady class
+again. See `core/kratos/flow_elements_process.py`, which is copied here unchanged.
+Kratos imports it by its module name (`FLOW_ELEMENTS_MODULE`) from the deck's
+directory."""
+
+FLOW_ELEMENTS_MODULE = Path(FLOW_ELEMENTS_NAME).stem
+
+FLOW_ELEMENTS_SOURCE = Path(__file__).with_name("flow_elements_process.py")
+"""The file the deck's copy is made from. Read as text and never imported, like
+`PRESTRESS_WORKAROUND_SOURCE`."""
+
 
 def write_text(path: Path, text: str) -> None:
     r"""Write `text` to `path` exactly as it is.

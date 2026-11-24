@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════════════════
    test-water.js — the water line.
 
-   `Project.water` is the deck's water table: `core.kratos.parameters._pore_pressure` states
-   the whole ground's pressure from its `y` and `specific_weight`, `_normal_load` sizes
-   every hydrostatic load from the same two numbers, and `core.kratos.materials` derives
-   DENSITY_WATER from the specific weight. Until now nothing in the GUI could change
-   either of them -- the Selection explorer's `water` entry was still the mockup's
-   three water rows from js/data.js:631, which describe a different project.
+   `Project.water` is the water level: the level a new hydrostatic condition or normal
+   load takes, and the one a normal load saved without its own reads. What the water
+   weighs is not the level's but the water's (`Project.fluid.specific_weight`), edited
+   under Water properties; the panel shows it read-only. The Selection explorer's
+   `water` entry used to be the mockup's three water rows from js/data.js:631, which
+   describe a different project.
 
    See plan/outdated/staged-construction-plan.md sec 7.2, "the GUI follow-on Marjan asked for".
    A *per-stage* phreatic level is a further step and deliberately not here.
@@ -28,7 +28,7 @@
       ],
       layers: [{ id: 'L1', name: 'Soil_1', mat: 'm2', top: 0, bottom: -25 }],
       custom_parts: [],
-      water: water || { y: -1.5, margin: 3.0, thickness: 0.06, specific_weight: 10.0 }
+      water: water || { y: -1.5, margin: 3.0, thickness: 0.06 }
     };
   }
 
@@ -59,20 +59,27 @@
   /* ── The panel describes this project ─────────────────────────────────── */
 
   test('the water panel shows the project level, not the mockup rows', function () {
-    withProject(project({ y: -4.25, margin: 3, thickness: 0.06, specific_weight: 10 }),
+    withProject(project({ y: -4.25, margin: 3, thickness: 0.06 }),
                 function () {
       T.eq(row('Geometry', 'Level')[1], '-4.250');
     });
   });
 
-  test('the water panel shows the specific weight the deck will use', function () {
-    withProject(project({ y: -1.5, margin: 3, thickness: 0.06, specific_weight: 9.81 }),
-                function () {
-      T.eq(row('General', 'Specific weight')[1], '9.81');
+  /* What the water weighs is the water's (`Fluid.specific_weight`), which a project
+     without a level has too: shown with the level, edited under Water properties. */
+  test('the water panel shows the water\'s specific weight, which the deck will use',
+       function () {
+    var p = project();
+    p.fluid = { specific_weight: 9.81 };
+    withProject(p, function () {
+      var weight = row('General', 'Specific weight (Water properties)');
+      T.eq(weight[1], '9.81');
+      T.eq(weight[3], true, 'read only here: it is the water\'s, not the level\'s');
+      T.ok(!weight[4], 'no editor on the level');
     });
   });
 
-  /* ── Both are editable, and validated the way the server validates them ── */
+  /* ── The level is editable, and validated the way the server validates it ── */
 
   test('the level is editable and the edit is what gets sent', function () {
     withProject(project(), function () {
@@ -83,21 +90,9 @@
     });
   });
 
-  test('the specific weight is editable', function () {
+  test('a project that leaves the weight to the water shows water\'s own', function () {
     withProject(project(), function () {
-      var editor = row('General', 'Specific weight')[4];
-      T.eq(editor.set(9.81), null);
-      T.eq(App.Model.pendingWater().specific_weight, 9.81);
-    });
-  });
-
-  /* Mirrors WaterLevel's `gt=0` rather than duplicating a rule: a weightless fluid
-     divides by zero in the materials file, where DENSITY_WATER comes from it. */
-  test('a weightless fluid is refused here rather than at save', function () {
-    withProject(project(), function () {
-      var editor = row('General', 'Specific weight')[4];
-      T.ok(editor.set(0) !== null, 'zero specific weight was accepted');
-      T.eq(App.Model.pendingWater().specific_weight, 10.0, 'the rejected edit stuck');
+      T.eq(row('General', 'Specific weight (Water properties)')[1], '10000');
     });
   });
 
@@ -119,14 +114,13 @@
   /* ── The level survives a reload ──────────────────────────────────────── */
 
   test('applying a project replaces the pending water wholesale', function () {
-    withProject(project({ y: -2, margin: 3, thickness: 0.06, specific_weight: 10 }),
+    withProject(project({ y: -2, margin: 3, thickness: 0.06 }),
                 function () {
       T.eq(App.Model.pendingWater().y, -2);
     });
-    withProject(project({ y: -7, margin: 3, thickness: 0.06, specific_weight: 12 }),
-                function () {
+    withProject(project({ y: -7, margin: 3.5, thickness: 0.06 }), function () {
       T.eq(App.Model.pendingWater().y, -7);
-      T.eq(App.Model.pendingWater().specific_weight, 12);
+      T.eq(App.Model.pendingWater().margin, 3.5);
     });
   });
 
@@ -164,7 +158,7 @@
   });
 
   test('the water row is labelled with the level it is at', function () {
-    withProject(project({ y: -3.25, margin: 3, thickness: 0.06, specific_weight: 10 }),
+    withProject(project({ y: -3.25, margin: 3, thickness: 0.06 }),
                 function () {
       var node = topNode(App.TREES.flow, 'Water levels');
       T.ok(node.children[0].label.indexOf('-3.25') >= 0,
@@ -177,7 +171,7 @@
      user's business. They still have to survive the round trip, because the layers
      PATCH replaces the whole water object. */
   test('the drawing fields ride along untouched', function () {
-    withProject(project({ y: -3, margin: 4.5, thickness: 0.2, specific_weight: 10 }),
+    withProject(project({ y: -3, margin: 4.5, thickness: 0.2 }),
                 function () {
       App.Model.pendingWater().y = -3.5;
       T.eq(App.Model.pendingWater().margin, 4.5);
@@ -230,7 +224,7 @@
     return Object.assign({
       dimension: dimension,
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
-      water: { y: y, margin: 3.0, thickness: 0.06, specific_weight: 10.0 }
+      water: { y: y, margin: 3.0, thickness: 0.06 }
     }, extra || {});
   }
 

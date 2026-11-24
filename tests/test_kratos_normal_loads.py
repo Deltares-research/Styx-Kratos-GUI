@@ -34,7 +34,8 @@ def normal_load_project(fluid_pressure_type: str = "Hydrostatic", pressure: floa
                         points=None) -> Project:
     payload = seed_project().model_dump()
     payload.update(dimension=dimension, section_offset=20.0)
-    payload["water"] = {"y": -3.5, "specific_weight": 10_000.0}   # N/m3: the project is SI
+    payload["water"] = {"y": -3.5}
+    payload["fluid"] = {**payload["fluid"], "specific_weight": 10_000.0}   # N/m3: SI
     payload["normal_loads"] = [{
         "id": "normal_1", "name": "River load", "kind": "normal",
         "points": points or [[8.0, 0.0], [8.0, -5.0], [16.0, -5.0]],

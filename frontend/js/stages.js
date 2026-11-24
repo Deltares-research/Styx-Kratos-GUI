@@ -366,7 +366,9 @@ App.Stages = (function () {
       max_iterations: DEFAULTS.max_iterations, tolerated_error: DEFAULTS.tolerated_error,
       absolute_tolerance: ABSOLUTE_TOLERANCES[CONVERGENCE_CRITERIA.mechanical[0][0]],
       start_time: 0, duration: DEFAULTS.duration, time_step: DEFAULTS.time_step,
-      solver_settings: {}
+      solver_settings: {},
+      // The water it gives (`schemas.Stage.phreatic_line` ...): none of its own.
+      phreatic_line: null, soil_water: {}, condition_values: {}
     };
   }
 
@@ -729,6 +731,190 @@ App.Stages = (function () {
     });
   }
 
+  /* ── The water of a stage: the twin of core/model/stages.py ─────────────── */
+
+  var LINE_TYPES = ['Phreatic_Multi_Line', 'Head_Line'];
+  var LINE_TARGETS = ['domain', 'line'];
+  var STAGED_CONDITIONS = ['displacement', 'water_pressure', 'seepage', 'flux'];
+  var INTERPOLATE = 'interpolate';
+  var DRY = 'dry';
+  /* What a stage's soil water says for the phreatic line again (`schemas.PHREATIC`). */
+  var PHREATIC = '';
+
+  function isWaterLine(record) {
+    return !!record && record.kind === 'water_pressure' && LINE_TARGETS.indexOf(record.on) >= 0
+      && LINE_TYPES.indexOf(record.fluid_pressure_type) >= 0;
+  }
+
+  /* `stages.stage_values`: each condition's values in stage `id` (null: the model as
+     built) that are not its own, the later stages' over the earlier, field by field. */
+  function stageValues(project, id) {
+    var values = {};
+    (id == null ? [] : chainTo(project, id)).forEach(function (stage) {
+      var given = stage.condition_values || {};
+      Object.keys(given).forEach(function (condition) {
+        values[condition] = Object.assign({}, values[condition] || {}, given[condition]);
+      });
+    });
+    return values;
+  }
+
+  /* `stages.water_in`: the water of stage `id`, or of the model as built for null --
+     `{phreatic, soil_water, conditions}`. `phreatic` is the phreatic line, typed
+     Phreatic_Multi_Line whatever its record says; every other water line on in the
+     stage is typed Head_Line among `conditions`, which is every condition on in the
+     stage with the values the stage gives it. `soil_water` is each soil that takes a
+     water of its own: a head line's id, interpolate or dry. */
+  function waterIn(project, id) {
+    var chain = id == null ? [] : chainTo(project, id);
+    var on = chain.length ? activeParts(project, id) : null;
+    var values = stageValues(project, id);
+    var named = null;
+    var chosen = Object.assign({}, (project && project.soil_water) || {});
+    chain.forEach(function (stage) {
+      if (stage.phreatic_line != null) named = stage.phreatic_line;
+      Object.assign(chosen, stage.soil_water || {});
+    });
+    var records = (project && project.boundary_conditions) || [];
+    var conditions = {};
+    records.forEach(function (record) {
+      if (record.active === false) return;
+      if (on && STAGED_CONDITIONS.indexOf(record.kind) >= 0 && on.indexOf(record.id) < 0) {
+        return;
+      }
+      conditions[record.id] = Object.assign({}, record, values[record.id] || {});
+    });
+    var lines = records.filter(isWaterLine).filter(function (record) {
+      return conditions[record.id];
+    }).map(function (record) { return conditions[record.id]; });
+    var phreaticId = null;
+    if (named != null) {
+      phreaticId = lines.some(function (line) { return line.id === named; }) ? named : null;
+    } else {
+      var typed = lines.filter(function (line) {
+        return line.fluid_pressure_type === 'Phreatic_Multi_Line';
+      })[0];
+      phreaticId = typed ? typed.id : null;
+    }
+    lines.forEach(function (line) {
+      var role = line.id === phreaticId ? 'Phreatic_Multi_Line' : 'Head_Line';
+      if (line.fluid_pressure_type !== role) {
+        conditions[line.id] = Object.assign({}, line, { fluid_pressure_type: role });
+      }
+    });
+    var heads = lines.filter(function (line) { return line.id !== phreaticId; })
+      .map(function (line) { return line.id; });
+    var soilWater = {};
+    Object.keys(chosen).forEach(function (key) {
+      var water = chosen[key];
+      if (water === INTERPOLATE || water === DRY || heads.indexOf(water) >= 0) {
+        soilWater[key] = water;
+      }
+    });
+    return { phreatic: phreaticId ? conditions[phreaticId] : null, soil_water: soilWater,
+             conditions: conditions };
+  }
+
+  /* `project` as stage `id` has its water: each condition the stage has on with the
+     values the stage gives it, its phreatic line typed Phreatic_Multi_Line and every
+     other water line Head_Line, and the soils' water the stage gives them. What draws
+     the water of a stage (surface-water.js) reads it as it reads the model as built. */
+  function waterView(project, id) {
+    if (!project || id == null || !index(project)[id]) return project;
+    var water = waterIn(project, id);
+    return Object.assign({}, project, {
+      boundary_conditions: (project.boundary_conditions || []).map(function (record) {
+        return water.conditions[record.id] || record;
+      }),
+      soil_water: water.soil_water
+    });
+  }
+
+  /* `stages._children_kept`: `list` with each stage that starts from `id` given, by
+     `pin(stage, was)`, what it read (`read(project, stageId)`) before the edit, where
+     the edit changed it -- each water edit is its stage's alone, as setActive is. */
+  function childrenKept(project, id, list, read, pin) {
+    var was = {};
+    stagesOf(project).forEach(function (stage) {
+      if (stage.parent === id && stage.id !== id) was[stage.id] = read(project, stage.id);
+    });
+    var after = Object.assign({}, project, { stages: list });
+    list.forEach(function (stage) {
+      if (Object.prototype.hasOwnProperty.call(was, stage.id)
+          && JSON.stringify(read(after, stage.id)) !== JSON.stringify(was[stage.id])) {
+        pin(stage, was[stage.id]);
+      }
+    });
+    return list;
+  }
+
+  /* `stages.set_phreatic_line`: the water line `line` the phreatic line from stage
+     `id` (null: the stage before's again), switched on there if it is off. */
+  function setPhreaticLine(project, id, line) {
+    var list = line != null && (activeParts(project, id) || []).indexOf(line) < 0
+      ? setActive(project, id, [line], true) : copy(stagesOf(project));
+    list.forEach(function (stage) {
+      if (stage.id === id) stage.phreatic_line = line == null ? null : line;
+    });
+    return childrenKept(project, id, list, function (p, stage) {
+      var found = waterIn(p, stage).phreatic;
+      return found ? found.id : null;
+    }, function (stage, was) {
+      if (was != null) stage.phreatic_line = was;
+    });
+  }
+
+  /* `stages.set_soil_water`: the soil `soil` takes `water` from stage `id` -- a water
+     line's id, interpolate, dry, or PHREATIC; null, the stage before's again. */
+  function setSoilWater(project, id, soil, water) {
+    var list = copy(stagesOf(project));
+    list.forEach(function (stage) {
+      if (stage.id !== id) return;
+      stage.soil_water = Object.assign({}, stage.soil_water || {});
+      if (water == null) delete stage.soil_water[soil];
+      else stage.soil_water[soil] = water;
+    });
+    return childrenKept(project, id, list, function (p, stage) {
+      var taken = waterIn(p, stage).soil_water[soil];
+      return taken === undefined ? PHREATIC : taken;
+    }, function (stage, was) {
+      var pinned = {};
+      pinned[soil] = was;
+      stage.soil_water = Object.assign({}, stage.soil_water || {}, pinned);
+    });
+  }
+
+  /* `stages.set_values`: the condition `condition` with the values `fields` from stage
+     `id`, over the ones it gives already; null, the stage before's values again. */
+  function setValues(project, id, condition, fields) {
+    var list = copy(stagesOf(project));
+    var record = ((project && project.boundary_conditions) || []).filter(function (c) {
+      return c.id === condition;
+    })[0] || {};
+    var mine = (index(project)[id] || {}).condition_values || {};
+    var touched = fields != null ? Object.keys(fields) : Object.keys(mine[condition] || {});
+    list.forEach(function (stage) {
+      if (stage.id !== id) return;
+      var values = Object.assign({}, stage.condition_values || {});
+      if (fields == null) delete values[condition];
+      else values[condition] = Object.assign({}, values[condition] || {}, fields);
+      stage.condition_values = values;
+    });
+    return childrenKept(project, id, list, function (p, stage) {
+      var given = stageValues(p, stage)[condition] || {};
+      var out = {};
+      touched.forEach(function (field) {
+        out[field] = Object.prototype.hasOwnProperty.call(given, field) ? given[field]
+          : record[field] === undefined ? null : record[field];
+      });
+      return out;
+    }, function (stage, was) {
+      var values = Object.assign({}, stage.condition_values || {});
+      values[condition] = Object.assign({}, was, values[condition] || {});
+      stage.condition_values = values;
+    });
+  }
+
   /* 'on', 'off' or -- for a group row whose parts differ -- 'mixed', in stage `id`. */
   function stateIn(project, id, keys) {
     var active = activeParts(project, id) || [];
@@ -801,6 +987,10 @@ App.Stages = (function () {
     startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,
     ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn,
+    PHREATIC: PHREATIC, DRY: DRY, INTERPOLATE: INTERPOLATE,
+    waterIn: waterIn, waterView: waterView, stageValues: stageValues,
+    setPhreaticLine: setPhreaticLine,
+    setSoilWater: setSoilWater, setValues: setValues,
     resolveSolver: resolveSolver, solverRows: solverRows, solverSetting: solverSetting,
     solverLabel: solverLabel, iterates: iterates, editedSolver: editedSolver
   };

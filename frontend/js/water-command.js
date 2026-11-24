@@ -6,8 +6,9 @@
        water off          remove it (also `none`, `remove`)
 
    A model is not born with a water level (core/model/templates.py `blank_project`): it has
-   one when its author sets one, and this is where that is done. Once set, the level and
-   its specific weight are also editable in the Selection explorer, as before.
+   one when its author sets one, and this is where that is done. Once set, the level is
+   also editable in the Selection explorer, as before. What the water weighs is not the
+   level's: it is the water's (`Fluid.specific_weight`), edited under Water properties.
 
    This module only decides what was asked and what to send to
    `PUT /api/project/water`. It has no DOM in it, so the headless runner executes it
@@ -38,10 +39,7 @@
 
     if (!arg) {
       return { ok: true, body: null, message: water
-        ? 'Water level: ' + fixed(water.y) + ' m (specific weight '
-          + (water.specific_weight === null || water.specific_weight === undefined
-             ? App.Units.fromSI(10000, 'specific weight') : water.specific_weight)
-          + ' ' + App.Units.label('specific weight') + ').'
+        ? 'Water level: ' + fixed(water.y) + ' m.'
         : 'This model has no water level. ' + USAGE };
     }
 
@@ -62,8 +60,8 @@
       return { ok: false, body: null, message: 'The water level must lie between '
                + fixed(domain.y_bottom) + ' and ' + fixed(domain.y_top) + ' m.' };
     }
-    // Everything else about an existing level -- its specific weight above all -- is
-    // the user's and is kept. A new level takes the server's defaults.
+    // Everything else about an existing level is the user's and is kept. A new level
+    // takes the server's defaults.
     var next = water ? Object.assign({}, water, { y: level }) : { y: level };
     var message = 'Water level set to ' + fixed(level) + ' m.';
     if (ctx.conditions && !ctx.conditions.some(function (c) {

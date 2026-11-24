@@ -1239,6 +1239,44 @@
     });
   });
 
+  test("the zero line carries the stage's own phreatic line, not the one first drawn",
+       function () {
+    var saved = { project: App.PROJECT, stages: App.Stages, water: App.SurfaceWater };
+    var viewed = { boundary_conditions: [] };
+    var asked = [];
+    App.PROJECT = { name: 'Staged excavation', dimension: 2,
+                    stages: [{ id: 's1', name: 'Initial stage' },
+                             { id: 's2', name: 'First excavation' }] };
+    App.Stages = {
+      order: function (project) { return project.stages; },
+      hiddenKeys: function () { return []; },
+      waterView: function (project, stage) {
+        asked.push(stage);
+        return viewed;
+      }
+    };
+    App.SurfaceWater = {
+      waters: function (project) {
+        return project === viewed
+          ? [{ x_coordinates: [0, 20], y_coordinates: [-6, -6] }]
+          : [{ x_coordinates: [0, 20], y_coordinates: [-1, -1] }];
+      }
+    };
+    function restore() {
+      App.PROJECT = saved.project;
+      App.Stages = saved.stages;
+      App.SurfaceWater = saved.water;
+    }
+    return showingWater('flow').then(function () {
+      T.eq(asked, ['s2'], 'the water of the stage on screen');
+      T.eq(drawn[drawn.length - 1].phreatic, [[[0, -6], [20, -6]]]);
+      restore();
+    }, function (error) {
+      restore();
+      throw error;
+    });
+  });
+
   test('the zero line carries the phreatic lines of the open project for the stage shown',
        function () {
     /* The open project is the one the run was made from: same deck name, same stages. */

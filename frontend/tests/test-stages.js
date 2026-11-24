@@ -64,6 +64,27 @@
     });
   });
 
+  /* The water of each stage, held to core/model/stages.py's `water_in`: its phreatic
+     line, the water of its soils, and the values it gives its conditions. */
+  Object.keys(FIXTURE.water_in || {}).forEach(function (id) {
+    test('waterIn(' + id + ') agrees with the server', function () {
+      var p = project();
+      var stage = id === 'as_built' ? null : id;
+      var water = App.Stages.waterIn(p, stage);
+      var expected = FIXTURE.water_in[id];
+      T.eq(water.phreatic ? water.phreatic.id : null, expected.phreatic, 'phreatic line');
+      T.eq(water.soil_water, expected.soil_water, 'soil water');
+      T.eq(App.Stages.stageValues(p, stage), expected.values, 'values');
+    });
+  });
+
+  test('a stage that names its phreatic line types every other line a head line',
+       function () {
+    var water = App.Stages.waterIn(project(), 'dig_1');
+    T.eq(water.phreatic.fluid_pressure_type, 'Phreatic_Multi_Line');
+    T.eq(water.conditions.high.fluid_pressure_type, 'Head_Line');
+  });
+
   /* The editing, held to core/model/stages.py's twins: the command line adds, inserts,
      deletes, copies and switches parts the way the toolbar and the explorer do. */
   (FIXTURE.edits || []).forEach(function (edit) {

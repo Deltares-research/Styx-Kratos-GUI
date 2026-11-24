@@ -191,6 +191,46 @@
     T.eq(top.symbols[0].outward, [0, 1]);
   });
 
+  function flux(id, points, value) {
+    return { id: id, name: id, kind: 'flux', on: 'line', face: null, part: null,
+             points: points, value: value, active: true };
+  }
+
+  /* `conditionGlyphSpec` of `record` with the line inside the soil or not, as
+     `insideSoil` would tell it off the built sections. */
+  function fluxGlyph(record, inside) {
+    var real = BC().insideSoil;
+    BC().insideSoil = function () { return inside; };
+    try {
+      return App.Viewport.conditionGlyphSpec(record, section([record]));
+    } finally {
+      BC().insideSoil = real;
+    }
+  }
+
+  test('a flux on the boundary draws its arrows into the soil, or out of it', function () {
+    var into = fluxGlyph(flux('rain', [[20, -1], [20, -6]], 1e-6), false);
+    T.ok(into.symbols.length > 1 && into.symbols.every(function (s) {
+      return s.arrow && s.outward[0] === -1 && s.outward[1] === 0;
+    }), 'into the soil, from the right side');
+    var out = fluxGlyph(flux('pump', [[20, -1], [20, -6]], -1e-6), false);
+    T.ok(out.symbols.every(function (s) { return s.outward[0] === 1; }), 'out of it');
+  });
+
+  test('a flux inside the soil draws its arrows to both sides of its line', function () {
+    var into = fluxGlyph(flux('pipe', [[5, -4], [15, -4]], 1e-6), true);
+    var ups = into.symbols.filter(function (s) { return s.outward[1] === 1; });
+    var downs = into.symbols.filter(function (s) { return s.outward[1] === -1; });
+    T.ok(ups.length > 0 && ups.length === downs.length, 'as many up as down');
+    T.ok(into.symbols.every(function (s) { return s.arrow && s.at[1] === -4; }),
+         'water flowing in: each arrow starts on the line and points away from it');
+    var size = into.size;
+    var out = fluxGlyph(flux('drain', [[5, -4], [15, -4]], -1e-6), true);
+    T.ok(out.symbols.length === into.symbols.length && out.symbols.every(function (s) {
+      return Math.abs(s.at[1] + 4 + s.outward[1] * 1.15 * size) < 1e-9;
+    }), 'water flowing out: each arrow stands off the line and points back to it');
+  });
+
   test('a hydrostatic pressure on a line draws the pressure along that line', function () {
     var record = pressure('bank', 'line', { points: [[20, 0], [20, -6]] });
     var spec = App.Viewport.conditionGlyphSpec(record, section([record]));
@@ -499,6 +539,23 @@
     T.eq(phreatic.label, undefined, 'no h = beside the phreatic line');
   });
 
+  test('a water pressure on a point is marked at its node', function () {
+    var uniform = App.Viewport.conditionGlyphSpec(pressure('u', 'point', {
+      fluid_pressure_type: 'Uniform', points: [[3, -4]] }), section());
+    T.eq(uniform.lines, [], 'no dot standing in for the node');
+    T.eq(uniform.symbols.map(function (s) { return [s.node, s.at]; }),
+         [[true, [3, -4, 5]]], 'the node, in the section');
+    T.eq(uniform.color, '#3949ab', 'a pressure of its own');
+    var hydrostatic = App.Viewport.conditionGlyphSpec(pressure('h', 'point', {
+      points: [[3, -4]] }), section());
+    T.eq(hydrostatic.lines[0], [[0, -2, 5], [20, -2, 5]], 'its level still drawn');
+    T.eq(hydrostatic.symbols.map(function (s) { return [s.node, s.at]; }),
+         [[true, [3, -4, 5]]], 'and the node it holds');
+    var line = App.Viewport.conditionGlyphSpec(pressure('l', 'line', {
+      fluid_pressure_type: 'Uniform', points: [[0, -4], [5, -4]] }), section());
+    T.eq(line.symbols.filter(function (s) { return s.node; }), [], 'a line has no node');
+  });
+
   test('each condition is shown in its own tabs; Results shows only the water',
        function () {
     [true, false].forEach(function (layered) {
@@ -606,13 +663,14 @@
          'a phreatic line drawn on a line is listed with the lines');
   });
 
-  test('a soil takes the phreatic line, a head line, or is interpolated', function () {
+  test('a soil takes the phreatic line, a head line, is interpolated, or is dry', function () {
     var list = [phreatic('pl', { on: 'line', points: [[0, -1], [20, -1]] }),
                 head('head', { name: 'Aquifer head', on: 'line', points: [[0, 1], [20, 3]] }),
                 pressure('level', 'domain')];
     T.eq(BC().soilWaterChoices(list), [
       ['', 'Phreatic line (pl)'], ['head', 'Head line (Aquifer head)'],
-      ['interpolate', 'Interpolated between the soils above and below']]);
+      ['interpolate', 'Interpolated between the soils above and below'],
+      ['dry', 'Dry: no water, its pressure held at zero']]);
     T.eq(BC().soilWaterChoices([pressure('level', 'domain')])[0],
          ['', 'Phreatic line (none yet)']);
   });
@@ -678,7 +736,7 @@
     var none = section([head('aq')], { soil_water: { soil_L2: 'aq' } });
     T.eq(BC().soilWaterColors(none, ['soil_L1']).soil_L1,
          { water: '', color: BC().NO_WATER_COLOR, fill: BC().tint(BC().NO_WATER_COLOR, 0.45),
-           label: 'No water line' }, 'no phreatic line: no water line');
+           label: 'No water line', pattern: null }, 'no phreatic line: no water line');
   });
 
   test('the legend has each water line, and interpolated when a soil takes it',
@@ -696,10 +754,13 @@
     var project = section([phreatic('pl'), head('aq', { name: 'Aquifer' })],
                           { soil_water: { soil_L1: 'aq' } });
     var menu = BC().soilWaterMenu(project, 'soil_L1');
-    T.eq(menu.map(function (row) { return [row.soilWater, !!row.checked, !!row.disabled]; }),
-         [['', false, false], ['aq', true, false], ['interpolate', false, false]]);
+    var choices = menu.filter(function (row) { return row !== '-'; });
+    T.eq(choices.map(function (row) { return [row.soilWater, !!row.checked, !!row.disabled]; }),
+         [['', false, false], ['aq', true, false], ['interpolate', false, false],
+          ['dry', false, false], [undefined, false, false]]);
     T.eq(menu[1].action, 'soilWater');
     T.eq(menu[1].soilKey, 'soil_L1');
+    T.eq(menu[menu.length - 1].action, 'soilPressure', 'and a uniform pressure of its own');
     var solid = BC().soilWaterMenu(Object.assign({}, project, { dimension: 3 }), 'soil_L1');
     T.eq(solid[2].disabled, true, 'interpolated is 2D only');
   });
@@ -734,11 +795,156 @@
     T.eq(App.Viewport.alongPath([[0, 0, 5], [10, 0, 5], [10, 10, 5]], 0.75), [10, 5, 5]);
   });
 
+  test('a stage with a phreatic line of its own draws its lines as the stage has them',
+       function () {
+    var pl = phreatic('pl', { y_coordinates: [-1, -3] });
+    var low = phreatic('low', { name: 'Pumped', y_coordinates: [-6, -6] });
+    var project = section(standard().concat([pl, low]), {
+      stageable_parts: ['pl', 'low'],
+      stages: [{ id: 's1', name: 'Initial', parent: null, activate: [], deactivate: ['low'] },
+               { id: 's2', name: 'Pumped dry', parent: 's1', activate: ['low'],
+                 deactivate: [], phreatic_line: 'low' }] });
+    var water = App.Stages.waterIn(project, 's2');
+    var made = App.Viewport.conditionGlyphSpec(low, project, null, water);
+    T.eq([made.waterLine, made.dashed, made.color], ['phreatic', false, BC().PHREATIC_COLOR],
+         'the line the stage makes phreatic has the phreatic symbol');
+    T.eq(made.symbols.length, 1);
+    var was = App.Viewport.conditionGlyphSpec(pl, project, null, water);
+    T.eq([was.waterLine, was.dashed], ['head', true], 'the one before is a head line there');
+    T.eq(was.color, BC().waterLineColor(pl, project.boundary_conditions, 'low'));
+    T.ok(was.color !== BC().PHREATIC_COLOR);
+    var initial = App.Viewport.conditionGlyphSpec(pl, project, null,
+                                                  App.Stages.waterIn(project, 's1'));
+    T.eq(initial.waterLine, 'phreatic', 'and the phreatic line again in the initial stage');
+  });
+
   test('a condition is shown until it is hidden', function () {
     App.PROJECT = section(standard().concat([pressure('pore', 'domain')]));
     T.eq(App.Viewport.isVisible('roller_left'), true);
     T.eq(App.Viewport.isVisible('pore'), true);
     T.eq(App.Viewport.isVisible('soil_L1'), true, 'a part is shown as before');
+  });
+
+  /* ── The water of a stage, dry soils and uniform soil pressures ─────── */
+
+  /* Two stages over the soil of `section`: the second names `later` its own. */
+  function staged(conditions, extra, later) {
+    var keys = ['soil_L1', 'soil_L2'].concat(conditions.map(function (c) { return c.id; }));
+    return section(conditions, Object.assign({
+      stageable_parts: keys,
+      stages: [{ id: 's1', name: 'First', parent: null },
+               Object.assign({ id: 's2', name: 'Second', parent: 's1' }, later || {})]
+    }, extra || {}));
+  }
+
+  test('a dry soil is drawn dry, and said so in the legend', function () {
+    var project = section([phreatic('pl')], { soil_water: { soil_L1: 'dry' } });
+    var colors = BC().soilWaterColors(project, ['soil_L1', 'soil_L2']);
+    T.eq([colors.soil_L1.water, colors.soil_L1.color], ['dry', BC().DRY_COLOR]);
+    T.eq(colors.soil_L2.color, BC().PHREATIC_COLOR);
+    T.ok(BC().waterLegend(project, ['soil_L1', 'soil_L2']).some(function (row) {
+      return row.label === 'Dry';
+    }));
+  });
+
+  test('a soil with a uniform pressure of its own is drawn with it', function () {
+    var own = pressure('clay', 'part', { part: 'soil_L2', fluid_pressure_type: 'Uniform',
+                                         value: -10 });
+    var project = section([phreatic('pl'), own]);
+    var colors = BC().soilWaterColors(project, ['soil_L1', 'soil_L2']);
+    T.eq(colors.soil_L2.color, BC().UNIFORM_COLOR);
+    T.eq(colors.soil_L2.label, 'Uniform pressure: clay');
+    // Hatched, and in no water line's colour: never mistaken for the phreatic line.
+    T.eq([colors.soil_L2.pattern, colors.soil_L1.pattern], ['hatch', null]);
+    T.ok(colors.soil_L2.color !== colors.soil_L1.color
+         && colors.soil_L2.fill !== colors.soil_L1.fill, 'apart from the phreatic blue');
+    T.ok(BC().waterLegend(project, ['soil_L1', 'soil_L2']).some(function (row) {
+      return row.label === 'Uniform pressure: clay' && row.pattern === 'hatch';
+    }));
+  });
+
+  test('a stage that names another phreatic line draws its soils with it', function () {
+    var project = staged([phreatic('high'), head('low')], {}, { phreatic_line: 'low' });
+    var first = BC().soilWaterColors(project, ['soil_L1'], 's1');
+    var second = BC().soilWaterColors(project, ['soil_L1'], 's2');
+    T.eq(first.soil_L1.label, 'Phreatic line: high');
+    T.eq(second.soil_L1.label, 'Phreatic line: low');
+    T.eq(BC().waterLegend(project, ['soil_L1'], 's2').map(function (row) {
+      return [row.label, row.line];
+    }), [['Phreatic line: low', 'solid'], ['Head line: high', 'dashed']]);
+    T.eq(BC().waterLineColor(head('low'), project.boundary_conditions, 'low'),
+         BC().PHREATIC_COLOR, 'the line a stage makes phreatic is blue there');
+  });
+
+  test('a stage gives a soil its water, or the water of the stage before', function () {
+    var project = staged([phreatic('pl'), head('aq')], {},
+                         { soil_water: { soil_L1: 'dry' } });
+    T.eq(BC().soilWaterOf(project, 'soil_L1', 's2'), 'dry');
+    T.eq(BC().soilWaterOf(project, 'soil_L1', 's1'), '');
+    var menu = BC().soilWaterMenu(project, 'soil_L1', 's2');
+    var rows = menu.filter(function (row) { return row !== '-'; });
+    T.eq(rows[0].action, 'stageSoilWater');
+    T.eq(rows[0].stageId, 's2');
+    T.eq(rows.filter(function (row) { return row.checked; })[0].soilWater, 'dry');
+    var before = rows[rows.length - 1];
+    T.eq([before.label, before.soilWater, !!before.disabled],
+         ['As the stage before', null, false]);
+    T.eq(BC().soilWaterMenu(project, 'soil_L2', 's2').slice(-1)[0].disabled, true,
+         'a soil the stage gives nothing of its own has nothing to take back');
+  });
+
+  test('a stage gives a condition the values that differ from the stage before', function () {
+    var own = pressure('clay', 'part', { part: 'soil_L2', fluid_pressure_type: 'Uniform',
+                                         value: -10 });
+    var project = staged([own], {}, { condition_values: { clay: { value: -25 } } });
+    var stages = BC().stageValueEdit(project, 's2', own, { value: -30 });
+    T.eq(stages[1].condition_values, { clay: { value: -30 } });
+    stages = BC().stageValueEdit(project, 's2', own, { value: -10 });
+    T.eq(stages[1].condition_values, {}, 'the value of the stage before is no value of its own');
+  });
+
+  test('a flow boundary condition is a seepage face, a flux or a water pressure', function () {
+    var project = section([]);
+    var points = [[20, 0], [20, -5]];
+    var seepage = BC().flowBoundary(project, 'line', points, 'seepage', 0);
+    T.eq([seepage.kind, seepage.on, seepage.points], ['seepage', 'line', points]);
+    var flux = BC().flowBoundary(project, 'line', points, 'flux', 2e-6);
+    T.eq([flux.kind, flux.value], ['flux', 2e-6]);
+    var level = BC().flowBoundary(project, 'line', points, 'Hydrostatic', -3);
+    T.eq([level.kind, level.fluid_pressure_type, level.reference_coordinate, level.is_fixed],
+         ['water_pressure', 'Hydrostatic', -3, true]);
+    var point = BC().flowBoundary(project, 'point', [[20, -2]], 'Uniform', -5);
+    T.eq([point.on, point.fluid_pressure_type, point.value], ['point', 'Uniform', -5]);
+    var screen = BC().flowBoundary(project, 'line', points, 'impermeable', 0);
+    T.eq([screen.kind, screen.on, screen.points, screen.id],
+         ['impermeable', 'line', points, 'impermeable_1']);
+  });
+
+  test('an impermeable line says what it is, in the list, the explorer and its table', function () {
+    var record = BC().draftImpermeable(section([]), { points: [[9, -4], [9, -10]] });
+    T.eq(BC().line(record), 'impermeable_1  Impermeable line 1  impermeable on line '
+         + '(9, -4) -> (9, -10); no water flows through it');
+    T.eq(BC().label(record), 'Impermeable line 1  ·  impermeable');
+    var row = BC().flowRows(section([record]))[0];
+    T.eq([row.condition, row.value], ['Impermeable line', '—']);
+    var error = null;
+    try { BC().draftImpermeable(section([], { dimension: 3 })); } catch (e) { error = e; }
+    T.ok(error && /switch to 2D/.test(error.message));
+  });
+
+  test('an impermeable line draws its line hatched on both sides', function () {
+    var record = BC().draftImpermeable(section([]), { points: [[9, -4], [9, -10]] });
+    var spec = App.Viewport.conditionGlyphSpec(record, section([record]));
+    T.eq(spec.lines, [[[9, -4, 5], [9, -10, 5]]]);
+    T.eq(spec.strips.map(function (s) { return s.outward; }), [[-1, 0], [1, 0]]);
+    T.eq(spec.symbols, [], 'no arrows: no water crosses it');
+  });
+
+  test('a new hydrostatic level is the water level, else the phreatic line\'s', function () {
+    T.eq(BC().levelAt(section([]), [[0, 0]]), -1.5);
+    var dry = section([phreatic('pl', { y_coordinates: [-1, -3] })], { water: null });
+    T.eq(BC().levelAt(dry, [[10, 0], [10, -4]]), -2);
+    T.eq(BC().levelAt(section([], { water: null }), [[5, 0]]), 0, 'else the ground');
   });
 
 })();
