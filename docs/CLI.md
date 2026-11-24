@@ -512,12 +512,19 @@ kratos-cli boundary dike.json add rain --face top --flux 1e-7   # 1e-7 m/s into 
   every stage until a stage switches it off (`stages P deactivate STAGE ID`), as a water
   pressure condition is.
 - **Flux.** `--flux RATE` makes a prescribed flux: water flowing into the soil per unit
-  area of its boundary, in the project's length over its time (m/s), negative for water
-  flowing out. It is on `--face F`, or on `--line X Y X Y ...` along the soil's outer
-  boundary, and takes no other option; `set ID --flux RATE` changes it. A flux line
-  through the soil is refused. It acts in a groundwater flow and in a coupled
-  calculation, and a 3D deck leaves it out, with a warning. A stage switches it on and
-  off, and may give it another rate (`stages value`).
+  area of its line, in the project's length over its time (m/s), negative for water
+  flowing out. It is on `--face F`, or on `--line X Y X Y ...` anywhere in the soil, and
+  takes no other option; `set ID --flux RATE` changes it. A flux line may run along the
+  soil's outer boundary or through the soil: there the water leaves the line to both
+  sides, the given rate per unit area of the line in all. It acts in a groundwater flow
+  and in a coupled calculation, and a 3D deck leaves it out, with a warning. A stage
+  switches it on and off, and may give it another rate (`stages value`).
+- **Impermeable line.** `--impermeable` makes a line no water flows through, in a
+  groundwater flow calculation: on `--line X Y X Y ...` in the soil, and it takes no other
+  option; `set ID --line ...` moves it. The export cuts the mesh along the line, so the
+  water pressure may differ on its two sides; where the line ends inside the soil the
+  water flows round its end. It acts in every stage, and no stage switches it. A coupled
+  or deformation calculation leaves it out, with a warning, and so does a 3D deck.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind

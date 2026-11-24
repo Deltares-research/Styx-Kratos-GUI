@@ -1287,7 +1287,8 @@
         var sent = ctx.requests[ctx.requests.length - 1].body.boundary_conditions;
         T.eq(sent.map(function (r) { return r.id; }), [before[0].id, before[2].id, before[3].id]);
         button(latest(ctx), 'Add condition…');
-        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage', 'flux']);
+        T.eq(values(field(latest(ctx), 'Condition')),
+             ['water_pressure', 'seepage', 'flux', 'impermeable']);
       });
     });
   });
@@ -1325,12 +1326,12 @@
     });
   });
 
-  test('a new flow condition offers water pressure, seepage face and flux, on the whole soil', function () {
+  test('a new flow condition offers each flow kind, on the whole soil', function () {
     return withEnvironment(project(), function (ctx) {
       App.BoundaryConditions.openRecord(null, 'flow');
       var dialog = latest(ctx);
       var condition = field(dialog, 'Condition');
-      T.eq(values(condition), ['water_pressure', 'seepage', 'flux']);
+      T.eq(values(condition), ['water_pressure', 'seepage', 'flux', 'impermeable']);
       T.eq(condition.disabled, false);
       T.eq(field(dialog, 'Where').value, 'domain');
       T.eq(field(dialog, 'Name').value, 'Water pressure 1');
@@ -1341,7 +1342,8 @@
         T.eq([saved.kind, saved.on, saved.fluid_pressure_type, saved.reference_coordinate],
              ['water_pressure', 'domain', 'Hydrostatic', -1.5]);
         App.BoundaryConditions.edit(saved.id);
-        T.eq(values(field(latest(ctx), 'Condition')), ['water_pressure', 'seepage', 'flux'],
+        T.eq(values(field(latest(ctx), 'Condition')),
+             ['water_pressure', 'seepage', 'flux', 'impermeable'],
              'a water condition is edited among the flow kinds');
       });
     });
@@ -1372,7 +1374,7 @@
       App.BoundaryConditions.openFlowBoundary('line', [[50, 0], [50, -10]]);
       var dialog = latest(ctx);
       var condition = field(dialog, 'Condition');
-      T.eq(values(condition), ['seepage', 'flux', 'Hydrostatic', 'Uniform']);
+      T.eq(values(condition), ['seepage', 'flux', 'impermeable', 'Hydrostatic', 'Uniform']);
       change(condition, 'flux');
       field(dialog, 'Flux').value = '0.000002';
       return button(dialog, 'Save').then(function () {
@@ -1452,15 +1454,36 @@
     });
   });
 
-  test('a flow boundary line inside the soil is a water pressure only', function () {
+  test('a flow boundary line inside the soil is a flux, a screen or a pressure', function () {
     return withEnvironment(project(), function (ctx) {
       App.Viewport.builtSections = layerSections;
+      var inner = ['flux', 'impermeable', 'Hydrostatic', 'Uniform'];
       App.BoundaryConditions.openFlowBoundary('line', [[0, -10], [50, -10]]);
-      T.eq(values(field(latest(ctx), 'Condition')), ['Hydrostatic', 'Uniform'],
-           'the line between the two layers: no seepage face or flux there');
+      T.eq(values(field(latest(ctx), 'Condition')), inner,
+           'the line between the two layers: no seepage face there');
+      App.BoundaryConditions.openFlowBoundary('line', [[10, -4], [40, -4]]);
+      T.eq(values(field(latest(ctx), 'Condition')), inner,
+           'a line straight across a soil: the same');
       App.BoundaryConditions.openFlowBoundary('line', [[50, 0], [50, -25]]);
       T.eq(values(field(latest(ctx), 'Condition')),
-           ['seepage', 'flux', 'Hydrostatic', 'Uniform'], 'the right side: any of them');
+           ['seepage', 'flux', 'impermeable', 'Hydrostatic', 'Uniform'],
+           'the right side: any of them');
+    });
+  });
+
+  test('a flow boundary line saved as impermeable is an impermeable line', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Viewport.builtSections = layerSections;
+      App.BoundaryConditions.openFlowBoundary('line', [[25, 0], [25, -15]]);
+      var dialog = latest(ctx);
+      change(field(dialog, 'Condition'), 'impermeable');
+      return button(dialog, 'Save').then(function () {
+        var saved = ctx.requests[0].body.boundary_conditions.filter(function (c) {
+          return c.kind === 'impermeable';
+        });
+        T.eq(saved.length, 1);
+        T.eq([saved[0].on, saved[0].points], ['line', [[25, 0], [25, -15]]]);
+      });
     });
   });
 

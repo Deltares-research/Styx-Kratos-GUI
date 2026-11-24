@@ -7,8 +7,8 @@ does not have. The export (`core.kratos.writer`) adds them to its own, and
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
-A seepage face (`SeepageCondition`) belongs to a groundwater flow calculation; a
-deformation deck leaves it out and says so.
+A seepage face (`SeepageCondition`) and an impermeable line (`ImpermeableCondition`)
+belong to a groundwater flow calculation; a deformation deck leaves them out and says so.
 
 A groundwater flow project (`core.model.stages.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
@@ -28,8 +28,8 @@ from collections.abc import Collection
 
 from core.model import stages
 from core.model.schemas import (DRY, INTERPOLATE, SECTION_FACES, DisplacementCondition,
-                                Material, Stage, Project, SeepageCondition,
-                                WaterPressureCondition)
+                                ImpermeableCondition, Material, Stage, Project,
+                                SeepageCondition, WaterPressureCondition)
 
 
 def warnings(project: Project) -> list[str]:
@@ -46,6 +46,7 @@ def warnings(project: Project) -> list[str]:
         out += _unused_water_level(project)
         return out
     out += _seepage_outside_flow(project)
+    out += _impermeable_outside_flow(project)
     out += _rigid_body(project)
     out += _unpinned_water(project)
     out += _free_water_in_stages(project)
@@ -85,7 +86,8 @@ def written(project: Project, condition) -> bool:
 def noun(condition) -> str:
     """`condition`, as a warning names it."""
     kind = {"water_pressure": "water pressure", "seepage": "seepage",
-            "flux": "flux"}.get(condition.kind, "displacement")
+            "flux": "flux", "impermeable": "impermeable"}.get(condition.kind,
+                                                              "displacement")
     return f"{kind} condition {condition.name!r}"
 
 
@@ -122,6 +124,16 @@ def _seepage_outside_flow(project: Project) -> list[str]:
     return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
             "calculation, and this project's stages are not flow stages."
             for c in faces]
+
+
+def _impermeable_outside_flow(project: Project) -> list[str]:
+    """An impermeable line in a deformation or coupled project: the deck cuts the mesh
+    along it only where nothing but the water flows, as the soil cut without a contact
+    would come apart. Left out, and said."""
+    lines = [c for c in project.boundary_conditions
+             if isinstance(c, ImpermeableCondition) and written(project, c)]
+    return [f"{noun(c)} is left out: an impermeable line belongs to a groundwater flow "
+            "calculation, and this project's stages are not flow stages." for c in lines]
 
 
 def _rigid_body(project: Project) -> list[str]:

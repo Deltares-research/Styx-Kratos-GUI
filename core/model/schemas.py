@@ -1397,7 +1397,7 @@ class WaterPressureCondition(Base):
         return self
 
 def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition
-                  | FluxCondition, noun: str) -> None:
+                  | FluxCondition | ImpermeableCondition, noun: str) -> None:
     """`on` and the one field it names, and none of the others: the target check both
     kinds of condition share."""
     named = {"face": record.face, "part": record.part, "points": record.points}
@@ -1468,8 +1468,8 @@ class DisplacementCondition(Base):
 
 
 SeepageTarget = Literal["face", "line"]
-"""Where a seepage face can be: a face of the domain, or a line drawn along the soil's
-outer boundary."""
+"""Where a seepage face or a flux can be: a face of the domain, or a drawn line -- along
+the soil's outer boundary for a seepage face, anywhere in the soil for a flux."""
 
 
 class SeepageCondition(Base):
@@ -1510,10 +1510,10 @@ class SeepageCondition(Base):
 
 
 class FluxCondition(Base):
-    """A prescribed flux: water flowing into the soil through a stretch of its outer
-    boundary at a given rate -- rain on the crest, a recharge, or a pumped outflow.
+    """A prescribed flux: water flowing into the soil through a line at a given rate --
+    rain on the crest, a recharge, a leaking pipe or a drain, or a pumped outflow.
 
-    `value` is a discharge per unit area of the boundary (a velocity), in the project's
+    `value` is a discharge per unit area of the line (a velocity), in the project's
     length over its time (`core.model.units`): positive flows into the soil, negative out
     of it. The deck writes a normal flux condition on each mesh edge of the target --
     `PwNormalFluxCondition2D2N` in a groundwater flow deck, `UPwNormalFluxCondition2D2N`
@@ -1521,10 +1521,12 @@ class FluxCondition(Base):
     `NORMAL_FLUID_FLUX` on them (`core/kratos/parameters.py:_normal_flux`).
 
     The target is `on` and the field it names, as for a `SeepageCondition`: the face
-    `face`, or the polyline `points` drawn along the soil's outer boundary in the 2D
-    section. A line through the soil is refused at export. A 3D export leaves it out with
-    a warning. A stage switches it on and off, and may give it a value of its own
-    (`Stage.condition_values`).
+    `face`, or the polyline `points` drawn in the 2D section. Unlike a seepage face's, the
+    line may run through the soil -- along a line between two soils, or across one:
+    there it is a line source, and the water it lets in leaves it to both sides, `value`
+    per unit area of the line in all (`core.kratos.writer._flux_conditions`). A 3D export
+    leaves it out with a warning. A stage switches it on and off, and may give it a value
+    of its own (`Stage.condition_values`).
     """
     id: Ident
     name: str
@@ -1545,8 +1547,37 @@ class FluxCondition(Base):
         return self
 
 
+class ImpermeableCondition(Base):
+    """An impermeable line: a screen in the soil that no water flows through, such as a
+    sealed sheet-pile screen or a clay cut-off. Water can only flow round it.
+
+    In a groundwater flow calculation only. The deck cuts the mesh along the polyline
+    `points`, drawn in the 2D section: each soil on either side of it gets nodes of its
+    own there, so the water pressure may jump across the line and nothing flows over
+    it (`core.kratos.writer._impermeable_cut`). Where the line stops inside the soil the
+    two sides meet in one node again, and the water flows round its end. Along the soil's
+    outer boundary a line cuts nothing: no water flows out there anyway. A coupled or
+    deformation calculation leaves it out, with a warning: cut without a contact the
+    soil would come apart. It acts in every stage, as the mesh it cuts is one for all of
+    them; no stage switches it.
+    """
+    id: Ident
+    name: str
+    kind: Literal["impermeable"] = "impermeable"
+    on: Literal["line"] = "line"
+    face: None = None
+    part: None = None
+    points: list[tuple[float, float]] | None = None
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> ImpermeableCondition:
+        _check_target(self, f"impermeable condition {self.id!r}")
+        return self
+
+
 AnyCondition = (DisplacementCondition | WaterPressureCondition | SeepageCondition
-                | FluxCondition)
+                | FluxCondition | ImpermeableCondition)
 """Any one boundary condition, for a type annotation (`BoundaryCondition` is the same
 union, told apart by `kind` when a project is read)."""
 
@@ -1569,7 +1600,7 @@ def standard_conditions() -> list[AnyCondition]:
 
 
 BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
-                              | SeepageCondition | FluxCondition,
+                              | SeepageCondition | FluxCondition | ImpermeableCondition,
                               Field(discriminator="kind")]
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 

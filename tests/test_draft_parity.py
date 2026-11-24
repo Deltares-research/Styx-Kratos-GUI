@@ -274,6 +274,14 @@ def calls(models: dict) -> list[dict]:
          ["part", {}], lambda p: drafts.flux_condition(p, "part"))
     call("a flux line in the solid model is refused", "BoundaryConditions.draftFlux",
          "solid", ["line", {}], lambda p: drafts.flux_condition(p, "line"))
+    call("an impermeable line down the middle", "BoundaryConditions.draftImpermeable",
+         "section", [{}], lambda p: drafts.impermeable_condition(p))
+    call("an impermeable line drawn", "BoundaryConditions.draftImpermeable", "section",
+         [{"points": [[9, -4], [9, -10]], "name": "Screen"}],
+         lambda p: drafts.impermeable_condition(p, [(9, -4), (9, -10)], name="Screen"))
+    call("an impermeable line in the solid model is refused",
+         "BoundaryConditions.draftImpermeable", "solid", [{}],
+         lambda p: drafts.impermeable_condition(p))
     call("the first water line is the phreatic line", "BoundaryConditions.draftWaterLine",
          "dry", [[[25, -2], [0, -1], [10, -3]], {}],
          lambda p: drafts.water_line(p, [(25, -2), (0, -1), (10, -3)]))

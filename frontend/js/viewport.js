@@ -843,6 +843,8 @@ App.Viewport = (function () {
   var CONDITION_PRESSURE_COLOR = '#3949ab';
   // A prescribed flux: cyan, the water moving rather than standing.
   var FLUX_COLOR = '#0097a7';
+  // An impermeable line: dark slate, a screen rather than water.
+  var IMPERMEABLE_COLOR = '#37474f';
   var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
   var NODE_RING = 0.6;             // a point condition's ring radius, in symbol sizes
 
@@ -1058,10 +1060,32 @@ App.Viewport = (function () {
       return spec;
     }
 
+    // An impermeable line: a screen, its line hatched on both sides, in no water's
+    // colour -- no water passes it.
+    if (record.kind === 'impermeable') {
+      spec.color = IMPERMEABLE_COLOR;
+      var screen = (record.points || []).map(function (q) { return [q[0], q[1], z]; });
+      if (screen.length > 1) spec.lines.push(screen);
+      for (var s2 = 0; two && s2 + 1 < screen.length; s2 += 1) {
+        var from = screen[s2], to = screen[s2 + 1];
+        var run = Math.hypot(to[0] - from[0], to[1] - from[1]);
+        if (!(run > 0)) continue;
+        var n = [(to[1] - from[1]) / run, -(to[0] - from[0]) / run];
+        spec.strips.push({ from: from, to: to, outward: n },
+                         { from: from, to: to, outward: [-n[0], -n[1]] });
+      }
+      return spec;
+    }
+
     // A seepage face: its edge or line, with arrows out of the soil. A flux the same,
-    // its arrows into the soil where water flows in and out where it flows out.
+    // its arrows into the soil where water flows in and out where it flows out. A flux
+    // on a line inside the soil has soil on both sides: its arrows leave the line to
+    // both where water flows in, and come to it from both where it flows out.
     if (record.kind === 'seepage' || record.kind === 'flux') {
       var into = record.kind === 'flux' && !(record.value < 0);
+      var both = record.kind === 'flux' && record.on === 'line' && two
+        && App.BoundaryConditions && App.BoundaryConditions.insideSoil
+        && App.BoundaryConditions.insideSoil(project, record.points || []);
       if (record.kind === 'flux') spec.color = FLUX_COLOR;
       var path = record.on === 'face'
         ? faceOutline(project, record.face, outlines)
@@ -1080,6 +1104,18 @@ App.Viewport = (function () {
         var middle = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
         if ((middle[0] - centre[0]) * normalOut[0] + (middle[1] - centre[1]) * normalOut[1] < 0) {
           normalOut = [-normalOut[0], -normalOut[1]];
+        }
+        if (both) {
+          // An arrow is drawn from 0.15 to 1 symbol size off its point, along `outward`:
+          // one standing that far off the line, pointing back, ends at the line.
+          var off = into ? 0 : 1.15 * spec.size;
+          alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {
+            [normalOut, [-normalOut[0], -normalOut[1]]].forEach(function (n) {
+              spec.symbols.push({ at: [at[0] + n[0] * off, at[1] + n[1] * off, z],
+                                  outward: into ? n : [-n[0], -n[1]], arrow: true });
+            });
+          });
+          continue;
         }
         if (into) normalOut = [-normalOut[0], -normalOut[1]];
         alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {

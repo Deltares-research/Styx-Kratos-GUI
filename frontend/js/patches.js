@@ -902,14 +902,14 @@ App.LivePatches = (function () {
      line tool instead: the first line drawn is the phreatic line, the next ones head
      lines. Then a flow boundary condition drawn on a line of the soil -- its boundary,
      or a line between two soils: one point clicked is a condition at that point, more a
-     line through them (seepage, flux, hydrostatic or uniform) -- a uniform pressure on a
-     soil, the window of them all, and the water's own properties -- the Water box of
-     the Soil materials window, on its own (App.MaterialSets.openWater). A new condition
-     of any kind in its window is in the menu. */
+     line through them (seepage, flux, impermeable, hydrostatic or uniform) -- a uniform
+     pressure on a soil, the window of them all, and the water's own properties -- the
+     Water box of the Soil materials window, on its own (App.MaterialSets.openWater). A
+     new condition of any kind in its window is in the menu. */
   var FLOW_TOOLS = [
     { icon: 'watercondition', tip: 'Create flow boundary condition: click one point on a '
       + 'line of the soil for a point, more for a line; right-click or Enter to finish -- '
-      + 'seepage, flux, hydrostatic or uniform',
+      + 'seepage, flux, impermeable, hydrostatic or uniform',
       action: 'createFlowBoundary' },
     { icon: 'water', tip: 'Uniform soil pressure: click a soil, give its water pressure',
       action: 'createSoilPressure' },

@@ -371,9 +371,9 @@ The tool rail of Flow conditions mode draws the water on the model (2D):
 | Tool | What it does |
 |---|---|
 | **Draw water line** | Click the points of a water line, then right-click or press Enter. The first water line of a project is the phreatic line; every next one is a head line. A water line acts on the whole soil, wherever you draw it, and it may start and end outside the soil. The points are sorted by x. |
-| **Create flow boundary condition** | Click points on a line of the soil, then right-click or press Enter: one point makes a condition at that point, two or more a line through them. A line of the soil is its outer boundary, or a line between two soils: a layer boundary, or a line that splits the soil. Each point that you click or type moves onto the nearest point of such a line, wherever you click; a marker shows where it lands. With snapping on, the point then moves along the line to the nearest corner (where a line turns or meets another) or grid line of the snapping distance, within that distance. Then choose what it is: **Seepage face**, **Flux** (the water that flows in, per m² of boundary, in m/s; negative flows out), **Hydrostatic** (with its level) or **Uniform** (with its pressure). A point, and a line inside the soil, can be Hydrostatic or Uniform only: a seepage face and a flux are on the outer boundary. |
+| **Create flow boundary condition** | Click points on a line of the soil, then right-click or press Enter: one point makes a condition at that point, two or more a line through them. A line of the soil is its outer boundary, or a line between two soils: a layer boundary, or a line that splits the soil. Each point that you click or type moves onto the nearest point of such a line, wherever you click; a marker shows where it lands. With snapping on, the point then moves along the line to the nearest corner (where a line turns or meets another) or grid line of the snapping distance, within that distance. Then choose what it is: **Seepage face**, **Flux** (the water that flows in, per m² of boundary, in m/s; negative flows out), **Impermeable** (no water flows through the line), **Hydrostatic** (with its level) or **Uniform** (with its pressure). A point can be Hydrostatic or Uniform only. A line inside the soil can be anything but a seepage face, which is on the outer boundary. |
 | **Uniform soil pressure** | Click a soil and give its water pressure. The soil gets that pressure, fixed, in place of the water it takes (see [The water of each soil](#the-water-of-each-soil)). |
-| **Flow boundary conditions…** | The window of all water pressures, seepage faces and fluxes. |
+| **Flow boundary conditions…** | The window of all water pressures, seepage faces, fluxes and impermeable lines. |
 | **Water properties…** | The unit weight, bulk modulus and viscosity of the water in every soil: the same values as **Water** in the **Soil materials** window. |
 
 **Flow conditions > New flow condition…** opens the window of one new condition of any
@@ -523,14 +523,29 @@ the face for each iteration, so give the stage enough iterations: the calculatio
 when the stage allows fewer iterations than the face has nodes. A deformation calculation
 leaves a seepage face out, and warns.
 
-A **flux** is water that flows into the soil through a part of its outer boundary at a
-known rate: rain on the crest of a dike, a recharge, or a pumped outflow (negative). The
-value is a discharge per m² of the boundary, in the project's length over its time (m/s).
+A **flux** is water that flows into the soil through a line at a known rate: rain on the
+crest of a dike, a recharge, a leaking pipe, or a pumped outflow or a drain (negative). The
+value is a discharge per m² of the line, in the project's length over its time (m/s).
 Make one with **Create flow boundary condition** (choose **Flux**), or as a condition of
-the kind **Flux** on a face or a line. Like a seepage face, a flux line must lie along the
-soil's outer boundary. The viewport shows a flux as a cyan line with arrows into the soil
-(out of it for a negative flux). A flux acts in a groundwater flow calculation and in a
-coupled one. 3D leaves it out, and warns.
+the kind **Flux** on a face or a line. A flux line can lie along the soil's outer boundary,
+or anywhere inside the soil: along a line between two soils, or straight across one. Inside
+the soil the water leaves the line to both sides, the given rate per m² of the line in all.
+The viewport shows a flux as a cyan line with arrows into the soil (out of it for a
+negative flux); inside the soil the arrows point away from the line on both sides (towards
+it for a negative flux). A flux acts in a groundwater flow calculation and in a coupled
+one. 3D leaves it out, and warns. A flux of 0 inside the soil does nothing: the water
+flows through the line as if it were not there. To stop the water, use an impermeable
+line.
+
+An **impermeable line** is a screen in the soil that no water flows through: a sealed
+sheet-pile screen, or a clay cut-off. Make one with **Create flow boundary condition**
+(choose **Impermeable**), or as a condition of the kind **Impermeable line** on a line.
+The calculation cuts the mesh along the line, so the water pressure can differ on its two
+sides. Where the line ends inside the soil, the water flows round its end. A stretch of
+the line on the soil's outer boundary does nothing, as no water flows out there anyway.
+The viewport shows the line in dark grey, hatched on both sides. It acts in every stage of
+a groundwater flow calculation, and no stage can switch it off. A coupled or deformation
+calculation leaves it out, and warns: there the cut would let the soil come apart.
 
 ### The water of each soil
 

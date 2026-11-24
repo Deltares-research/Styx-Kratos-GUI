@@ -6459,7 +6459,7 @@ window.DRAFTS_FIXTURE =
         "part",
         {}
       ],
-      "error": "A prescribed flux is on a face of the model, or on a line along the soil's outer boundary."
+      "error": "A prescribed flux is on a face of the model, or on a line in the soil."
     },
     {
       "title": "a flux line in the solid model is refused",
@@ -6470,6 +6470,81 @@ window.DRAFTS_FIXTURE =
         {}
       ],
       "error": "A flux line is drawn in the 2D section; switch to 2D to create one, or put the flux on a face."
+    },
+    {
+      "title": "an impermeable line down the middle",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "section",
+      "args": [
+        {}
+      ],
+      "result": {
+        "id": "impermeable_1",
+        "name": "Impermeable line 1",
+        "kind": "impermeable",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an impermeable line drawn",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "section",
+      "args": [
+        {
+          "points": [
+            [
+              9,
+              -4
+            ],
+            [
+              9,
+              -10
+            ]
+          ],
+          "name": "Screen"
+        }
+      ],
+      "result": {
+        "id": "impermeable_1",
+        "name": "Screen",
+        "kind": "impermeable",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            9.0,
+            -4.0
+          ],
+          [
+            9.0,
+            -10.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an impermeable line in the solid model is refused",
+      "call": "BoundaryConditions.draftImpermeable",
+      "project": "solid",
+      "args": [
+        {}
+      ],
+      "error": "An impermeable line is drawn in the 2D section; switch to 2D to create one."
     },
     {
       "title": "the first water line is the phreatic line",

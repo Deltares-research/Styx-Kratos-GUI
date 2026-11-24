@@ -12,7 +12,9 @@
        Phreatic_Multi_Line, and Head_Line: a phreatic multi-line to Kratos) on the whole
        soil, a face, a part, a line or a point;
      • "seepage": where water may leave the soil, on a face or a line of its boundary;
-     • "flux": water flowing into the soil at a rate, on a face or a line of its boundary.
+     • "flux": water flowing into the soil at a rate, on a face or a line in the soil;
+     • "impermeable": a line in the soil no water flows through, in a groundwater flow
+       calculation.
 
    The Flow conditions rail draws them directly: a water line (`drawWaterLine`: the
    phreatic line first, head lines after it), a flow boundary condition along the soil's
@@ -69,10 +71,12 @@ App.BoundaryConditions = (function () {
      Flow conditions mode. */
   var GROUPS = {
     mechanical: { kinds: ['displacement'], title: 'Mechanical boundary conditions' },
-    flow: { kinds: ['water_pressure', 'seepage', 'flux'], title: 'Flow boundary conditions' }
+    flow: { kinds: ['water_pressure', 'seepage', 'flux', 'impermeable'],
+            title: 'Flow boundary conditions' }
   };
   var KIND_CHOICES = [['displacement', 'Support'], ['water_pressure', 'Water pressure'],
-                      ['seepage', 'Seepage face'], ['flux', 'Flux']];
+                      ['seepage', 'Seepage face'], ['flux', 'Flux'],
+                      ['impermeable', 'Impermeable line']];
 
   /* The unit of a flux: the project's length over its time. */
   function fluxUnit() {
@@ -262,13 +266,13 @@ App.BoundaryConditions = (function () {
   }
 
   /* `drafts.flux_condition`: water flowing into the soil at `value` (the project's length
-     over its time; negative flows out), on a face or along a line of the soil's outer
-     boundary. */
+     over its time; negative flows out), on a face or along a line anywhere in the soil:
+     its outer boundary, a line between two soils, or across one. */
   function draftFlux(project, on, options) {
     options = options || {};
     if (on !== 'face' && on !== 'line') {
-      throw new Error('A prescribed flux is on a face of the model, or on a line along '
-                      + "the soil's outer boundary.");
+      throw new Error('A prescribed flux is on a face of the model, or on a line in '
+                      + 'the soil.');
     }
     if (on === 'line' && project.dimension !== 2) {
       throw new Error('A flux line is drawn in the 2D section; switch to 2D to create '
@@ -283,6 +287,25 @@ App.BoundaryConditions = (function () {
       id: id[0], name: options.name || id[1], kind: 'flux', on: on,
       face: options.face || null, part: null, points: points,
       value: options.value === undefined ? 0.0 : options.value, active: true
+    };
+  }
+
+  /* `drafts.impermeable_condition`: a line through `points` (down the middle of the
+     section when none are given) that no water flows through in a groundwater flow
+     calculation. */
+  function draftImpermeable(project, options) {
+    options = options || {};
+    if (project.dimension !== 2) {
+      throw new Error('An impermeable line is drawn in the 2D section; switch to 2D to '
+                      + 'create one.');
+    }
+    var points = options.points
+      ? options.points.map(function (p) { return [Number(p[0]), Number(p[1])]; })
+      : middle(project);
+    var id = named(options.id, takenIds(project), 'impermeable_', 'Impermeable line');
+    return {
+      id: id[0], name: options.name || id[1], kind: 'impermeable', on: 'line',
+      face: null, part: null, points: points, active: true
     };
   }
 
@@ -415,6 +438,7 @@ App.BoundaryConditions = (function () {
       }).join(' ');
     }
     if (record.kind === 'seepage') return 'water may leave the soil here';
+    if (record.kind === 'impermeable') return 'no water flows through it';
     if (record.kind === 'flux') {
       return record.value >= 0 ? String(record.value) + ' into the soil'
         : String(-record.value) + ' out of the soil';
@@ -448,6 +472,8 @@ App.BoundaryConditions = (function () {
       what = AXES.filter(function (axis, i) { return record.fixed[i]; }).join(' ') + ' fixed';
     } else if (record.kind === 'seepage') {
       what = 'seepage';
+    } else if (record.kind === 'impermeable') {
+      what = 'impermeable';
     } else if (record.kind === 'flux') {
       what = 'q = ' + record.value + ' ' + fluxUnit();
     } else if (record.fluid_pressure_type === 'Hydrostatic') {
@@ -1590,9 +1616,10 @@ App.BoundaryConditions = (function () {
     var stress = ' ' + App.Units.label('stress');
     var row = { id: record.id, name: record.name, active: record.active !== false,
                 where: whereCell(record, project) };
-    if (record.kind === 'seepage') {
-      return Object.assign(row, { condition: 'Seepage face', type: NO_VALUE,
-                                  value: NO_VALUE, cutoff: NO_VALUE, initial: NO_VALUE });
+    if (record.kind === 'seepage' || record.kind === 'impermeable') {
+      return Object.assign(row, {
+        condition: record.kind === 'seepage' ? 'Seepage face' : 'Impermeable line',
+        type: NO_VALUE, value: NO_VALUE, cutoff: NO_VALUE, initial: NO_VALUE });
     }
     if (record.kind === 'flux') {
       return Object.assign(row, { condition: 'Flux', type: NO_VALUE,
@@ -1830,6 +1857,10 @@ App.BoundaryConditions = (function () {
         } else if (kind === 'seepage') {
           made = draftSeepage(project, on, Object.assign({
             id: record ? record.id : undefined }, where));
+        } else if (kind === 'impermeable') {
+          if (on !== 'line') throw new Error('An impermeable line is on a line.');
+          made = draftImpermeable(project, Object.assign({
+            id: record ? record.id : undefined }, where));
         } else if (kind === 'flux') {
           var rate = Number(c.flux.value || 0);
           if (!isFinite(rate)) throw new Error('The flux must be a number.');
@@ -1934,6 +1965,7 @@ App.BoundaryConditions = (function () {
           return draftFlux(project, on === 'line' ? 'line' : 'face',
                            on === 'line' ? {} : { face: 'left' });
         }
+        if (kind === 'impermeable') return draftImpermeable(project);
         return kind === 'displacement'
           ? draftDisplacement(project, on === 'domain' ? 'face' : on,
                               on === 'domain' || on === 'face' ? { face: 'bottom' } : {})
@@ -1995,7 +2027,9 @@ App.BoundaryConditions = (function () {
         var supportHelp = 'A support holds displacements at zero.';
         var flowHelp = 'A water pressure sets the pore pressure. A seepage face, on a '
           + 'face or a line along the soil\'s outer boundary, lets water leave the soil '
-          + 'in a groundwater flow calculation. A flux, there too, lets water in at a rate.';
+          + 'in a groundwater flow calculation. A flux, on a face or a line anywhere in the '
+          + 'soil, lets water in at a rate. An impermeable line, on a line in the soil, '
+          + 'lets no water through in a groundwater flow calculation.';
         row('kind', 'Condition', c.kind, group === 'mechanical' ? supportHelp
             : group === 'flow' ? flowHelp
             : supportHelp + ' A seepage face, on a face or a line along the soil\'s outer '
@@ -2090,8 +2124,12 @@ App.BoundaryConditions = (function () {
           var support = c.kind.value === 'displacement';
           var seepage = c.kind.value === 'seepage';
           var flux = c.kind.value === 'flux';
-          var water = !support && !seepage && !flux;
+          var impermeable = c.kind.value === 'impermeable';
+          var water = !support && !seepage && !flux && !impermeable;
           show('flux', flux);
+          // An impermeable line is on a line, and nowhere else.
+          if (impermeable && c.on.value !== 'line') c.on.value = 'line';
+          c.on.disabled = impermeable || !!staged;
           var on = c.on.value;
           var type = c.type.value;
           show('face', on === 'face');
@@ -2202,15 +2240,17 @@ App.BoundaryConditions = (function () {
   }
 
   var FLOW_TYPES = {
-    line: [['seepage', 'Seepage face'], ['flux', 'Flux'], ['Hydrostatic', 'Hydrostatic'],
-           ['Uniform', 'Uniform']],
+    line: [['seepage', 'Seepage face'], ['flux', 'Flux'], ['impermeable', 'Impermeable'],
+           ['Hydrostatic', 'Hydrostatic'], ['Uniform', 'Uniform']],
+    inner: [['flux', 'Flux'], ['impermeable', 'Impermeable'], ['Hydrostatic', 'Hydrostatic'],
+            ['Uniform', 'Uniform']],
     point: [['Hydrostatic', 'Hydrostatic'], ['Uniform', 'Uniform']]
   };
 
   /* Whether the line `points` is off the soil's outer boundary -- along a line between
-     two bodies, or across the soil -- where a seepage face and a flux cannot be (writer
-     `_edge_conditions`). False when it is on the boundary, or the model is not built and
-     it cannot be told. */
+     two bodies, or across the soil -- where a seepage face cannot be, and a flux is a
+     line source the water leaves to both sides (writer `_edge_conditions`). False when
+     it is on the boundary, or the model is not built and it cannot be told. */
   function insideSoil(project, points) {
     var outer = soilLines(project).filter(function (edge) { return edge.outer; });
     return outer.length > 0 && !App.SurfaceWater.runsAlong(outer, points);
@@ -2232,6 +2272,7 @@ App.BoundaryConditions = (function () {
   function flowBoundary(project, on, points, type, number) {
     var where = { points: points };
     if (type === 'seepage') return draftSeepage(project, 'line', where);
+    if (type === 'impermeable') return draftImpermeable(project, where);
     if (type === 'flux') return draftFlux(project, 'line', Object.assign({ value: number }, where));
     return draftWaterPressure(project, on, Object.assign(
       type === 'Hydrostatic' ? { reference_coordinate: number } : { value: number },
@@ -2316,17 +2357,20 @@ App.BoundaryConditions = (function () {
         }
         form.appendChild(el('div.mesh-setting-help', {
           text: (on === 'point' ? 'At ' : 'Along ') + points.map(xy).join(' → ') }));
-        // A line inside the soil takes a water pressure only.
+        // A line inside the soil takes a flux or a water pressure: no seepage face.
         var inner = on === 'line' && insideSoil(project, points);
-        var types = inner ? FLOW_TYPES.point : FLOW_TYPES[on];
+        var types = inner ? FLOW_TYPES.inner : FLOW_TYPES[on];
         c.type = options(el('select.mesh-setting-control'), types, types[0][0]);
         row('Condition', c.type, on === 'point'
-          ? 'A seepage face and a flux are on a line of the boundary.'
+          ? 'A seepage face and a flux are on a line.'
           : inner
-            ? 'This line is inside the soil: a seepage face and a flux are on its outer '
-              + 'boundary only. Hydrostatic and Uniform fix the water pressure.'
+            ? 'This line is inside the soil: a seepage face is on its outer boundary '
+              + 'only. Flux: water flows in at a rate, out to both sides of the line. '
+              + 'Impermeable: no water flows through the line. Hydrostatic and Uniform '
+              + 'fix the water pressure.'
             : 'Seepage: water may leave the soil here. Flux: water flows in at a rate. '
-              + 'Hydrostatic and Uniform fix the water pressure.');
+              + 'Impermeable: no water flows through the line. Hydrostatic and Uniform '
+              + 'fix the water pressure.');
         c.number = el('input.mesh-setting-control', { type: 'number', step: 'any' });
         var numberRow = row('', c.number, '');
         c.name = el('input.mesh-setting-control', { type: 'text', value: '' });
@@ -2433,7 +2477,7 @@ App.BoundaryConditions = (function () {
     FACES: FACES, SECTION_FACES: SECTION_FACES, FACE_NORMALS: FACE_NORMALS,
     PRESSURE_TYPES: PRESSURE_TYPES, TARGETS: TARGETS, GROUPS: GROUPS, groupOf: groupOf,
     draftDisplacement: draftDisplacement, draftWaterPressure: draftWaterPressure,
-    draftSeepage: draftSeepage,
+    draftSeepage: draftSeepage, draftImpermeable: draftImpermeable, insideSoil: insideSoil,
     standardConditions: standardConditions, withStandard: withStandard,
     soilPartKeys: soilPartKeys, facesOf: facesOf, heldBySection: heldBySection,
     unusedInFlow: unusedInFlow, waterIn: waterIn,

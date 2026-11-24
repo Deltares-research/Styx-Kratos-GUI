@@ -41,7 +41,8 @@ from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
 from core.model.schemas import (DRY, INTERPOLATE, STAGED_CONDITIONS, TARGET_ORDER, Beam,
-                                DisplacementCondition, FluxCondition, LineLoad, Member,
+                                DisplacementCondition, FluxCondition, ImpermeableCondition,
+                                LineLoad, Member,
                                 MeshRequest, Panel, PanelSection, PointLoad, Project,
                                 SeepageCondition, Stage, SurfaceLoad, WaterPressureCondition)
 
@@ -308,9 +309,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     blocks.extend(anchor_blocks)
     # A flow deck's conditions are its seepage faces; a deformation deck's are its loads,
     # and a seepage face is left out of it (`condition_checks.warnings` says so). Both
-    # write the prescribed fluxes, last, so a deck with none is numbered as it was.
+    # write the prescribed fluxes, last, so a deck with none is numbered as it was. A
+    # copy of the seepage faces, so the fluxes added to it are not seepage faces too.
     seepage = _seepage_conditions(project, soil_blocks, world, warnings) if flow else []
-    conditions = (seepage if flow else
+    conditions = (list(seepage) if flow else
                   _load_conditions(project, dim, world, warnings) +
                   _normal_load_conditions(project, dim, warnings, world))
     conditions += _flux_conditions(project, soil_blocks, world, warnings, flow)
@@ -321,6 +323,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
     # the node table are read off it.
+    # A flow deck has no interface; its impermeable lines cut the soil instead, in the
+    # same place for the same reason.
+    if flow:
+        _impermeable_cut(project, soil_blocks, conditions, world, coordinates, warnings)
     interface_blocks, interface_ties, interface_faces = ([], [], []) if flow else         _interface_elements(project, dim, soil_blocks, beam_blocks, conditions, world,
                             coordinates, warnings)
     blocks.extend(interface_blocks)
@@ -1322,6 +1328,75 @@ def _follow_the_soil(conditions: list[tuple[str, str, list[list[int]]]],
             if owner is None:
                 continue
             rows[index] = [split.renamed[owner].get(node, node) for node in row]
+
+
+def _impermeable_cut(project: Project,
+                     soil_blocks: list[tuple[str, str, list[list[int]]]],
+                     conditions: list[tuple[str, str, list[list[int]]]],
+                     world: dict[int, tuple[float, float, float]],
+                     coordinates: dict[int, tuple[float, float, float]],
+                     warnings: list[str]) -> None:
+    """Cut the soil of a groundwater flow deck along every impermeable line
+    (`schemas.ImpermeableCondition`), so no water flows over it.
+
+    The cut is the one a free interface makes (`interfaces.split_mesh`): the soil on one
+    side of the line gets its own copy of each node on it, and where the line stops
+    inside the soil the two sides close round its end in one node again. Unlike an
+    interface's, no contact element goes back across it: a flow deck's elements carry
+    the water pressure alone, and two copies no element joins share no water, so the
+    pressure may jump across the line and the flow over it is nought. The copies take
+    their originals' coordinates, and a seepage face or a flux on a node of the line
+    follows its own soil onto the copy (`_follow_the_soil`).
+
+    A stretch of the line on the soil's outer boundary cuts nothing -- no water flows
+    out there anyway -- and is left out of the cut."""
+    lines = [c for c in project.boundary_conditions
+             if isinstance(c, ImpermeableCondition) and condition_checks.written(project, c)]
+    if not lines:
+        return
+    shared: dict[frozenset[int], int] = {}
+    for _, _, rows in soil_blocks:
+        for row in rows:
+            for order in EDGES.get(len(row), ()):
+                key = frozenset(row[index] for index in order[:2])
+                shared[key] = shared.get(key, 0) + 1
+    specs = []
+    for line in lines:
+        noun = condition_checks.noun(line)
+        segments = _segments(_tagged(1).get(line.id, []))
+        if not segments:
+            raise ExportError(
+                f"{noun} has no mesh along its line -- it lies outside the soil in this "
+                "section, so there is no water for it to stop.")
+        inside = [row for row in segments if shared.get(frozenset(row[:2]), 0) == 2]
+        if not inside:
+            warnings.append(f"{noun} runs along the soil's outer boundary only, where no "
+                            "water flows out anyway; it cuts nothing.")
+            continue
+        specs.append(interfaces.Spec(
+            key=line.id, path=[(float(x), float(y)) for x, y in line.points or []],
+            segments=inside, structural=False, sides="left"))
+    if not specs:
+        return
+    flat: list[list[int]] = []
+    spans = []
+    for _, _, rows in soil_blocks:
+        spans.append((len(flat), len(rows)))
+        flat.extend(rows)
+    before = [list(row) for row in flat]
+    try:
+        split = interfaces.split_mesh(specs, flat, coordinates)
+    except interfaces.InterfaceError as failure:
+        raise ExportError(
+            "the impermeable lines cannot cut the soil: two of them share a stretch, or "
+            "one leaves soil on a single side of it somewhere. Draw each line through the "
+            f"soil, and give two lines no stretch in common. ({failure})") from None
+    for (start, count), (_, _, rows) in zip(spans, soil_blocks):
+        rows[:] = flat[start:start + count]
+    for new_tag, source in split.duplicates.items():
+        coordinates[new_tag] = coordinates[source]
+        world[new_tag] = world[source]
+    _follow_the_soil(conditions, before, split)
 
 
 def _interface_of(project: Project, key: str):
@@ -2407,33 +2482,41 @@ def _flux_conditions(project: Project,
                      world: dict[int, tuple[float, float, float]],
                      warnings: list[str], flow: bool) -> list[tuple[str, str, list[list[int]]]]:
     """Each prescribed flux's conditions (`schemas.FluxCondition`): one normal flux
-    condition per mesh edge of its target, on the soil's outer boundary as a seepage
-    face's are (`_seepage_conditions`). 2D only (`condition_checks._left_out`)."""
+    condition per mesh edge of its target. 2D only (`condition_checks._left_out`).
+
+    Unlike a seepage face's (`_seepage_conditions`), a flux line may run through the
+    soil -- along a line between two soils, or across one: Kratos' normal flux condition
+    puts `-NORMAL_FLUID_FLUX * N * dl` on its nodes' water balance from the edge alone
+    (`PwNormalFluxCondition::CalculateRHS`, GeoMechanicsApplication 10.4.4), whatever
+    lies on either side of it, so inside the soil it is a line source the water leaves
+    to both sides."""
     fluxes = [c for c in project.boundary_conditions
               if isinstance(c, FluxCondition) and condition_checks.written(project, c)]
     return _edge_conditions(fluxes, lambda nodes: FLUX_CONDITIONS[(flow, nodes)],
                             soil_blocks, world, warnings,
-                            "there is no boundary for the water to flow through",
-                            "A prescribed flux")
+                            "there is no soil for the water to flow into",
+                            "A prescribed flux", through=True)
 
 
 def _edge_conditions(records: Sequence[SeepageCondition | FluxCondition],
                      condition_name: Callable[[int], str],
                      soil_blocks: list[tuple[str, str, list[list[int]]]],
                      world: dict[int, tuple[float, float, float]],
-                     warnings: list[str], nowhere: str, what: str
+                     warnings: list[str], nowhere: str, what: str,
+                     through: bool = False
                      ) -> list[tuple[str, str, list[list[int]]]]:
-    """The line conditions of `records` on the soil's outer boundary, one per mesh edge
-    of each one's target, as the soil element bounding it traverses that edge; named by
-    `condition_name` of the edge's node count. `nowhere` says what a line outside the
-    soil has none of, and `what` is the kind, as the refusal of a line through the soil
-    names it.
+    """The line conditions of `records`, one per mesh edge of each one's target, as a
+    soil element bounding it traverses that edge; named by `condition_name` of the
+    edge's node count. `nowhere` says what a line outside the soil has none of, and
+    `what` is the kind, as the refusal of a line through the soil names it.
 
     The soil's outer boundary is the edges one element has; an edge two elements share
     is inside the soil. A face is the boundary edges on the face's plane, measured from
     the meshed soil as `_boundary_nodes` measures it. A line is its own mesh edges
-    (`solid_model._embed_beams`), and has to be on the boundary: Kratos refuses a line
-    condition with an element on each side, and so does the export, before the run."""
+    (`solid_model._embed_beams`). Unless `through`, it has to be on the boundary:
+    Kratos' seepage strategy lets water out of a seepage face only where there is no
+    soil beyond it, so the export refuses a line with an element on each side, before
+    the run. With `through`, its edges inside the soil are conditions too."""
     faces = list(records)
     if not faces:
         return []
@@ -2457,14 +2540,15 @@ def _edge_conditions(records: Sequence[SeepageCondition | FluxCondition],
                 raise ExportError(
                     f"{noun} has no mesh along its line -- it lies outside the soil in "
                     f"this section, so {nowhere}.")
-            inside = [row for row in segments if frozenset(row[:2]) not in boundary]
+            allowed = edge_of if through else boundary
+            inside = [row for row in segments if frozenset(row[:2]) not in allowed]
             if inside:
                 raise ExportError(
                     f"{noun} runs through the soil: {len(inside)} of its "
                     f"{len(segments)} mesh edges have soil on both sides. {what} "
                     "is on the soil's outer boundary; draw the line along it, or put the "
                     "condition on a face.")
-            rows = [list(boundary[frozenset(row[:2])]) for row in segments]
+            rows = [list(allowed[frozenset(row[:2])]) for row in segments]
         else:
             part = FACE_PARTS[condition.face or ""]
             axis, attribute = next((axis, attribute) for name, axis, attribute
@@ -2689,8 +2773,10 @@ def _condition_targets(project: Project, dim: int,
         # Left out of this dimension altogether is `condition_checks.warnings`' to say.
         if not condition_checks.written(project, condition):
             continue
-        # A seepage face and a flux are conditions of their own (`_edge_conditions`).
-        if isinstance(condition, (SeepageCondition, FluxCondition)) or (
+        # A seepage face and a flux are conditions of their own (`_edge_conditions`),
+        # and an impermeable line a cut in the mesh (`_impermeable_cut`).
+        if isinstance(condition, (SeepageCondition, FluxCondition,
+                                  ImpermeableCondition)) or (
                 flow and isinstance(condition, DisplacementCondition)):
             continue
         noun = condition_checks.noun(condition)

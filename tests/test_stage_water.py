@@ -19,7 +19,8 @@ from core.geometry import solid_model
 from core.kratos import condition_checks, writer
 from core.kratos.writer import ExportError
 from core.model import stages
-from core.model.schemas import DRY, INTERPOLATE, PHREATIC as BACK, FluxCondition, Project
+from core.model.schemas import (DRY, INTERPOLATE, PHREATIC as BACK, FluxCondition, Project,
+                                SeepageCondition)
 from tests import mdpa
 from tests.models.muskat import HEADS, LEFT_LEVEL, head, muskat
 from tests.models.muskat import FLOW
@@ -259,6 +260,24 @@ def test_a_flux_in_a_flow_deck_is_the_flow_elements_own_condition(gmsh_session):
         "is_fixed": False, "value": -2.0e-6, "table": 0}]
 
 
+def test_a_flux_in_a_flow_deck_is_no_seepage_face(gmsh_session):
+    """A flux is no face the seepage strategy may open: written as one too, its nodes
+    were held at zero pressure where the water stood above them, a drain."""
+    face = SeepageCondition(id="exit", name="Exit", on="face", face="right")
+    for conditions in ([HEADS[1], RAIN], [HEADS[1], RAIN, face]):
+        export = writer.export_project(muskat(conditions=conditions))
+        stage = json.loads(export["project_parameters"])["stages"]["1_Flow"][
+            "stage_settings"]
+        seepage = [p["Parameters"]["model_part_name"]
+                   for p in stage["processes"]["loads_process_list"]
+                   if p["process_name"] == "ApplySeepageBoundaryProcess"]
+        assert seepage == (["PorousDomain.Exit"] if face in conditions else [])
+        assert (stage["solver_settings"]["strategy_type"]
+                == "newton_raphson_with_seepage") == (face in conditions)
+        assert not any("Rain" in w for w in export["warnings"]
+                       if "seepage faces have" in w)
+
+
 def test_a_flux_in_a_coupled_deck_is_the_coupled_elements_condition(gmsh_session):
     top = {"id": "rain", "name": "Rain", "kind": "flux", "on": "face", "face": "top",
            "value": 1.0e-7}
@@ -299,8 +318,75 @@ def test_a_flux_a_stage_switches_off_is_not_in_it(gmsh_session):
     assert fluxes(export, "1_Flow") and not fluxes(export, "2_Later")
 
 
-def test_a_flux_line_through_the_soil_is_refused(gmsh_session):
-    through = {"id": "rain", "name": "Rain", "kind": "flux", "on": "line",
-               "points": [[5.0, -2.0], [20.0, -2.0]], "value": 1.0e-7}
-    with pytest.raises(ExportError, match="A prescribed flux is on the soil's outer"):
-        writer.export_project(layered((PHREATIC, through)), MESH)
+def inner_edges(deck: mdpa.Deck, part: str) -> tuple[int, int]:
+    """How many of `part`'s conditions have an element on each side, and how many it
+    has: an edge two soil elements share is inside the soil."""
+    shared: dict[frozenset[int], int] = {}
+    for block in deck.elements:
+        for row in block.entries.values():
+            for a, b in zip(row[:3], row[1:3] + row[:1]):
+                key = frozenset((a, b))
+                shared[key] = shared.get(key, 0) + 1
+    rows = [row for block in deck.conditions for cid, row in block.entries.items()
+            if cid in deck.parts[part].conditions]
+    return sum(shared.get(frozenset(row[:2]), 0) == 2 for row in rows), len(rows)
+
+
+def test_a_flux_line_across_a_soil_is_a_line_source_in_it(gmsh_session):
+    """Kratos' normal flux condition reads its edge alone, so inside the soil it is a
+    line source: every mesh edge of the line is a condition, with soil on both sides."""
+    across = {"id": "pipe", "name": "Pipe", "kind": "flux", "on": "line",
+              "points": [[5.0, -2.0], [20.0, -2.0]], "value": 1.0e-7}
+    export = writer.export_project(layered((PHREATIC, across)), MESH)
+    deck = mdpa.parse(export["mdpa"])
+    pipe = deck.parts["Pipe"]
+    assert pipe.conditions and len(pipe.conditions) == len(pipe.nodes) - 1
+    assert all(deck.nodes[n][1] == pytest.approx(-2.0) for n in pipe.nodes)
+    assert sorted(deck.nodes[n][0] for n in pipe.nodes)[::len(pipe.nodes) - 1] \
+        == pytest.approx([5.0, 20.0])
+    inside, every = inner_edges(deck, "Pipe")
+    assert inside == every
+    assert [p["value"] for p in fluxes(export, next(iter(json.loads(
+        export["project_parameters"])["stages"])))] == [-1.0e-7]
+
+
+def test_a_flux_line_between_two_soils_is_on_their_shared_edges(gmsh_session):
+    between = {"id": "seam", "name": "Seam", "kind": "flux", "on": "line",
+               "points": [[0.0, -5.0], [25.0, -5.0]], "value": 1.0e-7}
+    deck = mdpa.parse(writer.export_project(layered((PHREATIC, between)), MESH)["mdpa"])
+    inside, every = inner_edges(deck, "Seam")
+    assert every and inside == every
+    assert all(deck.nodes[n][1] == pytest.approx(-5.0) for n in deck.parts["Seam"].nodes)
+
+
+def test_a_flux_line_partly_on_the_boundary_takes_both_stretches(gmsh_session):
+    """Down the ground and on into the soil: the edges on the boundary and the ones
+    inside it are one flux."""
+    bent = {"id": "bent", "name": "Bent", "kind": "flux", "on": "line",
+            "points": [[5.0, 0.0], [10.0, 0.0], [10.0, -4.0]], "value": 1.0e-7}
+    deck = mdpa.parse(writer.export_project(layered((PHREATIC, bent)), MESH)["mdpa"])
+    inside, every = inner_edges(deck, "Bent")
+    assert 0 < inside < every
+
+
+def test_a_quadratic_flux_line_through_the_soil_has_three_node_conditions(gmsh_session):
+    across = {"id": "pipe", "name": "Pipe", "kind": "flux", "on": "line",
+              "points": [[5.0, -2.0], [20.0, -2.0]], "value": 1.0e-7}
+    deck = mdpa.parse(writer.export_project(
+        layered((PHREATIC, across)), MESH.model_copy(update={"order": 2}))["mdpa"])
+    rows = [row for block in deck.conditions for cid, row in block.entries.items()
+            if cid in deck.parts["Pipe"].conditions]
+    assert rows and all(len(row) == 3 for row in rows)
+    assert {block.name for block in deck.conditions
+            if set(block.entries) & set(deck.parts["Pipe"].conditions)} \
+        == {"UPwNormalFluxCondition2D3N"}
+
+
+def test_a_seepage_line_through_the_soil_is_still_refused(gmsh_session):
+    """The seepage strategy lets water out only where there is no soil beyond the face,
+    so only a flux may run through the soil."""
+    through = {"id": "seep", "name": "Seep", "kind": "seepage", "on": "line",
+               "points": [[5.0, -2.0], [20.0, -2.0]]}
+    flow = layered((PHREATIC, through), stages=[FLOW.model_dump()])
+    with pytest.raises(ExportError, match="A seepage face is on the soil's outer"):
+        writer.export_project(flow, MESH)

@@ -25,7 +25,7 @@ from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interf
                                 Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
                                 SeepageCondition, SurfaceLoad, WaterPressureCondition,
-                                FluxCondition)
+                                FluxCondition, ImpermeableCondition)
 from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
                                 PressureType, standard_conditions as standard_set)
 
@@ -917,10 +917,11 @@ def flux_condition(project: Project, on: ConditionTarget, *, face: Face | None =
     """A new prescribed flux on `on`: `"face"` with `face`, or `"line"` with `points`
     (down the right side of the section to half its depth when none are given, as a
     seepage line's), of `value` -- water flowing into the soil per unit area, in the
-    project's length over its time; negative flows out."""
+    project's length over its time; negative flows out. Its line may run anywhere in the
+    soil, not only along its outer boundary (`schemas.FluxCondition`)."""
     if on not in ("face", "line"):
-        raise DraftError("A prescribed flux is on a face of the model, or on a line along "
-                         "the soil's outer boundary.")
+        raise DraftError("A prescribed flux is on a face of the model, or on a line in "
+                         "the soil.")
     if on == "line" and project.dimension != 2:
         raise DraftError("A flux line is drawn in the 2D section; switch to 2D to create "
                          "one, or put the flux on a face.")
@@ -932,6 +933,23 @@ def flux_condition(project: Project, on: ConditionTarget, *, face: Face | None =
     return FluxCondition(id=id, name=name or default_name, kind="flux",
                          on="face" if on == "face" else "line", face=face, part=None,
                          points=drawn, value=value, active=True)
+
+
+def impermeable_condition(project: Project, points=None, *, id: str | None = None,
+                          name: str | None = None) -> ImpermeableCondition:
+    """A new impermeable line through `points` (down the middle of the section to half
+    its depth when none are given: a screen is in the soil, not along its edge), which
+    no water flows through in a groundwater flow calculation."""
+    if project.dimension != 2:
+        raise DraftError("An impermeable line is drawn in the 2D section; switch to 2D to "
+                         "create one.")
+    drawn = (_middle(project) if points is None
+             else [(float(p[0]), float(p[1])) for p in points])
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "impermeable_", "Impermeable line")
+    return ImpermeableCondition(id=id, name=name or default_name, kind="impermeable",
+                                on="line", face=None, part=None, points=drawn,
+                                active=True)
 
 
 def water_line(project: Project, points, *, id: str | None = None,

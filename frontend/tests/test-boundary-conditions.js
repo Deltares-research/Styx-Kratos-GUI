@@ -191,6 +191,46 @@
     T.eq(top.symbols[0].outward, [0, 1]);
   });
 
+  function flux(id, points, value) {
+    return { id: id, name: id, kind: 'flux', on: 'line', face: null, part: null,
+             points: points, value: value, active: true };
+  }
+
+  /* `conditionGlyphSpec` of `record` with the line inside the soil or not, as
+     `insideSoil` would tell it off the built sections. */
+  function fluxGlyph(record, inside) {
+    var real = BC().insideSoil;
+    BC().insideSoil = function () { return inside; };
+    try {
+      return App.Viewport.conditionGlyphSpec(record, section([record]));
+    } finally {
+      BC().insideSoil = real;
+    }
+  }
+
+  test('a flux on the boundary draws its arrows into the soil, or out of it', function () {
+    var into = fluxGlyph(flux('rain', [[20, -1], [20, -6]], 1e-6), false);
+    T.ok(into.symbols.length > 1 && into.symbols.every(function (s) {
+      return s.arrow && s.outward[0] === -1 && s.outward[1] === 0;
+    }), 'into the soil, from the right side');
+    var out = fluxGlyph(flux('pump', [[20, -1], [20, -6]], -1e-6), false);
+    T.ok(out.symbols.every(function (s) { return s.outward[0] === 1; }), 'out of it');
+  });
+
+  test('a flux inside the soil draws its arrows to both sides of its line', function () {
+    var into = fluxGlyph(flux('pipe', [[5, -4], [15, -4]], 1e-6), true);
+    var ups = into.symbols.filter(function (s) { return s.outward[1] === 1; });
+    var downs = into.symbols.filter(function (s) { return s.outward[1] === -1; });
+    T.ok(ups.length > 0 && ups.length === downs.length, 'as many up as down');
+    T.ok(into.symbols.every(function (s) { return s.arrow && s.at[1] === -4; }),
+         'water flowing in: each arrow starts on the line and points away from it');
+    var size = into.size;
+    var out = fluxGlyph(flux('drain', [[5, -4], [15, -4]], -1e-6), true);
+    T.ok(out.symbols.length === into.symbols.length && out.symbols.every(function (s) {
+      return Math.abs(s.at[1] + 4 + s.outward[1] * 1.15 * size) < 1e-9;
+    }), 'water flowing out: each arrow stands off the line and points back to it');
+  });
+
   test('a hydrostatic pressure on a line draws the pressure along that line', function () {
     var record = pressure('bank', 'line', { points: [[20, 0], [20, -6]] });
     var spec = App.Viewport.conditionGlyphSpec(record, section([record]));
@@ -852,6 +892,29 @@
          ['water_pressure', 'Hydrostatic', -3, true]);
     var point = BC().flowBoundary(project, 'point', [[20, -2]], 'Uniform', -5);
     T.eq([point.on, point.fluid_pressure_type, point.value], ['point', 'Uniform', -5]);
+    var screen = BC().flowBoundary(project, 'line', points, 'impermeable', 0);
+    T.eq([screen.kind, screen.on, screen.points, screen.id],
+         ['impermeable', 'line', points, 'impermeable_1']);
+  });
+
+  test('an impermeable line says what it is, in the list, the explorer and its table', function () {
+    var record = BC().draftImpermeable(section([]), { points: [[9, -4], [9, -10]] });
+    T.eq(BC().line(record), 'impermeable_1  Impermeable line 1  impermeable on line '
+         + '(9, -4) -> (9, -10); no water flows through it');
+    T.eq(BC().label(record), 'Impermeable line 1  ·  impermeable');
+    var row = BC().flowRows(section([record]))[0];
+    T.eq([row.condition, row.value], ['Impermeable line', '—']);
+    var error = null;
+    try { BC().draftImpermeable(section([], { dimension: 3 })); } catch (e) { error = e; }
+    T.ok(error && /switch to 2D/.test(error.message));
+  });
+
+  test('an impermeable line draws its line hatched on both sides', function () {
+    var record = BC().draftImpermeable(section([]), { points: [[9, -4], [9, -10]] });
+    var spec = App.Viewport.conditionGlyphSpec(record, section([record]));
+    T.eq(spec.lines, [[[9, -4, 5], [9, -10, 5]]]);
+    T.eq(spec.strips.map(function (s) { return s.outward; }), [[-1, 0], [1, 0]]);
+    T.eq(spec.symbols, [], 'no arrows: no water crosses it');
   });
 
   test('a new hydrostatic level is the water level, else the phreatic line\'s', function () {
