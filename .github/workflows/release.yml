@@ -8,6 +8,9 @@
 # the merged pull requests, sorted by label (.github/release.yml). A tag with a hyphen,
 # such as v1.2.0-rc.1, makes a pre-release.
 #
+# A release made by hand on the Releases page pushes its tag too. The release is then
+# already there, so the workflow attaches the archives to it and changes nothing else.
+#
 # The tag has to be `v` + VERSION in core/version.py, and the unpacked archive has to
 # say that version (`kratos-cli --version`, the GUI's About box), or nothing is published.
 name: release
@@ -94,6 +97,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A release made on the Releases page also pushes its tag, so the release is
+          # already there: attach the archives to it and keep its notes and pre-release mark.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            exit 0
+          fi
           prerelease=false
           case "$GITHUB_REF_NAME" in *-*) prerelease=true ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* \
