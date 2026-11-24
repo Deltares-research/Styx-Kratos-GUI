@@ -140,6 +140,82 @@ App.SoilVolumeDialog = (function () {
     return (recipe.vertices || []).map(function (v) { return [v[0], v[1]]; });
   }
 
+  /* A custom part's outline in the section, [[x, y], ...], when it is a soil surface: a
+     material, and a polygon swept along z alone (CustomPart.section_outline). Else null. */
+  function surfaceOutline(part) {
+    var recipe = part && part.recipe;
+    if (!part || !part.mat || !recipe || recipe.kind !== 'polygon_extrude') return null;
+    var e = recipe.extrusion || [];
+    if (Math.abs(e[0]) > 1e-12 || Math.abs(e[1]) > 1e-12 || !(Math.abs(e[2]) > 1e-12)) {
+      return null;
+    }
+    return (recipe.vertices || []).length >= 3 ? outlineOf(recipe) : null;
+  }
+
+  var TOUCH = 1e-6;   // metres: a point this close to an edge is on it
+
+  /* Whether two outlines share ground, and not only an edge or a corner: an edge of
+     one crosses an edge of the other, or a corner or the middle of an edge of one lies
+     inside the other. The server is the judge (regions.overlay); this is what decides
+     which surfaces the menu offers. */
+  function outlinesOverlap(a, b) {
+    function edges(points) {
+      return points.map(function (p, i) { return [p, points[(i + 1) % points.length]]; });
+    }
+    function cross(o, p, q) {
+      return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+    }
+    function crosses(e, f) {
+      var d1 = cross(f[0], f[1], e[0]), d2 = cross(f[0], f[1], e[1]);
+      var d3 = cross(e[0], e[1], f[0]), d4 = cross(e[0], e[1], f[1]);
+      var eps = TOUCH * TOUCH;
+      return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
+             ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
+    }
+    function nearEdge(point, polygon) {
+      return edges(polygon).some(function (e) {
+        var dx = e[1][0] - e[0][0], dy = e[1][1] - e[0][1];
+        var t = ((point[0] - e[0][0]) * dx + (point[1] - e[0][1]) * dy) / (dx * dx + dy * dy);
+        t = Math.max(0, Math.min(1, t || 0));
+        var ox = point[0] - e[0][0] - t * dx, oy = point[1] - e[0][1] - t * dy;
+        return Math.sqrt(ox * ox + oy * oy) <= TOUCH;
+      });
+    }
+    function inside(point, polygon) {
+      if (nearEdge(point, polygon)) return false;
+      var hit = false;
+      edges(polygon).forEach(function (e) {
+        var p = e[0], q = e[1];
+        if ((p[1] > point[1]) !== (q[1] > point[1]) &&
+            point[0] < p[0] + (point[1] - p[1]) * (q[0] - p[0]) / (q[1] - p[1])) hit = !hit;
+      });
+      return hit;
+    }
+    function probes(points) {
+      return points.concat(edges(points).map(function (e) {
+        return [(e[0][0] + e[1][0]) / 2, (e[0][1] + e[1][1]) / 2];
+      }));
+    }
+    return edges(a).some(function (e) { return edges(b).some(function (f) { return crosses(e, f); }); })
+      || probes(a).some(function (p) { return inside(p, b); })
+      || probes(b).some(function (p) { return inside(p, a); });
+  }
+
+  /* The other soil surfaces the surface `key` overlaps, as {key, label}, in the order
+     of the project; null when `key` is not a soil surface. A piece a line cut off a
+     surface (`drawn_0__part1`) stands for the whole of it. */
+  function overlappingSurfaces(project, key) {
+    var own = String(key || '').split('__')[0];
+    var parts = (project && project.custom_parts) || [];
+    var part = parts.filter(function (p) { return p.key === own; })[0];
+    var outline = part && surfaceOutline(part);
+    if (!outline) return null;
+    return parts.filter(function (other) {
+      var theirs = other.key !== own && surfaceOutline(other);
+      return theirs && outlinesOverlap(outline, theirs);
+    }).map(function (other) { return { key: other.key, label: other.label }; });
+  }
+
   /* Shoelace. The outline is already in one plane, so this is the whole story. */
   function areaOf(points) {
     var sum = 0;
@@ -197,13 +273,36 @@ App.SoilVolumeDialog = (function () {
              value: volumeOf(recipe.vertices, recipe.extrusion) };
   }
 
+  /* Corners as the viewport drew them, made fit to type over: rounded to the
+     millimetre (a click unsnapped lands on 12.3456789), with a click repeated on
+     the same spot -- a double click, or closing the outline on its first corner --
+     kept once, since a corner given twice encloses nothing more. */
+  function drawnOutline(points) {
+    var kept = [];
+    (points || []).forEach(function (p) {
+      var corner = p.map(function (c) { return Math.round(c * 1000) / 1000; });
+      var last = kept[kept.length - 1];
+      if (last && same(last, corner)) return;
+      kept.push(corner);
+    });
+    if (kept.length > 1 && same(kept[0], kept[kept.length - 1])) kept.pop();
+    return kept;
+
+    function same(a, b) {
+      return a.every(function (c, i) { return Math.abs(c - b[i]) < 1e-9; });
+    }
+  }
+
   function titleFor(form, editing) {
     return (editing ? 'Edit soil ' : 'Create soil ') + form;
   }
 
   /* `part` edits an existing body: the form opens on its coordinates and the
      create call rebuilds it in place, keeping its key (and so its mesh size,
-     its tree row and the current selection). */
+     its tree row and the current selection).
+
+     `options.vertices` opens a new body on corners drawn in the viewport (3D
+     points, as App.DrawInput reports them), in place of the worked example. */
   function open(part, options) {
     options = options || {};
     if (!App.PROJECT || document.getElementById('soil-volume-dialog')) return;
@@ -239,8 +338,9 @@ App.SoilVolumeDialog = (function () {
     }
 
     /* ── Name ─────────────────────────────────────────────────── */
-    var nameInput = el('input.mesh-setting-control',
-                       { type: 'text', value: editing ? editing.label : EXAMPLE.label });
+    var drawn = !editing && options.vertices ? options.vertices : null;
+    var nameInput = el('input.mesh-setting-control', { type: 'text',
+      value: editing ? editing.label : (drawn ? 'Soil ' + form : EXAMPLE.label) });
     row('Name', nameInput, 'Shown in the Model explorer.');
 
     /* ── Material ─────────────────────────────────────────────── */
@@ -439,10 +539,12 @@ App.SoilVolumeDialog = (function () {
         });
     });
 
-    // Open on the body being edited, or on the worked example so the shape of the
-    // input is obvious.
+    // Open on the body being edited, on the corners just drawn, or on the worked
+    // example so the shape of the input is obvious.
     var seed;
-    if (surface) {
+    if (drawn) {
+      seed = drawnOutline(surface ? outlineOf({ vertices: drawn }) : drawn);
+    } else if (surface) {
       seed = outlineOf(editing ? editing.recipe : { vertices: EXAMPLE.vertices });
     } else {
       seed = editing ? editing.recipe.vertices : EXAMPLE.vertices;
@@ -459,6 +561,7 @@ App.SoilVolumeDialog = (function () {
     open: open, validate: validate, volumeOf: volumeOf, planeNormal: planeNormal,
     sectionAxes: sectionAxes, prismFor: prismFor, outlineOf: outlineOf, areaOf: areaOf,
     validateOutline: validateOutline, formFor: formFor, titleFor: titleFor,
-    measure: measure
+    measure: measure, drawnOutline: drawnOutline, surfaceOutline: surfaceOutline,
+    outlinesOverlap: outlinesOverlap, overlappingSurfaces: overlappingSurfaces
   };
 })();

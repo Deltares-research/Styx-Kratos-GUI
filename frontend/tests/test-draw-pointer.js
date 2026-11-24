@@ -159,6 +159,71 @@
     } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
   });
 
+  test('draw: a click snaps to the status bar\'s snapping distance', async function () {
+    var ctx = rig(SOLID, TOP_DOWN);
+    try {
+      App.state.snap = true;
+      App.state.snapDistance = 0.25;
+      App.DrawInput.start('line');
+      at(ctx, 'click', 13, 7);
+      at(ctx, 'click', 57, 31);
+      at(ctx, 'contextmenu');
+      ctx.posted[0].vertices.forEach(function (point) {
+        point.forEach(function (c) {
+          T.eq(c * 4, Math.round(c * 4), 'on a quarter metre: ' + point);
+        });
+      });
+      T.ok(ctx.posted[0].vertices.some(function (point) {
+        return point.some(function (c) { return c !== Math.round(c); });
+      }), 'not merely whole metres: ' + JSON.stringify(ctx.posted[0].vertices));
+    } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
+  });
+
+  function key(target, name) {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+  }
+
+  test('draw: Enter applying a typed value in a field does not finish the line',
+       async function () {
+    var ctx = rig(SOLID, TOP_DOWN);
+    var field = document.createElement('input');
+    field.value = field.defaultValue = '1';
+    document.body.appendChild(field);
+    try {
+      App.DrawInput.start('line');
+      at(ctx, 'click', 13, 7);
+      at(ctx, 'click', 57, 31);
+      field.value = '0.5';                       // typed, not yet applied
+      key(field, 'Enter');
+      T.eq(ctx.posted.length, 0, 'the Enter applying the edit is the field\'s');
+      field.defaultValue = '0.5';                // applied, as app.js does on change
+      key(field, 'Enter');
+      T.eq(ctx.posted.length, 1, 'with nothing pending, Enter in the field finishes it');
+    } finally {
+      field.remove();
+      await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore();
+    }
+  });
+
+  test('draw: Escape in a field cancels the drawing', async function () {
+    var ctx = rig(SOLID, TOP_DOWN);
+    var field = document.createElement('input');
+    field.value = '0.5';                         // even with an edit pending
+    document.body.appendChild(field);
+    try {
+      App.DrawInput.start('polygon');
+      at(ctx, 'click', 13, 7);
+      at(ctx, 'click', 57, 31);
+      at(ctx, 'click', -20, 31);
+      key(field, 'Escape');
+      key(document, 'Enter');
+      T.eq(ctx.posted.length, 0, 'cancelled, so a later Enter has nothing to finish');
+    } finally {
+      field.remove();
+      await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore();
+    }
+  });
+
   test('draw: a keyboard "click" (detail 0) places nothing', function () {
     var ctx = rig(SOLID, TOP_DOWN);
     try {

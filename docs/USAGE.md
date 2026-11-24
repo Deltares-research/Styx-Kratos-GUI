@@ -25,7 +25,7 @@ To learn the GUI by building one model step by step, start with the
 | Model explorer | Right, top | A tree of all the objects in the model. A group, such as **Sheet piles**, shows when the model has one. Clear a check box to hide an object. |
 | Selection explorer | Right, bottom | The properties of the selected object. You can edit most of them here. |
 | Command panel | Bottom | The **Session** log with all messages, the **Model history** tab with the commands that you typed, and the command box |
-| Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and zoom |
+| Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and its distance (a clicked point is rounded to a multiple of it, 1 m by default) and zoom |
 
 Staged construction mode adds a **Stages explorer**, and Results mode adds a **Results
 explorer**, below the Model explorer.
@@ -210,7 +210,9 @@ The preset values are only a start. Check them for your soil.
 ### Soil surfaces and volumes
 
 **Create soil surface…** (in 2D) or **Create soil volume…** (in 3D) adds a body of soil that
-is not a layer, for example an embankment or a lens. Type the corners of its outline and
+is not a layer, for example an embankment or a lens. In 2D, click the corners of its outline
+in the viewport, then right-click or press Enter: the window opens on the corners that you
+clicked, and you can type over any of them. In 3D, type the corners in the window. Then
 select its material. In a terminal, `kratos-cli surface add` makes the same soil surface.
 
 A line splits a soil surface in the same way as a layer (see below). Each part then has its
@@ -218,6 +220,14 @@ own row in the Model explorer, for example *Embankment · Part 1*. Select a part
 **Edit coordinates…** to change the corners of the whole surface. A new material for the
 surface goes to all of its parts. In 3D, a line splits a soil volume only if the volume is
 a polygon extruded along z, or a box.
+
+Two soil surfaces can overlap. To make the overlap a surface of its own, right-click one
+of them in the viewport and select **Intersect with**, then the other surface. The two
+become the part of each surface outside the other, with its name and material, and the
+overlap, which gets the material of the surface that you right-clicked. You can then give
+the overlap another material. If one surface lies wholly inside the other, the rest of the
+outer surface is split into parts on either side of it, because a soil surface cannot have
+a hole. In a terminal, `kratos-cli surface intersect` does the same.
 
 ### Lines that split the soil
 
