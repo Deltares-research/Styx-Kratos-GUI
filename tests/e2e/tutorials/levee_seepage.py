@@ -154,6 +154,13 @@ def levee_parts(tour: Tour) -> None:
     soil_names = {m.id: m.name for m in PLAN.materials}
     for index, part in enumerate(PLAN.custom_parts, start=1):
         rail(tour, "createSoilVolume")
+        # In 2D the tool draws first: a rough outline of three clicks and Enter opens
+        # the window on those corners, which are then typed over.
+        box = page.locator("canvas").first.bounding_box()
+        for across, down in ((0.4, 0.4), (0.6, 0.4), (0.5, 0.6)):
+            page.mouse.click(box["x"] + box["width"] * across,
+                             box["y"] + box["height"] * down)
+        page.keyboard.press("Enter")
         dialog = page.locator("#soil-volume-dialog")
         dialog.wait_for()
         field(page, "Name").fill(part.label)

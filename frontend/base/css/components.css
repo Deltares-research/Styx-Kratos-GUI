@@ -283,6 +283,12 @@
 .sb-toggle { cursor: pointer; border-radius: var(--radius); }
 .sb-toggle:hover { background: var(--c-hover); }
 .sb-toggle.active { color: var(--brand-primary); font-weight: 600; }
+.sb-snap-dist { padding-left: 0; }
+.sb-snap-dist input {
+  width: 52px; height: 16px; padding: 0 3px; font: inherit; font-family: var(--font-mono);
+  border: 1px solid var(--c-border); border-radius: var(--radius); background: #fff; color: var(--c-ink);
+}
+.sb-snap-dist input:focus { outline: none; border-color: var(--c-focus); }
 
 /* ══════════════════════════════════════════════════════════════════
    Modal dialogs

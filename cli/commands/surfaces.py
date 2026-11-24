@@ -48,6 +48,12 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     remove = action(surface, common, "remove", remove_surface,
                     help="remove a soil surface and the soil bodies cut from it")
     remove.add_argument("key", help="the surface's key, as `surface list` shows it")
+    intersect = action(surface, common, "intersect", intersect_surfaces,
+                       help="split two overlapping soil surfaces into the part of each "
+                            "outside the other and the overlap, which takes the first's "
+                            "material")
+    intersect.add_argument("key", help="the surface whose material the overlap takes")
+    intersect.add_argument("other", help="the surface it overlaps")
 
 
 def _two_dimensional(project: Project) -> None:
@@ -131,6 +137,27 @@ def remove_surface(args: argparse.Namespace) -> Answer:
     target, where = written(args, project)
     return Answer(data={"file": str(target) if target else None},
                   lines=[f"removed soil surface {args.key}; {where}"])
+
+
+def intersect_surfaces(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    _two_dimensional(project)
+    first, second = _surface(project, args.key), _surface(project, args.other)
+    plan = session.intersection_plan(project, first.key, second.key)
+    try:
+        built = [gmsh_worker.run_here(gmsh_worker.create_job, json.dumps(recipe))
+                 for recipe, _ in plan]
+    except ValueError as failure:
+        raise CommandError(str(failure)) from None
+    before = {part.key for part in project.custom_parts}
+    project = session.with_intersection(project, plan, built)
+    made = [part for part in project.custom_parts
+            if part.key not in before or part.key in (first.key, second.key)]
+    target, where = written(args, project)
+    return Answer(data={"file": str(target) if target else None,
+                        "parts": [part.model_dump(mode="json") for part in made]},
+                  lines=[f"intersected {first.label} with {second.label}: "
+                         + ", ".join(part.label for part in made) + f"; {where}"])
 
 
 def _built(project: Project, recipe: dict) -> tuple[Project, CustomPart]:

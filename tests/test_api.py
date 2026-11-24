@@ -1878,3 +1878,31 @@ def test_a_project_put_with_phases_is_accepted(client):
         "initial", "null_step"]
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_post_intersect_splits_two_overlapping_soil_surfaces(client):
+    """Viewport right-click > Intersect with: the part of each outside the other, and the
+    overlap, which takes the material of the surface that was clicked."""
+    from core.model.templates import blank_project
+    project = blank_project().model_dump() | {
+        "materials": seed_project().model_dump()["materials"][:1]}
+    client.put("/api/project", json=project)
+    material = project["materials"][0]["id"]
+
+    def surface(x0, label):
+        return client.post("/api/geometry/create", json={
+            "kind": "polygon_extrude", "label": label, "material": material,
+            "vertices": [[x0, 0, 0], [x0 + 3, 0, 0], [x0 + 3, 3, 0], [x0, 3, 0]],
+            "extrusion": [0, 0, 1]}).json()["parts"][0]["key"]
+
+    first, second = surface(0, "Left"), surface(2, "Right")
+    response = client.post("/api/geometry/intersect", json={"key": first, "other": second})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "geometry" in body["invalidates"]
+    labels = [part["label"] for part in body["project"]["custom_parts"]]
+    assert labels == ["Left", "Right", "Left & Right"]
+
+    refused = client.post("/api/geometry/intersect", json={"key": first, "other": first})
+    assert refused.status_code == 422 and "itself" in refused.json()["detail"]
+    client.put("/api/project", json=seed_project().model_dump())

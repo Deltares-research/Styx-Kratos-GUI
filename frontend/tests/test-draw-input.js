@@ -106,6 +106,23 @@
     });
   });
 
+  test('surface for a tool: the corners go to its callback, nothing is posted', function () {
+    return withMockedEnvironment(function (canvas, getPosted) {
+      var handed = null;
+      App.DrawInput.start('polygon', { onComplete: function (v) { handed = v; } });
+      App.DrawInput.handleCommand('0 0 0');
+      App.DrawInput.handleCommand('10 0 0');
+      pressEnter();
+      T.eq(handed, null, 'two corners enclose nothing, so the outline stays open');
+      App.DrawInput.handleCommand('10 5 0');
+      pressEnter();
+
+      T.eq(handed, [[0, 0, 0], [10, 0, 0], [10, 5, 0]]);
+      T.eq(getPosted(), null, 'the soil-surface window builds it, not the draw tool');
+      T.eq(canvas.style.cursor, '', 'the tool is finished');
+    });
+  });
+
   test('box: two typed corners auto-commit a box recipe', function () {
     return withMockedEnvironment(function (canvas, getPosted) {
       App.DrawInput.start('box');

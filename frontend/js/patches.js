@@ -193,7 +193,13 @@ App.LivePatches = (function () {
   function nameSoilBodyActions(mode) {
     var noun = mode === '2d' ? 'surface' : 'volume';
     ((App.RAILS && App.RAILS.soil) || []).forEach(function (tool) {
-      if (tool && tool.action === 'createSoilVolume') tool.tip = 'Create soil ' + noun + '…';
+      if (!tool || tool.action !== 'createSoilVolume') return;
+      tool.tip = 'Create soil ' + noun + '…';
+      (tool.flyout || []).forEach(function (item) {
+        if (item.action === 'createSoilBodyByCoordinates') {
+          item.label = 'Soil ' + noun + ' by coordinates…';
+        }
+      });
     });
     (App.MENUS || []).forEach(function (menu) {
       (menu.items || []).forEach(function (item) {
@@ -201,6 +207,19 @@ App.LivePatches = (function () {
           item.label = 'Create soil ' + noun + '…';
         }
       });
+    });
+  }
+
+  /* Create soil surface… in 2D: the outline is clicked corner by corner in the
+     section, then the soil-surface window opens on those corners, so the name, the
+     material and any corner the click did not land exactly can be set before it is
+     built. Without the draw tool the window opens on its worked example. */
+  function drawSoilSurface() {
+    if (!App.SoilVolumeDialog) return;
+    if (!App.DrawInput) { App.SoilVolumeDialog.open(); return; }
+    App.DrawInput.start('polygon', {
+      noun: 'a soil surface',
+      onComplete: function (vertices) { App.SoilVolumeDialog.open(null, { vertices: vertices }); }
     });
   }
 
@@ -1181,6 +1200,7 @@ App.LivePatches = (function () {
   /* The rulers measure two named axes of one plane. In 3D the screen edges are three
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
   var TWO_D_ONLY = ['interface', 'createNormalLoad', 'drawLine', 'createLineByCoordinates',
+                    'drawSoilSurface',
                     'toggleRuler', 'createSupportLine',
                     'createSupportPoint', 'createWaterPressureLine',
                     'createWaterPressurePoint', 'createSeepageLine'];
@@ -1246,7 +1266,9 @@ App.LivePatches = (function () {
        drawPoint          draws a point, which the server then refuses: the creation
                           recipes (core/geometry/primitives.py) have no `point` kind.
        drawPolygon        "Create surface": a flat surface with no material. The mesh
-                          leaves it out, with a note, so Kratos never sees it.
+                          leaves it out, with a note, so Kratos never sees it. Drawing
+                          a surface is Soil > Create soil surface… now, which asks for
+                          the material once the outline is drawn.
        drawBox,           a solid with no material, and the Selection explorer offers
        drawCylinder,      no way to give it one: the deck gets a body that no material
        importModel        is assigned to. Soil comes from Soil > Create soil surface…,
@@ -1600,6 +1622,14 @@ App.LivePatches = (function () {
     })[0] || {}).flyout || [];
     sheetPile.forEach(function (item) {
       item.disabled = item.beamKind === 'beam' ? !is2d : !!is2d;
+    });
+
+    // An outline is drawn in the section; a 3D body has no plane to draw it on, so
+    // there it is typed. Greyed rather than dropped: the flyout is mounted once.
+    (((App.RAILS || {}).soil || []).filter(function (tool) {
+      return tool && tool.action === 'createSoilVolume';
+    })[0] || { flyout: [] }).flyout.forEach(function (item) {
+      item.disabled = TWO_D_ONLY.indexOf(item.action) >= 0 ? !is2d : false;
     });
 
     // Neither structure tool is gated by dimension any more: each dimension has its
@@ -2296,7 +2326,11 @@ App.LivePatches = (function () {
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
         openAt(gateViewportItems(withPictureRows(withSoilWaterRows(
-          withStageRows(withLabelRows(items), key), key))), x, y, function (item) {
+          withStageRows(withIntersectRows(withLabelRows(items), key), key), key))),
+               x, y, function (item) {
+          if (item && item.action === 'intersectSurface') {
+            return intersectSurfaces(item.surfaceKey, item.otherKey);
+          }
           if (item && item.action === 'soilWater') {
             return App.BoundaryConditions.setSoilWater(item.soilKey, item.soilWater);
           }
@@ -2542,6 +2576,41 @@ App.LivePatches = (function () {
     ];
     var at = items.length && items[0] && items[0].title ? 1 : 0;
     return items.slice(0, at).concat(rows, items.slice(at));
+  }
+
+  /* Right-click on a drawn soil surface: Intersect with > each other soil surface it
+     overlaps. The two become the part of each outside the other and the overlap, which
+     takes the material of the one clicked (POST /api/geometry/intersect). A surface
+     nothing overlaps says so rather than leaving the row out, so the action is found. */
+  function withIntersectRows(items, key) {
+    var D = App.SoilVolumeDialog;
+    if (!key || !App.PROJECT || App.PROJECT.deck || !D || !D.overlappingSurfaces) return items;
+    if (App.state && App.state.mode === 'results') return items;
+    var others = D.overlappingSurfaces(App.PROJECT, key);
+    if (!others) return items;
+    var own = String(key).split('__')[0];
+    var row = others.length
+      ? { label: 'Intersect with', sub: others.map(function (other) {
+          return { label: other.label, action: 'intersectSurface', surfaceKey: own,
+                   otherKey: other.key };
+        }) }
+      : { label: 'Intersect with (no overlapping surface)', disabled: true };
+    var at = items.length && items[0] && items[0].title ? 1 : 0;
+    return items.slice(0, at).concat([row, '-'], items.slice(at));
+  }
+
+  function intersectSurfaces(key, other) {
+    var named = '"' + partLabel(key) + '" with "' + partLabel(other) + '"';
+    App.Command.note('Intersecting ' + named + '…');
+    return App.Api.post('/api/geometry/intersect', { key: key, other: other })
+      .then(function () { return App.Model.load(); })
+      .then(function () { return App.Viewport.refresh(); })
+      .then(function () {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        App.Command.ok('Intersected ' + named + ': the overlap is a soil surface of its '
+                       + 'own, of the material of "' + partLabel(key) + '".');
+      })
+      .catch(function (error) { App.Command.err('Intersect failed: ' + error.message); });
   }
 
   function withStageRows(items, key) {
@@ -3523,7 +3592,15 @@ App.LivePatches = (function () {
         requestMesh(!item.keepSelection, 'mesh ' + size);
         return;
       }
-      if (item && item.action === 'createSoilVolume') {
+      // In 2D the soil surface is drawn first and its window opens on the corners;
+      // a 3D volume has no plane to draw on, so its window opens straight away.
+      if (item && (item.action === 'drawSoilSurface'
+                   || (item.action === 'createSoilVolume' && in2D()))) {
+        drawSoilSurface();
+        return;
+      }
+      if (item && (item.action === 'createSoilVolume'
+                   || item.action === 'createSoilBodyByCoordinates')) {
         if (App.SoilVolumeDialog) App.SoilVolumeDialog.open();
         return;
       }
@@ -3941,7 +4018,12 @@ App.LivePatches = (function () {
       return tool && tool.action === 'createSoilVolume';
     })) {
       App.RAILS.soil.push('-');
-      App.RAILS.soil.push({ icon: 'cube', tip: 'Create soil volume…', action: 'createSoilVolume' });
+      App.RAILS.soil.push({ icon: 'cube', tip: 'Create soil volume…', action: 'createSoilVolume',
+        flyout: [
+          { icon: 'polygon', label: 'Draw soil surface', action: 'drawSoilSurface' },
+          { icon: 'cube', label: 'Soil volume by coordinates…',
+            action: 'createSoilBodyByCoordinates' }
+        ] });
     }
     if (App.RAILS.soil) App.RAILS.soil = orderSoilRail(App.RAILS.soil);
     var soilMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Soil'; })[0];
@@ -5470,6 +5552,8 @@ App.LivePatches = (function () {
     moveBefore: moveBefore,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
+    withIntersectRows: withIntersectRows, intersectSurfaces: intersectSurfaces,
+    drawSoilSurface: drawSoilSurface,
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
