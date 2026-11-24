@@ -795,6 +795,29 @@
     T.eq(App.Viewport.alongPath([[0, 0, 5], [10, 0, 5], [10, 10, 5]], 0.75), [10, 5, 5]);
   });
 
+  test('a stage with a phreatic line of its own draws its lines as the stage has them',
+       function () {
+    var pl = phreatic('pl', { y_coordinates: [-1, -3] });
+    var low = phreatic('low', { name: 'Pumped', y_coordinates: [-6, -6] });
+    var project = section(standard().concat([pl, low]), {
+      stageable_parts: ['pl', 'low'],
+      stages: [{ id: 's1', name: 'Initial', parent: null, activate: [], deactivate: ['low'] },
+               { id: 's2', name: 'Pumped dry', parent: 's1', activate: ['low'],
+                 deactivate: [], phreatic_line: 'low' }] });
+    var water = App.Stages.waterIn(project, 's2');
+    var made = App.Viewport.conditionGlyphSpec(low, project, null, water);
+    T.eq([made.waterLine, made.dashed, made.color], ['phreatic', false, BC().PHREATIC_COLOR],
+         'the line the stage makes phreatic has the phreatic symbol');
+    T.eq(made.symbols.length, 1);
+    var was = App.Viewport.conditionGlyphSpec(pl, project, null, water);
+    T.eq([was.waterLine, was.dashed], ['head', true], 'the one before is a head line there');
+    T.eq(was.color, BC().waterLineColor(pl, project.boundary_conditions, 'low'));
+    T.ok(was.color !== BC().PHREATIC_COLOR);
+    var initial = App.Viewport.conditionGlyphSpec(pl, project, null,
+                                                  App.Stages.waterIn(project, 's1'));
+    T.eq(initial.waterLine, 'phreatic', 'and the phreatic line again in the initial stage');
+  });
+
   test('a condition is shown until it is hidden', function () {
     App.PROJECT = section(standard().concat([pressure('pore', 'domain')]));
     T.eq(App.Viewport.isVisible('roller_left'), true);

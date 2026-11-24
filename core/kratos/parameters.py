@@ -74,6 +74,11 @@ One process here is not Kratos' own, and it is temporary: `_exclude_prestress`. 
 around Kratos counting an anchor's prestress twice when the anchor's stress is carried
 into the next stage. It is written only for prestressed anchors, and it is removed once
 Kratos is fixed (`core/kratos/prestress_workaround.py`).
+
+The other is not a workaround: `_switch_flow_elements` gives a groundwater flow stage the
+water pressure elements its time integration needs, because the .mdpa holds one class
+for every stage and Kratos decides steady or transient by the element alone
+(`core/kratos/flow_elements_process.py`).
 """
 
 from __future__ import annotations
@@ -84,7 +89,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from core.kratos.deck_files import MATERIALS_NAME, PRESTRESS_WORKAROUND_MODULE
+from core.kratos.deck_files import (FLOW_ELEMENTS_MODULE, MATERIALS_NAME,
+                                    PRESTRESS_WORKAROUND_MODULE)
 from core.model import solver, units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
@@ -297,6 +303,11 @@ class Stage:
 
     `prestressed` is the anchors in `final_stresses` that have a prestress. The temporary
     prestress workaround runs for them (`_exclude_prestress`).
+
+    `flow_elements` is (sub-model part, water pressure element class) for each soil part
+    of a groundwater flow stage whose time integration needs other elements than the
+    model holds when the stage starts (`_switch_flow_elements`); empty when it needs
+    none.
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -326,6 +337,7 @@ class Stage:
     time_integration: str = "static"
     duration: float = DURATION
     time_step: float = TIME_STEP
+    flow_elements: tuple[tuple[str, str], ...] = ()
 
 
 PhreaticLine = tuple[tuple[float, float], tuple[float, float]]
@@ -577,8 +589,11 @@ def _auxiliary(stage: Stage) -> list[dict]:
     The temporary prestress workaround comes directly before the stress carry-over. It
     has to: it hides the prestress in its `ExecuteInitialize`, and the carry-over stores
     the stresses in its own `ExecuteInitialize`, which Kratos runs next.
+
+    A flow stage's element switch comes first of all, so whatever follows it already
+    finds the elements the stage solves with.
     """
-    out: list[dict] = []
+    out: list[dict] = _switch_flow_elements(stage)
     if stage.k0_parts:
         out.append(_k0_procedure(stage.k0_parts))
     if stage.final_stresses:
@@ -713,6 +728,36 @@ def _apply_final_stresses(parts: tuple[str, ...]) -> dict:
             "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
         },
     }
+
+
+FLOW_ELEMENTS_PROCESS = "SwitchFlowElements"
+
+
+def _switch_flow_elements(stage: Stage) -> list[dict]:
+    """One process per element class in `stage.flow_elements`, each replacing the
+    elements of its parts with that class before the solver initialises.
+
+    Kratos' groundwater flow solver reads `solution_type` only to check it; the elements
+    decide whether the flow is steady or transient. So a dynamic flow stage switches the
+    soil to the transient class and a static one after it switches back
+    (`core/kratos/flow_elements_process.py`). Switching to the transient class always
+    follows a steady stage, whose pressure has no rate of change, so the switch sets the
+    rate to zero too.
+
+    A user-defined process, shipped with the deck (`deck_files.FLOW_ELEMENTS_NAME`).
+    """
+    by_class: dict[str, list[str]] = {}
+    for part, element in stage.flow_elements:
+        by_class.setdefault(element, []).append(part)
+    return [{
+        "python_module": FLOW_ELEMENTS_MODULE,
+        "process_name": FLOW_ELEMENTS_PROCESS,
+        "Parameters": {
+            "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
+            "element_name": element,
+            "zero_water_pressure_rate": stage.time_integration == "dynamic",
+        },
+    } for element, parts in by_class.items()]
 
 
 PRESTRESS_WORKAROUND_PROCESS = "ExcludePrestressFromCarriedStress"

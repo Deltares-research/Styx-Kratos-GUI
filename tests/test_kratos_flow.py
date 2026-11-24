@@ -22,7 +22,7 @@ import json
 import pytest
 
 from core.geometry import solid_model
-from core.kratos import condition_checks, external_deck, materials, writer
+from core.kratos import condition_checks, deck_files, external_deck, materials, writer
 from core.model import stages
 from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Stage,
                                 SeepageCondition, WaterPressureCondition,
@@ -321,6 +321,53 @@ def test_a_dynamic_flow_stage_is_a_transient_flow(gmsh_session):
     export = writer.export_project(muskat(stages=[
         Stage(id="flow", name="Flow", calculation="flow", time_integration="dynamic")]))
     assert settings(export)["solver_settings"]["solution_type"] ==         "Transient_Groundwater_Flow"
+
+
+def switches(export: dict, stage: str) -> list[dict]:
+    """The stage's flow element switches (`parameters._switch_flow_elements`)."""
+    auxiliary = settings(export, stage)["processes"].get("auxiliary_process_list", [])
+    return [process["Parameters"] for process in auxiliary
+            if process.get("python_module") == deck_files.FLOW_ELEMENTS_MODULE]
+
+
+def test_a_static_flow_deck_keeps_its_steady_elements_and_ships_no_switch(case_a):
+    assert switches(case_a, "1_Flow") == []
+    assert case_a["process_files"] == {}
+
+
+def test_a_dynamic_flow_stage_switches_the_soil_to_the_transient_elements(gmsh_session):
+    """Kratos' flow solver decides steady or transient by the element alone: on the
+    .mdpa's steady class a dynamic stage would be the steady state at every step."""
+    export = writer.export_project(muskat(order=2, stages=[
+        Stage(id="flow", name="Flow", calculation="flow", time_integration="dynamic")]))
+    [switch] = switches(export, "1_Flow")
+    assert switch == {"model_part_name_list": ["PorousDomain.soil"],
+                      "element_name": "TransientPwElement2D6N",
+                      "zero_water_pressure_rate": True}
+    # First, so whatever runs after it finds the stage's own elements.
+    first = settings(export)["processes"]["auxiliary_process_list"][0]
+    assert first["python_module"] == deck_files.FLOW_ELEMENTS_MODULE
+    assert "kratos_module" not in first
+    assert export["process_files"] == {
+        deck_files.FLOW_ELEMENTS_NAME:
+            deck_files.FLOW_ELEMENTS_SOURCE.read_text(encoding="utf-8")}
+
+
+def test_a_stage_switches_only_when_its_time_integration_changes(gmsh_session):
+    """Static, dynamic, dynamic, static: the soil goes transient in the second stage,
+    stays so in the third, and goes back to the steady class in the fourth."""
+    def stage(id, parent, time_integration):
+        return Stage(id=id, name=id, parent=parent, calculation="flow",
+                     time_integration=time_integration)
+    export = writer.export_project(muskat(stages=[
+        stage("a", None, "static"), stage("b", "a", "dynamic"),
+        stage("c", "b", "dynamic"), stage("d", "c", "static")]))
+    assert [[(s["element_name"], s["zero_water_pressure_rate"])
+             for s in switches(export, name)] for name in ("1_a", "2_b", "3_c", "4_d")] == [
+        [], [("TransientPwElement2D3N", True)], [], [("SteadyStatePwElement2D3N", False)]]
+    # The .mdpa itself keeps the steady class.
+    assert {block.name for block in mdpa.parse(export["mdpa"]).elements} == \
+        {"SteadyStatePwElement2D3N"}
 
 
 def test_a_missing_biot_coefficient_is_derived(gmsh_session):

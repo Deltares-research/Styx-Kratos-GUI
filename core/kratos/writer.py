@@ -62,6 +62,16 @@ FLOW_ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
     (2, 9): ("SteadyStatePwElement2D6N", (0, 1, 2, 3, 4, 5)),
 }
 
+# The class a dynamic flow stage switches each of those to, and a static stage after it
+# switches back from. Kratos' groundwater flow solver does not make a steady element
+# transient: only `TransientPwElement` has the storage term, so a dynamic stage on the
+# steady class would jump to the new steady state in its first step
+# (`core/kratos/flow_elements_process.py`).
+TRANSIENT_FLOW_ELEMENTS: dict[str, str] = {
+    "SteadyStatePwElement2D3N": "TransientPwElement2D3N",
+    "SteadyStatePwElement2D6N": "TransientPwElement2D6N",
+}
+
 # Sheet piles: 1D structural elements living inside the 2D section, sharing its nodes.
 # Both 2D classes and their (end, end, midside) connectivity are read off reference
 # GeoMechanics decks, one of each order, so the gmsh order maps straight through.
@@ -544,6 +554,8 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         prestressed=tuple(name for name, section, prestress, _ in anchor_properties
                           if materials.anchor_prestress(section, prestress)),
         scheduled=tuple(surface_water.scheduled.items()),
+        flow_elements=(tuple((names[key], element) for key, element, rows in soil_blocks
+                             if rows) if flow else ()),
     )
     kratos_stages = _stages(project, deck, wall_parts, staged_ties, stage_keys)
     if dim == 3:
@@ -604,12 +616,19 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         "initial_materials": initial_materials,
         "project_parameters": processes,
         # Python processes the deck runs that are not Kratos' own, by the file name they
-        # go under beside the deck. Today there is one, and it is TEMPORARY: the prestress
-        # workaround, for a deck that carries a prestressed anchor into a later stage
-        # (`parameters._exclude_prestress`).
-        "process_files": ({deck_files.PRESTRESS_WORKAROUND_NAME:
-                           deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
-                          if any(stage.prestressed for stage in kratos_stages) else {}),
+        # go under beside the deck. There are two. The prestress workaround is TEMPORARY,
+        # for a deck that carries a prestressed anchor into a later stage
+        # (`parameters._exclude_prestress`). The flow element switch is for a flow deck
+        # with a stage whose time integration needs other elements than the .mdpa holds
+        # (`parameters._switch_flow_elements`).
+        "process_files": {
+            **({deck_files.PRESTRESS_WORKAROUND_NAME:
+                deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
+               if any(stage.prestressed for stage in kratos_stages) else {}),
+            **({deck_files.FLOW_ELEMENTS_NAME:
+                deck_files.FLOW_ELEMENTS_SOURCE.read_text(encoding="utf-8")}
+               if any(stage.flow_elements for stage in kratos_stages) else {}),
+        },
         "stats": mesh.stats.to_dict(),
         "meshed_keys": mesh.meshed_keys,
         # True when the deck is written from the mesh made before for the same model
@@ -685,6 +704,10 @@ class _Deck:
     whatever `owners` says: the water on the ground (`_water_surface_loads`), whose
     stretch of exposed surface is worked out stage by stage rather than owned by one
     model key."""
+    flow_elements: tuple[tuple[str, str], ...] = ()
+    """(soil part, its class in the .mdpa) for each soil part of a groundwater flow deck,
+    which is a `FLOW_ELEMENTS` class: what a dynamic stage switches to the transient
+    class (`_flow_element_switch`)."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -768,6 +791,9 @@ def _sequenced_stages(project: Project, deck: _Deck,
     keyed = {c.id for c in project.boundary_conditions
              if isinstance(c, (WaterPressureCondition, FluxCondition))}
     scheduled = dict(deck.scheduled)
+    # The .mdpa holds the steady water pressure elements; each flow stage switches the
+    # soil to the class it needs, when that is not the one the stage before left.
+    integrated = "static"
     for index, (stage, switched_on, switched_off) in enumerate(steps):
         was = live
         keys = (set(keys) - switched_off) | switched_on
@@ -804,6 +830,10 @@ def _sequenced_stages(project: Project, deck: _Deck,
         contacts = tuple(name for name in deck.interfaces if name in live)
 
         flow = stage.calculation == stages.FLOW
+        flow_elements: tuple[tuple[str, str], ...] = ()
+        if flow and stage.time_integration != integrated:
+            flow_elements = _flow_element_switch(deck, stage.time_integration)
+            integrated = stage.time_integration
         bodies = tuple(name for name in deck.bodies if name in live)
         extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
         if flow and bodies:
@@ -859,9 +889,23 @@ def _sequenced_stages(project: Project, deck: _Deck,
             solver_settings=tuple(stage.solver_settings.items()),
             seepage=tuple(name for name in deck.seepage if name in live) if flow else (),
             time_integration=stage.time_integration,
+            flow_elements=flow_elements,
         ))
         start_time += stage.duration
     return out
+
+
+def _flow_element_switch(deck: _Deck, time_integration: str) -> tuple[tuple[str, str], ...]:
+    """(soil part, class) for every soil part of a flow deck, in the class a stage of
+    `time_integration` solves with: the transient one for a dynamic stage, the steady one
+    the .mdpa holds for a static stage.
+
+    Every soil part, not only the ones alive in the stage: a part switched off keeps the
+    class it had, and would come back on in the wrong one."""
+    if time_integration == "dynamic":
+        return tuple((part, TRANSIENT_FLOW_ELEMENTS[element])
+                     for part, element in deck.flow_elements)
+    return deck.flow_elements
 
 
 def _kept_across_a_stage(kratos_stages: list[parameters.Stage],

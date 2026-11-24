@@ -145,6 +145,52 @@ def test_each_stage_is_solved_with_its_own_heads():
     assert worst_pressure(deck, run_id, 2, 1.0) <= PRESSURE_TOLERANCE
 
 
+COMPRESSIBLE = {**muskat.SOIL, "BULK_MODULUS_SOLID": 1.0e10, "BULK_MODULUS_FLUID": 2.2e9,
+                "PERMEABILITY_XX": 6.9444e-16, "PERMEABILITY_YY": 6.9444e-16}
+"""The column's soil with water and grains of real stiffness, and a thousand times less
+permeable. Its storage, (alpha - n)/K_s + n/K_f, is 2.2e-10 /Pa, so the pressure
+diffuses at k/(mu S), about 3e-3 m2/s, and the slowest change across the 1.62 m column
+dies away with a time constant of W^2/(pi^2 c), some 80 s. The reference soil's 1e20
+makes the flow steady at once whatever the elements."""
+
+
+def test_a_dynamic_stage_moves_towards_the_new_steady_state_and_a_static_one_reaches_it():
+    """Lower the right head in a dynamic stage of 50 s, then hold it in a static one.
+
+    The dynamic stage solves on the transient elements, so it is part of the way there:
+    away from the faces the pressure is between the old steady state and the new one,
+    and well off the new one. On the .mdpa's steady elements it would be the new steady
+    state at once. The static stage after it switches back to the steady elements and is
+    the new steady state exactly; on the transient ones its one second would not be."""
+    low = muskat.head("low_right", "right", 1.0)
+    project = muskat.muskat(
+        conditions=[*muskat.HEADS, low], order=2, soil=COMPRESSIBLE,
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      deactivate=["low_right"]),
+                Stage(id="lower", name="Lower", parent="flow", calculation="flow",
+                      time_integration="dynamic", duration=50.0, time_step=5.0,
+                      activate=["low_right"], deactivate=["right_head"]),
+                Stage(id="hold", name="Hold", parent="lower", calculation="flow")])
+    deck, run_id = run(project)
+
+    assert worst_pressure(deck, run_id, 1, muskat.RIGHT_LEVEL) <= PRESSURE_TOLERANCE
+    assert worst_pressure(deck, run_id, 2, 1.0) > 100.0
+    assert worst_pressure(deck, run_id, 3, 1.0) <= PRESSURE_TOLERANCE
+
+    values = catalog.stage_results(run_id, 2).field("WATER_PRESSURE").values
+    level = muskat.LEFT_LEVEL
+    inside = 0
+    for node, x, y, _ in deck["nodes"]:
+        if not 0.4 < x < muskat.WIDTH - 0.4:
+            continue
+        # Lowering the right head raises the pressure inside: the old state is below.
+        before = muskat.GAMMA_W * (y - level + (level - muskat.RIGHT_LEVEL) * x / muskat.WIDTH)
+        after = muskat.GAMMA_W * (y - level + (level - 1.0) * x / muskat.WIDTH)
+        assert before - PRESSURE_TOLERANCE <= values[node][0] <= after + PRESSURE_TOLERANCE
+        inside += 1
+    assert inside
+
+
 # ── Case B: a Van Genuchten soil ────────────────────────────────────────────
 
 CASE_B_TOLERANCE = {"WATER_PRESSURE": 10.0, "EFFECTIVE_SATURATION": 0.02}

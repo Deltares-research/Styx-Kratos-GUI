@@ -1011,7 +1011,12 @@ App.Viewport = (function () {
     return path[path.length - 1].slice();
   }
 
-  function conditionGlyphSpec(record, project, outlines) {
+  /* `water`, when given, is the water of the stage on screen (`App.Stages.waterIn`): a
+     water line the stage has on is drawn as that stage has it -- its phreatic line, or
+     a head line, with the values the stage gives it -- whatever its record is typed. */
+  function conditionGlyphSpec(record, project, outlines, water) {
+    var staged = water && water.conditions && water.conditions[record.id];
+    if (staged) record = staged;
     var spec = { kind: record.kind, lines: [], strips: [], symbols: [], dashed: false,
                  active: record.active !== false };
     var d = project.domain;
@@ -1164,7 +1169,10 @@ App.Viewport = (function () {
       // the two never read as one another.
       var BC = App.BoundaryConditions;
       var list = project.boundary_conditions || [];
-      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list) : null;
+      // In a stage, its own phreatic line (`Stage.phreatic_line`); head lines keep the
+      // colour of their place in the list either way.
+      var phreaticId = staged ? (water.phreatic ? water.phreatic.id : null) : undefined;
+      var color = BC && BC.waterLineColor ? BC.waterLineColor(record, list, phreaticId) : null;
       if (color) {
         spec.color = color;
         if (type === 'Phreatic_Multi_Line') {
@@ -1193,8 +1201,8 @@ App.Viewport = (function () {
     return spec;
   }
 
-  function conditionGlyphGroup(record, project, outlines) {
-    var spec = conditionGlyphSpec(record, project, outlines);
+  function conditionGlyphGroup(record, project, outlines, water) {
+    var spec = conditionGlyphSpec(record, project, outlines, water);
     var group = new THREE.Group();
     group.name = record.id + '-condition';
     var color = !spec.active ? 0x777777
@@ -1363,7 +1371,38 @@ App.Viewport = (function () {
       }).map(function (part) { return part.key; }));
     // No soil, no face: the export has none either, and a support drawn round an
     // empty site would hold nothing.
-    var outlines = App.PROJECT ? soilFaceOutlines(sections, soil, App.PROJECT) || {} : null;
+    conditionOutlines = App.PROJECT ? soilFaceOutlines(sections, soil, App.PROJECT) || {} : null;
+    drawConditionGlyphs(App.state && App.state.mode);
+  }
+
+  /* The face outlines of the last build, and what the condition glyphs were last drawn
+     for (`glyphWaterKey`): a stage selected or a result opened redraws them only when
+     its water differs. */
+  var conditionOutlines = null;
+  var drawnGlyphWater = null;
+
+  /* The water of the stage `mode` shows, or null for the model as built: the stage
+     selected in Staged construction, the stage of the result in Results. */
+  function glyphWater(mode) {
+    var S = App.Stages, project = App.PROJECT;
+    if (!S || !S.waterIn || !S.chainTo || !project || !(project.stages || []).length) {
+      return null;
+    }
+    var stage = mode === 'staged' ? viewedStage(App.state && App.state.phase)
+      : mode === 'results' ? (resultsStage() || {}).stage : null;
+    if (stage == null || !S.chainTo(project, stage).length) return null;
+    return S.waterIn(project, stage);
+  }
+
+  function glyphWaterKey(water) {
+    return water ? JSON.stringify([water.phreatic ? water.phreatic.id : null,
+                                   water.conditions]) : '';
+  }
+
+  /* Each condition's glyph, as the stage `mode` shows has it (`glyphWater`). */
+  function drawConditionGlyphs(mode) {
+    var water = glyphWater(mode);
+    drawnGlyphWater = glyphWaterKey(water);
     ((App.PROJECT && App.PROJECT.boundary_conditions) || []).forEach(function (record) {
       var group = groups[record.id];
       if (!group) {
@@ -1371,8 +1410,21 @@ App.Viewport = (function () {
         group.name = record.id;
         scene.add(group);
       }
-      group.add(conditionGlyphGroup(record, App.PROJECT, outlines));
+      group.children.slice().forEach(function (child) {
+        if (child.name !== record.id + '-condition') return;
+        group.remove(child);
+        disposeGroup(child);
+      });
+      group.add(conditionGlyphGroup(record, App.PROJECT, conditionOutlines, water));
     });
+  }
+
+  /* On a change of tab or stage: the glyphs redrawn when the water they show is no
+     longer the water on screen -- a stage with a phreatic line of its own. */
+  function syncConditionGlyphs(mode) {
+    if (!scene || !App.PROJECT || conditionOutlines === null) return;
+    if (glyphWaterKey(glyphWater(mode)) === drawnGlyphWater) return;
+    drawConditionGlyphs(mode);
   }
 
   /* The keys of the conditions, supports and water pressures apart. Both are in every
@@ -2889,6 +2941,9 @@ App.Viewport = (function () {
 
   function setMode(mode) {
     var wanted = modeKeys(mode);
+    // Before anything sets the glyphs' visibility, fade or highlight: a stage with a
+    // phreatic line of its own has them drawn anew.
+    syncConditionGlyphs(mode);
     var hidden = stageHidden();
     var ghosts = stageGhosts();
     revealed = [];

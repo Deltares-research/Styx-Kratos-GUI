@@ -50,10 +50,15 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 |---|---|---|---|
 | 2D plane strain | `UPwSmallStrainElement2D3N` (triangle) | `SmallStrainUPwDiffOrderElement2D6N` | Tested against the Kratos reference results |
 | 3D | `UPwSmallStrainElement3D4N` (tetrahedron) | `SmallStrainUPwDiffOrderElement3D10N` | Limited: no 3D reference run |
-| 2D groundwater flow | `SteadyStatePwElement2D3N` | `SteadyStatePwElement2D6N` | Tested against the exact solution of the semi-Muskat column |
+| 2D groundwater flow, static stage | `SteadyStatePwElement2D3N` | `SteadyStatePwElement2D6N` | Tested against the exact solution of the semi-Muskat column |
+| 2D groundwater flow, dynamic stage | `TransientPwElement2D3N` | `TransientPwElement2D6N` | Tested in Kratos: a dynamic stage moves part of the way to the new steady state, and a static stage after it reaches it |
 
 Styx makes triangles and tetrahedra only. It does not make quadrilaterals or hexahedra.
 See `ELEMENTS` and `FLOW_ELEMENTS` in [kratos/writer.py](../core/kratos/writer.py).
+The .mdpa holds the steady flow elements. A dynamic flow stage switches the soil to the
+transient ones when it starts, and a static stage after it switches back
+(`TRANSIENT_FLOW_ELEMENTS`, [kratos/flow_elements_process.py](../core/kratos/flow_elements_process.py)).
+Kratos decides whether flow is steady or transient by the element alone.
 
 ### A3. Structural elements
 

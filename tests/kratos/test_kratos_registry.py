@@ -68,7 +68,8 @@ def exporter_names() -> dict[str, str]:
     for table in ("ELEMENTS", "FLOW_ELEMENTS", "BEAMS", "SHELLS", "CONDITIONS"):
         for key, (name, _) in getattr(writer, table).items():
             out[name] = f"writer.{table}[{key}]"
-    for table in ("INTERFACES", "NORMAL_LOAD_CONDITIONS", "SEEPAGE_CONDITIONS", "TRUSSES"):
+    for table in ("INTERFACES", "NORMAL_LOAD_CONDITIONS", "SEEPAGE_CONDITIONS", "TRUSSES",
+                  "TRANSIENT_FLOW_ELEMENTS"):
         for key, name in getattr(writer, table).items():
             out[name] = f"writer.{table}[{key}]"
     for law in (*materials.LINEAR_ELASTIC, materials.ANCHOR_LAW,
