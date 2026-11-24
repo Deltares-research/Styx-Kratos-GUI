@@ -274,8 +274,11 @@
   });
 
   T.test('the pressure is the depth times the water\'s weight', function () {
-    var p = { unit_system: 'SI', water: { y: 0, specific_weight: 10000 } };
+    var p = { unit_system: 'SI', water: { y: 0 }, fluid: { specific_weight: 10000 } };
     T.ok(/^p = 25000\b/.test(W.pressureText(p, 2.5)), W.pressureText(p, 2.5));
+    p.fluid.specific_weight = 9000;
+    T.ok(/^p = 22500\b/.test(W.pressureText(p, 2.5)), 'the water\'s own weight: '
+         + W.pressureText(p, 2.5));
     T.eq(W.pressureText(p, 0), null, 'no water, no pressure');
   });
 

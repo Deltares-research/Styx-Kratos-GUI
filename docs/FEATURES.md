@@ -202,7 +202,7 @@ and adds only the values that are missing
 | Interfaces | The interface window: a sheet pile by name with **From** and **To**, or own coordinates; the faces as on the screen; the contact. Contact properties are shared. |
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
-| Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. You can change the specific weight of the water. |
+| Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. The water's unit weight, bulk modulus and viscosity are one set for the project, with or without a water level: edit them under **Water** in the Soil materials window or with **Water properties…** in Flow conditions mode. |
 | Boundary conditions | The **Boundary conditions** window: a row for each face and one for the whole soil, with the support and the water pressure on each, and the conditions on parts, lines and points. Tools draw a support or a water pressure along a line or at a point (2D). |
 
 ### B4. Mesh

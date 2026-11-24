@@ -231,14 +231,11 @@ def convert_project(payload: dict, target: str) -> tuple[dict, list[str]]:
          "pressure_tension_cut_off": value(c.get("pressure_tension_cut_off", 0.0), STRESS)}
         if c.get("kind") == "water_pressure" else c
         for c in payload.get("boundary_conditions", [])]
-    water = payload.get("water")
-    if isinstance(water, dict):
-        out["water"] = {**water,
-                        "specific_weight": value(water.get("specific_weight"),
-                                                 SPECIFIC_WEIGHT)}
     fluid = payload.get("fluid")
     if isinstance(fluid, dict):
         out["fluid"] = {**fluid,
+                        "specific_weight": value(fluid.get("specific_weight"),
+                                                 SPECIFIC_WEIGHT),
                         "bulk_modulus": value(fluid.get("bulk_modulus"), STRESS),
                         "dynamic_viscosity": value(fluid.get("dynamic_viscosity"),
                                                    VISCOSITY)}

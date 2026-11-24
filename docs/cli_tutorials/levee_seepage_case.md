@@ -49,14 +49,14 @@ The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`).
 ## Step 2. The water and the soils
 
 The water in the soils' pores is the project's, one for every soil. Its unit weight is
-the water level's specific weight, 10 kN/m³ in a new project, so Kratos gets a water
-density of 10 000 / 9.81 ≈ 1019.37 kg/m³. Its bulk modulus and viscosity are
-set here; the water is taken as incompressible:
+10 kN/m³ unless you set it (`--unit-weight`), so Kratos gets a water density of
+10 000 / 9.81 ≈ 1019.37 kg/m³. Its bulk modulus and viscosity are set here; the water is
+taken as incompressible:
 
 ```powershell
 kratos-cli fluid levee.json --bulk-modulus 1e20 --viscosity 1e-3
 ```
-> <pre style="white-space: pre-wrap">Water in every soil: bulk modulus 1e+20 Pa, viscosity 0.001 Pa·s, density 1019.37 kg/m³ (the water level's specific weight over g). wrote levee.json</pre>
+> <pre style="white-space: pre-wrap">Water in every soil: unit weight 10000 N/m³ (water's), bulk modulus 1e+20 Pa, viscosity 0.001 Pa·s, density 1019.37 kg/m³ (the unit weight over g). wrote levee.json</pre>
 
 All four soil bodies share one set of flow properties, as in the model script:
 

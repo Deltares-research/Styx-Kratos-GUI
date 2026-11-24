@@ -238,12 +238,12 @@ App.Model = (function () {
     // Copied rather than aliased: the editors below mutate this object in place, and
     // aliasing App.PROJECT.water would make a rejected edit visible to everything
     // that reads the project before the PATCH that would have justified it.
-    water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
-                                           specific_weight: null }, mapped.water) : null;
+    water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06 }, mapped.water) : null;
     App.MATERIALS = mapped.MATERIALS;
-    // The water every soil holds, edited in the Soil materials window in place: a copy,
-    // for the same reason as `water`.
-    App.FLUID = Object.assign({ bulk_modulus: null, dynamic_viscosity: null }, project.fluid || {});
+    // The water every soil holds, edited in place in the Soil materials window and in
+    // Water properties (Flow conditions): a copy, for the same reason as `water`.
+    App.FLUID = Object.assign({ specific_weight: null, bulk_modulus: null, dynamic_viscosity: null },
+                              project.fluid || {});
     App.LAYERS = mapped.LAYERS;
     App.LOADS = mapped.LOADS;
     App.BEAMS = mapped.BEAMS;
@@ -936,27 +936,13 @@ App.Model = (function () {
     };
   }
 
-  /* What the water weighs: the project's own, or water's 10 kN/m3 in its system when
-     the project leaves it to the server (WaterLevel.specific_weight is optional). */
+  /* What the water weighs: the water's own (Fluid.specific_weight), or water's 10 kN/m3
+     in the project's system. Shown with the level, edited under Water properties: it
+     is the water's, which a project without a water level has too. */
   function waterWeight() {
-    return water.specific_weight !== null && water.specific_weight !== undefined
-      ? water.specific_weight : App.Units.fromSI(10000, 'specific weight');
-  }
-
-  function waterWeightEditor() {
-    return {
-      kind: 'number', decimals: App.PropertySets.decimals(waterWeight()),
-      unit: App.Units.label('specific weight'),
-      get: function () { return waterWeight(); },
-      set: function (value) {
-        if (!Number.isFinite(value)) return 'The specific weight must be a number.';
-        // Mirrors WaterLevel's gt=0. Zero is not merely wrong, it divides by zero
-        // where core.kratos.materials derives DENSITY_WATER from it.
-        if (value <= 0) return 'The specific weight must be greater than zero.';
-        water.specific_weight = value;
-        return null;
-      }
-    };
+    var given = App.FLUID && App.FLUID.specific_weight;
+    return given !== null && given !== undefined
+      ? given : App.Units.fromSI(10000, 'specific weight');
   }
 
   function waterProps() {
@@ -965,8 +951,8 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Type', 'Global phreatic level', '', true],
-          ['Specific weight', String(waterWeight()), App.Units.label('specific weight'),
-           false, waterWeightEditor()]
+          ['Specific weight (Water properties)', String(waterWeight()),
+           App.Units.label('specific weight'), true]
         ],
         'Geometry': [
           ['Level', fixed(water.y), 'm', false, waterLevelEditor()],

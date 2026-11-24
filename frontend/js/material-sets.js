@@ -33,12 +33,12 @@ App.MaterialSets = (function () {
     return !!(App.Stages && App.PROJECT && App.Stages.groundwaterFlow(App.PROJECT));
   }
 
-  /* The water every soil holds, as Kratos reads it: the water level's specific weight,
-     and the bulk modulus and viscosity edited under Water in this window (App.FLUID). */
+  /* The water every soil holds, as Kratos reads it: its unit weight, bulk modulus and
+     viscosity, edited under Water in this window and in Water properties (App.FLUID). */
   function waterWeight() {
-    var level = App.PROJECT && App.PROJECT.water;
-    return level && level.specific_weight !== null && level.specific_weight !== undefined
-      ? level.specific_weight : null;
+    var fluid = App.FLUID || {};
+    return fluid.specific_weight !== null && fluid.specific_weight !== undefined
+      ? fluid.specific_weight : null;
   }
 
   function waterVariables() {
@@ -248,29 +248,28 @@ App.MaterialSets = (function () {
   }
 
   /* The water in every soil's pores: one for the project, as every soil holds the same
-     water (core/model/schemas.py `Fluid`). Its weight is the water level's, shown here;
-     its bulk modulus and viscosity are edited here, on App.FLUID, and saved with the
-     soils. Left blank, each is water's at 20 C. */
+     water (core/model/schemas.py `Fluid`). Its unit weight, bulk modulus and viscosity
+     are edited here, on App.FLUID, and saved with the soils -- the same box the Flow
+     conditions tab's Water properties window shows (`openWater`). Left blank, each is
+     water's at 20 C. */
+  var WATER_FIELDS = [
+    ['specific_weight', 'Unit weight', 'DENSITY_WATER is this over g; every hydrostatic '
+      + 'water pressure grows by it per metre', 'specific weight', 'WATER_SPECIFIC_WEIGHT'],
+    ['bulk_modulus', 'Bulk modulus', 'BULK_MODULUS_FLUID, written into every soil', 'stress',
+      'WATER_BULK_MODULUS'],
+    ['dynamic_viscosity', 'Dynamic viscosity', 'DYNAMIC_VISCOSITY, written into every soil',
+      'viscosity', 'WATER_VISCOSITY']];
+
   function water(say) {
     var box = el('div.pgrid.material-water');
     box.appendChild(el('h3', { text: 'Water' }));
-    var weight = waterWeight();
-    var shownWeight = weight !== null ? weight
-      : App.Units.fromSI(App.SOIL_MODEL_TABLE.constants.WATER_SPECIFIC_WEIGHT, 'specific weight');
-    box.appendChild(el('div.pgrid-row', { title: 'DENSITY_WATER is this over g' }, [
-      el('div.pgrid-key', { text: 'Unit weight' }),
-      el('div.pgrid-val.readonly.field', { 'data-water': 'specific_weight' }, [
-        el('span.computed-value', { text: number(shownWeight) }),
-        el('span.unit', { text: App.Units.label('specific weight') })])]));
-    [['bulk_modulus', 'Bulk modulus', 'BULK_MODULUS_FLUID', 'stress',
-      App.SOIL_MODEL_TABLE.constants.WATER_BULK_MODULUS],
-     ['dynamic_viscosity', 'Dynamic viscosity', 'DYNAMIC_VISCOSITY', 'viscosity',
-      App.SOIL_MODEL_TABLE.constants.WATER_VISCOSITY]].forEach(function (spec) {
+    WATER_FIELDS.forEach(function (spec) {
       App.FLUID = App.FLUID || {};
       var value = App.FLUID[spec[0]];
       var input = el('input.cell-input', {
         value: value === null || value === undefined ? '' : number(value), 'data-water': spec[0],
-        placeholder: number(App.Units.fromSI(spec[4], spec[3])) + ' (water)' });
+        placeholder: number(App.Units.fromSI(App.SOIL_MODEL_TABLE.constants[spec[4]], spec[3]))
+          + ' (water)' });
       input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
       });
@@ -289,7 +288,7 @@ App.MaterialSets = (function () {
         }
         value = App.FLUID[spec[0]];
       });
-      box.appendChild(el('div.pgrid-row', { title: spec[2] + ', written into every soil' }, [
+      box.appendChild(el('div.pgrid-row', { title: spec[2] }, [
         el('div.pgrid-key', { text: spec[1] }),
         el('div.pgrid-val.editable.field', null, [
           input, el('span.unit', { text: App.Units.label(spec[3]) })])]));
@@ -710,8 +709,55 @@ App.MaterialSets = (function () {
     });
   }
 
+  /* Water properties, from the Flow conditions tab: the Water box of the Soil materials
+     window on its own -- the same fields on the same App.FLUID, so the two cannot
+     disagree. OK stores it with the soils as they are (PATCH /api/project/materials,
+     as that window's OK does); Cancel, Esc or the close box put it back. */
+  function openWater() {
+    var before = copy(App.FLUID || {});
+    var saved = false;
+    var hint;
+    function say(message, invalid) {
+      if (!hint) return;
+      hint.textContent = message || 'The water in every soil\'s pores, one for the whole '
+        + 'project, in ' + App.Units.title() + '. Left blank, each is water\'s at 20 °C.';
+      hint.classList.toggle('invalid', !!invalid);
+    }
+    var handle = App.Dialogs.open({
+      title: 'Water properties', width: 460, height: 300,
+      onClose: function () { if (!saved) App.FLUID = before; },
+      buttons: [{ label: 'OK', primary: true, keepOpen: true, onClick: function () {
+        var buttons = handle.dialog.querySelectorAll('.dlg-foot .btn');
+        Array.prototype.forEach.call(buttons, function (b) { b.disabled = true; });
+        App.Api.patch('/api/project/materials',
+                      { materials: App.Model.materialsToServer(App.MATERIALS),
+                        fluid: App.FLUID || null })
+          .then(function (response) {
+            saved = true;
+            App.Model.apply(response.project);
+            handle.close();
+            if (App.Command && App.Command.ok) App.Command.ok('Water properties saved.');
+            return App.Viewport && App.Viewport.refresh ? App.Viewport.refresh() : null;
+          })
+          .catch(function (error) {
+            Array.prototype.forEach.call(buttons, function (b) { b.disabled = false; });
+            say(error.message, true);
+          });
+      } }, { label: 'Cancel' }],
+      build: function (root) {
+        var wrap = el('div.dlg-simple.water-properties');
+        wrap.appendChild(water(say));
+        hint = el('div.lay-hint', { style: 'border-top:0;background:none;padding:6px 0' });
+        wrap.appendChild(hint);
+        root.appendChild(wrap);
+        say(null);
+      }
+    });
+    return handle;
+  }
+
   return { open: open, editor: editor, newMaterial: newMaterial, blankSoil: blankSoil,
-           createSoil: createSoil, missing: missing,
+           createSoil: createSoil, missing: missing, openWater: openWater,
            addMaterial: addMaterial, duplicateMaterial: duplicateMaterial };
 })();
 

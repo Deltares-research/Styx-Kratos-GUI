@@ -437,11 +437,13 @@
         return tool === '-' ? '-' : (tool.action || tool.icon);
       });
       // Drawn on the model: the water line, a flow boundary condition along the soil's
-      // boundary, a uniform pressure on a soil; then the window of them all.
+      // boundary, a uniform pressure on a soil; then the window of them all, and the
+      // water's own properties.
       var draw = flow.indexOf('drawWaterLine');
       T.ok(draw > 0, 'the Flow conditions rail has a Draw water line button');
-      T.eq(flow.slice(draw, draw + 4),
-           ['drawWaterLine', 'createFlowBoundary', 'createSoilPressure', 'flowConditions']);
+      T.eq(flow.slice(draw, draw + 5),
+           ['drawWaterLine', 'createFlowBoundary', 'createSoilPressure', 'flowConditions',
+            'waterProperties']);
       T.eq(flow.indexOf('createFlowCondition'), -1, 'the window of one new condition is in '
            + 'the menu, not on the rail');
       var boundary = App.RAILS.flow.filter(function (t) {
@@ -456,6 +458,7 @@
       T.ok(actions('Flow conditions').indexOf('createFlowBoundary') >= 0);
       T.ok(actions('Flow conditions').indexOf('createSoilPressure') >= 0);
       T.ok(actions('Flow conditions').indexOf('flowConditions') >= 0);
+      T.ok(actions('Flow conditions').indexOf('waterProperties') >= 0);
       T.eq(actions('Flow conditions').indexOf('boundaryConditions'), -1);
       T.ok(actions('Structures').indexOf('createBoundaryCondition') >= 0);
       T.ok(actions('Structures').indexOf('mechanicalConditions') >= 0);

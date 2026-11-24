@@ -381,17 +381,21 @@ def set_water_level(project: Project, level: float | None) -> Project:
     return set_water(project, WaterUpdate(water=water))
 
 
-def set_fluid(project: Project, *, bulk_modulus: float | None = None,
+def set_fluid(project: Project, *, specific_weight: float | None = None,
+              bulk_modulus: float | None = None,
               dynamic_viscosity: float | None = None,
               unset: Sequence[str] = ()) -> Project:
-    """The water in every soil's pores: its bulk modulus and viscosity, in the project's
-    units. `unset` names fields to give back to water's own (`soil_models.water`)."""
+    """The water in every soil's pores: its unit weight, bulk modulus and viscosity, in
+    the project's units. `unset` names fields to give back to water's own
+    (`soil_models.water`)."""
     payload = project.model_dump()
     fluid = payload["fluid"]
     for name in unset:
         if name not in fluid:
             raise EditRefused(f"the water has no {name}; it has: " + ", ".join(fluid))
         fluid[name] = None
+    if specific_weight is not None:
+        fluid["specific_weight"] = specific_weight
     if bulk_modulus is not None:
         fluid["bulk_modulus"] = bulk_modulus
     if dynamic_viscosity is not None:

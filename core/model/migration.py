@@ -111,11 +111,12 @@ def migrate_records(value: dict) -> dict:
     out = dict(value)
     dim = out.get("dimension", 3)
     system = out.get("unit_system", units.DEFAULT)
-    water = out.get("water")
     water_weight = DEFAULT_WATER_SPECIFIC_WEIGHT
-    if isinstance(water, dict) and water.get("specific_weight") is not None:
-        water_weight = units.convert(water["specific_weight"], units.SPECIFIC_WEIGHT,
-                                     system, "kN")
+    for holder in (out.get("fluid"), out.get("water")):     # the water level's, before
+        if isinstance(holder, dict) and holder.get("specific_weight") is not None:
+            water_weight = units.convert(holder["specific_weight"], units.SPECIFIC_WEIGHT,
+                                         system, "kN")
+            break
 
     def converted(record: dict) -> dict:
         if system != "SI":
@@ -484,6 +485,26 @@ def lift_water(value: dict) -> dict:
     return out
 
 
+def lift_water_weight(value: dict) -> dict:
+    """A document saved before 2026-11-24 keeps the water's specific weight on the water
+    level (`water.specific_weight`), so a project without a water level could not say
+    what its water weighs. It is the water's now (`Fluid.specific_weight`), moved there
+    as it stands: the deck does not change. A document whose water level carries none
+    is left alone."""
+    level = value.get("water")
+    if not isinstance(level, dict) or "specific_weight" not in level:
+        return value
+    out = dict(value)
+    level = dict(level)
+    weight = level.pop("specific_weight")
+    out["water"] = level
+    fluid = dict(out.get("fluid") or {})
+    if weight is not None and fluid.get("specific_weight") is None:
+        fluid["specific_weight"] = weight
+    out["fluid"] = fluid
+    return out
+
+
 FLUID_FIELDS = {"BULK_MODULUS_FLUID": "bulk_modulus", "DYNAMIC_VISCOSITY": "dynamic_viscosity"}
 
 
@@ -543,8 +564,8 @@ def water_notes(value: object) -> list[str]:
         if changed:
             notes.append(f"{soil}: the pore water is the project's now, one for every "
                          f"soil, so this soil is written with {', '.join(changed)}. "
-                         "Set the water with `fluid` and the water level's specific "
-                         "weight, or under Water in the material window.")
+                         "Set the water with `fluid`, or under Water in the material "
+                         "window.")
     return notes
 
 
@@ -831,7 +852,8 @@ def upgraded(value: object) -> object:
     """`value`, a project document of any age, in the current shape: every conversion
     above, in the order the shapes came (`Project`'s validator)."""
     value = _before_water(value)
-    return lift_water(keep_old_deck(value)) if isinstance(value, dict) else value
+    return (lift_water_weight(lift_water(keep_old_deck(value))) if isinstance(value, dict)
+            else value)
 
 
 def notes(value: object) -> list[str]:

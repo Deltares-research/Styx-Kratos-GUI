@@ -913,35 +913,43 @@ def test_patch_layers_can_move_the_water_line(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_layers_can_change_the_specific_weight(client):
-    """The other half of the pair, and the one that silently scales every hydrostatic
-    pressure in the deck -- `_water_pressure` and `_normal_load` both read it."""
+def test_patch_materials_can_change_the_waters_unit_weight(client):
+    """The water's unit weight is the water's (`Fluid`), sent with the soils, as the
+    Soil materials window and Water properties both send it. It silently scales every
+    hydrostatic pressure in the deck -- `_water_pressure` and `_normal_load` both read
+    it -- so it must arrive."""
     project = seed_project()
-    water = project.water.model_dump()
-    water.update(specific_weight=9.81)
-
-    assert client.patch("/api/project/layers", json={
-        "layers": [layer.model_dump() for layer in project.layers],
-        "water": water,
+    assert client.patch("/api/project/materials", json={
+        "materials": [m.model_dump() for m in project.materials],
+        "fluid": {"specific_weight": 9.81},
     }).status_code == 200
-    assert client.get("/api/project").json()["water"]["specific_weight"] == 9.81
+    assert client.get("/api/project").json()["fluid"]["specific_weight"] == 9.81
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_layers_rejects_a_weightless_fluid(client):
+def test_patch_materials_rejects_a_weightless_fluid(client):
     """Zero specific weight is a division by zero waiting in the materials file --
     DENSITY_WATER is derived from it -- and it is not water in any case."""
     project = seed_project()
-    water = project.water.model_dump()
-    water["specific_weight"] = 0.0
-
-    response = client.patch("/api/project/layers", json={
-        "layers": [layer.model_dump() for layer in project.layers],
-        "water": water,
+    response = client.patch("/api/project/materials", json={
+        "materials": [m.model_dump() for m in project.materials],
+        "fluid": {"specific_weight": 0.0},
     })
     assert response.status_code == 422
-    assert client.get("/api/project").json()["water"]["specific_weight"] ==         seed_project().water.specific_weight
+    assert (client.get("/api/project").json()["fluid"]["specific_weight"]
+            == seed_project().fluid.specific_weight)
+
+
+def test_the_water_level_carries_no_specific_weight(client):
+    """A level is a level: what the water weighs is the water's. One sent with it is
+    refused, not quietly dropped."""
+    project = seed_project()
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "water": {**project.water.model_dump(), "specific_weight": 9.81},
+    })
+    assert response.status_code == 422
 
 
 def test_patch_layers_leaves_the_water_alone_when_it_is_not_sent(client):

@@ -1272,7 +1272,7 @@ def test_the_pore_pressure_is_the_condition_s_level_and_the_project_s_water(sess
     weight is the project's one value, the same a hydrostatic `NormalLoad` reads."""
     project = seed_project()
     project.water.y = -4.25
-    project.water.specific_weight = 9_900.0
+    project.fluid.specific_weight = 9_900.0
     exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     (process,) = _pressure_processes(exported)[0]
     parameters = process["Parameters"]

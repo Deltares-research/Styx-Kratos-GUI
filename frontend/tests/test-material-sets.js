@@ -26,7 +26,7 @@
     var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
     var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
     App.MATERIALS = [sand()]; App.LAYERS = [];
-    App.FLUID = { bulk_modulus: null, dynamic_viscosity: null };
+    App.FLUID = { specific_weight: null, bulk_modulus: null, dynamic_viscosity: null };
     App.PROJECT = Object.assign({}, App.PROJECT || {}, { unit_system: 'kN', dimension: 2 });
     try {
       App.MaterialSets.open();
@@ -458,6 +458,40 @@
       ['DENSITY_WATER', 'BULK_MODULUS_FLUID', 'DYNAMIC_VISCOSITY'].forEach(function (name) {
         T.ok(!variableInput(host, name), name + ' is not a soil\'s');
       });
+    });
+  });
+
+  T.test('the water\'s unit weight is edited with its other properties', function () {
+    withDialog(function (host) {
+      var weight = host.querySelector('[data-water="specific_weight"]');
+      T.eq(weight.tagName, 'INPUT', 'editable, not shown read-only');
+      T.ok(/^10 /.test(weight.placeholder), 'water\'s 10 kN/m3: ' + weight.placeholder);
+      type(weight, '9.81');
+      T.eq(App.FLUID.specific_weight, 9.81);
+      type(weight, '0');
+      T.eq(App.FLUID.specific_weight, 9.81, 'zero is refused');
+      openProperties(host);
+      // 0.7 * 1.83486 t/m3 * 9.81 dry, and 0.3 * 9.81 kN/m3 of water on top.
+      var wet = host.querySelector('[data-computed="UNIT_WEIGHT_SATURATED"]').textContent;
+      T.ok(/saturated15\.5\d*kN/.test(wet), 'the soils weigh the water\'s weight: ' + wet);
+    });
+  });
+
+  T.test('Water properties edits the same water, and Cancel puts it back', function () {
+    withDialog(function (host) {
+      App.MaterialSets.openWater();
+      var dialogs = host.querySelectorAll('.dialog');
+      var dialog = dialogs[dialogs.length - 1];
+      T.eq(dialog.querySelector('.dlg-title').textContent, 'Water properties');
+      ['specific_weight', 'bulk_modulus', 'dynamic_viscosity'].forEach(function (name) {
+        T.ok(dialog.querySelector('input[data-water="' + name + '"]'), name);
+      });
+      type(dialog.querySelector('[data-water="specific_weight"]'), '9.5');
+      T.eq(App.FLUID.specific_weight, 9.5);
+      Array.prototype.filter.call(dialog.querySelectorAll('.dlg-foot .btn'), function (b) {
+        return b.textContent === 'Cancel';
+      })[0].click();
+      T.eq(App.FLUID.specific_weight, null, 'cancelled: the water as it was');
     });
   });
 

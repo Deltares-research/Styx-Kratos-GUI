@@ -532,12 +532,23 @@ def test_a_custom_part_removed_by_path_is_checked_against_the_stages():
 
 def test_a_water_level_keeps_the_rest_of_an_existing_one():
     project = session.set_water(seed_project(), WaterUpdate(
-        water=WaterLevel(y=-2.0, specific_weight=9.81)))
+        water=WaterLevel(y=-2.0, margin=5.0)))
 
     moved = session.set_water_level(project, -4.0)
 
-    assert (moved.water.y, moved.water.specific_weight) == (-4.0, 9.81)
+    assert (moved.water.y, moved.water.margin) == (-4.0, 5.0)
     assert session.set_water_level(moved, None).water is None
+
+
+def test_the_waters_unit_weight_is_set_with_the_rest_of_the_water():
+    """The `fluid` command's `--unit-weight`: the water's, which a project with no
+    water level has too, and back to water's own with `unset`."""
+    project = session.set_water_level(seed_project(), None)
+    weighed = session.set_fluid(project, specific_weight=9.81)
+    assert weighed.fluid.specific_weight == 9.81
+    assert weighed.water_specific_weight == 9.81
+    back = session.set_fluid(weighed, unset=["specific_weight"])
+    assert back.fluid.specific_weight is None
 
 
 def test_a_water_level_outside_the_model_is_refused():

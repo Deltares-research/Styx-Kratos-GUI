@@ -903,8 +903,9 @@ App.LivePatches = (function () {
      lines. Then a flow boundary condition drawn on a line of the soil -- its boundary,
      or a line between two soils: one point clicked is a condition at that point, more a
      line through them (seepage, flux, hydrostatic or uniform) -- a uniform pressure on a
-     soil, and the window of them all. A new condition of any kind in its window is in
-     the menu. */
+     soil, the window of them all, and the water's own properties -- the Water box of
+     the Soil materials window, on its own (App.MaterialSets.openWater). A new condition
+     of any kind in its window is in the menu. */
   var FLOW_TOOLS = [
     { icon: 'watercondition', tip: 'Create flow boundary condition: click one point on a '
       + 'line of the soil for a point, more for a line; right-click or Enter to finish -- '
@@ -912,7 +913,9 @@ App.LivePatches = (function () {
       action: 'createFlowBoundary' },
     { icon: 'water', tip: 'Uniform soil pressure: click a soil, give its water pressure',
       action: 'createSoilPressure' },
-    { icon: 'conditionlist', tip: 'Flow boundary conditions…', action: 'flowConditions' }
+    { icon: 'conditionlist', tip: 'Flow boundary conditions…', action: 'flowConditions' },
+    { icon: 'waterproperties', tip: 'Water properties…: unit weight, bulk modulus and '
+      + 'viscosity of the water in every soil', action: 'waterProperties' }
   ];
 
   function installBoundaryConditionTools() {
@@ -943,7 +946,9 @@ App.LivePatches = (function () {
         { label: 'New flow condition…', icon: 'watercondition',
           action: 'createFlowCondition' },
         { label: 'Flow boundary conditions…', icon: 'conditionlist',
-          action: 'flowConditions' }, '-');
+          action: 'flowConditions' },
+        { label: 'Water properties…', icon: 'waterproperties', action: 'waterProperties' },
+        '-');
     }
     var structuresMenu = menus.filter(function (m) { return m.label === 'Structures'; })[0];
     var items = structuresMenu ? structuresMenu.items : [];
@@ -3731,6 +3736,10 @@ App.LivePatches = (function () {
         if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null, 'flow');
         return;
       }
+      if (item && item.action === 'waterProperties') {
+        if (App.MaterialSets) App.MaterialSets.openWater();
+        return;
+      }
       var flowTools = {
         drawWaterLine: function (BC) { BC.drawWaterLine(); },
         createFlowBoundary: function (BC) { BC.drawFlowBoundary(); },
@@ -3933,6 +3942,9 @@ App.LivePatches = (function () {
     // The window of all conditions of a group: a table of rows.
     App.ICONS.conditionlist = '<path d="M3 4h18v16H3z"/>'
                             + '<path d="M3 9h18M3 14.5h18M8.5 4v16"/>';
+    // The water's properties: a drop beside the lines of a property sheet.
+    App.ICONS.waterproperties = '<path d="M8 3s5 5.5 5 9a5 5 0 01-10 0c0-3.5 5-9 5-9z"/>'
+                              + '<path d="M16 8h5M16 12.5h5M16 17h5"/>';
 
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {

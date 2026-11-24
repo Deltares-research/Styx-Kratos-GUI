@@ -613,7 +613,7 @@ App.SurfaceWater = (function () {
      (`Project.water_specific_weight`): the project's own, or water's. Null where the
      unit tables are not loaded. */
   function specificWeight(project) {
-    var given = project && project.water && project.water.specific_weight;
+    var given = project && project.fluid && project.fluid.specific_weight;
     if (typeof given === 'number') return given;
     if (!App.SoilModels || !App.Units) return null;
     var system = (project && project.unit_system) || undefined;

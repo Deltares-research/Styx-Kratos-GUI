@@ -41,7 +41,8 @@ def section(conditions: list[dict], water: float | None = -3.5, **changes) -> Pr
     payload = seed_project().model_dump()
     payload.update({"dimension": 2, "section_offset": 20.0,
                     "boundary_conditions": conditions, **changes})
-    payload["water"] = None if water is None else {"y": water, "specific_weight": 10_000.0}
+    payload["water"] = None if water is None else {"y": water}
+    payload["fluid"] = {**payload["fluid"], "specific_weight": 10_000.0}
     return Project.model_validate(payload)
 
 

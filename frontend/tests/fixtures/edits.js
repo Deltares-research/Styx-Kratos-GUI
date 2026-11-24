@@ -377,10 +377,10 @@ window.EDITS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "fluid": {
+        "specific_weight": null,
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
@@ -939,10 +939,10 @@ window.EDITS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "fluid": {
+        "specific_weight": null,
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
@@ -1557,10 +1557,10 @@ window.EDITS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "fluid": {
+        "specific_weight": null,
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
@@ -2088,10 +2088,10 @@ window.EDITS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "fluid": {
+        "specific_weight": null,
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
@@ -2646,10 +2646,10 @@ window.EDITS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "fluid": {
+        "specific_weight": null,
         "bulk_modulus": null,
         "dynamic_viscosity": null
       },
@@ -3474,8 +3474,7 @@ window.EDITS_FIXTURE =
         "water": {
           "y": -1.0,
           "margin": 3.0,
-          "thickness": 0.06,
-          "specific_weight": null
+          "thickness": 0.06
         },
         "custom_parts": []
       }
@@ -3710,6 +3709,7 @@ window.EDITS_FIXTURE =
           }
         ],
         "fluid": {
+          "specific_weight": null,
           "bulk_modulus": null,
           "dynamic_viscosity": null
         }

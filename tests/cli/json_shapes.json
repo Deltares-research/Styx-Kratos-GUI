@@ -103,7 +103,6 @@
   "warnings": [],
   "water": {
    "margin": "number",
-   "specific_weight": "null",
    "thickness": "number",
    "y": "number"
   }
@@ -295,7 +294,6 @@
   "unit_system": "string",
   "water": {
    "margin": "number",
-   "specific_weight": "null",
    "thickness": "number",
    "y": "number"
   }

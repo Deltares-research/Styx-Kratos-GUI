@@ -228,16 +228,14 @@ class Material(KratosPropertySet):
     @model_validator(mode="after")
     def _the_water_is_the_project_s(self) -> Material:
         """Every soil has the same water in its pores, so its density, bulk modulus and
-        viscosity are the project's (`Project.fluid`, `WaterLevel.specific_weight`),
-        written into every soil by the export. One a soil carried would be a second
-        water nobody sees."""
+        viscosity are the project's (`Project.fluid`), written into every soil by the
+        export. One a soil carried would be a second water nobody sees."""
         own = [name for name in soil_models.WATER if name in self.variables]
         if own:
             raise ValueError(
                 f"{', '.join(own)} belong{'s' if len(own) == 1 else ''} to the project's "
-                "water, not to a soil: set the water's specific weight on the water level, "
-                "its bulk modulus and viscosity under Water in the material window "
-                "(`kratos-cli fluid`)")
+                "water, not to a soil: set the water's unit weight, bulk modulus and "
+                "viscosity under Water in the material window (`kratos-cli fluid`)")
         return self
 
 
@@ -1179,10 +1177,16 @@ WATER_SPECIFIC_WEIGHT_SI = soil_models.WATER_SPECIFIC_WEIGHT_SI
 
 class Fluid(Base):
     """The water in every soil's pores: one for the whole project, as every soil holds
-    the same water. The export writes it into each soil as `BULK_MODULUS_FLUID` and
-    `DYNAMIC_VISCOSITY`, with `DENSITY_WATER` from the water's specific weight
-    (`WaterLevel.specific_weight`). In the project's units; None is water's at 20 C
-    (`soil_models.water`). Edited under Water in the material window."""
+    the same water. The export writes it into each soil as `DENSITY_WATER` (the specific
+    weight over g), `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. In the project's units;
+    None is water's at 20 C (`soil_models.water`). Edited under Water in the material
+    window, and in the Water properties window of the Flow conditions tab."""
+    specific_weight: float | None = Field(default=None, gt=0)
+    """The water's unit weight. None is water's 10 kN/m3 in whatever system the project
+    uses (`Project.water_specific_weight`). Besides `DENSITY_WATER`, read by a
+    `NormalLoad` in `"Hydrostatic"` mode (`core/kratos/parameters.py:_normal_load`) and
+    by every `WaterPressureCondition` (`_water_pressure`). A document saved before
+    2026-11-24 kept it on the water level (`migration.lift_water_weight`)."""
     bulk_modulus: float | None = Field(default=None, gt=0)
     dynamic_viscosity: float | None = Field(default=None, gt=0)
 
@@ -1194,12 +1198,8 @@ class WaterLevel(Base):
     # (js/viewport.js:201). It takes no part in the geometry booleans.
     margin: float = Field(default=3.0, ge=0)
     thickness: float = Field(default=0.06, gt=0)
-    specific_weight: float | None = Field(default=None, gt=0)
-    """In the project's units. None is water's 10 kN/m3 in whatever system the project
-    uses (`Project.water_specific_weight`). Read by a `NormalLoad` in `"Hydrostatic"` mode
-    (`core/kratos/parameters.py:_normal_load`) and by every `WaterPressureCondition`
-    (`_water_pressure`). One value for the whole project, the same way `y` is one
-    phreatic level -- not a per-load setting."""
+    # The water's specific weight is not the level's: it is the water's
+    # (`Fluid.specific_weight`), which a project with no water level has too.
 
 
 # ── Boundary conditions ─────────────────────────────────────────────────────
@@ -1856,15 +1856,12 @@ class LayersUpdate(Base):
     # The plan extents, edited from the Selection explorer's Geometry rows. They ride
     # along so one request gets one validation of the resulting model.
     domain: Domain | None = None
-    # The phreatic level and the fluid's specific weight, edited from the same
-    # explorer. One object for the whole project, exactly like `domain`, and carried
+    # The phreatic level, edited from the same explorer. One object for the whole project, exactly like `domain`, and carried
     # here rather than on an endpoint of its own for the same reason: the water level
     # is validated against the model it belongs to, not on its own.
     #
-    # It is not merely cosmetic. Every hydrostatic water pressure condition and normal
-    # load with no level of its own is measured from `y` (`core.kratos.parameters.
-    # _water_pressure`, `_normal_load`), the specific weight scales all of them, and
-    # `core.kratos.materials` derives DENSITY_WATER from it.
+    # It is not merely cosmetic. Every hydrostatic normal load with no level of its own
+    # is measured from `y` (`core.kratos.parameters._normal_load`).
     water: WaterLevel | None = None
     # Custom soil bodies, so reassigning one's material is validated against the
     # same library in the same request.
@@ -2144,8 +2141,8 @@ class Project(Base):
     (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
     normal load saved without a level still reads it at export."""
     fluid: Fluid = Field(default_factory=Fluid)
-    """The water in every soil's pores: its bulk modulus and viscosity. Its weight is
-    `water`'s (`water_specific_weight`)."""
+    """The water in every soil's pores: its unit weight, bulk modulus and viscosity
+    (`water_specific_weight`, `water_variables`)."""
     soil_water: dict[str, str] = Field(default_factory=dict)
     """The water each soil takes, for an aquifer under an aquitard: a soil part key
     (`soil_part_keys`: a layer, a body cut off one, or a custom soil part) to the id of a
@@ -2174,7 +2171,7 @@ class Project(Base):
     """The gravitational acceleration g, in m/s2: both unit systems measure length in
     metres and time in seconds. The deck's self weight (`VOLUME_ACCELERATION`) is g, and
     the water's density is its specific weight over g (`water_variables`), so the water
-    pressures stay those of `WaterLevel.specific_weight` whatever g is. Whether the self
+    pressures stay those of `Fluid.specific_weight` whatever g is. Whether the self
     weight acts at all is the initial stage's (`core.model.stages.gravity`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
@@ -2198,7 +2195,8 @@ class Project(Base):
         switches gravity itself (`migration.drop_gravity`), and one saved before 2026-11
         has flow stages with no absolute tolerance (`migration.flow_tolerance`). One
         saved before 2026-11-18 sets a phreatic line drawn on a line on that line only
-        (`migration.drawn_water_lines`)."""
+        (`migration.drawn_water_lines`), and one saved before 2026-11-24 keeps the
+        water's specific weight on the water level (`migration.lift_water_weight`)."""
         return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
@@ -2413,8 +2411,8 @@ class Project(Base):
     def water_specific_weight(self) -> float:
         """The water's specific weight in the project's units: the project's own, or
         10 kN/m3 in its system -- a dry model's materials still describe water."""
-        if self.water is not None and self.water.specific_weight is not None:
-            return self.water.specific_weight
+        if self.fluid.specific_weight is not None:
+            return self.fluid.specific_weight
         return units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT,
                              self.unit_system)
 

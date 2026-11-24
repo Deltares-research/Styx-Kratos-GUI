@@ -107,7 +107,8 @@ def test_loads_pressures_and_water_in_newtons(old, new):
     uniform0 = next(n for n in old["normal_loads"] if n["fluid_pressure_type"] == "Uniform")
     uniform = next(n for n in new.normal_loads if n.id == uniform0["id"])
     assert uniform.pressure == uniform0["pressure"] * 1000
-    assert new.water.specific_weight == old["water"]["specific_weight"] * 1000
+    assert new.fluid.specific_weight == old["water"]["specific_weight"] * 1000
+    assert "specific_weight" not in new.water.model_dump(), "the water's, not the level's"
 
 
 def test_the_prestress_is_the_stress_the_old_deck_carried(old, new):
@@ -172,7 +173,7 @@ def test_an_old_shaped_section_in_a_kn_project_arrives_in_kilonewtons():
 
 def test_an_old_shaped_material_takes_the_projects_water():
     data = Project.model_validate(fixture("staged_v1")).model_dump(mode="json")
-    data["water"]["specific_weight"] = 9_810.0                   # N/m3, the SI project's
+    data["fluid"]["specific_weight"] = 9_810.0                   # N/m3, the SI project's
     old = fixture("staged_v1")["materials"][0]
     data["materials"][0] = old
     project = Project.model_validate(data)

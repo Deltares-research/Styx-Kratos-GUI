@@ -313,12 +313,15 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   soil hydrostatic pore pressures about the water level, and keeps that level as its own.
 - **The water in the pores** is the project's, not each soil's: every soil is written
   with the same `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. `fluid`
-  without a value says what they are. `--bulk-modulus` (a stress) and `--viscosity` set
-  them in the project's units (Pa and Pa·s in SI, kPa and kPa·s in kN), and `--unset
-  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 2.2 GPa and
-  1 mPa·s. `DENSITY_WATER` is not set here: it is the water level's specific weight over
-  g. A soil that sets one of the three itself is refused; a file saved when each soil
-  had its own water is read with the first soil's, and says which soils changed.
+  without a value says what they are. `--unit-weight` (a specific weight),
+  `--bulk-modulus` (a stress) and `--viscosity` set them in the project's units (N/m³,
+  Pa and Pa·s in SI; kN/m³, kPa and kPa·s in kN), and `--unset specific_weight
+  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 10 kN/m³, 2.2 GPa
+  and 1 mPa·s. `DENSITY_WATER` is the unit weight over g, and every hydrostatic water
+  pressure grows by the unit weight per metre. A soil that sets one of the three itself
+  is refused; a file saved when each soil had its own water is read with the first
+  soil's, and says which soils changed. A file saved when the unit weight was the water
+  level's keeps its value, now as the water's.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.

@@ -1961,8 +1961,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -2272,8 +2271,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3066,8 +3064,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3411,8 +3408,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -3794,8 +3790,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.0,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -4089,8 +4084,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -4418,8 +4412,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {
@@ -4749,8 +4742,7 @@ window.DRAFTS_FIXTURE =
       "water": {
         "y": -1.5,
         "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
+        "thickness": 0.06
       },
       "boundary_conditions": [
         {

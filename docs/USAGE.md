@@ -356,9 +356,15 @@ See [Boundary conditions](#boundary-conditions).
 
 The model has one horizontal water level. A new hydrostatic water pressure condition or
 normal load takes this level as its own. To change the water level, select **Global water
-level** in the Model explorer. Then change **Level** or **Specific weight** in the Selection
-explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water off` to
-remove the water. A condition keeps its own level when the water level changes.
+level** in the Model explorer. Then change **Level** in the Selection explorer. You can
+also type `water -1.5` to set the level to -1.5 m, or `water off` to remove the water. A
+condition keeps its own level when the water level changes.
+
+The properties of the water itself — its unit weight, bulk modulus and viscosity — are
+one set for the whole project, also when it has no water level. Change them under
+**Water** in the **Soil materials** window, or with **Water properties…** on the tool rail
+of Flow conditions mode. Both edit the same values. Left blank, each is the value of
+water at 20 °C (10 kN/m³ for the unit weight).
 
 The tool rail of Flow conditions mode draws the water on the model (2D):
 
@@ -368,6 +374,7 @@ The tool rail of Flow conditions mode draws the water on the model (2D):
 | **Create flow boundary condition** | Click points on a line of the soil, then right-click or press Enter: one point makes a condition at that point, two or more a line through them. A line of the soil is its outer boundary, or a line between two soils: a layer boundary, or a line that splits the soil. Each point that you click or type moves onto the nearest point of such a line, wherever you click; a marker shows where it lands. With snapping on, the point then moves along the line to the nearest corner (where a line turns or meets another) or grid line of the snapping distance, within that distance. Then choose what it is: **Seepage face**, **Flux** (the water that flows in, per m² of boundary, in m/s; negative flows out), **Hydrostatic** (with its level) or **Uniform** (with its pressure). A point, and a line inside the soil, can be Hydrostatic or Uniform only: a seepage face and a flux are on the outer boundary. |
 | **Uniform soil pressure** | Click a soil and give its water pressure. The soil gets that pressure, fixed, in place of the water it takes (see [The water of each soil](#the-water-of-each-soil)). |
 | **Flow boundary conditions…** | The window of all water pressures, seepage faces and fluxes. |
+| **Water properties…** | The unit weight, bulk modulus and viscosity of the water in every soil: the same values as **Water** in the **Soil materials** window. |
 
 **Flow conditions > New flow condition…** opens the window of one new condition of any
 kind, on any target: the whole soil, a face, a part, a line or a point.

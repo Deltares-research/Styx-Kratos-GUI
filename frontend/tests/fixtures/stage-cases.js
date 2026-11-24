@@ -6656,10 +6656,10 @@ window.STAGE_FIXTURE =
     "water": {
       "y": -1.5,
       "margin": 3.0,
-      "thickness": 0.06,
-      "specific_weight": null
+      "thickness": 0.06
     },
     "fluid": {
+      "specific_weight": null,
       "bulk_modulus": null,
       "dynamic_viscosity": null
     },
