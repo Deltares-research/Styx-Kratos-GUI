@@ -44,3 +44,9 @@ __pycache__/
 /build/
 # ... and in docs/gui_tutorials/images/, where the site build reads them.
 /docs/gui_tutorials/images/
+
+# Credentials (never commit)
+.netrc
+_netrc
+.pypirc
+.env
