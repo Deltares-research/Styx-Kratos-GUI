@@ -2845,21 +2845,28 @@ def _render(coordinates: dict[int, tuple[float, float, float]], node_id: dict[in
             elements: list[tuple[str, list[tuple[int, int, list[int]]]]],
             conditions: list[tuple[str, list[tuple[int, int, list[int]]]]],
             parts: list[tuple[str, list[int], list[int], list[int]]]) -> str:
-    """Lay the deck out the way GiD does, so the two diff against each other."""
+    """Lay the deck out the way GiD does, so the two diff against each other.
+
+    Each column is written as a space and then the number in its GiD width less one.
+    For a number that fits, this is the same text as the GiD width alone. A wider
+    number (a coordinate of -100 or less, a node id of 100000 or more) then pushes the
+    line to the right instead of joining the number before it, which Kratos would
+    read as one bad value.
+    """
     lines = ["Begin Properties 0", "End Properties", ""]
 
     lines.append("Begin Nodes")
     for tag, index in sorted(node_id.items(), key=lambda item: item[1]):
         x, y, z = coordinates[tag]
-        lines.append(f"{index:5d}{x:15.10f}{y:15.10f}{z:15.10f}")
+        lines.append(f"{index:5d} {x:14.10f} {y:14.10f} {z:14.10f}")
     lines += ["End Nodes", ""]
 
     for keyword, blocks in (("Elements", elements), ("Conditions", conditions)):
         for class_name, entries in blocks:
             lines.append(f"Begin {keyword} {class_name}")
             for entry_id, property_id, connectivity in entries:
-                row = "".join(f"{n:6d}" for n in connectivity)
-                lines.append(f"{entry_id:9d}{property_id:11d}{row} ")
+                row = "".join(f" {n:5d}" for n in connectivity)
+                lines.append(f"{entry_id:9d} {property_id:10d}{row} ")
             lines += [f"End {keyword}", ""]
 
     for name, nodes, part_elements, part_conditions in parts:
